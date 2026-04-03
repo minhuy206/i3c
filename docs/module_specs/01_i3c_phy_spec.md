@@ -14,48 +14,55 @@ The PHY (Physical Layer) module provides the electrical interface between the I3
 ## 2. Dependencies
 
 ### Sub-modules
+
 - None (the reference uses `caliptra_prim_flop_2sync`, which will be replaced with inline 2FF logic)
 
 ### Parent modules
+
 - `i3c_controller_top` (top-level integration)
 
 ### Packages
+
 - None
 
 ## 3. Parameters
 
-| Parameter    | Type | Default | Description                              |
-|-------------|------|---------|------------------------------------------|
+| Parameter    | Type | Default | Description                                           |
+| ------------ | ---- | ------- | ----------------------------------------------------- |
 | `ResetValue` | bit  | 1'b1    | Reset value for synchronized outputs (bus idles HIGH) |
 
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description        |
-|----------|-----------|-------|--------------------|
-| `clk_i`  | Input     | 1     | System clock (min 333 MHz) |
+
+| Signal   | Direction | Width | Description                   |
+| -------- | --------- | ----- | ----------------------------- |
+| `clk_i`  | Input     | 1     | System clock (min 333 MHz)    |
 | `rst_ni` | Input     | 1     | Active-low asynchronous reset |
 
 ### Physical Bus Pins (External)
-| Signal  | Direction | Width | Description                           |
-|---------|-----------|-------|---------------------------------------|
-| `scl_i` | Input     | 1     | SCL bus input (asynchronous)          |
+
+| Signal  | Direction | Width | Description                               |
+| ------- | --------- | ----- | ----------------------------------------- |
+| `scl_i` | Input     | 1     | SCL bus input (asynchronous)              |
 | `scl_o` | Output    | 1     | SCL bus output (directly from controller) |
-| `sda_i` | Input     | 1     | SDA bus input (asynchronous)          |
+| `sda_i` | Input     | 1     | SDA bus input (asynchronous)              |
 | `sda_o` | Output    | 1     | SDA bus output (directly from controller) |
 
 ### Controller-Side (Internal)
-| Signal         | Direction | Width | Description                              |
-|----------------|-----------|-------|------------------------------------------|
-| `ctrl_scl_i`   | Input     | 1     | SCL value from controller (to drive bus) |
-| `ctrl_sda_i`   | Input     | 1     | SDA value from controller (to drive bus) |
-| `ctrl_scl_o`   | Output    | 1     | Synchronized SCL for controller logic    |
-| `ctrl_sda_o`   | Output    | 1     | Synchronized SDA for controller logic    |
+
+| Signal       | Direction | Width | Description                              |
+| ------------ | --------- | ----- | ---------------------------------------- |
+| `ctrl_scl_i` | Input     | 1     | SCL value from controller (to drive bus) |
+| `ctrl_sda_i` | Input     | 1     | SDA value from controller (to drive bus) |
+| `ctrl_scl_o` | Output    | 1     | Synchronized SCL for controller logic    |
+| `ctrl_sda_o` | Output    | 1     | Synchronized SDA for controller logic    |
 
 ### Mode Control
-| Signal        | Direction | Width | Description                            |
-|---------------|-----------|-------|----------------------------------------|
-| `sel_od_pp_i` | Input     | 1     | 0 = Open-Drain, 1 = Push-Pull         |
+
+| Signal        | Direction | Width | Description                               |
+| ------------- | --------- | ----- | ----------------------------------------- |
+| `sel_od_pp_i` | Input     | 1     | 0 = Open-Drain, 1 = Push-Pull             |
 | `sel_od_pp_o` | Output    | 1     | Pass-through of mode select to bus driver |
 
 ## 5. Functional Description
@@ -111,20 +118,20 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 
 ## 6. Timing Requirements
 
-| Aspect                    | Requirement                                          |
-|--------------------------|------------------------------------------------------|
-| Input synchronization     | 2 clock cycle latency (part of tSCO budget)         |
-| Output path              | Combinational (0 cycle latency)                      |
-| System clock minimum     | 333 MHz (to meet tSCO = 12 ns with 4-cycle budget)  |
-| Reset recovery           | After reset de-assertion, outputs stable after 2 clocks |
+| Aspect                | Requirement                                             |
+| --------------------- | ------------------------------------------------------- |
+| Input synchronization | 2 clock cycle latency (part of tSCO budget)             |
+| Output path           | Combinational (0 cycle latency)                         |
+| System clock minimum  | 333 MHz (to meet tSCO = 12 ns with 4-cycle budget)      |
+| Reset recovery        | After reset de-assertion, outputs stable after 2 clocks |
 
 ## 7. Changes from Reference Design
 
-| Aspect                     | Reference                          | This Design                          |
-|----------------------------|------------------------------------|--------------------------------------|
-| 2FF synchronizer           | `caliptra_prim_flop_2sync` (Caliptra primitive) | Inline 2FF (no external dependency) |
-| `ifdef DISABLE_INPUT_FF`   | Conditional compile for simulation | Removed; always use 2FF              |
-| OD/PP logic                | Pass-through (no logic)            | Same (pass-through)                  |
+| Aspect                   | Reference                                       | This Design                         |
+| ------------------------ | ----------------------------------------------- | ----------------------------------- |
+| 2FF synchronizer         | `caliptra_prim_flop_2sync` (Caliptra primitive) | Inline 2FF (no external dependency) |
+| `ifdef DISABLE_INPUT_FF` | Conditional compile for simulation              | Removed; always use 2FF             |
+| OD/PP logic              | Pass-through (no logic)                         | Same (pass-through)                 |
 
 ## 8. Error Handling
 
@@ -135,6 +142,7 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 ## 9. Test Plan
 
 ### Scenarios
+
 1. **Reset behavior:** Verify `ctrl_scl_o` and `ctrl_sda_o` are HIGH after reset
 2. **Input synchronization latency:** Apply a transition on `scl_i`/`sda_i` and verify it appears on `ctrl_scl_o`/`ctrl_sda_o` exactly 2 clock cycles later
 3. **Output pass-through:** Verify `scl_o == ctrl_scl_i` and `sda_o == ctrl_sda_i` at all times (combinational)
@@ -142,6 +150,7 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 5. **Glitch filtering:** Apply a pulse shorter than 1 clock cycle on `sda_i` and verify it is filtered by the 2FF (may or may not propagate — this tests metastability tolerance)
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_i3c_phy/

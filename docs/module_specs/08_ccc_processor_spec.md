@@ -8,27 +8,31 @@
 
 The CCC (Common Command Code) processor handles the execution of CCC commands on the I3C bus. In this simplified design, it supports only 3 CCCs:
 
-| CCC Code | Mnemonic | Type      | Description                          |
-|----------|----------|-----------|--------------------------------------|
-| 0x07     | ENTDAA   | Broadcast | Enter Dynamic Address Assignment     |
-| 0x00     | ENEC     | Broadcast | Enable Events (broadcast)            |
-| 0x80     | ENEC     | Direct    | Enable Events (specific target)      |
-| 0x01     | DISEC    | Broadcast | Disable Events (broadcast)           |
-| 0x81     | DISEC    | Direct    | Disable Events (specific target)     |
+| CCC Code | Mnemonic | Type      | Description                      |
+| -------- | -------- | --------- | -------------------------------- |
+| 0x07     | ENTDAA   | Broadcast | Enter Dynamic Address Assignment |
+| 0x00     | ENEC     | Broadcast | Enable Events (broadcast)        |
+| 0x80     | ENEC     | Direct    | Enable Events (specific target)  |
+| 0x01     | DISEC    | Broadcast | Disable Events (broadcast)       |
+| 0x81     | DISEC    | Direct    | Disable Events (specific target) |
 
 The module is split into two tightly coupled components:
+
 - **`ccc`** — Top-level CCC dispatcher FSM that handles ENEC/DISEC and delegates ENTDAA
 - **`ccc_entdaa`** — Dedicated sub-FSM for the ENTDAA arbitration procedure
 
 ## 2. Dependencies
 
 ### Sub-modules
+
 - `ccc_entdaa` — Instantiated by `ccc`
 
 ### Parent modules
+
 - `controller_active` (connected to bus_tx_flow, bus_rx_flow, bus_monitor)
 
 ### Packages
+
 - `controller_pkg` — For `dat_entry_t`
 - `i3c_pkg` — For bus state types
 
@@ -41,25 +45,28 @@ None.
 ### ccc (Top-Level CCC Processor)
 
 #### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
-| `clk_i`  | Input     | 1     | System clock             |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
 #### Command Interface (from flow_active)
-| Signal         | Direction | Width | Description                         |
-|----------------|-----------|-------|-------------------------------------|
-| `ccc_i`        | Input     | 8     | CCC command code                    |
-| `ccc_valid_i`  | Input     | 1     | Assert to start CCC execution       |
-| `def_byte_i`   | Input     | 8     | Defining byte (for ENEC/DISEC)      |
-| `dev_addr_i`   | Input     | 7     | Target address (for Direct CCCs)    |
-| `dev_count_i`  | Input     | 4     | Number of devices (for ENTDAA)      |
-| `done_o`       | Output    | 1     | CCC execution complete              |
-| `invalid_ccc_o`| Output    | 1     | Unsupported CCC code received       |
+
+| Signal          | Direction | Width | Description                      |
+| --------------- | --------- | ----- | -------------------------------- |
+| `ccc_i`         | Input     | 8     | CCC command code                 |
+| `ccc_valid_i`   | Input     | 1     | Assert to start CCC execution    |
+| `def_byte_i`    | Input     | 8     | Defining byte (for ENEC/DISEC)   |
+| `dev_addr_i`    | Input     | 7     | Target address (for Direct CCCs) |
+| `dev_count_i`   | Input     | 4     | Number of devices (for ENTDAA)   |
+| `done_o`        | Output    | 1     | CCC execution complete           |
+| `invalid_ccc_o` | Output    | 1     | Unsupported CCC code received    |
 
 #### Bus TX Interface
+
 | Signal               | Direction | Width | Description                  |
-|----------------------|-----------|-------|------------------------------|
+| -------------------- | --------- | ----- | ---------------------------- |
 | `bus_tx_done_i`      | Input     | 1     | TX completed current request |
 | `bus_tx_idle_i`      | Input     | 1     | TX is idle                   |
 | `bus_tx_req_byte_o`  | Output    | 1     | Request byte transmission    |
@@ -68,54 +75,61 @@ None.
 | `bus_tx_sel_od_pp_o` | Output    | 1     | OD/PP mode for this TX       |
 
 #### Bus RX Interface
-| Signal               | Direction | Width | Description                  |
-|----------------------|-----------|-------|------------------------------|
-| `bus_rx_data_i`      | Input     | 8     | Received data                |
-| `bus_rx_done_i`      | Input     | 1     | RX completed current request |
-| `bus_rx_req_bit_o`   | Output    | 1     | Request bit reception        |
-| `bus_rx_req_byte_o`  | Output    | 1     | Request byte reception       |
+
+| Signal              | Direction | Width | Description                  |
+| ------------------- | --------- | ----- | ---------------------------- |
+| `bus_rx_data_i`     | Input     | 8     | Received data                |
+| `bus_rx_done_i`     | Input     | 1     | RX completed current request |
+| `bus_rx_req_bit_o`  | Output    | 1     | Request bit reception        |
+| `bus_rx_req_byte_o` | Output    | 1     | Request byte reception       |
 
 #### Bus Monitor Interface
-| Signal              | Direction | Width | Description                   |
-|---------------------|-----------|-------|-------------------------------|
-| `bus_start_det_i`   | Input     | 1     | START detected                |
-| `bus_rstart_det_i`  | Input     | 1     | Repeated START detected       |
-| `bus_stop_det_i`    | Input     | 1     | STOP detected                 |
+
+| Signal             | Direction | Width | Description             |
+| ------------------ | --------- | ----- | ----------------------- |
+| `bus_start_det_i`  | Input     | 1     | START detected          |
+| `bus_rstart_det_i` | Input     | 1     | Repeated START detected |
+| `bus_stop_det_i`   | Input     | 1     | STOP detected           |
 
 #### DAA Output (for ENTDAA)
-| Signal              | Direction | Width | Description                    |
-|---------------------|-----------|-------|--------------------------------|
-| `daa_address_o`     | Output    | 7     | Assigned dynamic address       |
-| `daa_address_valid_o`| Output   | 1     | Address assignment valid pulse |
-| `daa_pid_o`         | Output    | 48    | Provisioned ID of assigned device |
-| `daa_bcr_o`         | Output    | 8     | BCR of assigned device         |
-| `daa_dcr_o`         | Output    | 8     | DCR of assigned device         |
+
+| Signal                | Direction | Width | Description                       |
+| --------------------- | --------- | ----- | --------------------------------- |
+| `daa_address_o`       | Output    | 7     | Assigned dynamic address          |
+| `daa_address_valid_o` | Output    | 1     | Address assignment valid pulse    |
+| `daa_pid_o`           | Output    | 48    | Provisioned ID of assigned device |
+| `daa_bcr_o`           | Output    | 8     | BCR of assigned device            |
+| `daa_dcr_o`           | Output    | 8     | DCR of assigned device            |
 
 ### ccc_entdaa (ENTDAA Sub-FSM)
 
 #### Identity Inputs (from master — addresses to assign)
-| Signal          | Direction | Width | Description                         |
-|-----------------|-----------|-------|-------------------------------------|
-| `id_i`          | Input     | 48    | Provisioned ID (unused in master mode; for target) |
-| `dcr_i`         | Input     | 8     | DCR (unused in master mode)         |
-| `bcr_i`         | Input     | 8     | BCR (unused in master mode)         |
+
+| Signal  | Direction | Width | Description                                        |
+| ------- | --------- | ----- | -------------------------------------------------- |
+| `id_i`  | Input     | 48    | Provisioned ID (unused in master mode; for target) |
+| `dcr_i` | Input     | 8     | DCR (unused in master mode)                        |
+| `bcr_i` | Input     | 8     | BCR (unused in master mode)                        |
 
 #### DAA Control
-| Signal              | Direction | Width | Description                    |
-|---------------------|-----------|-------|--------------------------------|
-| `start_daa_i`       | Input     | 1     | Start DAA procedure            |
-| `done_daa_o`        | Output    | 1     | DAA round complete             |
-| `process_virtual_i` | Input     | 1     | Use virtual ID (tied to '0)   |
+
+| Signal              | Direction | Width | Description                 |
+| ------------------- | --------- | ----- | --------------------------- |
+| `start_daa_i`       | Input     | 1     | Start DAA procedure         |
+| `done_daa_o`        | Output    | 1     | DAA round complete          |
+| `process_virtual_i` | Input     | 1     | Use virtual ID (tied to '0) |
 
 #### Bus TX/RX/Monitor
+
 Same as `ccc` TX/RX/Monitor interfaces (directly connected).
 
 #### Address Output
-| Signal            | Direction | Width | Description                      |
-|-------------------|-----------|-------|----------------------------------|
-| `address_o`       | Output    | 7     | Received dynamic address (from master to target) |
-| `address_valid_o` | Output    | 1     | Address valid pulse              |
-| `arbitration_lost_i` | Input  | 1     | Arbitration lost signal          |
+
+| Signal               | Direction | Width | Description                                      |
+| -------------------- | --------- | ----- | ------------------------------------------------ |
+| `address_o`          | Output    | 7     | Received dynamic address (from master to target) |
+| `address_valid_o`    | Output    | 1     | Address valid pulse                              |
+| `arbitration_lost_i` | Input     | 1     | Arbitration lost signal                          |
 
 ## 5. Functional Description
 
@@ -162,6 +176,7 @@ stateDiagram-v2
 ```
 
 The CCC module drives this sequence by:
+
 1. Requesting bus_tx to send broadcast address byte `{7'h7E, 1'b0}` (0xFC)
 2. Reading ACK via bus_rx (1-bit)
 3. Sending CCC code byte
@@ -172,12 +187,12 @@ The CCC module drives this sequence by:
 
 **Defining byte for ENEC/DISEC:**
 
-| Bit | Meaning                    |
-|-----|----------------------------|
-| [0] | Interrupt Request (IBI)    |
-| [1] | Controller Role Request    |
-| [2] | Hot-Join                   |
-| [7:3] | Reserved                 |
+| Bit   | Meaning                 |
+| ----- | ----------------------- |
+| [0]   | Interrupt Request (IBI) |
+| [1]   | Controller Role Request |
+| [2]   | Hot-Join                |
+| [7:3] | Reserved                |
 
 ### 5.3. Direct CCC Frame (ENEC/DISEC)
 
@@ -186,6 +201,7 @@ The CCC module drives this sequence by:
 ```
 
 Additional steps for direct CCC:
+
 1. After CCC code ACK: signal flow_active to generate Repeated START
 2. Send target address byte `{dev_addr_i, 1'b0}`
 3. Read ACK
@@ -197,6 +213,7 @@ Additional steps for direct CCC:
 ENTDAA is handled by the `ccc_entdaa` sub-FSM. The master-side flow differs from the reference (which is target-side):
 
 **Master-side ENTDAA sequence:**
+
 1. Send broadcast header `[S] [0x7E + W]`
 2. Read ACK
 3. Send ENTDAA code (0x07)
@@ -237,6 +254,7 @@ stateDiagram-v2
 ```
 
 **Note:** The `ccc_entdaa` module in the reference is designed from the TARGET perspective (it sends its own PID and receives an address). For master-side operation, the roles are reversed:
+
 - Master RECEIVES the 64-bit PID+BCR+DCR (via bus_rx)
 - Master SENDS the dynamic address (via bus_tx)
 
@@ -264,24 +282,24 @@ end
 
 ## 6. Timing Requirements
 
-| Aspect                 | Requirement                                         |
-|------------------------|-----------------------------------------------------|
-| ENTDAA per-device      | 64 SCL cycles (PID+BCR+DCR) + 9 cycles (addr+ACK) + overhead |
-| ENEC/DISEC             | 3 bytes + ACKs = ~27 SCL cycles + START/STOP        |
-| Arbitration detection  | Must detect within 1 SCL cycle (SDA readback)       |
+| Aspect                | Requirement                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| ENTDAA per-device     | 64 SCL cycles (PID+BCR+DCR) + 9 cycles (addr+ACK) + overhead |
+| ENEC/DISEC            | 3 bytes + ACKs = ~27 SCL cycles + START/STOP                 |
+| Arbitration detection | Must detect within 1 SCL cycle (SDA readback)                |
 
 ## 7. Changes from Reference Design
 
-| Aspect                     | Reference                              | This Design                       |
-|----------------------------|----------------------------------------|-----------------------------------|
-| CCC count                  | 40+ CCCs (23 FSM states)               | 3 CCCs (ENTDAA, ENEC, DISEC)     |
-| Target-side CCC handling   | Full decode/response for all CCCs      | Removed (master only)             |
-| Virtual device support     | `process_virtual_i` logic              | Tied to '0 (removed)             |
-| HDR mode outputs           | 8 `ent_hdr_*` signals                  | Removed                           |
-| ccc.sv FSM states          | 23 states                              | ~8 states                         |
-| ccc_entdaa                 | 13 states (target perspective)         | Adapted for master perspective    |
-| MWL/MRL/SETDASA outputs    | Full set of CSR write ports            | Removed                           |
-| Error handling             | NACK detection, timeout                | Basic NACK detection              |
+| Aspect                   | Reference                         | This Design                    |
+| ------------------------ | --------------------------------- | ------------------------------ |
+| CCC count                | 40+ CCCs (23 FSM states)          | 3 CCCs (ENTDAA, ENEC, DISEC)   |
+| Target-side CCC handling | Full decode/response for all CCCs | Removed (master only)          |
+| Virtual device support   | `process_virtual_i` logic         | Tied to '0 (removed)           |
+| HDR mode outputs         | 8 `ent_hdr_*` signals             | Removed                        |
+| ccc.sv FSM states        | 23 states                         | ~8 states                      |
+| ccc_entdaa               | 13 states (target perspective)    | Adapted for master perspective |
+| MWL/MRL/SETDASA outputs  | Full set of CSR write ports       | Removed                        |
+| Error handling           | NACK detection, timeout           | Basic NACK detection           |
 
 ### CCC Module Size Reduction
 
@@ -295,15 +313,15 @@ This design:             ~200 lines (adapted for master perspective)
 
 ## 8. Error Handling
 
-| Error                   | Detection                              | Action                        |
-|-------------------------|----------------------------------------|-------------------------------|
-| NACK on broadcast addr  | ACK bit == 1 after 0x7E+W             | `err_status = AddrHeader`     |
-| NACK on CCC code        | ACK bit == 1 after CCC byte           | `err_status = Nack`           |
-| NACK on ENTDAA address  | ACK bit == 1 after dynamic addr       | Retry with different address  |
-| Parity error (ENTDAA)   | Calculated parity != received parity  | NACK, retry round             |
-| Arbitration lost         | SDA readback != SDA driven            | End round, try next device    |
-| Unsupported CCC          | CCC code not in {0x00,0x01,0x07,0x80,0x81} | `invalid_ccc_o` pulse    |
-| STOP during ENTDAA      | `bus_stop_det_i` during active DAA    | End DAA, go to Done           |
+| Error                  | Detection                                  | Action                       |
+| ---------------------- | ------------------------------------------ | ---------------------------- |
+| NACK on broadcast addr | ACK bit == 1 after 0x7E+W                  | `err_status = AddrHeader`    |
+| NACK on CCC code       | ACK bit == 1 after CCC byte                | `err_status = Nack`          |
+| NACK on ENTDAA address | ACK bit == 1 after dynamic addr            | Retry with different address |
+| Parity error (ENTDAA)  | Calculated parity != received parity       | NACK, retry round            |
+| Arbitration lost       | SDA readback != SDA driven                 | End round, try next device   |
+| Unsupported CCC        | CCC code not in {0x00,0x01,0x07,0x80,0x81} | `invalid_ccc_o` pulse        |
+| STOP during ENTDAA     | `bus_stop_det_i` during active DAA         | End DAA, go to Done          |
 
 ## 9. Test Plan
 
@@ -323,6 +341,7 @@ This design:             ~200 lines (adapted for master perspective)
 12. **STOP during ENTDAA:** External STOP; verify clean termination
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_ccc/

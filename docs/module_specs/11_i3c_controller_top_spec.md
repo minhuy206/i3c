@@ -14,64 +14,71 @@ The top-level module integrates all major subsystems into a single, self-contain
 - **HCI Queues** (`hci_queues`) — Command/data FIFOs
 
 It exposes two external interfaces:
+
 1. **Register bus** — For software access (simple addr/data/wen/ren)
 2. **Physical pins** — SCL and SDA bus lines
 
 ## 2. Dependencies
 
 ### Sub-modules
-| Module              | Instance          | Role                          |
-|---------------------|-------------------|-------------------------------|
-| `controller_active` | `u_ctrl`          | Protocol engine               |
-| `i3c_phy`           | `u_phy`           | Physical layer (2FF + drivers)|
-| `csr_registers`     | `u_csr`           | Register file + DAT           |
-| `hci_queues`        | `u_queues`        | 4 FIFOs (CMD/TX/RX/RESP)     |
+
+| Module              | Instance   | Role                           |
+| ------------------- | ---------- | ------------------------------ |
+| `controller_active` | `u_ctrl`   | Protocol engine                |
+| `i3c_phy`           | `u_phy`    | Physical layer (2FF + drivers) |
+| `csr_registers`     | `u_csr`    | Register file + DAT            |
+| `hci_queues`        | `u_queues` | 4 FIFOs (CMD/TX/RX/RESP)       |
 
 ### Parent modules
+
 - None (this is the top-level)
 
 ### Packages
+
 - `i3c_pkg`
 - `controller_pkg`
 
 ## 3. Parameters
 
-| Parameter         | Type | Default | Description                    |
-|-------------------|------|---------|--------------------------------|
-| `DatDepth`        | int  | 16      | Device Address Table depth     |
-| `CmdFifoDepth`    | int  | 64      | CMD FIFO depth                 |
-| `TxFifoDepth`     | int  | 64      | TX FIFO depth                  |
-| `RxFifoDepth`     | int  | 64      | RX FIFO depth                  |
-| `RespFifoDepth`   | int  | 64      | RESP FIFO depth                |
-| `AddrWidth`       | int  | 12      | Register bus address width     |
-| `DataWidth`       | int  | 32      | Register bus data width        |
+| Parameter       | Type | Default | Description                |
+| --------------- | ---- | ------- | -------------------------- |
+| `DatDepth`      | int  | 16      | Device Address Table depth |
+| `CmdFifoDepth`  | int  | 64      | CMD FIFO depth             |
+| `TxFifoDepth`   | int  | 64      | TX FIFO depth              |
+| `RxFifoDepth`   | int  | 64      | RX FIFO depth              |
+| `RespFifoDepth` | int  | 64      | RESP FIFO depth            |
+| `AddrWidth`     | int  | 12      | Register bus address width |
+| `DataWidth`     | int  | 32      | Register bus data width    |
 
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description                        |
-|----------|-----------|-------|------------------------------------|
-| `clk_i`  | Input     | 1     | System clock (min 333 MHz)         |
-| `rst_ni` | Input     | 1     | Active-low asynchronous reset      |
+
+| Signal   | Direction | Width | Description                   |
+| -------- | --------- | ----- | ----------------------------- |
+| `clk_i`  | Input     | 1     | System clock (min 333 MHz)    |
+| `rst_ni` | Input     | 1     | Active-low asynchronous reset |
 
 ### Register Bus (Software Interface)
-| Signal       | Direction | Width       | Description                  |
-|--------------|-----------|-------------|------------------------------|
-| `reg_addr_i` | Input     | AddrWidth   | Register address             |
-| `reg_wdata_i`| Input     | DataWidth   | Write data                   |
-| `reg_wen_i`  | Input     | 1           | Write enable                 |
-| `reg_ren_i`  | Input     | 1           | Read enable                  |
-| `reg_rdata_o`| Output    | DataWidth   | Read data                    |
-| `reg_ready_o`| Output    | 1           | Transaction acknowledge      |
+
+| Signal        | Direction | Width     | Description             |
+| ------------- | --------- | --------- | ----------------------- |
+| `reg_addr_i`  | Input     | AddrWidth | Register address        |
+| `reg_wdata_i` | Input     | DataWidth | Write data              |
+| `reg_wen_i`   | Input     | 1         | Write enable            |
+| `reg_ren_i`   | Input     | 1         | Read enable             |
+| `reg_rdata_o` | Output    | DataWidth | Read data               |
+| `reg_ready_o` | Output    | 1         | Transaction acknowledge |
 
 ### Physical Bus Pins
-| Signal   | Direction | Width | Description                           |
-|----------|-----------|-------|---------------------------------------|
-| `scl_i`  | Input     | 1     | SCL bus input (from pad)              |
-| `scl_o`  | Output    | 1     | SCL bus output (to pad driver)        |
-| `sda_i`  | Input     | 1     | SDA bus input (from pad)              |
-| `sda_o`  | Output    | 1     | SDA bus output (to pad driver)        |
-| `sel_od_pp_o` | Output | 1    | OD/PP mode select (to pad driver)    |
+
+| Signal        | Direction | Width | Description                       |
+| ------------- | --------- | ----- | --------------------------------- |
+| `scl_i`       | Input     | 1     | SCL bus input (from pad)          |
+| `scl_o`       | Output    | 1     | SCL bus output (to pad driver)    |
+| `sda_i`       | Input     | 1     | SDA bus input (from pad)          |
+| `sda_o`       | Output    | 1     | SDA bus output (to pad driver)    |
+| `sel_od_pp_o` | Output    | 1     | OD/PP mode select (to pad driver) |
 
 ## 5. Functional Description
 
@@ -235,28 +242,28 @@ u_csr.sw_reset_o → u_queues.sw_reset_i
 
 ## 6. Timing Requirements
 
-| Aspect                 | Requirement                                 |
-|------------------------|---------------------------------------------|
-| System clock           | Minimum 333 MHz                             |
-| Register bus latency   | 1 cycle write, combinational read           |
-| Pin-to-internal        | 2 cycle latency (PHY 2FF sync)              |
-| Internal-to-pin        | 0 cycle latency (combinational output path) |
+| Aspect               | Requirement                                 |
+| -------------------- | ------------------------------------------- |
+| System clock         | Minimum 333 MHz                             |
+| Register bus latency | 1 cycle write, combinational read           |
+| Pin-to-internal      | 2 cycle latency (PHY 2FF sync)              |
+| Internal-to-pin      | 0 cycle latency (combinational output path) |
 
 ## 7. Changes from Reference Design
 
-| Aspect                  | Reference                               | This Design                     |
-|-------------------------|-----------------------------------------|---------------------------------|
-| Top hierarchy           | `i3c.sv` → `i3c_wrapper.sv` → modules  | Single `i3c_controller_top`     |
-| Wrappers                | 3 levels of wrappers                    | Flat (1 level)                  |
-| Bus interface           | AXI4 + AHB-Lite adapters (418 lines)   | Simple reg bus (~0 lines of adapter) |
-| `ifdef` conditionals    | `CONTROLLER_SUPPORT`, `TARGET_SUPPORT`, `AXI_ID_FILTERING` | None |
-| Parameters              | 50+ top-level parameters                | 7 parameters                    |
-| SRAM primitives          | `prim_ram_1p_adv` for queues           | Synthesizable reg-based FIFOs   |
-| Recovery handler        | `recovery_handler.sv` instance          | Removed                         |
-| Target mode             | `target_fsm`, `tti` instances           | Removed                         |
-| Standby controller      | `controller_standby` instance           | Removed                         |
-| `controller.sv`         | Intermediate aggregator module          | Removed (flattened)             |
-| `configuration.sv`      | CSR extraction module (80 lines)        | Merged into `csr_registers`     |
+| Aspect               | Reference                                                  | This Design                          |
+| -------------------- | ---------------------------------------------------------- | ------------------------------------ |
+| Top hierarchy        | `i3c.sv` → `i3c_wrapper.sv` → modules                      | Single `i3c_controller_top`          |
+| Wrappers             | 3 levels of wrappers                                       | Flat (1 level)                       |
+| Bus interface        | AXI4 + AHB-Lite adapters (418 lines)                       | Simple reg bus (~0 lines of adapter) |
+| `ifdef` conditionals | `CONTROLLER_SUPPORT`, `TARGET_SUPPORT`, `AXI_ID_FILTERING` | None                                 |
+| Parameters           | 50+ top-level parameters                                   | 7 parameters                         |
+| SRAM primitives      | `prim_ram_1p_adv` for queues                               | Synthesizable reg-based FIFOs        |
+| Recovery handler     | `recovery_handler.sv` instance                             | Removed                              |
+| Target mode          | `target_fsm`, `tti` instances                              | Removed                              |
+| Standby controller   | `controller_standby` instance                              | Removed                              |
+| `controller.sv`      | Intermediate aggregator module                             | Removed (flattened)                  |
+| `configuration.sv`   | CSR extraction module (80 lines)                           | Merged into `csr_registers`          |
 
 ## 8. Error Handling
 
@@ -278,6 +285,7 @@ No error logic at this level. All errors are handled by sub-modules and reported
 10. **FPGA loopback:** Connect SCL_o→SCL_i, SDA_o→SDA_i (with pull-up behavior) for self-test
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_top/
@@ -295,6 +303,7 @@ tests/
 For system-level testing, behavioral models of I3C and I2C targets are needed:
 
 **I3C Target Model (`i3c_target_model.py`):**
+
 - Responds to broadcast address 0x7E
 - Participates in ENTDAA (drives PID/BCR/DCR, accepts address)
 - ACKs assigned dynamic address
@@ -302,6 +311,7 @@ For system-level testing, behavioral models of I3C and I2C targets are needed:
 - Drives T-bit correctly
 
 **I2C Target Model (`i2c_target_model.py`):**
+
 - Responds to configured static address
 - ACKs address and data bytes
 - Provides read data when addressed with RnW=1

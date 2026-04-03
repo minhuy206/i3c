@@ -11,7 +11,7 @@ The HCI (Host Controller Interface) queues provide the data path between softwar
 Four synchronous FIFOs:
 
 | Queue     | Direction | Width  | Software Side | Hardware Side |
-|-----------|-----------|--------|---------------|---------------|
+| --------- | --------- | ------ | ------------- | ------------- |
 | CMD FIFO  | SW → HW   | 64-bit | Write port    | Read port     |
 | TX FIFO   | SW → HW   | 32-bit | Write port    | Read port     |
 | RX FIFO   | HW → SW   | 32-bit | Write port    | Read port     |
@@ -20,91 +20,100 @@ Four synchronous FIFOs:
 ## 2. Dependencies
 
 ### Sub-modules
+
 - `sync_fifo` — Generic synchronous FIFO (parameterized width/depth)
 
 ### Parent modules
+
 - `i3c_controller_top` (top-level)
 
 ### Packages
+
 - `i3c_pkg` — For descriptor type definitions (used by connected modules, not internally)
 
 ## 3. Parameters
 
-| Parameter         | Type | Default | Description              |
-|-------------------|------|---------|--------------------------|
-| `CmdFifoDepth`    | int  | 64      | CMD FIFO depth (entries) |
-| `TxFifoDepth`     | int  | 64      | TX FIFO depth            |
-| `RxFifoDepth`     | int  | 64      | RX FIFO depth            |
-| `RespFifoDepth`   | int  | 64      | RESP FIFO depth          |
-| `CmdDataWidth`    | int  | 64      | CMD entry width (bits)   |
-| `TxDataWidth`     | int  | 32      | TX entry width           |
-| `RxDataWidth`     | int  | 32      | RX entry width           |
-| `RespDataWidth`   | int  | 32      | RESP entry width         |
+| Parameter       | Type | Default | Description              |
+| --------------- | ---- | ------- | ------------------------ |
+| `CmdFifoDepth`  | int  | 64      | CMD FIFO depth (entries) |
+| `TxFifoDepth`   | int  | 64      | TX FIFO depth            |
+| `RxFifoDepth`   | int  | 64      | RX FIFO depth            |
+| `RespFifoDepth` | int  | 64      | RESP FIFO depth          |
+| `CmdDataWidth`  | int  | 64      | CMD entry width (bits)   |
+| `TxDataWidth`   | int  | 32      | TX entry width           |
+| `RxDataWidth`   | int  | 32      | RX entry width           |
+| `RespDataWidth` | int  | 32      | RESP entry width         |
 
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
-| `clk_i`  | Input     | 1     | System clock             |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
 ### Software-Side Reset
-| Signal       | Direction | Width | Description                  |
-|--------------|-----------|-------|------------------------------|
+
+| Signal       | Direction | Width | Description                                     |
+| ------------ | --------- | ----- | ----------------------------------------------- |
 | `sw_reset_i` | Input     | 1     | Software-initiated FIFO reset (from HC_CONTROL) |
 
 ### CMD FIFO — Software Write / Hardware Read
-| Signal               | Direction | Width | Description                    |
-|----------------------|-----------|-------|--------------------------------|
-| `cmd_wvalid_i`       | Input     | 1     | SW write valid                 |
-| `cmd_wready_o`       | Output    | 1     | FIFO ready to accept           |
-| `cmd_wdata_i`        | Input     | 64    | Command descriptor from SW     |
-| `cmd_rvalid_o`       | Output    | 1     | Data available for HW          |
-| `cmd_rready_i`       | Input     | 1     | HW read acknowledge            |
-| `cmd_rdata_o`        | Output    | 64    | Command descriptor to HW       |
-| `cmd_full_o`         | Output    | 1     | FIFO full flag                 |
-| `cmd_empty_o`        | Output    | 1     | FIFO empty flag                |
-| `cmd_depth_o`        | Output    | 7     | Current occupancy count        |
+
+| Signal         | Direction | Width | Description                |
+| -------------- | --------- | ----- | -------------------------- |
+| `cmd_wvalid_i` | Input     | 1     | SW write valid             |
+| `cmd_wready_o` | Output    | 1     | FIFO ready to accept       |
+| `cmd_wdata_i`  | Input     | 64    | Command descriptor from SW |
+| `cmd_rvalid_o` | Output    | 1     | Data available for HW      |
+| `cmd_rready_i` | Input     | 1     | HW read acknowledge        |
+| `cmd_rdata_o`  | Output    | 64    | Command descriptor to HW   |
+| `cmd_full_o`   | Output    | 1     | FIFO full flag             |
+| `cmd_empty_o`  | Output    | 1     | FIFO empty flag            |
+| `cmd_depth_o`  | Output    | 7     | Current occupancy count    |
 
 ### TX FIFO — Software Write / Hardware Read
-| Signal               | Direction | Width | Description                    |
-|----------------------|-----------|-------|--------------------------------|
-| `tx_wvalid_i`        | Input     | 1     | SW write valid                 |
-| `tx_wready_o`        | Output    | 1     | FIFO ready to accept           |
-| `tx_wdata_i`         | Input     | 32    | TX data from SW                |
-| `tx_rvalid_o`        | Output    | 1     | Data available for HW          |
-| `tx_rready_i`        | Input     | 1     | HW read acknowledge            |
-| `tx_rdata_o`         | Output    | 32    | TX data to HW                  |
-| `tx_full_o`          | Output    | 1     | FIFO full flag                 |
-| `tx_empty_o`         | Output    | 1     | FIFO empty flag                |
-| `tx_depth_o`         | Output    | 7     | Current occupancy count        |
+
+| Signal        | Direction | Width | Description             |
+| ------------- | --------- | ----- | ----------------------- |
+| `tx_wvalid_i` | Input     | 1     | SW write valid          |
+| `tx_wready_o` | Output    | 1     | FIFO ready to accept    |
+| `tx_wdata_i`  | Input     | 32    | TX data from SW         |
+| `tx_rvalid_o` | Output    | 1     | Data available for HW   |
+| `tx_rready_i` | Input     | 1     | HW read acknowledge     |
+| `tx_rdata_o`  | Output    | 32    | TX data to HW           |
+| `tx_full_o`   | Output    | 1     | FIFO full flag          |
+| `tx_empty_o`  | Output    | 1     | FIFO empty flag         |
+| `tx_depth_o`  | Output    | 7     | Current occupancy count |
 
 ### RX FIFO — Hardware Write / Software Read
-| Signal               | Direction | Width | Description                    |
-|----------------------|-----------|-------|--------------------------------|
-| `rx_wvalid_i`        | Input     | 1     | HW write valid                 |
-| `rx_wready_o`        | Output    | 1     | FIFO ready to accept           |
-| `rx_wdata_i`         | Input     | 32    | RX data from HW                |
-| `rx_rvalid_o`        | Output    | 1     | Data available for SW          |
-| `rx_rready_i`        | Input     | 1     | SW read acknowledge            |
-| `rx_rdata_o`         | Output    | 32    | RX data to SW                  |
-| `rx_full_o`          | Output    | 1     | FIFO full flag                 |
-| `rx_empty_o`         | Output    | 1     | FIFO empty flag                |
-| `rx_depth_o`         | Output    | 7     | Current occupancy count        |
+
+| Signal        | Direction | Width | Description             |
+| ------------- | --------- | ----- | ----------------------- |
+| `rx_wvalid_i` | Input     | 1     | HW write valid          |
+| `rx_wready_o` | Output    | 1     | FIFO ready to accept    |
+| `rx_wdata_i`  | Input     | 32    | RX data from HW         |
+| `rx_rvalid_o` | Output    | 1     | Data available for SW   |
+| `rx_rready_i` | Input     | 1     | SW read acknowledge     |
+| `rx_rdata_o`  | Output    | 32    | RX data to SW           |
+| `rx_full_o`   | Output    | 1     | FIFO full flag          |
+| `rx_empty_o`  | Output    | 1     | FIFO empty flag         |
+| `rx_depth_o`  | Output    | 7     | Current occupancy count |
 
 ### RESP FIFO — Hardware Write / Software Read
-| Signal               | Direction | Width | Description                    |
-|----------------------|-----------|-------|--------------------------------|
-| `resp_wvalid_i`      | Input     | 1     | HW write valid                 |
-| `resp_wready_o`      | Output    | 1     | FIFO ready to accept           |
-| `resp_wdata_i`       | Input     | 32    | Response descriptor from HW    |
-| `resp_rvalid_o`      | Output    | 1     | Data available for SW          |
-| `resp_rready_i`      | Input     | 1     | SW read acknowledge            |
-| `resp_rdata_o`       | Output    | 32    | Response descriptor to SW      |
-| `resp_full_o`        | Output    | 1     | FIFO full flag                 |
-| `resp_empty_o`       | Output    | 1     | FIFO empty flag                |
-| `resp_depth_o`       | Output    | 7     | Current occupancy count        |
+
+| Signal          | Direction | Width | Description                 |
+| --------------- | --------- | ----- | --------------------------- |
+| `resp_wvalid_i` | Input     | 1     | HW write valid              |
+| `resp_wready_o` | Output    | 1     | FIFO ready to accept        |
+| `resp_wdata_i`  | Input     | 32    | Response descriptor from HW |
+| `resp_rvalid_o` | Output    | 1     | Data available for SW       |
+| `resp_rready_i` | Input     | 1     | SW read acknowledge         |
+| `resp_rdata_o`  | Output    | 32    | Response descriptor to SW   |
+| `resp_full_o`   | Output    | 1     | FIFO full flag              |
+| `resp_empty_o`  | Output    | 1     | FIFO empty flag             |
+| `resp_depth_o`  | Output    | 7     | Current occupancy count     |
 
 ## 5. Functional Description
 
@@ -140,6 +149,7 @@ module sync_fifo #(
 ```
 
 **Implementation:**
+
 - Circular buffer using `logic [Width-1:0] mem [Depth]`
 - Write pointer (`wptr`) and read pointer (`rptr`), both `$clog2(Depth)` bits wide
 - Counter-based full/empty detection: `depth_o` tracks current occupancy
@@ -152,6 +162,7 @@ module sync_fifo #(
 - `flush_i` resets pointers and depth to 0 (does NOT clear memory)
 
 **Valid/Ready handshake protocol:**
+
 ```
 Write: data transferred when wvalid_i == 1 && wready_o == 1 on clock edge
 Read:  data transferred when rvalid_o == 1 && rready_i == 1 on clock edge
@@ -161,11 +172,11 @@ Read:  data transferred when rvalid_o == 1 && rready_i == 1 on clock edge
 
 **CMD FIFO Entry (64-bit):** See `i3c_pkg` for descriptor types:
 
-| Command Type             | Attr Code | Layout (DWORD1 | DWORD0)                |
-|--------------------------|-----------|------------------------------------------------|
-| Immediate Data Transfer  | `3'b001`  | `{data_byte4, data_byte3, data_byte2, def_or_data_byte1} | {toc, wroc, rnw, mode, dtt, rsvd, dev_idx, cp, cmd, tid, attr}` |
-| Regular Transfer         | `3'b000`  | `{data_length, rsvd, def_byte} | {toc, wroc, rnw, mode, dbp, sre, rsvd, dev_idx, cp, cmd, tid, attr}` |
-| Address Assignment       | `3'b010`  | `{rsvd} | {toc, wroc, dev_count, rsvd, dev_idx, rsvd, cmd, tid, attr}` |
+| Command Type            | Attr Code | Layout (DWORD1                                           | DWORD0)                                                              |
+| ----------------------- | --------- | -------------------------------------------------------- | -------------------------------------------------------------------- |
+| Immediate Data Transfer | `3'b001`  | `{data_byte4, data_byte3, data_byte2, def_or_data_byte1} | {toc, wroc, rnw, mode, dtt, rsvd, dev_idx, cp, cmd, tid, attr}`      |
+| Regular Transfer        | `3'b000`  | `{data_length, rsvd, def_byte}                           | {toc, wroc, rnw, mode, dbp, sre, rsvd, dev_idx, cp, cmd, tid, attr}` |
+| Address Assignment      | `3'b010`  | `{rsvd}                                                  | {toc, wroc, dev_count, rsvd, dev_idx, rsvd, cmd, tid, attr}`         |
 
 **TX FIFO Entry (32-bit):** Raw data DWORD — up to 4 bytes of payload per entry.
 
@@ -197,46 +208,46 @@ endmodule
 
 ## 6. Timing Requirements
 
-| Aspect              | Requirement                              |
-|---------------------|------------------------------------------|
-| Write latency       | Data available for read 1 cycle after write (if FIFO was empty) |
-| Read latency        | Data on `rdata_o` in same cycle as `rvalid_o` (combinational read) |
-| Throughput          | 1 entry per clock cycle (write or read)  |
-| Flush latency       | 1 cycle to reset pointers                |
+| Aspect        | Requirement                                                        |
+| ------------- | ------------------------------------------------------------------ |
+| Write latency | Data available for read 1 cycle after write (if FIFO was empty)    |
+| Read latency  | Data on `rdata_o` in same cycle as `rvalid_o` (combinational read) |
+| Throughput    | 1 entry per clock cycle (write or read)                            |
+| Flush latency | 1 cycle to reset pointers                                          |
 
 ## 7. Changes from Reference Design
 
-| Aspect                    | Reference                                  | This Design                       |
-|---------------------------|--------------------------------------------|-----------------------------------|
-| Complexity                | 2,500+ lines with threshold system         | ~250 lines, simple FIFOs          |
-| Threshold interrupts      | Complex start/ready threshold per queue    | Removed — use full/empty flags    |
-| IBI queue                 | 5th FIFO for In-Band Interrupts            | Removed (IBI out of scope)        |
-| TTI (Target Transaction)  | `tti.sv` (600+ lines)                      | Removed (target mode out of scope)|
-| CSRI wrapper              | `csri.sv` (74 lines)                       | Removed                           |
-| Queue depth indicators    | Per-queue depth with threshold comparison  | Simple `depth_o` counter          |
-| Reset control             | Per-queue individual reset                 | Single `sw_reset_i` for all       |
+| Aspect                   | Reference                                 | This Design                        |
+| ------------------------ | ----------------------------------------- | ---------------------------------- |
+| Complexity               | 2,500+ lines with threshold system        | ~250 lines, simple FIFOs           |
+| Threshold interrupts     | Complex start/ready threshold per queue   | Removed — use full/empty flags     |
+| IBI queue                | 5th FIFO for In-Band Interrupts           | Removed (IBI out of scope)         |
+| TTI (Target Transaction) | `tti.sv` (600+ lines)                     | Removed (target mode out of scope) |
+| CSRI wrapper             | `csri.sv` (74 lines)                      | Removed                            |
+| Queue depth indicators   | Per-queue depth with threshold comparison | Simple `depth_o` counter           |
+| Reset control            | Per-queue individual reset                | Single `sw_reset_i` for all        |
 
 ## 8. Register Interface
 
 The queues are accessed via the CSR register interface at these offsets (see spec 07):
 
-| Register          | Offset | Access | Description                      |
-|-------------------|--------|--------|----------------------------------|
-| `CMD_QUEUE_PORT`  | 0x100  | W      | Write CMD descriptor (2x 32-bit writes for 64-bit entry) |
-| `TX_DATA_PORT`    | 0x104  | W      | Write TX data DWORD              |
-| `RX_DATA_PORT`    | 0x108  | R      | Read RX data DWORD               |
-| `RESP_PORT`       | 0x10C  | R      | Read response descriptor         |
-| `QUEUE_STATUS`    | 0x110  | R      | Full/empty flags for all queues  |
+| Register         | Offset | Access | Description                                              |
+| ---------------- | ------ | ------ | -------------------------------------------------------- |
+| `CMD_QUEUE_PORT` | 0x100  | W      | Write CMD descriptor (2x 32-bit writes for 64-bit entry) |
+| `TX_DATA_PORT`   | 0x104  | W      | Write TX data DWORD                                      |
+| `RX_DATA_PORT`   | 0x108  | R      | Read RX data DWORD                                       |
+| `RESP_PORT`      | 0x10C  | R      | Read response descriptor                                 |
+| `QUEUE_STATUS`   | 0x110  | R      | Full/empty flags for all queues                          |
 
 **CMD FIFO 64-bit write protocol:** Software writes DWORD0 first (offset 0x100), then DWORD1 (offset 0x100 again). The CSR module assembles the 64-bit entry and writes to CMD FIFO as a single transaction. A staging register in CSR holds DWORD0 until DWORD1 arrives.
 
 ## 9. Error Handling
 
-| Error              | Detection              | Behavior                         |
-|--------------------|------------------------|----------------------------------|
-| Write to full FIFO | `wvalid & ~wready`     | Write ignored, data lost         |
-| Read from empty    | `rready & ~rvalid`     | No data transferred              |
-| Overflow           | `full_o` flag          | Reported to SW via QUEUE_STATUS  |
+| Error              | Detection          | Behavior                        |
+| ------------------ | ------------------ | ------------------------------- |
+| Write to full FIFO | `wvalid & ~wready` | Write ignored, data lost        |
+| Read from empty    | `rready & ~rvalid` | No data transferred             |
+| Overflow           | `full_o` flag      | Reported to SW via QUEUE_STATUS |
 
 Software is responsible for checking full/empty status before accessing queue ports. The controller hardware checks `tx_queue_empty` before popping TX data and `resp_queue_full` before pushing responses.
 
@@ -256,6 +267,7 @@ Software is responsible for checking full/empty status before accessing queue po
 10. **Reset behavior:** Verify all FIFOs empty after `rst_ni` assertion
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_hci_queues/

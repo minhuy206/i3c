@@ -11,12 +11,15 @@ The RX flow module deserializes data from the SDA bus line into bytes and indivi
 ## 2. Dependencies
 
 ### Sub-modules
+
 - None (single-module implementation, unlike TX which has bus_tx sub-module)
 
 ### Parent modules
+
 - `controller_active` (via `ccc` and `flow_active` control signals)
 
 ### Packages
+
 - None (standalone)
 
 ## 3. Parameters
@@ -26,30 +29,34 @@ None.
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
-| `clk_i`  | Input     | 1     | System clock             |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
 ### Bus Events (from bus_monitor)
-| Signal             | Direction | Width | Description              |
-|--------------------|-----------|-------|--------------------------|
-| `scl_posedge_i`    | Input     | 1     | SCL rising edge          |
-| `scl_stable_high_i`| Input     | 1    | SCL stable HIGH          |
+
+| Signal              | Direction | Width | Description     |
+| ------------------- | --------- | ----- | --------------- |
+| `scl_posedge_i`     | Input     | 1     | SCL rising edge |
+| `scl_stable_high_i` | Input     | 1     | SCL stable HIGH |
 
 ### Bus Data Input
-| Signal  | Direction | Width | Description                    |
-|---------|-----------|-------|--------------------------------|
-| `sda_i` | Input     | 1     | Synchronized SDA from PHY      |
+
+| Signal  | Direction | Width | Description               |
+| ------- | --------- | ----- | ------------------------- |
+| `sda_i` | Input     | 1     | Synchronized SDA from PHY |
 
 ### Request Interface (from flow_active / ccc)
-| Signal          | Direction | Width | Description                          |
-|-----------------|-----------|-------|--------------------------------------|
-| `rx_req_bit_i`  | Input     | 1     | Request to receive a single bit      |
-| `rx_req_byte_i` | Input     | 1     | Request to receive a full byte       |
-| `rx_data_o`     | Output    | 8     | Received data (byte or bit in [0])   |
-| `rx_done_o`     | Output    | 1     | Pulse: reception complete            |
-| `rx_idle_o`     | Output    | 1     | RX flow is idle and ready            |
+
+| Signal          | Direction | Width | Description                        |
+| --------------- | --------- | ----- | ---------------------------------- |
+| `rx_req_bit_i`  | Input     | 1     | Request to receive a single bit    |
+| `rx_req_byte_i` | Input     | 1     | Request to receive a full byte     |
+| `rx_data_o`     | Output    | 8     | Received data (byte or bit in [0]) |
+| `rx_done_o`     | Output    | 1     | Pulse: reception complete          |
+| `rx_idle_o`     | Output    | 1     | RX flow is idle and ready          |
 
 ## 5. Functional Description
 
@@ -71,29 +78,29 @@ stateDiagram-v2
 
 ### 5.2. State Transitions
 
-| Current State      | Condition                    | Next State        |
-|--------------------|------------------------------|-------------------|
-| `Idle`             | `rx_req_byte_i`              | `ReadByte`        |
-| `Idle`             | `rx_req_bit_i`               | `ReadBit`         |
-| `Idle`             | neither                      | `Idle`            |
-| `ReadByte`         | `!rx_req_byte_i`             | `Idle` (abort)    |
-| `ReadByte`         | `rx_done_o` (8 bits done)    | `NextTaskDecision`|
-| `ReadBit`          | `!rx_req_bit_i`              | `Idle` (abort)    |
-| `ReadBit`          | `rx_done` (1 bit done)       | `NextTaskDecision`|
-| `NextTaskDecision` | `rx_req_byte_i`              | `ReadByte`        |
-| `NextTaskDecision` | `rx_req_bit_i`               | `ReadBit`         |
-| `NextTaskDecision` | neither                      | `Idle`            |
+| Current State      | Condition                 | Next State         |
+| ------------------ | ------------------------- | ------------------ |
+| `Idle`             | `rx_req_byte_i`           | `ReadByte`         |
+| `Idle`             | `rx_req_bit_i`            | `ReadBit`          |
+| `Idle`             | neither                   | `Idle`             |
+| `ReadByte`         | `!rx_req_byte_i`          | `Idle` (abort)     |
+| `ReadByte`         | `rx_done_o` (8 bits done) | `NextTaskDecision` |
+| `ReadBit`          | `!rx_req_bit_i`           | `Idle` (abort)     |
+| `ReadBit`          | `rx_done` (1 bit done)    | `NextTaskDecision` |
+| `NextTaskDecision` | `rx_req_byte_i`           | `ReadByte`         |
+| `NextTaskDecision` | `rx_req_bit_i`            | `ReadBit`          |
+| `NextTaskDecision` | neither                   | `Idle`             |
 
 Global abort: if `~req` (neither request asserted), always transition to `Idle`.
 
 ### 5.3. Output Logic
 
-| State             | rx_idle_o | rx_done_o                  | rx_bit_en | bit_counter_en |
-|-------------------|-----------|----------------------------|-----------|----------------|
-| `Idle`            | 1         | 0                          | 0         | 0              |
-| `ReadByte`        | 0         | 1 when counter==0 & rx_done| ~rx_done  | 1              |
-| `ReadBit`         | 0         | 1 when rx_done             | ~rx_done  | 0              |
-| `NextTaskDecision`| 0         | 0                          | req       | 0              |
+| State              | rx_idle_o | rx_done_o                   | rx_bit_en | bit_counter_en |
+| ------------------ | --------- | --------------------------- | --------- | -------------- |
+| `Idle`             | 1         | 0                           | 0         | 0              |
+| `ReadByte`         | 0         | 1 when counter==0 & rx_done | ~rx_done  | 1              |
+| `ReadBit`          | 0         | 1 when rx_done              | ~rx_done  | 0              |
+| `NextTaskDecision` | 0         | 0                           | req       | 0              |
 
 ### 5.4. Bit Sampling
 
@@ -154,28 +161,28 @@ Note: The output uses combinational `sda_i` for the last bit to avoid an extra c
 
 ## 6. Timing Requirements
 
-| Aspect              | Requirement                                    |
-|---------------------|------------------------------------------------|
-| Sampling edge       | SDA sampled on SCL positive edge               |
-| Bit order           | MSB first (bit [7] received first)             |
-| Byte rate           | 8 SCL cycles per byte                          |
-| Output valid        | `rx_data_o` valid when `rx_done_o` pulses      |
+| Aspect        | Requirement                               |
+| ------------- | ----------------------------------------- |
+| Sampling edge | SDA sampled on SCL positive edge          |
+| Bit order     | MSB first (bit [7] received first)        |
+| Byte rate     | 8 SCL cycles per byte                     |
+| Output valid  | `rx_data_o` valid when `rx_done_o` pulses |
 
 ## 7. Changes from Reference Design
 
-| Aspect                    | Reference                       | This Design                     |
-|---------------------------|---------------------------------|---------------------------------|
-| `rx_req_bit` latch        | Stored in FF but uses `rx_req_bit_i` directly in output mux | Keep as-is (registered copy used in FSM transitions, direct input used for output — consistent behavior) |
-| Assertion `RxBitAndByte_A`| Uses `` `I3C_ASSERT `` macro   | Replace with standard `assert` or SVA |
-| `scl_stable_high_i`       | Port exists but unused internally | Keep port for interface consistency |
+| Aspect                     | Reference                                                   | This Design                                                                                              |
+| -------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `rx_req_bit` latch         | Stored in FF but uses `rx_req_bit_i` directly in output mux | Keep as-is (registered copy used in FSM transitions, direct input used for output — consistent behavior) |
+| Assertion `RxBitAndByte_A` | Uses `` `I3C_ASSERT `` macro                                | Replace with standard `assert` or SVA                                                                    |
+| `scl_stable_high_i`        | Port exists but unused internally                           | Keep port for interface consistency                                                                      |
 
 ## 8. Error Handling
 
-| Error                  | Detection                                  | Action                  |
-|------------------------|--------------------------------------------|-------------------------|
-| Simultaneous req       | `rx_req_bit_i & rx_req_byte_i`             | Assertion (design rule) |
-| Abort                  | Request deasserted during reception        | Return to Idle          |
-| Parity error           | NOT detected here — checked by flow_active | N/A                     |
+| Error            | Detection                                  | Action                  |
+| ---------------- | ------------------------------------------ | ----------------------- |
+| Simultaneous req | `rx_req_bit_i & rx_req_byte_i`             | Assertion (design rule) |
+| Abort            | Request deasserted during reception        | Return to Idle          |
+| Parity error     | NOT detected here — checked by flow_active | N/A                     |
 
 The module does not validate parity or T-bit semantics. It simply delivers raw received data. Parity checking is the responsibility of `flow_active` or `ccc`.
 
@@ -194,6 +201,7 @@ The module does not validate parity or T-bit semantics. It simply delivers raw r
 9. **SCL edge alignment:** Verify that SDA is sampled at the exact cycle of `scl_posedge_i` assertion
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_bus_rx/

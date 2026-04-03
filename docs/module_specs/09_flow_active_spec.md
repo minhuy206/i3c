@@ -20,16 +20,20 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 ## 2. Dependencies
 
 ### Sub-modules
+
 - None (purely FSM logic; sub-modules are peers connected by `controller_active`)
 
 ### Parent modules
+
 - `controller_active`
 
 ### Packages
+
 - `controller_pkg` — For `dat_entry_t`, `cmd_transfer_dir_e`
 - `i3c_pkg` — For command descriptors, response descriptors, error types
 
 ### Connected Peer Modules (via controller_active)
+
 - `bus_tx_flow` — Byte/bit transmission
 - `bus_rx_flow` — Byte/bit reception
 - `scl_generator` — Clock and START/STOP generation
@@ -38,121 +42,134 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 
 ## 3. Parameters
 
-| Parameter            | Type | Default | Description                  |
-|---------------------|------|---------|------------------------------|
-| `HciCmdDataWidth`   | int  | 64      | Command descriptor width     |
-| `HciTxDataWidth`    | int  | 32      | TX FIFO data width           |
-| `HciRxDataWidth`    | int  | 32      | RX FIFO data width           |
-| `HciRespDataWidth`  | int  | 32      | Response descriptor width    |
-| `DatDepth`          | int  | 16      | DAT table depth              |
+| Parameter          | Type | Default | Description               |
+| ------------------ | ---- | ------- | ------------------------- |
+| `HciCmdDataWidth`  | int  | 64      | Command descriptor width  |
+| `HciTxDataWidth`   | int  | 32      | TX FIFO data width        |
+| `HciRxDataWidth`   | int  | 32      | RX FIFO data width        |
+| `HciRespDataWidth` | int  | 32      | Response descriptor width |
+| `DatDepth`         | int  | 16      | DAT table depth           |
 
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
-| `clk_i`  | Input     | 1     | System clock             |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
 ### CMD FIFO Interface
-| Signal              | Direction | Width | Description                   |
-|---------------------|-----------|-------|-------------------------------|
-| `cmd_queue_empty_i` | Input     | 1     | CMD FIFO empty                |
-| `cmd_queue_rvalid_i`| Input     | 1     | CMD data valid                |
-| `cmd_queue_rready_o`| Output    | 1     | CMD read acknowledge          |
-| `cmd_queue_rdata_i` | Input     | 64    | Command descriptor            |
+
+| Signal               | Direction | Width | Description          |
+| -------------------- | --------- | ----- | -------------------- |
+| `cmd_queue_empty_i`  | Input     | 1     | CMD FIFO empty       |
+| `cmd_queue_rvalid_i` | Input     | 1     | CMD data valid       |
+| `cmd_queue_rready_o` | Output    | 1     | CMD read acknowledge |
+| `cmd_queue_rdata_i`  | Input     | 64    | Command descriptor   |
 
 ### TX FIFO Interface
-| Signal              | Direction | Width | Description                   |
-|---------------------|-----------|-------|-------------------------------|
-| `tx_queue_empty_i`  | Input     | 1     | TX FIFO empty                 |
-| `tx_queue_rvalid_i` | Input     | 1     | TX data valid                 |
-| `tx_queue_rready_o` | Output    | 1     | TX read acknowledge           |
-| `tx_queue_rdata_i`  | Input     | 32    | TX data DWORD                 |
+
+| Signal              | Direction | Width | Description         |
+| ------------------- | --------- | ----- | ------------------- |
+| `tx_queue_empty_i`  | Input     | 1     | TX FIFO empty       |
+| `tx_queue_rvalid_i` | Input     | 1     | TX data valid       |
+| `tx_queue_rready_o` | Output    | 1     | TX read acknowledge |
+| `tx_queue_rdata_i`  | Input     | 32    | TX data DWORD       |
 
 ### RX FIFO Interface
-| Signal              | Direction | Width | Description                   |
-|---------------------|-----------|-------|-------------------------------|
-| `rx_queue_full_i`   | Input     | 1     | RX FIFO full                  |
-| `rx_queue_wvalid_o` | Output    | 1     | RX write valid                |
-| `rx_queue_wready_i` | Input     | 1     | RX FIFO ready                 |
-| `rx_queue_wdata_o`  | Output    | 32    | RX data DWORD                 |
+
+| Signal              | Direction | Width | Description    |
+| ------------------- | --------- | ----- | -------------- |
+| `rx_queue_full_i`   | Input     | 1     | RX FIFO full   |
+| `rx_queue_wvalid_o` | Output    | 1     | RX write valid |
+| `rx_queue_wready_i` | Input     | 1     | RX FIFO ready  |
+| `rx_queue_wdata_o`  | Output    | 32    | RX data DWORD  |
 
 ### RESP FIFO Interface
-| Signal               | Direction | Width | Description                   |
-|----------------------|-----------|-------|-------------------------------|
-| `resp_queue_full_i`  | Input     | 1     | RESP FIFO full                |
-| `resp_queue_wvalid_o`| Output    | 1     | RESP write valid              |
-| `resp_queue_wready_i`| Input     | 1     | RESP FIFO ready               |
-| `resp_queue_wdata_o` | Output    | 32    | Response descriptor           |
+
+| Signal                | Direction | Width | Description         |
+| --------------------- | --------- | ----- | ------------------- |
+| `resp_queue_full_i`   | Input     | 1     | RESP FIFO full      |
+| `resp_queue_wvalid_o` | Output    | 1     | RESP write valid    |
+| `resp_queue_wready_i` | Input     | 1     | RESP FIFO ready     |
+| `resp_queue_wdata_o`  | Output    | 32    | Response descriptor |
 
 ### DAT Interface
-| Signal                | Direction | Width           | Description            |
-|-----------------------|-----------|-----------------|------------------------|
-| `dat_read_valid_hw_o` | Output    | 1               | Request DAT read       |
-| `dat_index_hw_o`      | Output    | $clog2(DatDepth)| DAT entry index        |
-| `dat_rdata_hw_i`      | Input     | 32              | DAT entry data         |
+
+| Signal                | Direction | Width            | Description      |
+| --------------------- | --------- | ---------------- | ---------------- |
+| `dat_read_valid_hw_o` | Output    | 1                | Request DAT read |
+| `dat_index_hw_o`      | Output    | $clog2(DatDepth) | DAT entry index  |
+| `dat_rdata_hw_i`      | Input     | 32               | DAT entry data   |
 
 ### Bus TX Control (to bus_tx_flow)
-| Signal              | Direction | Width | Description                    |
-|---------------------|-----------|-------|--------------------------------|
-| `bus_tx_req_byte_o` | Output    | 1     | Request byte transmission      |
-| `bus_tx_req_bit_o`  | Output    | 1     | Request bit transmission       |
-| `bus_tx_req_value_o`| Output    | 8     | Value to transmit              |
-| `bus_tx_done_i`     | Input     | 1     | TX completed                   |
-| `bus_tx_idle_i`     | Input     | 1     | TX is idle                     |
+
+| Signal               | Direction | Width | Description               |
+| -------------------- | --------- | ----- | ------------------------- |
+| `bus_tx_req_byte_o`  | Output    | 1     | Request byte transmission |
+| `bus_tx_req_bit_o`   | Output    | 1     | Request bit transmission  |
+| `bus_tx_req_value_o` | Output    | 8     | Value to transmit         |
+| `bus_tx_done_i`      | Input     | 1     | TX completed              |
+| `bus_tx_idle_i`      | Input     | 1     | TX is idle                |
 
 ### Bus RX Control (to bus_rx_flow)
-| Signal              | Direction | Width | Description                    |
-|---------------------|-----------|-------|--------------------------------|
-| `bus_rx_req_byte_o` | Output    | 1     | Request byte reception         |
-| `bus_rx_req_bit_o`  | Output    | 1     | Request bit reception          |
-| `bus_rx_data_i`     | Input     | 8     | Received data                  |
-| `bus_rx_done_i`     | Input     | 1     | RX completed                   |
-| `bus_rx_idle_i`     | Input     | 1     | RX is idle (from `rx_idle_o`)  |
+
+| Signal              | Direction | Width | Description                   |
+| ------------------- | --------- | ----- | ----------------------------- |
+| `bus_rx_req_byte_o` | Output    | 1     | Request byte reception        |
+| `bus_rx_req_bit_o`  | Output    | 1     | Request bit reception         |
+| `bus_rx_data_i`     | Input     | 8     | Received data                 |
+| `bus_rx_done_i`     | Input     | 1     | RX completed                  |
+| `bus_rx_idle_i`     | Input     | 1     | RX is idle (from `rx_idle_o`) |
 
 ### SCL Generator Control
-| Signal            | Direction | Width | Description                      |
-|-------------------|-----------|-------|----------------------------------|
-| `gen_start_o`     | Output    | 1     | Request START                    |
-| `gen_rstart_o`    | Output    | 1     | Request Repeated START           |
-| `gen_stop_o`      | Output    | 1     | Request STOP                     |
-| `gen_clock_o`     | Output    | 1     | Enable clock generation          |
-| `gen_idle_o`      | Output    | 1     | Force return to idle (abort)     |
-| `sel_i3c_i2c_o`   | Output    | 1     | 0 = I2C FM, 1 = I3C SDR         |
-| `scl_gen_done_i`  | Input     | 1     | SCL generator operation complete |
-| `scl_gen_busy_i`  | Input     | 1     | SCL generator is busy            |
+
+| Signal           | Direction | Width | Description                      |
+| ---------------- | --------- | ----- | -------------------------------- |
+| `gen_start_o`    | Output    | 1     | Request START                    |
+| `gen_rstart_o`   | Output    | 1     | Request Repeated START           |
+| `gen_stop_o`     | Output    | 1     | Request STOP                     |
+| `gen_clock_o`    | Output    | 1     | Enable clock generation          |
+| `gen_idle_o`     | Output    | 1     | Force return to idle (abort)     |
+| `sel_i3c_i2c_o`  | Output    | 1     | 0 = I2C FM, 1 = I3C SDR          |
+| `scl_gen_done_i` | Input     | 1     | SCL generator operation complete |
+| `scl_gen_busy_i` | Input     | 1     | SCL generator is busy            |
 
 ### CCC Control (to ccc module)
-| Signal              | Direction | Width | Description                        |
-|---------------------|-----------|-------|------------------------------------|
-| `ccc_valid_o`       | Output    | 1     | Start CCC execution               |
-| `ccc_code_o`        | Output    | 8     | CCC command code (maps to `ccc.ccc_i`) |
-| `ccc_def_byte_o`    | Output    | 8     | Defining byte                      |
-| `ccc_dev_addr_o`    | Output    | 7     | Target address (direct CCC)        |
-| `ccc_dev_count_o`   | Output    | 4     | Device count (ENTDAA)              |
-| `ccc_done_i`        | Input     | 1     | CCC execution complete (from `ccc.done_o`) |
-| `ccc_invalid_i`     | Input     | 1     | Unsupported CCC (from `ccc.invalid_ccc_o`) |
+
+| Signal            | Direction | Width | Description                                |
+| ----------------- | --------- | ----- | ------------------------------------------ |
+| `ccc_valid_o`     | Output    | 1     | Start CCC execution                        |
+| `ccc_code_o`      | Output    | 8     | CCC command code (maps to `ccc.ccc_i`)     |
+| `ccc_def_byte_o`  | Output    | 8     | Defining byte                              |
+| `ccc_dev_addr_o`  | Output    | 7     | Target address (direct CCC)                |
+| `ccc_dev_count_o` | Output    | 4     | Device count (ENTDAA)                      |
+| `ccc_done_i`      | Input     | 1     | CCC execution complete (from `ccc.done_o`) |
+| `ccc_invalid_i`   | Input     | 1     | Unsupported CCC (from `ccc.invalid_ccc_o`) |
 
 ### CCC DAA Results (from ccc module)
-| Signal              | Direction | Width | Description                        |
-|---------------------|-----------|-------|------------------------------------|
-| `daa_address_i`     | Input     | 7     | Assigned dynamic address           |
-| `daa_address_valid_i`| Input    | 1     | Address assignment valid pulse     |
-| `daa_pid_i`         | Input     | 48    | Provisioned ID of assigned device  |
-| `daa_bcr_i`         | Input     | 8     | BCR of assigned device             |
-| `daa_dcr_i`         | Input     | 8     | DCR of assigned device             |
+
+| Signal                | Direction | Width | Description                       |
+| --------------------- | --------- | ----- | --------------------------------- |
+| `daa_address_i`       | Input     | 7     | Assigned dynamic address          |
+| `daa_address_valid_i` | Input     | 1     | Address assignment valid pulse    |
+| `daa_pid_i`           | Input     | 48    | Provisioned ID of assigned device |
+| `daa_bcr_i`           | Input     | 8     | BCR of assigned device            |
+| `daa_dcr_i`           | Input     | 8     | DCR of assigned device            |
 
 ### OD/PP Mode Control
-| Signal          | Direction | Width | Description                          |
-|-----------------|-----------|-------|--------------------------------------|
-| `sel_od_pp_o`   | Output    | 1     | 0=Open-Drain, 1=Push-Pull           |
+
+| Signal        | Direction | Width | Description               |
+| ------------- | --------- | ----- | ------------------------- |
+| `sel_od_pp_o` | Output    | 1     | 0=Open-Drain, 1=Push-Pull |
 
 ### Status
-| Signal           | Direction | Width | Description                       |
-|------------------|-----------|-------|-----------------------------------|
-| `i3c_fsm_en_i`  | Input     | 1     | FSM enable (from CSR)             |
-| `i3c_fsm_idle_o`| Output    | 1     | FSM is idle                       |
+
+| Signal           | Direction | Width | Description           |
+| ---------------- | --------- | ----- | --------------------- |
+| `i3c_fsm_en_i`   | Input     | 1     | FSM enable (from CSR) |
+| `i3c_fsm_idle_o` | Output    | 1     | FSM is idle           |
 
 ## 5. Functional Description
 
@@ -216,17 +233,20 @@ stateDiagram-v2
 ### 5.2. State Descriptions (All 13 States)
 
 #### Idle (State 0) — IMPLEMENTED in reference
+
 - **Purpose:** Wait for software to enable the FSM
 - **Outputs:** `i3c_fsm_idle_o = 1`
 - **Transition:** → `WaitForCmd` when `i3c_fsm_en_i` asserted
 
 #### WaitForCmd (State 1) — IMPLEMENTED in reference
+
 - **Purpose:** Fetch next command descriptor from CMD FIFO
 - **Outputs:** `cmd_queue_rready_o = 1`
 - **Actions:** Latch `cmd_queue_rdata_i` into internal `cmd_desc` register
 - **Transition:** → `FetchDAT` when `!cmd_queue_empty_i & cmd_queue_rvalid_i`
 
 #### FetchDAT (State 2) — IMPLEMENTED in reference
+
 - **Purpose:** Read the DAT entry pointed to by `dev_index` field of command descriptor
 - **Outputs:** `dat_read_valid_hw_o = 1`, `dat_index_hw_o = dev_index`
 - **Actions:** Capture `dat_rdata_hw_i` after 1-cycle latency
@@ -238,6 +258,7 @@ stateDiagram-v2
   - `cmd_dir == Read` → `IssueCmd`
 
 #### I2CWriteImmediate (State 4) — IMPLEMENTED in reference
+
 - **Purpose:** Execute immediate data transfer to a legacy I2C device
 - **Actions:**
   - Generate START via `scl_generator`
@@ -250,6 +271,7 @@ stateDiagram-v2
 - **Transition:** → `WriteResp` when all bytes sent
 
 #### I3CWriteImmediate (State 3) — **NEW (was TODO)**
+
 - **Purpose:** Execute immediate data transfer to an I3C device (CCC with inline data)
 - **Actions:**
   - Generate START via `scl_generator` (Open-Drain)
@@ -267,6 +289,7 @@ stateDiagram-v2
 - **Transition:** → `WriteResp` when complete
 
 #### FetchTxData (State 5) — **NEW (was TODO)**
+
 - **Purpose:** Pop a 32-bit DWORD from TX FIFO for regular/combo write transfers
 - **Actions:**
   - Assert `tx_queue_rready_o` to pop TX FIFO
@@ -277,6 +300,7 @@ stateDiagram-v2
   - → `StallWrite` if TX FIFO empty
 
 #### FetchRxData (State 6) — **NEW (was TODO)**
+
 - **Purpose:** Push received data to RX FIFO
 - **Actions:**
   - Assemble received bytes into a 32-bit DWORD (4 bytes per entry)
@@ -287,6 +311,7 @@ stateDiagram-v2
   - → `StallRead` if RX FIFO full
 
 #### InitI2CWrite (State 7) — **NEW (was TODO)**
+
 - **Purpose:** Initialize a regular I2C write transaction
 - **Actions:**
   - Generate START (Open-Drain)
@@ -296,6 +321,7 @@ stateDiagram-v2
 - **Transition:** → `IssueCmd` to send data bytes, or → `WriteResp` on NACK
 
 #### InitI2CRead (State 8) — **NEW (was TODO)**
+
 - **Purpose:** Initialize a regular I2C read transaction
 - **Actions:**
   - Generate START (Open-Drain)
@@ -305,6 +331,7 @@ stateDiagram-v2
 - **Transition:** → `IssueCmd` to receive data bytes, or → `WriteResp` on NACK
 
 #### StallWrite (State 9) — **NEW (was TODO)**
+
 - **Purpose:** Stall bus clock while waiting for TX FIFO data (prevents underflow)
 - **Actions:**
   - Hold SCL LOW (deassert `gen_clock_o`)
@@ -312,6 +339,7 @@ stateDiagram-v2
 - **Transition:** → `FetchTxData` when TX data available
 
 #### StallRead (State 10) — **NEW (was TODO)**
+
 - **Purpose:** Stall bus clock while waiting for RX FIFO space (prevents overflow)
 - **Actions:**
   - Hold SCL LOW (deassert `gen_clock_o`)
@@ -319,6 +347,7 @@ stateDiagram-v2
 - **Transition:** → `FetchRxData` when RX space available
 
 #### IssueCmd (State 11) — **NEW (was TODO)**
+
 - **Purpose:** Core bus transaction execution — sends/receives data bytes on the bus
 - **Actions (Write):**
   - Enable clock generation (`gen_clock_o = 1`)
@@ -343,13 +372,16 @@ stateDiagram-v2
   - I3C transfers: Open-Drain for address/ACK, Push-Pull for data
 
 #### WriteResp (State 12) — IMPLEMENTED in reference
+
 - **Purpose:** Generate response descriptor and push to RESP FIFO
 - **Outputs:**
+
   ```systemverilog
   resp_desc.err_status  = resp_err_status_d;  // Accumulated error
   resp_desc.tid         = cmd_tid;             // From command descriptor
   resp_desc.data_length = resp_data_length_d;  // Actual bytes transferred
   ```
+
 - **Actions:** Assert `resp_queue_wvalid_o` when `resp_queue_wready_i`
 - **Transition:** → `Idle` when response written
 
@@ -365,14 +397,17 @@ assign cmd_dir  = cmd_desc[29] ? Read : Write;
 ```
 
 **Immediate Data Transfer (`attr = 3'b001`):**
+
 - `dtt` field (bits [25:23]): 0-4 = data bytes, 5-7 = defining byte + (dtt-5) data bytes
 - Data bytes packed in DWORD1: `{data_byte4, data_byte3, data_byte2, def_or_data_byte1}`
 
 **Regular Transfer (`attr = 3'b000`):**
+
 - `data_length` in DWORD1[63:48]
 - Data comes from TX FIFO (write) or goes to RX FIFO (read)
 
 **Address Assignment (`attr = 3'b010`):**
+
 - `dev_count` in bits [29:26]
 - Triggers ENTDAA via CCC module
 
@@ -412,44 +447,44 @@ end
 
 ## 6. Timing Requirements
 
-| Aspect                    | Requirement                                       |
-|--------------------------|---------------------------------------------------|
-| CMD fetch latency         | 1 cycle (registered FIFO output)                 |
-| DAT read latency          | 1 cycle (registered read)                        |
-| TX FIFO to bus            | ~3 cycles (fetch + latch + drive)                |
-| RX bus to FIFO            | ~2 cycles (sample + assemble)                    |
-| Response generation       | 1 cycle after transaction completion             |
+| Aspect              | Requirement                          |
+| ------------------- | ------------------------------------ |
+| CMD fetch latency   | 1 cycle (registered FIFO output)     |
+| DAT read latency    | 1 cycle (registered read)            |
+| TX FIFO to bus      | ~3 cycles (fetch + latch + drive)    |
+| RX bus to FIFO      | ~2 cycles (sample + assemble)        |
+| Response generation | 1 cycle after transaction completion |
 
 ## 7. Changes from Reference Design
 
-| Aspect                     | Reference                              | This Design                    |
-|----------------------------|----------------------------------------|--------------------------------|
-| Implemented states         | 5 of 13 (8 TODO)                       | All 13 implemented             |
-| I3CWriteImmediate          | Empty TODO                             | Full implementation            |
-| FetchTxData / FetchRxData  | Empty TODO                             | Full implementation            |
-| InitI2CWrite/Read          | Empty TODO                             | Full implementation            |
-| StallWrite/Read            | Empty TODO                             | Full implementation            |
-| IssueCmd                   | Empty TODO                             | Full implementation            |
-| Error handling             | Always returns `Success`               | Proper error accumulation      |
-| IBI interface              | 8 ports, always `'0`                   | Removed entirely               |
-| DCT interface              | Full DCT read/write ports              | Removed (SW stores PID/BCR/DCR)|
-| I2C controller interface   | `fmt_fifo_*` signals to `i2c_controller_fsm` | Direct bus_tx/bus_rx control |
-| HCI threshold signals      | 10+ threshold ports per queue          | Removed (use full/empty only) |
-| `rx_queue_wvalid_o`        | Tied to `'0` (disabled)                | Fully functional               |
-| Parameters                 | 10 HCI width/threshold parameters      | 5 essential parameters         |
-| OD/PP control              | Not implemented (hardcoded OD)         | Proper phase-based switching   |
+| Aspect                    | Reference                                    | This Design                     |
+| ------------------------- | -------------------------------------------- | ------------------------------- |
+| Implemented states        | 5 of 13 (8 TODO)                             | All 13 implemented              |
+| I3CWriteImmediate         | Empty TODO                                   | Full implementation             |
+| FetchTxData / FetchRxData | Empty TODO                                   | Full implementation             |
+| InitI2CWrite/Read         | Empty TODO                                   | Full implementation             |
+| StallWrite/Read           | Empty TODO                                   | Full implementation             |
+| IssueCmd                  | Empty TODO                                   | Full implementation             |
+| Error handling            | Always returns `Success`                     | Proper error accumulation       |
+| IBI interface             | 8 ports, always `'0`                         | Removed entirely                |
+| DCT interface             | Full DCT read/write ports                    | Removed (SW stores PID/BCR/DCR) |
+| I2C controller interface  | `fmt_fifo_*` signals to `i2c_controller_fsm` | Direct bus_tx/bus_rx control    |
+| HCI threshold signals     | 10+ threshold ports per queue                | Removed (use full/empty only)   |
+| `rx_queue_wvalid_o`       | Tied to `'0` (disabled)                      | Fully functional                |
+| Parameters                | 10 HCI width/threshold parameters            | 5 essential parameters          |
+| OD/PP control             | Not implemented (hardcoded OD)               | Proper phase-based switching    |
 
 ## 8. Error Handling
 
-| Error                | Detection                                    | Response Code    |
-|----------------------|----------------------------------------------|-----------------|
-| Address NACK         | ACK bit = 1 after address byte               | `AddrHeader`    |
-| Data NACK            | ACK bit = 1 after data byte                  | `Nack`          |
-| Parity error         | T-bit != calculated odd parity               | `Parity`        |
-| TX underflow         | TX FIFO empty when data needed               | Stall (StallWrite), then `Ovl` if timeout |
-| RX overflow          | RX FIFO full when data received              | Stall (StallRead), then `Ovl` if timeout |
-| Frame error          | Unexpected bus condition during transfer      | `Frame`         |
-| CCC invalid          | `ccc.invalid_ccc_o` pulse                    | `NotSupported`  |
+| Error        | Detection                                | Response Code                             |
+| ------------ | ---------------------------------------- | ----------------------------------------- |
+| Address NACK | ACK bit = 1 after address byte           | `AddrHeader`                              |
+| Data NACK    | ACK bit = 1 after data byte              | `Nack`                                    |
+| Parity error | T-bit != calculated odd parity           | `Parity`                                  |
+| TX underflow | TX FIFO empty when data needed           | Stall (StallWrite), then `Ovl` if timeout |
+| RX overflow  | RX FIFO full when data received          | Stall (StallRead), then `Ovl` if timeout  |
+| Frame error  | Unexpected bus condition during transfer | `Frame`                                   |
+| CCC invalid  | `ccc.invalid_ccc_o` pulse                | `NotSupported`                            |
 
 ## 9. Test Plan
 
@@ -472,12 +507,14 @@ end
 15. **Back-to-back transfers:** No idle gap between commands; verify performance
 
 ### Corner Cases
+
 - Empty CMD FIFO when FSM enabled (stays in WaitForCmd)
 - RESP FIFO full when writing response (stays in WriteResp until space available)
 - Zero-length transfer (`data_length = 0`)
 - Maximum-length transfer (`data_length = 65535`)
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_flow_active/

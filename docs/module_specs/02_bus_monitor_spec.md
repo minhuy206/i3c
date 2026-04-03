@@ -11,13 +11,16 @@ The bus monitor detects bus events (START, Repeated START, STOP) by observing tr
 ## 2. Dependencies
 
 ### Sub-modules
+
 - `edge_detector` — Timing-aware edge detector (parameterized for rising/falling)
 - `stable_high_detector` — Detects stable HIGH/LOW level for a configurable duration
 
 ### Parent modules
+
 - `controller_active`
 
 ### Packages
+
 - `i3c_pkg` — Defines `bus_state_t`, `signal_state_t`
 
 ### Shared Types (from `i3c_pkg`)
@@ -47,32 +50,37 @@ None (timing is configured via input ports).
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
-| `clk_i`  | Input     | 1     | System clock             |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
 ### Control
-| Signal     | Direction | Width | Description                        |
-|------------|-----------|-------|------------------------------------|
-| `enable_i` | Input     | 1     | Enable bus monitoring (gating)     |
+
+| Signal     | Direction | Width | Description                    |
+| ---------- | --------- | ----- | ------------------------------ |
+| `enable_i` | Input     | 1     | Enable bus monitoring (gating) |
 
 ### Bus Inputs (synchronized by PHY)
-| Signal  | Direction | Width | Description                    |
-|---------|-----------|-------|--------------------------------|
-| `scl_i` | Input     | 1     | Synchronized SCL from PHY      |
-| `sda_i` | Input     | 1     | Synchronized SDA from PHY      |
+
+| Signal  | Direction | Width | Description               |
+| ------- | --------- | ----- | ------------------------- |
+| `scl_i` | Input     | 1     | Synchronized SCL from PHY |
+| `sda_i` | Input     | 1     | Synchronized SDA from PHY |
 
 ### Timing Configuration
-| Signal       | Direction | Width | Description                              |
-|--------------|-----------|-------|------------------------------------------|
-| `t_hd_dat_i` | Input     | 20    | Data hold time (system clock cycles)     |
-| `t_r_i`      | Input     | 20    | Rise time (system clock cycles)          |
-| `t_f_i`      | Input     | 20    | Fall time (system clock cycles)          |
+
+| Signal       | Direction | Width | Description                          |
+| ------------ | --------- | ----- | ------------------------------------ |
+| `t_hd_dat_i` | Input     | 20    | Data hold time (system clock cycles) |
+| `t_r_i`      | Input     | 20    | Rise time (system clock cycles)      |
+| `t_f_i`      | Input     | 20    | Fall time (system clock cycles)      |
 
 ### Output
-| Signal    | Direction | Width        | Description                       |
-|-----------|-----------|--------------|-----------------------------------|
+
+| Signal    | Direction | Width         | Description                           |
+| --------- | --------- | ------------- | ------------------------------------- |
 | `state_o` | Output    | `bus_state_t` | Complete bus state (see struct above) |
 
 ## 5. Functional Description
@@ -81,15 +89,15 @@ None (timing is configured via input ports).
 
 The module instantiates 4 `edge_detector` instances and 3 `stable_high_detector` instances:
 
-| Instance                 | Detects                    | Delay    | Output            |
-|--------------------------|---------------------------|----------|-------------------|
-| `edge_detector_scl_negedge` | SCL falling edge       | `t_f_i`  | `scl_negedge`     |
-| `edge_detector_scl_posedge` | SCL rising edge        | `t_r_i`  | `scl_posedge`     |
-| `edge_detector_sda_negedge` | SDA falling edge       | `t_f_i`  | `sda_negedge`     |
-| `edge_detector_sda_posedge` | SDA rising edge        | `t_r_i`  | `sda_posedge`     |
-| `stable_detector_sda_high`  | SDA stable HIGH        | `t_r_i`  | `sda_stable_high` |
-| `stable_detector_scl_high`  | SCL stable HIGH        | `t_r_i`  | `scl_stable_high` |
-| `stable_detector_scl_low`   | SCL stable LOW         | `t_f_i`  | `scl_stable_low`  |
+| Instance                    | Detects          | Delay   | Output            |
+| --------------------------- | ---------------- | ------- | ----------------- |
+| `edge_detector_scl_negedge` | SCL falling edge | `t_f_i` | `scl_negedge`     |
+| `edge_detector_scl_posedge` | SCL rising edge  | `t_r_i` | `scl_posedge`     |
+| `edge_detector_sda_negedge` | SDA falling edge | `t_f_i` | `sda_negedge`     |
+| `edge_detector_sda_posedge` | SDA rising edge  | `t_r_i` | `sda_posedge`     |
+| `stable_detector_sda_high`  | SDA stable HIGH  | `t_r_i` | `sda_stable_high` |
+| `stable_detector_scl_high`  | SCL stable HIGH  | `t_r_i` | `scl_stable_high` |
+| `stable_detector_scl_low`   | SCL stable LOW   | `t_f_i` | `scl_stable_low`  |
 
 The timing delays account for rise/fall times on the physical bus — an edge is only confirmed after the signal has been stable for the specified duration.
 
@@ -109,6 +117,7 @@ module edge_detector #(
 ```
 
 **Behavior:**
+
 - `trigger` fires on raw edge (combinational from previous/current sample)
 - If `delay_count == 0`: `detect = trigger` (immediate)
 - If `delay_count > 0`: Start counter, confirm edge only if `line` remains stable for `delay_count` cycles
@@ -126,6 +135,7 @@ module stable_high_detector (
 ```
 
 **Behavior:**
+
 - Counter increments each cycle while `line_i` is HIGH
 - Counter resets when `line_i` goes LOW
 - `stable_o` asserted when counter reaches `delay_count_i`
@@ -160,6 +170,7 @@ A tracking register `rstart_detection_en` distinguishes between initial START an
 ```
 
 Output mapping:
+
 ```
 state_o.start_det  = start_det & ~rstart_detection_en  (first START only)
 state_o.rstart_det = start_det &  rstart_detection_en  (subsequent STARTs)
@@ -192,19 +203,19 @@ Note: `sda.stable_low` is permanently `'0` (unused in the reference design).
 
 ## 6. Timing Requirements
 
-| Aspect                    | Requirement                                               |
-|--------------------------|-----------------------------------------------------------|
-| Detection latency         | `t_r_i` or `t_f_i` cycles after physical edge             |
-| START/STOP detection      | Requires SCL stable HIGH for `t_r_i` cycles first         |
-| Minimum system clock      | Must sample faster than I3C bus transitions               |
+| Aspect               | Requirement                                       |
+| -------------------- | ------------------------------------------------- |
+| Detection latency    | `t_r_i` or `t_f_i` cycles after physical edge     |
+| START/STOP detection | Requires SCL stable HIGH for `t_r_i` cycles first |
+| Minimum system clock | Must sample faster than I3C bus transitions       |
 
 ### Timing Register Values (at 333 MHz system clock, T_clk = 3 ns)
 
-| Parameter | I3C SDR Value | I2C FM Value | Unit |
-|-----------|--------------|--------------|------|
-| `t_r_i`   | 4 (12 ns)    | 100 (300 ns) | cycles |
-| `t_f_i`   | 4 (12 ns)    | 100 (300 ns) | cycles |
-| `t_hd_dat_i` | 4 (12 ns) | 0            | cycles |
+| Parameter    | I3C SDR Value | I2C FM Value | Unit   |
+| ------------ | ------------- | ------------ | ------ |
+| `t_r_i`      | 4 (12 ns)     | 100 (300 ns) | cycles |
+| `t_f_i`      | 4 (12 ns)     | 100 (300 ns) | cycles |
+| `t_hd_dat_i` | 4 (12 ns)     | 0            | cycles |
 
 ## 7. Changes from Reference Design
 
@@ -230,6 +241,7 @@ None. This module is reused as-is from the reference design. The sub-modules (`e
 8. **Edge signals:** Verify `scl.pos_edge`, `scl.neg_edge`, `sda.pos_edge`, `sda.neg_edge` pulse for exactly 1 cycle after confirmed edge
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_bus_monitor/

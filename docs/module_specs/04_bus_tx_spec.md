@@ -9,18 +9,22 @@
 The TX flow module serializes byte-level and bit-level data onto the SDA bus line, synchronized to the SCL clock. It is the primary data output path for the controller.
 
 The module is split into two layers:
+
 - **`bus_tx_flow`** — High-level FSM that manages byte/bit request arbitration, bit counting, and shift register
 - **`bus_tx`** — Low-level timing engine that drives a single bit onto SDA with correct setup/hold timing relative to SCL edges
 
 ## 2. Dependencies
 
 ### Sub-modules
+
 - `bus_tx` — Instantiated by `bus_tx_flow` as `xbus_tx`
 
 ### Parent modules
+
 - `controller_active` (via `ccc` and `flow_active` control signals)
 
 ### Packages
+
 - None (standalone)
 
 ## 3. Parameters
@@ -32,67 +36,78 @@ None.
 ### bus_tx_flow (Top-Level TX Interface)
 
 #### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
-| `clk_i`  | Input     | 1     | System clock             |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
 #### Timing Configuration
-| Signal        | Direction | Width | Description                     |
-|---------------|-----------|-------|---------------------------------|
-| `t_r_i`       | Input     | 20    | Rise time (clock cycles)        |
-| `t_su_dat_i`  | Input     | 20    | Data setup time (clock cycles)  |
-| `t_hd_dat_i`  | Input     | 20    | Data hold time (clock cycles)   |
+
+| Signal       | Direction | Width | Description                    |
+| ------------ | --------- | ----- | ------------------------------ |
+| `t_r_i`      | Input     | 20    | Rise time (clock cycles)       |
+| `t_su_dat_i` | Input     | 20    | Data setup time (clock cycles) |
+| `t_hd_dat_i` | Input     | 20    | Data hold time (clock cycles)  |
 
 #### Bus Events (from bus_monitor)
-| Signal            | Direction | Width | Description              |
-|-------------------|-----------|-------|--------------------------|
-| `scl_negedge_i`   | Input     | 1     | SCL falling edge         |
-| `scl_posedge_i`   | Input     | 1     | SCL rising edge          |
-| `scl_stable_low_i`| Input     | 1     | SCL stable in LOW state  |
+
+| Signal             | Direction | Width | Description             |
+| ------------------ | --------- | ----- | ----------------------- |
+| `scl_negedge_i`    | Input     | 1     | SCL falling edge        |
+| `scl_posedge_i`    | Input     | 1     | SCL rising edge         |
+| `scl_stable_low_i` | Input     | 1     | SCL stable in LOW state |
 
 #### Request Interface (from flow_active / ccc)
-| Signal         | Direction | Width | Description                          |
-|----------------|-----------|-------|--------------------------------------|
-| `req_byte_i`   | Input     | 1     | Request to transmit a full byte      |
-| `req_bit_i`    | Input     | 1     | Request to transmit a single bit     |
-| `req_value_i`  | Input     | 8     | Byte value (byte mode) or bit in [0] |
-| `bus_tx_done_o`| Output    | 1     | Pulse: transmission complete         |
-| `bus_tx_idle_o`| Output    | 1     | TX flow is idle and ready            |
-| `req_error_o`  | Output    | 1     | Error: both req_byte and req_bit asserted |
-| `bus_error_o`  | Output    | 1     | Bus error (currently tied to '0)     |
+
+| Signal          | Direction | Width | Description                               |
+| --------------- | --------- | ----- | ----------------------------------------- |
+| `req_byte_i`    | Input     | 1     | Request to transmit a full byte           |
+| `req_bit_i`     | Input     | 1     | Request to transmit a single bit          |
+| `req_value_i`   | Input     | 8     | Byte value (byte mode) or bit in [0]      |
+| `bus_tx_done_o` | Output    | 1     | Pulse: transmission complete              |
+| `bus_tx_idle_o` | Output    | 1     | TX flow is idle and ready                 |
+| `req_error_o`   | Output    | 1     | Error: both req_byte and req_bit asserted |
+| `bus_error_o`   | Output    | 1     | Bus error (currently tied to '0)          |
 
 #### OD/PP Pass-through
-| Signal        | Direction | Width | Description                  |
-|---------------|-----------|-------|------------------------------|
-| `sel_od_pp_i` | Input     | 1     | OD/PP mode from controller   |
-| `sel_od_pp_o` | Output    | 1     | Pass-through to bus driver   |
+
+| Signal        | Direction | Width | Description                |
+| ------------- | --------- | ----- | -------------------------- |
+| `sel_od_pp_i` | Input     | 1     | OD/PP mode from controller |
+| `sel_od_pp_o` | Output    | 1     | Pass-through to bus driver |
 
 #### Bus Output
-| Signal  | Direction | Width | Description           |
-|---------|-----------|-------|-----------------------|
-| `sda_o` | Output    | 1     | SDA drive output      |
+
+| Signal  | Direction | Width | Description      |
+| ------- | --------- | ----- | ---------------- |
+| `sda_o` | Output    | 1     | SDA drive output |
 
 ### bus_tx (Low-Level Bit Driver)
 
 #### Clock and Reset
+
 Same as `bus_tx_flow`.
 
 #### Timing Configuration
+
 Same as `bus_tx_flow`.
 
 #### Drive Interface (from bus_tx_flow)
-| Signal         | Direction | Width | Description                           |
-|----------------|-----------|-------|---------------------------------------|
-| `drive_i`      | Input     | 1     | Enable bit transmission               |
-| `drive_value_i`| Input     | 1     | Bit value to drive on SDA             |
-| `tx_idle_o`    | Output    | 1     | Bit driver is idle                    |
-| `tx_done_o`    | Output    | 1     | Pulse: bit transmission complete      |
+
+| Signal          | Direction | Width | Description                      |
+| --------------- | --------- | ----- | -------------------------------- |
+| `drive_i`       | Input     | 1     | Enable bit transmission          |
+| `drive_value_i` | Input     | 1     | Bit value to drive on SDA        |
+| `tx_idle_o`     | Output    | 1     | Bit driver is idle               |
+| `tx_done_o`     | Output    | 1     | Pulse: bit transmission complete |
 
 #### Bus Events
+
 Same as `bus_tx_flow` (passed through).
 
 #### OD/PP and Bus Output
+
 Same as `bus_tx_flow` (passed through).
 
 ## 5. Functional Description
@@ -113,14 +128,15 @@ stateDiagram-v2
 
 **State outputs:**
 
-| State             | bus_tx_idle | bus_tx_done | bit_counter_en | drive_bit_value        |
-|-------------------|-------------|-------------|----------------|------------------------|
-| Idle              | tx_idle     | 0           | 0              | req_byte? [7] : [0]   |
-| DriveByte         | 0           | on last bit | 1              | req_value[7] (MSB)    |
-| DriveBit          | 0           | on tx_done  | 0              | req_value[0] (LSB)    |
-| NextTaskDecision  | 0           | 0           | 0              | req_value_i[0]        |
+| State            | bus_tx_idle | bus_tx_done | bit_counter_en | drive_bit_value     |
+| ---------------- | ----------- | ----------- | -------------- | ------------------- |
+| Idle             | tx_idle     | 0           | 0              | req_byte? [7] : [0] |
+| DriveByte        | 0           | on last bit | 1              | req_value[7] (MSB)  |
+| DriveBit         | 0           | on tx_done  | 0              | req_value[0] (LSB)  |
+| NextTaskDecision | 0           | 0           | 0              | req_value_i[0]      |
 
 **Request protocol:**
+
 1. Assert `req_byte_i` or `req_bit_i` (never both simultaneously)
 2. Set `req_value_i` to the byte/bit value
 3. Hold request signals until `bus_tx_done_o` pulses
@@ -129,10 +145,12 @@ stateDiagram-v2
 **Byte transmission:** The `bit_counter` starts at 7 and decrements on each `tx_done`. A shift register shifts `req_value` left after each bit. When `bit_counter` reaches 0 and `tx_done` fires, `bus_tx_done` is asserted.
 
 **Error detection:** If both `req_byte_i` and `req_bit_i` are asserted simultaneously:
+
 ```systemverilog
 assign reqs = {req_byte_i, req_bit_i};
 assign req_error = ~(~|(reqs & (reqs - 1)));  // More than one bit set
 ```
+
 On error, the FSM returns to Idle.
 
 ### 5.2. bus_tx FSM (Bit-Level Timing Engine)
@@ -166,13 +184,14 @@ SDA: XXXXX|==VALID===|XXXXXXXXX
 
 **Timing counter (`tcount`):**
 
-| Selection     | Load Value                        | Purpose              |
-|---------------|-----------------------------------|----------------------|
-| `tSetupData`  | `t_r_i + t_su_dat_i`             | Setup time before SCL rises |
-| `tHoldData`   | `t_hd_dat_i` (min 1)             | Hold time after SCL falls  |
-| `tNoDelay`    | 1                                 | Minimum delay              |
+| Selection    | Load Value           | Purpose                     |
+| ------------ | -------------------- | --------------------------- |
+| `tSetupData` | `t_r_i + t_su_dat_i` | Setup time before SCL rises |
+| `tHoldData`  | `t_hd_dat_i` (min 1) | Hold time after SCL falls   |
+| `tNoDelay`   | 1                    | Minimum delay               |
 
 **SDA output logic:**
+
 - `Idle`: HIGH (pull-up default) unless `drive_i` and zero-delay
 - `SetupData`: `drive_value_i` when `tcount == 1` (just before TransmitData)
 - `TransmitData`: `drive_value_i` (stable during SCL HIGH period)
@@ -180,28 +199,28 @@ SDA: XXXXX|==VALID===|XXXXXXXXX
 
 ## 6. Timing Requirements
 
-| Aspect              | Requirement                                           |
-|---------------------|-------------------------------------------------------|
-| Data setup time     | `t_su_dat_i` cycles before SCL rising edge            |
-| Data hold time      | `t_hd_dat_i` cycles after SCL falling edge            |
-| Bit rate            | One bit per SCL cycle                                 |
-| Byte transfer       | 8 SCL cycles per byte (MSB first)                     |
+| Aspect          | Requirement                                |
+| --------------- | ------------------------------------------ |
+| Data setup time | `t_su_dat_i` cycles before SCL rising edge |
+| Data hold time  | `t_hd_dat_i` cycles after SCL falling edge |
+| Bit rate        | One bit per SCL cycle                      |
+| Byte transfer   | 8 SCL cycles per byte (MSB first)          |
 
 ## 7. Changes from Reference Design
 
-| Aspect                    | Reference                  | This Design                    |
-|---------------------------|----------------------------|--------------------------------|
-| One-hot check (line 73)   | `~(~\|(reqs & (reqs-1)))` | Keep as-is (functionally correct for 2 signals; comment added) |
-| `bus_error_o`             | Tied to `'0` (TODO)       | Keep as `'0` initially; errors detected at flow_active level |
-| `sel_od_pp` handling      | Pass-through only          | Same (pass-through)            |
+| Aspect                  | Reference                 | This Design                                                    |
+| ----------------------- | ------------------------- | -------------------------------------------------------------- |
+| One-hot check (line 73) | `~(~\|(reqs & (reqs-1)))` | Keep as-is (functionally correct for 2 signals; comment added) |
+| `bus_error_o`           | Tied to `'0` (TODO)       | Keep as `'0` initially; errors detected at flow_active level   |
+| `sel_od_pp` handling    | Pass-through only         | Same (pass-through)                                            |
 
 ## 8. Error Handling
 
-| Error              | Detection                              | Action              |
-|--------------------|----------------------------------------|----------------------|
-| Dual request       | `req_byte_i & req_bit_i` both HIGH     | `req_error_o` = 1, return to Idle |
-| Abort              | `~req` (request deasserted)            | Return to Idle       |
-| Bus error          | Not implemented (`bus_error_o = '0`)   | Future enhancement   |
+| Error        | Detection                            | Action                            |
+| ------------ | ------------------------------------ | --------------------------------- |
+| Dual request | `req_byte_i & req_bit_i` both HIGH   | `req_error_o` = 1, return to Idle |
+| Abort        | `~req` (request deasserted)          | Return to Idle                    |
+| Bus error    | Not implemented (`bus_error_o = '0`) | Future enhancement                |
 
 ## 9. Test Plan
 
@@ -219,6 +238,7 @@ SDA: XXXXX|==VALID===|XXXXXXXXX
 10. **Idle state:** Verify SDA is HIGH and bus_tx_idle_o is asserted when no request
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_bus_tx/

@@ -11,74 +11,83 @@ The `controller_active` module is the structural wrapper that instantiates and i
 ## 2. Dependencies
 
 ### Sub-modules
-| Module          | Instance    | Role                              |
-|-----------------|-------------|-----------------------------------|
-| `flow_active`   | `flow_fsm`  | Command flow FSM                  |
-| `bus_tx_flow`   | `tx_flow`   | TX serializer                     |
-| `bus_rx_flow`   | `rx_flow`   | RX deserializer                   |
-| `bus_monitor`   | `bus_mon`   | START/STOP/Sr detection           |
-| `scl_generator` | `scl_gen`   | SCL clock generation              |
-| `ccc`           | `ccc_proc`  | CCC processor (includes ccc_entdaa)|
+
+| Module          | Instance   | Role                                |
+| --------------- | ---------- | ----------------------------------- |
+| `flow_active`   | `flow_fsm` | Command flow FSM                    |
+| `bus_tx_flow`   | `tx_flow`  | TX serializer                       |
+| `bus_rx_flow`   | `rx_flow`  | RX deserializer                     |
+| `bus_monitor`   | `bus_mon`  | START/STOP/Sr detection             |
+| `scl_generator` | `scl_gen`  | SCL clock generation                |
+| `ccc`           | `ccc_proc` | CCC processor (includes ccc_entdaa) |
 
 ### Parent modules
+
 - `i3c_controller_top` (top-level integration)
 
 ### Packages
+
 - `i3c_pkg` — For `bus_state_t`
 - `controller_pkg` — For `dat_entry_t`
 
 ## 3. Parameters
 
-| Parameter         | Type | Default | Description               |
-|-------------------|------|---------|---------------------------|
-| `DatDepth`        | int  | 16      | DAT table depth           |
-| `CmdFifoDepth`    | int  | 64      | CMD FIFO depth            |
-| `TxFifoDepth`     | int  | 64      | TX FIFO depth             |
-| `RxFifoDepth`     | int  | 64      | RX FIFO depth             |
-| `RespFifoDepth`   | int  | 64      | RESP FIFO depth           |
+| Parameter       | Type | Default | Description     |
+| --------------- | ---- | ------- | --------------- |
+| `DatDepth`      | int  | 16      | DAT table depth |
+| `CmdFifoDepth`  | int  | 64      | CMD FIFO depth  |
+| `TxFifoDepth`   | int  | 64      | TX FIFO depth   |
+| `RxFifoDepth`   | int  | 64      | RX FIFO depth   |
+| `RespFifoDepth` | int  | 64      | RESP FIFO depth |
 
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
-| `clk_i`  | Input     | 1     | System clock             |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
 ### Physical Bus Interface (to/from i3c_phy)
-| Signal           | Direction | Width | Description                    |
-|------------------|-----------|-------|--------------------------------|
-| `ctrl_scl_i`     | Input     | 1     | Synchronized SCL from PHY      |
-| `ctrl_sda_i`     | Input     | 1     | Synchronized SDA from PHY      |
-| `ctrl_scl_o`     | Output    | 1     | SCL drive to PHY               |
-| `ctrl_sda_o`     | Output    | 1     | SDA drive to PHY               |
-| `sel_od_pp_o`    | Output    | 1     | OD/PP mode select to PHY       |
+
+| Signal        | Direction | Width | Description               |
+| ------------- | --------- | ----- | ------------------------- |
+| `ctrl_scl_i`  | Input     | 1     | Synchronized SCL from PHY |
+| `ctrl_sda_i`  | Input     | 1     | Synchronized SDA from PHY |
+| `ctrl_scl_o`  | Output    | 1     | SCL drive to PHY          |
+| `ctrl_sda_o`  | Output    | 1     | SDA drive to PHY          |
+| `sel_od_pp_o` | Output    | 1     | OD/PP mode select to PHY  |
 
 ### HCI Queue Interfaces
+
 Same as `flow_active` FIFO interfaces (CMD, TX, RX, RESP) — passed through.
 
 ### DAT Interface
+
 Same as `flow_active` DAT interface — passed through.
 
 ### Timing Configuration (from CSR)
-| Signal          | Direction | Width | Description              |
-|-----------------|-----------|-------|--------------------------|
-| `t_r_i`         | Input     | 20    | Rise time                |
-| `t_f_i`         | Input     | 20    | Fall time                |
-| `t_low_i`       | Input     | 20    | SCL LOW period           |
-| `t_high_i`      | Input     | 20    | SCL HIGH period          |
-| `t_su_sta_i`    | Input     | 20    | START setup time         |
-| `t_hd_sta_i`    | Input     | 20    | START hold time          |
-| `t_su_sto_i`    | Input     | 20    | STOP setup time          |
-| `t_su_dat_i`    | Input     | 20    | Data setup time          |
-| `t_hd_dat_i`    | Input     | 20    | Data hold time           |
+
+| Signal       | Direction | Width | Description      |
+| ------------ | --------- | ----- | ---------------- |
+| `t_r_i`      | Input     | 20    | Rise time        |
+| `t_f_i`      | Input     | 20    | Fall time        |
+| `t_low_i`    | Input     | 20    | SCL LOW period   |
+| `t_high_i`   | Input     | 20    | SCL HIGH period  |
+| `t_su_sta_i` | Input     | 20    | START setup time |
+| `t_hd_sta_i` | Input     | 20    | START hold time  |
+| `t_su_sto_i` | Input     | 20    | STOP setup time  |
+| `t_su_dat_i` | Input     | 20    | Data setup time  |
+| `t_hd_dat_i` | Input     | 20    | Data hold time   |
 
 ### Control / Status
-| Signal           | Direction | Width | Description                        |
-|------------------|-----------|-------|------------------------------------|
+
+| Signal           | Direction | Width | Description                                |
+| ---------------- | --------- | ----- | ------------------------------------------ |
 | `ctrl_enable_i`  | Input     | 1     | Controller enable (from CSR HC_CONTROL[0]) |
-| `i3c_fsm_en_i`  | Input     | 1     | FSM enable (from CSR)              |
-| `i3c_fsm_idle_o`| Output    | 1     | FSM idle status                    |
+| `i3c_fsm_en_i`   | Input     | 1     | FSM enable (from CSR)                      |
+| `i3c_fsm_idle_o` | Output    | 1     | FSM idle status                            |
 
 ## 5. Functional Description
 
@@ -183,6 +192,7 @@ assign sel_od_pp_o = flow_sel_od_pp;
 ```
 
 The reference had:
+
 ```systemverilog
 // TODO: Handle driver switching in the active controller mode
 assign phy_sel_od_pp_o[0] = '0;  // Always open-drain
@@ -263,18 +273,18 @@ No additional timing constraints beyond those of sub-modules. All connections ar
 
 ## 7. Changes from Reference Design
 
-| Aspect                     | Reference                              | This Design                       |
-|----------------------------|----------------------------------------|-----------------------------------|
-| Bus instances              | Dual bus (`ctrl_bus_i[2]`, `ctrl_scl_o[2]`) | Single bus                   |
-| I2C controller FSM         | Full `i2c_controller_fsm` instance     | Removed (flow_active drives bus directly) |
-| I3C controller FSM         | Stub (`i3c_controller_fsm`, drives '1) | Replaced by `scl_generator`       |
-| OD/PP switching            | Hardcoded to `'0` (TODO)               | Proper phase-based switching      |
-| IBI queue ports            | Full IBI FIFO interface                | Removed                           |
-| DCT interface              | Full DCT read/write ports              | Removed                           |
-| I2C event signals          | 8 `unused_*` signals                   | Removed                           |
-| `phy_mux_select_i`         | 2-bit MUX for dual bus                 | Removed (single bus)              |
-| I2C timing                 | Hardcoded `16'd1` / `16'd10`           | CSR-driven via timing registers   |
-| Line count                 | 292 lines                              | ~200 lines                        |
+| Aspect             | Reference                                   | This Design                               |
+| ------------------ | ------------------------------------------- | ----------------------------------------- |
+| Bus instances      | Dual bus (`ctrl_bus_i[2]`, `ctrl_scl_o[2]`) | Single bus                                |
+| I2C controller FSM | Full `i2c_controller_fsm` instance          | Removed (flow_active drives bus directly) |
+| I3C controller FSM | Stub (`i3c_controller_fsm`, drives '1)      | Replaced by `scl_generator`               |
+| OD/PP switching    | Hardcoded to `'0` (TODO)                    | Proper phase-based switching              |
+| IBI queue ports    | Full IBI FIFO interface                     | Removed                                   |
+| DCT interface      | Full DCT read/write ports                   | Removed                                   |
+| I2C event signals  | 8 `unused_*` signals                        | Removed                                   |
+| `phy_mux_select_i` | 2-bit MUX for dual bus                      | Removed (single bus)                      |
+| I2C timing         | Hardcoded `16'd1` / `16'd10`                | CSR-driven via timing registers           |
+| Line count         | 292 lines                                   | ~200 lines                                |
 
 ## 8. Error Handling
 
@@ -295,6 +305,7 @@ No additional error logic. Errors are detected by sub-modules (`flow_active`, `b
 9. **Reset:** Verify all sub-modules enter idle/safe state on reset
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_controller_active/

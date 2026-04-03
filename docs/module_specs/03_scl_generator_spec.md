@@ -20,61 +20,69 @@ This module does NOT exist as a standalone component in the reference design —
 ## 2. Dependencies
 
 ### Sub-modules
+
 - None
 
 ### Parent modules
+
 - `controller_active`
 
 ### Packages
+
 - `i3c_pkg` — For `bus_state_t` (bus monitor feedback)
 
 ## 3. Parameters
 
-| Parameter        | Type | Default | Description                      |
-|-----------------|------|---------|----------------------------------|
-| `CounterWidth`  | int  | 20      | Width of timing counters         |
+| Parameter      | Type | Default | Description              |
+| -------------- | ---- | ------- | ------------------------ |
+| `CounterWidth` | int  | 20      | Width of timing counters |
 
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
-| Signal   | Direction | Width | Description              |
-|----------|-----------|-------|--------------------------|
+
+| Signal   | Direction | Width | Description                |
+| -------- | --------- | ----- | -------------------------- |
 | `clk_i`  | Input     | 1     | System clock (min 333 MHz) |
-| `rst_ni` | Input     | 1     | Active-low async reset   |
+| `rst_ni` | Input     | 1     | Active-low async reset     |
 
 ### Control Interface (from flow_active)
-| Signal           | Direction | Width | Description                                |
-|------------------|-----------|-------|--------------------------------------------|
-| `gen_start_i`    | Input     | 1     | Request START condition                    |
-| `gen_rstart_i`   | Input     | 1     | Request Repeated START condition           |
-| `gen_stop_i`     | Input     | 1     | Request STOP condition                     |
-| `gen_clock_i`    | Input     | 1     | Enable continuous clock generation         |
-| `gen_idle_i`     | Input     | 1     | Return to idle state (both lines HIGH)     |
-| `sel_i3c_i2c_i`  | Input     | 1     | 0 = I2C FM timing, 1 = I3C SDR timing     |
-| `done_o`         | Output    | 1     | Pulse: requested operation completed       |
-| `busy_o`         | Output    | 1     | Generator is in non-Idle state             |
+
+| Signal          | Direction | Width | Description                            |
+| --------------- | --------- | ----- | -------------------------------------- |
+| `gen_start_i`   | Input     | 1     | Request START condition                |
+| `gen_rstart_i`  | Input     | 1     | Request Repeated START condition       |
+| `gen_stop_i`    | Input     | 1     | Request STOP condition                 |
+| `gen_clock_i`   | Input     | 1     | Enable continuous clock generation     |
+| `gen_idle_i`    | Input     | 1     | Return to idle state (both lines HIGH) |
+| `sel_i3c_i2c_i` | Input     | 1     | 0 = I2C FM timing, 1 = I3C SDR timing  |
+| `done_o`        | Output    | 1     | Pulse: requested operation completed   |
+| `busy_o`        | Output    | 1     | Generator is in non-Idle state         |
 
 ### Timing Configuration (from CSR, in system clock cycles)
-| Signal          | Direction | Width | Description                 |
-|-----------------|-----------|-------|-----------------------------|
-| `t_low_i`       | Input     | 20    | SCL LOW period              |
-| `t_high_i`      | Input     | 20    | SCL HIGH period             |
-| `t_su_sta_i`    | Input     | 20    | START setup time            |
-| `t_hd_sta_i`    | Input     | 20    | START hold time             |
-| `t_su_sto_i`    | Input     | 20    | STOP setup time             |
-| `t_r_i`         | Input     | 20    | Rise time allowance         |
-| `t_f_i`         | Input     | 20    | Fall time allowance         |
+
+| Signal       | Direction | Width | Description         |
+| ------------ | --------- | ----- | ------------------- |
+| `t_low_i`    | Input     | 20    | SCL LOW period      |
+| `t_high_i`   | Input     | 20    | SCL HIGH period     |
+| `t_su_sta_i` | Input     | 20    | START setup time    |
+| `t_hd_sta_i` | Input     | 20    | START hold time     |
+| `t_su_sto_i` | Input     | 20    | STOP setup time     |
+| `t_r_i`      | Input     | 20    | Rise time allowance |
+| `t_f_i`      | Input     | 20    | Fall time allowance |
 
 ### Bus Monitor Feedback
-| Signal           | Direction | Width | Description                         |
-|------------------|-----------|-------|-------------------------------------|
-| `scl_i`          | Input     | 1     | Synchronized SCL readback           |
+
+| Signal  | Direction | Width | Description               |
+| ------- | --------- | ----- | ------------------------- |
+| `scl_i` | Input     | 1     | Synchronized SCL readback |
 
 ### Bus Output
-| Signal     | Direction | Width | Description                            |
-|------------|-----------|-------|----------------------------------------|
-| `scl_o`    | Output    | 1     | SCL drive output                       |
-| `sda_o`    | Output    | 1     | SDA drive output (for START/STOP only) |
+
+| Signal  | Direction | Width | Description                            |
+| ------- | --------- | ----- | -------------------------------------- |
+| `scl_o` | Output    | 1     | SCL drive output                       |
+| `sda_o` | Output    | 1     | SDA drive output (for START/STOP only) |
 
 ## 5. Functional Description
 
@@ -95,12 +103,12 @@ stateDiagram-v2
     SclHigh --> RstartSdaFall: t_su_sta expired
     RstartSdaFall --> HoldStart: SDA driven LOW
 
-    DriveLow --> DriveHigh: gen_clock_i & t_low expired
-    DriveHigh --> DriveLow: gen_clock_i & t_high expired
-    DriveHigh --> GenerateStop: gen_stop_i & t_high expired
-    DriveHigh --> GenerateRstart: gen_rstart_i & t_high expired
+    DriveLow --> DriveHigh: gen_clock_i & t_low
+    DriveHigh --> DriveLow: gen_clock_i & t_high
+    DriveHigh --> GenerateStop: gen_stop_i & t_high
+    DriveHigh --> GenerateRstart: gen_rstart_i & t_high
 
-    DriveLow --> WaitCmd: !gen_clock_i (SCL held LOW)
+    DriveLow --> WaitCmd: !gen_clock_i
 
     WaitCmd --> DriveLow: gen_clock_i
     WaitCmd --> GenerateStop: gen_stop_i
@@ -112,21 +120,21 @@ stateDiagram-v2
 
 ### 5.2. State Descriptions
 
-| State              | SCL | SDA | Description                                |
-|--------------------|-----|-----|--------------------------------------------|
-| `Idle`             | Z/H | Z/H | Both lines released, bus idle              |
-| `GenerateStart`    | H   | H   | Ensure SCL is HIGH, wait t_su_sta          |
-| `SdaFall`          | H   | L   | Pull SDA LOW (START condition)             |
-| `HoldStart`        | H   | L   | Hold SDA LOW for t_hd_sta                  |
-| `DriveLow`         | L   | -   | Drive SCL LOW, count t_low                 |
-| `DriveHigh`        | H   | -   | Release SCL HIGH, count t_high             |
-| `WaitCmd`          | L   | -   | Hold SCL LOW, wait for next command        |
-| `GenerateRstart`   | L→H | L→H | From clock LOW, release SDA HIGH first     |
-| `SclHigh`          | H   | H   | SCL goes HIGH, wait t_su_sta for Sr        |
-| `RstartSdaFall`    | H   | L   | Pull SDA LOW (Repeated START)              |
-| `GenerateStop`     | L   | L   | SDA LOW, then release SCL HIGH             |
-| `SclHighForStop`   | H   | L   | SCL HIGH, wait t_su_sto                    |
-| `SdaRise`          | H   | H   | Release SDA HIGH (STOP condition)          |
+| State            | SCL | SDA | Description                            |
+| ---------------- | --- | --- | -------------------------------------- |
+| `Idle`           | Z/H | Z/H | Both lines released, bus idle          |
+| `GenerateStart`  | H   | H   | Ensure SCL is HIGH, wait t_su_sta      |
+| `SdaFall`        | H   | L   | Pull SDA LOW (START condition)         |
+| `HoldStart`      | H   | L   | Hold SDA LOW for t_hd_sta              |
+| `DriveLow`       | L   | -   | Drive SCL LOW, count t_low             |
+| `DriveHigh`      | H   | -   | Release SCL HIGH, count t_high         |
+| `WaitCmd`        | L   | -   | Hold SCL LOW, wait for next command    |
+| `GenerateRstart` | L→H | L→H | From clock LOW, release SDA HIGH first |
+| `SclHigh`        | H   | H   | SCL goes HIGH, wait t_su_sta for Sr    |
+| `RstartSdaFall`  | H   | L   | Pull SDA LOW (Repeated START)          |
+| `GenerateStop`   | L   | L   | SDA LOW, then release SCL HIGH         |
+| `SclHighForStop` | H   | L   | SCL HIGH, wait t_su_sto                |
+| `SdaRise`        | H   | H   | Release SDA HIGH (STOP condition)      |
 
 ### 5.3. Timing Counter
 
@@ -144,6 +152,7 @@ end
 ```
 
 The `tcount_load_value` is selected based on the current state transition:
+
 - Entering `GenerateStart`/`SclHigh`: load `t_su_sta_i`
 - Entering `HoldStart`: load `t_hd_sta_i`
 - Entering `DriveLow`: load `t_low_i + t_f_i`
@@ -174,6 +183,7 @@ end
 ### 5.5. Done Signal
 
 The `done_o` output pulses for 1 cycle to indicate completion of the requested operation:
+
 - After START/Sr: when entering `DriveLow` (clock generation begins)
 - After STOP: when entering `Idle`
 - After each clock cycle: on SCL negedge (entering `DriveLow`)
@@ -183,41 +193,41 @@ The `done_o` output pulses for 1 cycle to indicate completion of the requested o
 ### I3C SDR Mode (at 333 MHz, T_clk = 3 ns)
 
 | Parameter    | Min Spec | Register Value | Actual Time |
-|-------------|----------|----------------|-------------|
-| `t_low_i`   | 24 ns    | 8              | 24 ns       |
-| `t_high_i`  | 24 ns    | 8              | 24 ns       |
-| `t_su_sta_i`| -        | 8              | 24 ns       |
-| `t_hd_sta_i`| -        | 8              | 24 ns       |
-| `t_su_sto_i`| 12 ns    | 4              | 12 ns       |
-| `t_r_i`     | 12 ns    | 4              | 12 ns       |
-| `t_f_i`     | 12 ns    | 4              | 12 ns       |
+| ------------ | -------- | -------------- | ----------- |
+| `t_low_i`    | 24 ns    | 8              | 24 ns       |
+| `t_high_i`   | 24 ns    | 8              | 24 ns       |
+| `t_su_sta_i` | -        | 8              | 24 ns       |
+| `t_hd_sta_i` | -        | 8              | 24 ns       |
+| `t_su_sto_i` | 12 ns    | 4              | 12 ns       |
+| `t_r_i`      | 12 ns    | 4              | 12 ns       |
+| `t_f_i`      | 12 ns    | 4              | 12 ns       |
 
-Resulting SCL frequency: 1 / ((8+4+8+4) * 3ns) = ~13.9 MHz (meets 12.5 MHz target with some margin — actual values should be tuned to hit 12.5 MHz precisely).
+Resulting SCL frequency: 1 / ((8+4+8+4) \* 3ns) = ~13.9 MHz (meets 12.5 MHz target with some margin — actual values should be tuned to hit 12.5 MHz precisely).
 
 ### I2C FM Mode (at 333 MHz, T_clk = 3 ns)
 
 | Parameter    | Min Spec | Register Value | Actual Time |
-|-------------|----------|----------------|-------------|
-| `t_low_i`   | 1300 ns  | 434            | 1302 ns     |
-| `t_high_i`  | 600 ns   | 200            | 600 ns      |
-| `t_su_sta_i`| 600 ns   | 200            | 600 ns      |
-| `t_hd_sta_i`| 600 ns   | 200            | 600 ns      |
-| `t_su_sto_i`| 600 ns   | 200            | 600 ns      |
-| `t_r_i`     | 300 ns   | 100            | 300 ns      |
-| `t_f_i`     | 300 ns   | 100            | 300 ns      |
+| ------------ | -------- | -------------- | ----------- |
+| `t_low_i`    | 1300 ns  | 434            | 1302 ns     |
+| `t_high_i`   | 600 ns   | 200            | 600 ns      |
+| `t_su_sta_i` | 600 ns   | 200            | 600 ns      |
+| `t_hd_sta_i` | 600 ns   | 200            | 600 ns      |
+| `t_su_sto_i` | 600 ns   | 200            | 600 ns      |
+| `t_r_i`      | 300 ns   | 100            | 300 ns      |
+| `t_f_i`      | 300 ns   | 100            | 300 ns      |
 
-Resulting SCL frequency: 1 / ((434+100+200+100) * 3ns) = ~400 kHz.
+Resulting SCL frequency: 1 / ((434+100+200+100) \* 3ns) = ~400 kHz.
 
 ## 7. Changes from Reference Design
 
 This is a completely new module. In the reference design:
 
-| Aspect | Reference | This Design |
-|--------|-----------|-------------|
+| Aspect        | Reference                                        | This Design                    |
+| ------------- | ------------------------------------------------ | ------------------------------ |
 | I2C clock gen | Embedded in `i2c_controller_fsm.sv` (~900 lines) | Extracted into `scl_generator` |
-| I3C clock gen | `i3c_controller_fsm.sv` is a stub (TODO) | Implemented in `scl_generator` |
-| Dual bus | Two separate bus instances (I2C bus + I3C bus) | Single bus, mode-switched |
-| Timing source | Hardcoded constants | CSR-driven timing registers |
+| I3C clock gen | `i3c_controller_fsm.sv` is a stub (TODO)         | Implemented in `scl_generator` |
+| Dual bus      | Two separate bus instances (I2C bus + I3C bus)   | Single bus, mode-switched      |
+| Timing source | Hardcoded constants                              | CSR-driven timing registers    |
 
 ## 8. Error Handling
 
@@ -240,6 +250,7 @@ This is a completely new module. In the reference design:
 10. **Reset behavior:** Verify both outputs go HIGH (idle) immediately on reset
 
 ### cocotb Test Structure
+
 ```
 tests/
   test_scl_generator/
