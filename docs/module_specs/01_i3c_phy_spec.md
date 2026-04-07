@@ -65,9 +65,29 @@ The PHY (Physical Layer) module provides the electrical interface between the I3
 | `sel_od_pp_i` | Input     | 1     | 0 = Open-Drain, 1 = Push-Pull             |
 | `sel_od_pp_o` | Output    | 1     | Pass-through of mode select to bus driver |
 
-## 5. Functional Description
+## 5. Block Diagram
 
-### 5.1. Input Synchronization (2FF)
+```mermaid
+flowchart LR
+    subgraph PHY["i3c_phy"]
+        direction TB
+        FF_SCL["2FF Sync\nSCL"]
+        FF_SDA["2FF Sync\nSDA"]
+        DRV["Output Driver\n(combinational)"]
+        PT["Mode\nPass-Through"]
+        FF_SCL ~~~ FF_SDA ~~~ DRV ~~~ PT
+    end
+
+    scl_i["scl_i\n(async)"]    --> FF_SCL --> ctrl_scl_o(["ctrl_scl_o"])
+    sda_i["sda_i\n(async)"]    --> FF_SDA --> ctrl_sda_o(["ctrl_sda_o"])
+    ctrl_scl_i["ctrl_scl_i"]   --> DRV    --> scl_o(["scl_o"])
+    ctrl_sda_i["ctrl_sda_i"]   --> DRV    --> sda_o(["sda_o"])
+    sel_od_pp_i["sel_od_pp_i"] --> PT     --> sel_od_pp_o(["sel_od_pp_o"])
+```
+
+## 6. Functional Description
+
+### 6.1. Input Synchronization (2FF)
 
 Both SCL and SDA inputs are asynchronous relative to the system clock. To prevent metastability, each input passes through a double flip-flop synchronizer:
 
@@ -99,7 +119,7 @@ assign ctrl_scl_o = scl_ff2;
 
 Same pattern for SDA.
 
-### 5.2. Output Driving
+### 6.2. Output Driving
 
 The output path is purely combinational — no additional latency:
 
@@ -116,7 +136,7 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 
 > **Note:** The OD/PP mode switching happens at the pad level, not inside this module. This module only passes the mode selection signal through. The `controller_active` module is responsible for setting `sel_od_pp_i` correctly based on the current bus phase.
 
-## 6. Timing Requirements
+## 7. Timing Requirements
 
 | Aspect                | Requirement                                             |
 | --------------------- | ------------------------------------------------------- |
@@ -125,7 +145,7 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 | System clock minimum  | 333 MHz (to meet tSCO = 12 ns with 4-cycle budget)      |
 | Reset recovery        | After reset de-assertion, outputs stable after 2 clocks |
 
-## 7. Changes from Reference Design
+## 8. Changes from Reference Design
 
 | Aspect                   | Reference                                       | This Design                         |
 | ------------------------ | ----------------------------------------------- | ----------------------------------- |
@@ -133,13 +153,13 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 | `ifdef DISABLE_INPUT_FF` | Conditional compile for simulation              | Removed; always use 2FF             |
 | OD/PP logic              | Pass-through (no logic)                         | Same (pass-through)                 |
 
-## 8. Error Handling
+## 9. Error Handling
 
 - No explicit error detection in this module
 - Metastability is handled by the 2FF synchronizer (statistical guarantee, not deterministic)
 - Bus-level errors (stuck LOW, etc.) are detected by `bus_monitor`
 
-## 9. Test Plan
+## 10. Test Plan
 
 ### Scenarios
 
@@ -149,16 +169,36 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 4. **OD/PP pass-through:** Verify `sel_od_pp_o == sel_od_pp_i` at all times
 5. **Glitch filtering:** Apply a pulse shorter than 1 clock cycle on `sda_i` and verify it is filtered by the 2FF (may or may not propagate — this tests metastability tolerance)
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_i3c_phy/
-    test_i3c_phy.py       # Main test file
-    Makefile              # cocotb makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
 
-## 10. Implementation Notes
+**Module coverage note:** `i3c_phy` is exercised by all tests — every test requires SCL/SDA synchronization and OD/PP signal routing through the physical layer.
+
+## 11. Implementation Notes
 
 - This is the simplest module in the design — essentially just wires and flip-flops
 - The 2FF synchronizer does NOT guarantee that SCL and SDA are sampled at the same instant. The bus_monitor module handles this by using edge detectors with timing-aware delays.

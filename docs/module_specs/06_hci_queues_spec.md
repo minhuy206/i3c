@@ -266,15 +266,34 @@ Software is responsible for checking full/empty status before accessing queue po
 9. **All four queues:** Exercise all 4 FIFOs simultaneously; verify no cross-talk
 10. **Reset behavior:** Verify all FIFOs empty after `rst_ni` assertion
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_hci_queues/
-    test_sync_fifo.py      # Generic FIFO unit tests
-    test_hci_queues.py     # Integration test for all 4 queues
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `hci_queues` is exercised by all tests — the CMD FIFO, TX FIFO, RX FIFO, and RESP FIFO are used in every transaction type.
 
 ## 11. Implementation Notes
 

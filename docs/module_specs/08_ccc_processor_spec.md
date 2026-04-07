@@ -340,16 +340,34 @@ This design:             ~200 lines (adapted for master perspective)
 11. **NACK on broadcast header:** No targets on bus; verify AddrHeader error
 12. **STOP during ENTDAA:** External STOP; verify clean termination
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_ccc/
-    test_ccc_enec_disec.py  # ENEC/DISEC tests
-    test_ccc_entdaa.py      # ENTDAA tests
-    test_ccc_errors.py      # Error handling tests
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `ccc` is exercised by `i3c_entdaa_test` (ENTDAA DAA loop — PID/BCR/DCR reception and dynamic address assignment) and `i3c_enec_disec_seq` (ENEC/DISEC broadcast CCC transmission).
 
 ## 10. Implementation Notes
 

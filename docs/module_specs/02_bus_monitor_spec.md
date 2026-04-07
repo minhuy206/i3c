@@ -83,9 +83,86 @@ None (timing is configured via input ports).
 | --------- | --------- | ------------- | ------------------------------------- |
 | `state_o` | Output    | `bus_state_t` | Complete bus state (see struct above) |
 
-## 5. Functional Description
+## 5. Block Diagram
 
-### 5.1. Edge Detection
+```mermaid
+flowchart LR
+    %% ── Inputs ──────────────────────────────────────────────────────────────
+    scl_i["scl_i\n(sync)"]
+    sda_i["sda_i\n(sync)"]
+    t_r_i["t_r_i"]
+    t_f_i["t_f_i"]
+    t_hd_dat_i["t_hd_dat_i\n(unused here)"]
+    enable_i["enable_i"]
+
+    %% ── bus_monitor boundary ─────────────────────────────────────────────────
+    subgraph BM["bus_monitor"]
+        direction LR
+
+        subgraph ED["Edge Detectors ×4"]
+            direction TB
+            ED1["SCL negedge\ndelay=t_f"]
+            ED2["SCL posedge\ndelay=t_r"]
+            ED3["SDA negedge\ndelay=t_f"]
+            ED4["SDA posedge\ndelay=t_r"]
+        end
+
+        subgraph SD["Stable Detectors ×3"]
+            direction TB
+            SD1["SCL stable HIGH\ndelay=t_r"]
+            SD2["SCL stable LOW\ndelay=t_f"]
+            SD3["SDA stable HIGH\ndelay=t_r"]
+        end
+
+        subgraph COND["START / STOP Logic"]
+            direction TB
+            SL["START logic"]
+            PL["STOP logic"]
+            RR["rstart_detection_en\nreg"]
+        end
+
+        subgraph OUT["Output Pack\nbus_state_t"]
+            direction TB
+            O1["scl:\nvalue, edges,\nstable_hi/lo"]
+            O2["sda:\nvalue, edges,\nstable_hi"]
+            O3["start_det\nrstart_det\nstop_det"]
+        end
+
+        ED1 --> O1
+        ED2 --> O1
+        ED3 --> O2
+        ED4 --> O2
+        SD1 --> O1
+        SD2 --> O1
+        SD3 --> O2
+
+        SD1 --> SL
+        ED3 --> SL
+        SD1 --> PL
+        ED4 --> PL
+
+        SL --> RR
+        PL --> RR
+        RR --> O3
+        SL --> O3
+        PL --> O3
+    end
+
+    %% ── Connections in ───────────────────────────────────────────────────────
+    scl_i --> ED1 & ED2 & SD1 & SD2
+    sda_i --> ED3 & ED4 & SD3
+
+    t_f_i --> ED1 & ED3 & SD2
+    t_r_i --> ED2 & ED4 & SD1 & SD3
+    enable_i --> SL & PL
+
+    %% ── Output ───────────────────────────────────────────────────────────────
+    O1 & O2 & O3 --> state_o(["state_o\nbus_state_t"])
+```
+
+## 6. Functional Description
+
+### 6.1. Edge Detection
 
 The module instantiates 4 `edge_detector` instances and 3 `stable_high_detector` instances:
 
@@ -101,7 +178,7 @@ The module instantiates 4 `edge_detector` instances and 3 `stable_high_detector`
 
 The timing delays account for rise/fall times on the physical bus — an edge is only confirmed after the signal has been stable for the specified duration.
 
-### 5.2. Edge Detector Sub-module (`edge_detector`)
+### 6.2. Edge Detector Sub-module (`edge_detector`)
 
 ```systemverilog
 module edge_detector #(
@@ -122,7 +199,7 @@ module edge_detector #(
 - If `delay_count == 0`: `detect = trigger` (immediate)
 - If `delay_count > 0`: Start counter, confirm edge only if `line` remains stable for `delay_count` cycles
 
-### 5.3. Stable High Detector Sub-module (`stable_high_detector`)
+### 6.3. Stable High Detector Sub-module (`stable_high_detector`)
 
 ```systemverilog
 module stable_high_detector (
@@ -141,7 +218,7 @@ module stable_high_detector (
 - `stable_o` asserted when counter reaches `delay_count_i`
 - If `delay_count_i == 0`: `stable_o = line_i` (immediate)
 
-### 5.4. START/STOP Detection
+### 6.4. START/STOP Detection
 
 **START condition (SDA falls while SCL is stable HIGH):**
 
@@ -159,7 +236,7 @@ stop_det = enable & stop_det_pending
 
 The `_pending` registers ensure the detection signal stays asserted until consumed.
 
-### 5.5. START vs Repeated START Discrimination
+### 6.5. START vs Repeated START Discrimination
 
 A tracking register `rstart_detection_en` distinguishes between initial START and Repeated START:
 
@@ -176,7 +253,7 @@ state_o.start_det  = start_det & ~rstart_detection_en  (first START only)
 state_o.rstart_det = start_det &  rstart_detection_en  (subsequent STARTs)
 ```
 
-### 5.6. Output Assignment
+### 6.6. Output Assignment
 
 ```systemverilog
 // SDA state
@@ -201,7 +278,7 @@ state_o.stop_det   = stop_det;
 
 Note: `sda.stable_low` is permanently `'0` (unused in the reference design).
 
-## 6. Timing Requirements
+## 7. Timing Requirements
 
 | Aspect               | Requirement                                       |
 | -------------------- | ------------------------------------------------- |
@@ -217,17 +294,17 @@ Note: `sda.stable_low` is permanently `'0` (unused in the reference design).
 | `t_f_i`      | 4 (12 ns)     | 100 (300 ns) | cycles |
 | `t_hd_dat_i` | 4 (12 ns)     | 0            | cycles |
 
-## 7. Changes from Reference Design
+## 8. Changes from Reference Design
 
 None. This module is reused as-is from the reference design. The sub-modules (`edge_detector`, `stable_high_detector`) are also reused unchanged.
 
-## 8. Error Handling
+## 9. Error Handling
 
 - No explicit error outputs
 - If `enable_i` is deasserted, all detection outputs are suppressed (pending flags cleared)
 - Simultaneous edge conditions (SCL and SDA transitioning in the same cycle) are explicitly filtered to prevent false START/STOP detection
 
-## 9. Test Plan
+## 10. Test Plan
 
 ### Scenarios
 
@@ -240,16 +317,36 @@ None. This module is reused as-is from the reference design. The sub-modules (`e
 7. **Simultaneous edge filtering:** Drive SCL and SDA to transition in the same cycle; verify no false START/STOP
 8. **Edge signals:** Verify `scl.pos_edge`, `scl.neg_edge`, `sda.pos_edge`, `sda.neg_edge` pulse for exactly 1 cycle after confirmed edge
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_bus_monitor/
-    test_bus_monitor.py
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
 
-## 10. Implementation Notes
+**Module coverage note:** `bus_monitor` is exercised by all tests — START/STOP condition detection is required for every transaction regardless of type.
+
+## 11. Implementation Notes
 
 - The `sda` and `scl` internal signals (used for output `.value`) are registered versions that update only on confirmed edges — they are NOT the raw `sda_i`/`sda_i_q` signals. This provides additional filtering.
 - The pending mechanism (`start_det_pending`, `stop_det_pending`) creates a 1-cycle pulse. The pending flag is cleared when: the detection fires, `enable` is deasserted, `scl` goes LOW, or the opposite condition triggers.
