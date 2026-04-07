@@ -304,16 +304,34 @@ No additional error logic. Errors are detected by sub-modules (`flow_active`, `b
 8. **Bus monitor feedback:** Verify bus_state correctly distributed to all consumers
 9. **Reset:** Verify all sub-modules enter idle/safe state on reset
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_controller_active/
-    test_integration.py      # Full transaction tests
-    test_odpp_switching.py   # OD/PP mode verification
-    test_signal_routing.py   # Signal connectivity tests
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `controller_active` is exercised by all tests — it integrates all sub-modules (scl_generator, bus_tx_flow, bus_rx_flow, ccc, flow_active) and performs bus arbitration and SDA MUX control for every transaction.
 
 ## 10. Implementation Notes
 

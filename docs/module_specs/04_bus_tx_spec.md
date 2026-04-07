@@ -237,15 +237,34 @@ SDA: XXXXX|==VALID===|XXXXXXXXX
 9. **OD/PP pass-through:** Verify sel_od_pp_o tracks sel_od_pp_i
 10. **Idle state:** Verify SDA is HIGH and bus_tx_idle_o is asserted when no request
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_bus_tx/
-    test_bus_tx_flow.py   # Flow-level tests (byte/bit serialization)
-    test_bus_tx.py        # Bit-level timing tests
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `bus_tx_flow` is exercised by `i3c_private_rw_test` (address + write data transmission), `i3c_entdaa_test` (broadcast header + CCC code + dynamic address), and `i3c_i2c_test` (I2C address + data bytes in OD mode).
 
 ## 10. Implementation Notes
 

@@ -200,14 +200,34 @@ The module does not validate parity or T-bit semantics. It simply delivers raw r
 8. **Idle assertion:** Verify `rx_idle_o == 1` when in Idle state, `== 0` otherwise
 9. **SCL edge alignment:** Verify that SDA is sampled at the exact cycle of `scl_posedge_i` assertion
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_bus_rx/
-    test_bus_rx_flow.py
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `bus_rx_flow` is exercised by `i3c_private_rw_test` (read data reception from target) and `i3c_entdaa_test` (receiving PID/BCR/DCR bytes from each target during DAA).
 
 ## 10. Implementation Notes
 

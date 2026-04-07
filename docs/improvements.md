@@ -111,15 +111,15 @@ This document analyzes improvement opportunities from the CHIPS Alliance i3c-cor
 
 ## 7. Verification Infrastructure — **Approach improvement**
 
-**Current:** Hybrid cocotb + UVM with 24 block-level test dirs and full UVM environment.
+**Current:** Hybrid UVM with 24 block-level test dirs and full UVM environment.
 
 **Issues:**
 
 - No dedicated unit test for `ccc_entdaa.sv`
 - UVM environment is Caliptra-coupled
-- Some tests are minimal (e.g., `test_bus_timers.py` is only 44 lines)
+- Some tests are minimal
 
-**Improvement:** Focus on cocotb (lower barrier, Python-based). Add missing tests for ENTDAA. Create focused testbenches for the simplified modules.
+**Improvement:** Focus on UVM. Add missing tests for ENTDAA. Create focused testbenches for the simplified modules.
 
 ---
 
@@ -143,6 +143,6 @@ This document analyzes improvement opportunities from the CHIPS Alliance i3c-cor
 | OD/PP switching   | Hardcoded to open-drain         | Proper OD/PP driver switching           | **Improve**     |
 | HCI queues        | 2,500+ LoC, complex thresholds  | 4 simple FIFOs                          | **Simplify**    |
 | TX/RX flow        | Clean (214+169 LoC)             | Reuse with minor fixes                  | **Reuse**       |
-| Verification      | UVM + cocotb (Caliptra-coupled) | Focused cocotb tests                    | **Improve**     |
+| Verification      | UVM (Caliptra-coupled)          | Focused UVM tests                       | **Improve**     |
 | Configuration     | Tool-generated, 16+ params      | 5-6 clean parameters                    | **Simplify**    |
 | **Total**         | **~25,000 LoC**                 | **~2,000 LoC**                          | **92% smaller** |

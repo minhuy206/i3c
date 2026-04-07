@@ -84,9 +84,74 @@ This module does NOT exist as a standalone component in the reference design —
 | `scl_o` | Output    | 1     | SCL drive output                       |
 | `sda_o` | Output    | 1     | SDA drive output (for START/STOP only) |
 
-## 5. Functional Description
+## 5. Block Diagram
 
-### 5.1. FSM States
+```mermaid
+%%{init: {"theme": "dark"}}%%
+flowchart LR
+    %% ── Inputs ───────────────────────────────────────────────────────────────
+    subgraph CI["Control In\nfrom flow_active"]
+        direction TB
+        gen_start_i
+        gen_rstart_i
+        gen_stop_i
+        gen_clock_i
+        gen_idle_i
+        sel_i3c_i2c_i
+    end
+
+    subgraph TI["Timing In\nfrom csr_registers"]
+        direction TB
+        t_low_i
+        t_high_i
+        t_su_sta_i
+        t_hd_sta_i
+        t_su_sto_i
+        t_r_i
+        t_f_i
+    end
+
+    scl_fb["scl_i\n(readback)"]
+
+    %% ── scl_generator boundary ───────────────────────────────────────────────
+    subgraph SG["scl_generator"]
+        direction TB
+
+        FSM["13-State FSM\nIdle / GenerateStart / SdaFall\nHoldStart / DriveLow / DriveHigh\nWaitCmd / GenerateRstart / SclHigh\nRstartSdaFall / GenerateStop\nSclHighForStop / SdaRise"]
+
+        subgraph CNT["Timing Counter"]
+            direction LR
+            MUX["Load MUX\nt_su_sta / t_hd_sta\nt_low+t_f / t_high+t_r\nt_su_sto"]
+            TC["tcount\ncountdown"]
+            MUX --> TC
+        end
+
+        subgraph OL["Output Logic\n(combinational)"]
+            direction TB
+            SCL_DRV["scl_o\n0: DriveLow, WaitCmd\n1: otherwise"]
+            SDA_DRV["sda_o\n0: SdaFall, HoldStart\n   RstartSdaFall\n   GenerateStop, SclHighForStop\n1: otherwise"]
+        end
+
+        FSM -->|"load on\nstate entry"| MUX
+        TC  -->|"tcount==0\ntrigger transition"| FSM
+        FSM --> OL
+    end
+
+    %% ── Connections ──────────────────────────────────────────────────────────
+    CI     --> FSM
+    TI     --> MUX
+    scl_fb --> FSM
+
+    %% ── Outputs ──────────────────────────────────────────────────────────────
+    SCL_DRV --> scl_o(["scl_o"])
+    SDA_DRV --> sda_o(["sda_o\nSTART/STOP/Sr only"])
+    FSM     --> done_o(["done_o\n1-cycle pulse"])
+    FSM     --> busy_o(["busy_o"])
+```
+
+## 6. Functional Description
+
+### 6.1. FSM States
 
 ```mermaid
 stateDiagram-v2
@@ -118,7 +183,7 @@ stateDiagram-v2
     SdaRise --> Idle: SDA released HIGH (done_o pulse)
 ```
 
-### 5.2. State Descriptions
+### 6.2. State Descriptions
 
 | State            | SCL | SDA | Description                            |
 | ---------------- | --- | --- | -------------------------------------- |
@@ -136,7 +201,7 @@ stateDiagram-v2
 | `SclHighForStop` | H   | L   | SCL HIGH, wait t_su_sto                |
 | `SdaRise`        | H   | H   | Release SDA HIGH (STOP condition)      |
 
-### 5.3. Timing Counter
+### 6.3. Timing Counter
 
 A single countdown counter `tcount` manages all timing delays:
 
@@ -159,7 +224,7 @@ The `tcount_load_value` is selected based on the current state transition:
 - Entering `DriveHigh`: load `t_high_i + t_r_i`
 - Entering `SclHighForStop`: load `t_su_sto_i`
 
-### 5.4. Output Logic
+### 6.4. Output Logic
 
 ```systemverilog
 always_comb begin
@@ -180,7 +245,7 @@ always_comb begin
 end
 ```
 
-### 5.5. Done Signal
+### 6.5. Done Signal
 
 The `done_o` output pulses for 1 cycle to indicate completion of the requested operation:
 
@@ -188,7 +253,7 @@ The `done_o` output pulses for 1 cycle to indicate completion of the requested o
 - After STOP: when entering `Idle`
 - After each clock cycle: on SCL negedge (entering `DriveLow`)
 
-## 6. Timing Requirements
+## 7. Timing Requirements
 
 ### I3C SDR Mode (at 333 MHz, T_clk = 3 ns)
 
@@ -218,7 +283,7 @@ Resulting SCL frequency: 1 / ((8+4+8+4) \* 3ns) = ~13.9 MHz (meets 12.5 MHz targ
 
 Resulting SCL frequency: 1 / ((434+100+200+100) \* 3ns) = ~400 kHz.
 
-## 7. Changes from Reference Design
+## 8. Changes from Reference Design
 
 This is a completely new module. In the reference design:
 
@@ -229,12 +294,12 @@ This is a completely new module. In the reference design:
 | Dual bus      | Two separate bus instances (I2C bus + I3C bus)   | Single bus, mode-switched      |
 | Timing source | Hardcoded constants                              | CSR-driven timing registers    |
 
-## 8. Error Handling
+## 9. Error Handling
 
 - **SCL stuck LOW:** If `scl_i` does not go HIGH after releasing `scl_o`, the module will wait indefinitely in `DriveHigh`. The `flow_active` module should implement a timeout and issue `gen_idle_i` to abort.
 - **Bus contention:** Not explicitly detected. The flow_active module should monitor for unexpected bus states via bus_monitor.
 
-## 9. Test Plan
+## 10. Test Plan
 
 ### Scenarios
 
@@ -249,16 +314,36 @@ This is a completely new module. In the reference design:
 9. **Done signal:** Verify `done_o` pulses at the correct moments
 10. **Reset behavior:** Verify both outputs go HIGH (idle) immediately on reset
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_scl_generator/
-    test_scl_generator.py
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
 
-## 10. Implementation Notes
+**Module coverage note:** `scl_generator` is exercised by all tests — SCL clock generation and START/STOP/Sr condition signaling are required for every transaction.
+
+## 11. Implementation Notes
 
 - The `sda_o` output of this module is ONLY used for START/STOP/Sr conditions. During data phases, SDA is driven by `bus_tx_flow`. The `controller_active` module must MUX between `scl_generator.sda_o` and `bus_tx_flow.sda_o` based on the current phase.
 - The counter width of 20 bits supports up to 2^20 = ~1M cycles, which at 333 MHz is ~3 ms — more than sufficient for any I3C/I2C timing parameter.

@@ -335,16 +335,34 @@ This is a 1-cycle latency read (registered output).
 11. **QUEUE_STATUS accuracy:** Verify all 8 flag bits match actual FIFO states
 12. **Invalid address:** Read/write to unmapped address; verify no side effects
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_csr/
-    test_csr_registers.py   # Register read/write tests
-    test_dat.py              # DAT-specific tests
-    test_queue_ports.py      # Queue port bridge tests
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `csr_registers` is exercised by all tests — CSR configuration (timing parameters, CORE_CONFIG, DAT) must be written before any transaction can be initiated.
 
 ## 10. Implementation Notes
 

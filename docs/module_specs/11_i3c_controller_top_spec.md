@@ -284,19 +284,34 @@ No error logic at this level. All errors are handled by sub-modules and reported
 9. **Pin-level verification:** Verify 2FF synchronization latency on input path
 10. **FPGA loopback:** Connect SCL_o→SCL_i, SDA_o→SDA_i (with pull-up behavior) for self-test
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_top/
-    test_system_write.py     # End-to-end write tests
-    test_system_read.py      # End-to-end read tests
-    test_system_daa.py       # ENTDAA system tests
-    test_system_i2c.py       # I2C legacy tests
-    i3c_target_model.py      # Behavioral I3C target model
-    i2c_target_model.py      # Behavioral I2C target model
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `i3c_controller_top` is the top-level DUT and is exercised by all tests — every test drives the full chip through the register bus and SCL/SDA pins.
 
 ### Target Models
 

@@ -513,19 +513,34 @@ end
 - Zero-length transfer (`data_length = 0`)
 - Maximum-length transfer (`data_length = 65535`)
 
-### cocotb Test Structure
+### UVM Test Structure
 
 ```
-tests/
-  test_flow_active/
-    test_i3c_write.py       # I3C write transfers
-    test_i3c_read.py        # I3C read transfers
-    test_i2c_transfers.py   # I2C legacy transfers
-    test_ccc_flow.py        # CCC command flow
-    test_stall.py           # Stall/recovery tests
-    test_errors.py          # Error handling tests
-    Makefile
+verification/uvm/
+  tb_top.sv                    # DUT instantiation + clock/reset generation
+  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
+  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
+  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
+  i3c_driver.sv                # Drives SCL/SDA and register bus
+  i3c_monitor.sv               # Samples bus transactions
+  i3c_scoreboard.sv            # Checks responses vs expected
+  i3c_coverage.sv              # Functional coverage groups
+  sequences/
+    i3c_base_seq.sv
+    i3c_entdaa_seq.sv
+    i3c_private_write_seq.sv
+    i3c_private_read_seq.sv
+    i3c_i2c_write_seq.sv
+    i3c_enec_disec_seq.sv
+  tests/
+    i3c_base_test.sv
+    i3c_entdaa_test.sv
+    i3c_private_rw_test.sv
+    i3c_i2c_test.sv
+    i3c_error_test.sv
 ```
+
+**Module coverage note:** `flow_active` is exercised by all tests — the command FSM drives every transaction from CMD FIFO fetch through bus_tx/bus_rx orchestration to RESP FIFO write.
 
 ## 10. Implementation Notes
 
