@@ -25,7 +25,7 @@ The CSR (Control and Status Register) module provides the software-accessible re
 
 ### Packages
 
-- `i3c_pkg` — For `dat_entry_t` and other shared types
+- `controller_pkg` — For `dat_entry_t`
 
 ### Shared Types
 
