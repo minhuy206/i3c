@@ -28,9 +28,7 @@ module hci_queues #(
   // Software-initiated FIFO flush (from HC_CONTROL SW_RESET bit)
   input  logic sw_reset_i,
 
-  // ---------------------------------------------------------------------------
   // CMD FIFO — Software write / Hardware read
-  // ---------------------------------------------------------------------------
   input  logic                    cmd_wvalid_i,
   output logic                    cmd_wready_o,
   input  logic [CmdDataWidth-1:0] cmd_wdata_i,
@@ -41,9 +39,7 @@ module hci_queues #(
   output logic                    cmd_empty_o,
   output logic [CmdDepthW-1:0]    cmd_depth_o,
 
-  // ---------------------------------------------------------------------------
   // TX FIFO — Software write / Hardware read
-  // ---------------------------------------------------------------------------
   input  logic                   tx_wvalid_i,
   output logic                   tx_wready_o,
   input  logic [TxDataWidth-1:0] tx_wdata_i,
@@ -54,9 +50,7 @@ module hci_queues #(
   output logic                   tx_empty_o,
   output logic [TxDepthW-1:0]    tx_depth_o,
 
-  // ---------------------------------------------------------------------------
   // RX FIFO — Hardware write / Software read
-  // ---------------------------------------------------------------------------
   input  logic                   rx_wvalid_i,
   output logic                   rx_wready_o,
   input  logic [RxDataWidth-1:0] rx_wdata_i,
@@ -67,9 +61,7 @@ module hci_queues #(
   output logic                   rx_empty_o,
   output logic [RxDepthW-1:0]    rx_depth_o,
 
-  // ---------------------------------------------------------------------------
   // RESP FIFO — Hardware write / Software read
-  // ---------------------------------------------------------------------------
   input  logic                     resp_wvalid_i,
   output logic                     resp_wready_o,
   input  logic [RespDataWidth-1:0] resp_wdata_i,
@@ -80,10 +72,8 @@ module hci_queues #(
   output logic                     resp_empty_o,
   output logic [RespDepthW-1:0]    resp_depth_o
 );
-    // ---------------------------------------------------------------------------
   // CMD FIFO instance
   // 64-bit wide; sw writes 2x32 (assembled by csr_registers), hw reads 64-bit
-  // ---------------------------------------------------------------------------
   sync_fifo #(
     .Width (CmdDataWidth),
     .Depth (CmdFifoDepth)
@@ -102,9 +92,7 @@ module hci_queues #(
     .depth_o  (cmd_depth_o)
   );
 
-  // ---------------------------------------------------------------------------
   // TX FIFO instance
-  // ---------------------------------------------------------------------------
   sync_fifo #(
     .Width (TxDataWidth),
     .Depth (TxFifoDepth)
@@ -123,9 +111,7 @@ module hci_queues #(
     .depth_o  (tx_depth_o)
   );
 
-  // ---------------------------------------------------------------------------
   // RX FIFO instance
-  // ---------------------------------------------------------------------------
   sync_fifo #(
     .Width (RxDataWidth),
     .Depth (RxFifoDepth)
@@ -144,9 +130,7 @@ module hci_queues #(
     .depth_o  (rx_depth_o)
   );
 
-  // ---------------------------------------------------------------------------
   // RESP FIFO instance
-  // ---------------------------------------------------------------------------
   sync_fifo #(
     .Width (RespDataWidth),
     .Depth (RespFifoDepth)
