@@ -1,23 +1,23 @@
 module i3c_phy #(
   parameter bit ResetValue = 1'b1;
 )(
-  input logic clk_i;
-  input logic rst_ni;
+  input logic clk_i,
+  input logic rst_ni,
 
-  input logic scl_i;
-  output logic scl_o;
+  input logic scl_i,
+  output logic scl_o,
   
-  input logic sda_i;
-  output logic sda_o;
+  input logic sda_i,
+  output logic sda_o,
 
-  input logic ctrl_scl_i;
-  output logic ctrl_scl_o;
+  input logic ctrl_scl_i,
+  output logic ctrl_scl_o,
 
-  input logic ctrl_sda_i;
-  output logic ctrl_sda_o;
+  input logic ctrl_sda_i,
+  output logic ctrl_sda_o,
 
-  input logic sel_od_pp_i;
-  output logic sel_od_pp_o;
+  input logic sel_od_pp_i,
+  output logic sel_od_pp_o,
 );
 
   logic scl_ff1, scl_ff2;

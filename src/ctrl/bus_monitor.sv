@@ -5,18 +5,18 @@ module bus_monitor
 #(
     parameter int CNTR_W = 20
 ) (
-    input logic clk_i;
-    input logic rst_ni;
+    input logic clk_i,
+    input logic rst_ni,
 
-    input logic enable_i;
-    input logic scl_i;
-    input logic sda_i;
+    input logic enable_i,
+    input logic scl_i,
+    input logic sda_i,
 
-    input logic [CNTR_W-1:0] t_hd_dat_i;
-    input logic [CNTR_W-1:0] t_r_i;
-    input logic [CNTR_W-1:0] t_f_i;
+    input logic [CNTR_W-1:0] t_hd_dat_i,
+    input logic [CNTR_W-1:0] t_r_i,
+    input logic [CNTR_W-1:0] t_f_i,
 
-    output bus_state_t state_o;
+    output bus_state_t state_o,
 );
   logic enable;
 
