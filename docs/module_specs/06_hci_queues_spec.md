@@ -125,6 +125,7 @@ Each FIFO is an instance of a parameterized synchronous FIFO:
 module sync_fifo #(
   parameter int unsigned Width = 32,
   parameter int unsigned Depth = 64,
+  localparam int unsigned PtrW   = $clog2(Depth),
   localparam int unsigned DepthW = $clog2(Depth + 1)
 )(
   input  logic             clk_i,
@@ -150,16 +151,17 @@ module sync_fifo #(
 
 **Implementation:**
 
-- Circular buffer using `logic [Width-1:0] mem [Depth]`
-- Write pointer (`wptr`) and read pointer (`rptr`), both `$clog2(Depth)` bits wide
-- Counter-based full/empty detection: `depth_o` tracks current occupancy
-  - `full_o = (depth_o == Depth)`
-  - `empty_o = (depth_o == 0)`
+- Circular buffer using `logic [Width-1:0] mem [0:Depth-1]`
+- Write pointer (`wptr`) and read pointer (`rptr`), both `PtrW+1` bits wide (extra MSB for full/empty detection)
+- Extra-MSB pointer comparison for full/empty detection:
+  - `full_o  = (rptr_q == {~wptr_q[PtrW], wptr_q[PtrW-1:0]})` — same lower bits, opposite MSB
+  - `empty_o = (wptr_q == rptr_q)` — all bits equal
+  - `depth_o = wptr_q - rptr_q` — combinational subtraction
 - `wready_o = ~full_o`
 - `rvalid_o = ~empty_o`
 - Write occurs when `wvalid_i & wready_o`
 - Read occurs when `rvalid_o & rready_i`
-- `flush_i` resets pointers and depth to 0 (does NOT clear memory)
+- `flush_i` resets both pointers to 0 (does NOT clear memory)
 
 **Valid/Ready handshake protocol:**
 
@@ -297,7 +299,7 @@ verification/uvm/
 
 ## 11. Implementation Notes
 
-- The `sync_fifo` module should use a simple circular buffer (read/write pointer + counter). For FPGA, the synthesizer will infer block RAM for depth >= 16 entries.
+- The `sync_fifo` module uses a circular buffer with extra-MSB pointer comparison for full/empty detection (no separate counter register). Pointers are `PtrW+1` bits wide; the MSB wraps independently and allows distinguishing full from empty when lower bits are equal. For FPGA, the synthesizer will infer block RAM for depth >= 16 entries.
 - The CMD FIFO is 64-bit wide — on a 32-bit register bus, the CSR module handles the 2-write assembly. The FIFO itself always handles full 64-bit entries.
 - The `depth_o` output width is `$clog2(Depth + 1)` to represent values from 0 to Depth inclusive. For Depth=64, this is 7 bits.
 - The reference design's threshold system (`start_thld`, `ready_thld`, `thld_trig` signals) is intentionally removed. The simplified design relies on `full` / `empty` flags. If interrupt-driven operation is needed later, a simple comparator on `depth_o` can be added in the CSR module.

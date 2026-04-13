@@ -45,7 +45,7 @@ module scl_generator
     SdaRise        = 4'd12
   } state_e;
 
-  state_e state, next_state;
+  state_e state_q, state_d;
 
   logic [CNTR_W-1:0] tcount;
   logic                    load_tcount;
@@ -53,7 +53,7 @@ module scl_generator
 
   wire tcount_expired = (tcount == '0);
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_tcount
     if (!rst_ni)
       tcount <= '0;
     else if (load_tcount)
@@ -62,141 +62,182 @@ module scl_generator
       tcount <= tcount - 1'b1;
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) state <= Idle;
-    else         state <= next_state;
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_fsm_state
+    if (!rst_ni) state_q <= Idle;
+    else         state_q <= state_d;
   end
 
-  always_comb begin
-    next_state      = state;
+  always_comb begin : update_tcount_load_value
     load_tcount     = 1'b0;
-    tcount_load_val = '0;
+    tcount_load_val = '0; 
 
-    // gen_idle_i is a priority override from any state
+    unique case (state_q)
+      Idle: begin
+        if (gen_start_i) begin
+          load_tcount     = 1'b1;
+          tcount_load_val = t_su_sta_i;
+        end
+      end
+
+      // Release SDA+SCL HIGH; wait for SCL to be confirmed HIGH on bus
+      GenerateRstart: begin
+        if (scl_i) begin
+          load_tcount     = 1'b1;
+          tcount_load_val = t_su_sta_i;
+        end
+      end
+
+      // 1-cycle state: SDA is now LOW — immediately load t_hd_sta
+      SdaFall, RstartSdaFall : begin
+          load_tcount = 1'b1;
+          tcount_load_val = t_hd_sta_i;
+      end
+
+      // Hold SDA LOW for t_hd_sta, then begin clocking
+      HoldStart : begin
+        if (tcount_expired) begin
+          load_tcount = 1'b1;
+          tcount_load_val = t_low_i + t_f_i; 
+        end
+      end
+
+      // SCL held LOW; wait for the next command
+      WaitCmd: begin
+        if (gen_clock_i) begin
+          load_tcount     = 1'b1;
+          tcount_load_val = t_low_i + t_f_i;
+        end
+      end
+
+      // SCL HIGH for t_high + t_r; gen_stop/gen_rstart checked at expiry
+      DriveHigh : begin
+        if (tcount_expired && gen_clock_i) begin
+            load_tcount     = 1'b1;
+            tcount_load_val = t_low_i + t_f_i;
+        end
+      end
+
+      // SCL LOW for t_low + t_f
+      DriveLow : begin
+        if (tcount_expired && gen_clock_i) begin
+            load_tcount     = 1'b1;
+            tcount_load_val = t_high_i + t_r_i;
+        end
+      end
+
+      // SDA LOW, release SCL; wait for SCL confirmed HIGH on bus
+      GenerateStop : begin
+        if (scl_i) begin
+          load_tcount = 1'b1;
+          tcount_load_val = t_su_sto_i;
+        end
+      end
+
+      default : ;
+    endcase
+  end
+
+  always_comb begin : scl_fsm_state
+    state_d      = state_q;
+
+    // gen_idle_i is a priority override from any state_q
     if (gen_idle_i) begin
-      next_state = Idle;
+      state_d = Idle;
     end else begin
-      case (state)
-
-        // -----------------------------------------------------------------
+      unique case (state_q)
         Idle: begin
           if (gen_start_i) begin
-            next_state      = GenerateStart;
-            load_tcount     = 1'b1;
-            tcount_load_val = t_su_sta_i;
+            state_d      = GenerateStart;
           end else if (gen_rstart_i) begin
             // Rstart directly from idle (abnormal but handled)
-            next_state = GenerateRstart;
+            state_d = GenerateRstart;
           end
         end
 
         // Wait t_su_sta with SCL/SDA HIGH, then fall SDA
         GenerateStart: begin
           if (tcount_expired)
-            next_state = SdaFall;
+            state_d = SdaFall;
         end
 
-        // 1-cycle state: SDA is now LOW — immediately load t_hd_sta
         SdaFall: begin
-          next_state      = HoldStart;
-          load_tcount     = 1'b1;
-          tcount_load_val = t_hd_sta_i;
+          state_d      = HoldStart;
         end
 
-        // Hold SDA LOW for t_hd_sta, then begin clocking
         HoldStart: begin
           if (tcount_expired) begin
-            next_state      = DriveLow;
-            load_tcount     = 1'b1;
-            tcount_load_val = t_low_i + t_f_i;
+            state_d      = DriveLow;
           end
         end
 
-        // SCL LOW for t_low + t_f
         DriveLow: begin
           if (tcount_expired) begin
             if (gen_clock_i) begin
-              next_state      = DriveHigh;
-              load_tcount     = 1'b1;
-              tcount_load_val = t_high_i + t_r_i;
+              state_d      = DriveHigh;
             end else begin
-              next_state = WaitCmd;
+              state_d = WaitCmd;
             end
           end
         end
 
-        // SCL HIGH for t_high + t_r; gen_stop/gen_rstart checked at expiry
         DriveHigh: begin
           if (tcount_expired) begin
             if (gen_stop_i) begin
-              next_state = GenerateStop;
+              state_d = GenerateStop;
             end else if (gen_rstart_i) begin
-              next_state = GenerateRstart;
+              state_d = GenerateRstart;
             end else if (gen_clock_i) begin
-              next_state      = DriveLow;
-              load_tcount     = 1'b1;
-              tcount_load_val = t_low_i + t_f_i;
+              state_d      = DriveLow;
             end else begin
               // No command ready — hold SCL LOW until flow_active responds
-              next_state = WaitCmd;
+              state_d = WaitCmd;
             end
           end
         end
 
-        // SCL held LOW; wait for the next command
         WaitCmd: begin
           if (gen_stop_i) begin
-            next_state = GenerateStop;
+            state_d = GenerateStop;
           end else if (gen_clock_i) begin
-            next_state      = DriveLow;
-            load_tcount     = 1'b1;
-            tcount_load_val = t_low_i + t_f_i;
+            state_d      = DriveLow;
           end
         end
 
-        // Release SDA+SCL HIGH; wait for SCL to be confirmed HIGH on bus
         GenerateRstart: begin
           if (scl_i) begin
-            next_state      = SclHigh;
-            load_tcount     = 1'b1;
-            tcount_load_val = t_su_sta_i;
+            state_d      = SclHigh;
           end
         end
 
         // Wait t_su_sta with SCL/SDA HIGH before pulling SDA LOW for Sr
         SclHigh: begin
           if (tcount_expired)
-            next_state = RstartSdaFall;
+            state_d = RstartSdaFall;
         end
 
         // 1-cycle state: SDA falls for Sr — load t_hd_sta
         RstartSdaFall: begin
-          next_state      = HoldStart;
-          load_tcount     = 1'b1;
-          tcount_load_val = t_hd_sta_i;
+          state_d      = HoldStart;
         end
 
-        // SDA LOW, release SCL; wait for SCL confirmed HIGH on bus
         GenerateStop: begin
           if (scl_i) begin
-            next_state      = SclHighForStop;
-            load_tcount     = 1'b1;
-            tcount_load_val = t_su_sto_i;
+            state_d      = SclHighForStop;
           end
         end
 
         // SCL HIGH, SDA LOW; hold for t_su_sto then rise SDA
         SclHighForStop: begin
           if (tcount_expired)
-            next_state = SdaRise;
+            state_d = SdaRise;
         end
 
         // 1-cycle state: SDA released HIGH (STOP complete) → back to Idle
         SdaRise: begin
-          next_state = Idle;
+          state_d = Idle;
         end
 
-        default: next_state = Idle;
+        default: state_d = Idle;
 
       endcase
     end
@@ -206,7 +247,7 @@ module scl_generator
     scl_o = 1'b1;  // default: release HIGH (open-drain)
     sda_o = 1'b1;  // default: release HIGH
 
-    case (state)
+    case (state_q)
       DriveLow, WaitCmd:
         scl_o = 1'b0;
 
@@ -218,9 +259,9 @@ module scl_generator
     endcase
   end
 
-  assign done_o = ((next_state == DriveLow) && (state != DriveLow)) ||
-                  ((state == SdaRise) && (next_state == Idle));
+  assign done_o = ((state_d == DriveLow) && (state_q != DriveLow)) ||
+                  ((state_q == SdaRise) && (state_d == Idle));
 
-  assign busy_o = (state != Idle);
+  assign busy_o = (state_q != Idle);
 
 endmodule
