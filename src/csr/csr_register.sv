@@ -10,6 +10,8 @@ module csr_registers
   parameter int unsigned DatDepth  = 16,
   parameter int unsigned AddrWidth = 12,
   parameter int unsigned DataWidth = 32,
+  parameter int unsigned CounterWidth = 20;
+  parameter int unsigned CmdDataWidth = 64;
   localparam int unsigned DatAw    = $clog2(DatDepth)
 ) (
   input  logic clk_i,
@@ -26,34 +28,34 @@ module csr_registers
   output logic i3c_fsm_en_o,  
   output logic sw_reset_o,    
 
-  output logic [19:0] t_r_o,       
-  output logic [19:0] t_f_o,       
-  output logic [19:0] t_low_o,     
-  output logic [19:0] t_high_o,    
-  output logic [19:0] t_su_sta_o,  
-  output logic [19:0] t_hd_sta_o,  
-  output logic [19:0] t_su_sto_o,  
-  output logic [19:0] t_su_dat_o,  
-  output logic [19:0] t_hd_dat_o,  
+  output logic [CounterWidth-1:0] t_r_o,       
+  output logic [CounterWidth-1:0] t_f_o,       
+  output logic [CounterWidth-1:0] t_low_o,     
+  output logic [CounterWidth-1:0] t_high_o,    
+  output logic [CounterWidth-1:0] t_su_sta_o,  
+  output logic [CounterWidth-1:0] t_hd_sta_o,  
+  output logic [CounterWidth-1:0] t_su_sto_o,  
+  output logic [CounterWidth-1:0] t_su_dat_o,  
+  output logic [CounterWidth-1:0] t_hd_dat_o,  
 
   input  logic             dat_read_valid_i,
   input  logic [DatAw-1:0] dat_index_i,
-  output logic [31:0]            dat_rdata_o,
+  output logic [DataWidth-1:0]            dat_rdata_o,
 
   output logic        cmd_wvalid_o,
-  output logic [63:0] cmd_wdata_o,
+  output logic [CmdDataWidth-1:0] cmd_wdata_o,
   input  logic        cmd_wready_i,
 
   output logic        tx_wvalid_o,
-  output logic [31:0] tx_wdata_o,
+  output logic [DataWidth-1:0] tx_wdata_o,
   input  logic        tx_wready_i,
 
   input  logic        rx_rvalid_i,
-  input  logic [31:0] rx_rdata_i,
+  input  logic [DataWidth-1:0] rx_rdata_i,
   output logic        rx_rready_o,
 
   input  logic        resp_rvalid_i,
-  input  logic [31:0] resp_rdata_i,
+  input  logic [DataWidth-1:0] resp_rdata_i,
   output logic        resp_rready_o,
 
   input  logic cmd_full_i,
@@ -87,26 +89,31 @@ module csr_registers
   localparam logic [AddrWidth-1:0] ADDR_DAT_BASE     = 12'h200;
   localparam logic [AddrWidth-1:0] ADDR_DAT_END      = 12'h240;
 
-  localparam logic [19:0] RST_T_R      = 20'd4;   
-  localparam logic [19:0] RST_T_F      = 20'd4;
-  localparam logic [19:0] RST_T_LOW    = 20'd13;  
-  localparam logic [19:0] RST_T_HIGH   = 20'd13;
-  localparam logic [19:0] RST_T_SU_STA = 20'd13;
-  localparam logic [19:0] RST_T_HD_STA = 20'd13;
-  localparam logic [19:0] RST_T_SU_STO = 20'd13;
-  localparam logic [19:0] RST_T_SU_DAT = 20'd1;
-  localparam logic [19:0] RST_T_HD_DAT = 20'd4;
+  localparam logic [CounterWidth-1:0] RST_T_R      = 20'd4;   
+  localparam logic [CounterWidth-1:0] RST_T_F      = 20'd4;
+  localparam logic [CounterWidth-1:0] RST_T_LOW    = 20'd13;  
+  localparam logic [CounterWidth-1:0] RST_T_HIGH   = 20'd13;
+  localparam logic [CounterWidth-1:0] RST_T_SU_STA = 20'd13;
+  localparam logic [CounterWidth-1:0] RST_T_HD_STA = 20'd13;
+  localparam logic [CounterWidth-1:0] RST_T_SU_STO = 20'd13;
+  localparam logic [CounterWidth-1:0] RST_T_SU_DAT = 20'd1;
+  localparam logic [CounterWidth-1:0] RST_T_HD_DAT = 20'd4;
 
   logic hc_enable_q;  
   logic sw_reset_q;   
 
-  logic [19:0] t_r_q, t_f_q, t_low_q, t_high_q;
-  logic [19:0] t_su_sta_q, t_hd_sta_q, t_su_sto_q, t_su_dat_q, t_hd_dat_q;
+  logic [CounterWidth-1:0] t_r_q, t_f_q, t_low_q, t_high_q;
+  logic [CounterWidth-1:0] t_su_sta_q, t_hd_sta_q, t_su_sto_q, t_su_dat_q, t_hd_dat_q;
 
   dat_entry_t dat_mem [DatDepth];
 
-  logic        cmd_staging_valid_q;
-  logic [31:0] cmd_dword0_q;
+  logic cmd_staging_valid_q;
+  logic cmd_wvalid_q;
+  logic [DataWidth-1:0] cmd_dword0_q;
+  logic [CmdDataWidth-1:0] cmd_wdata_q;
+
+  logic [DataWidth-1:0] tx_wdata_q;
+  logic tx_wvalid_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : reg_write
     if (!rst_ni) begin
@@ -121,8 +128,6 @@ module csr_registers
       t_su_sto_q <= RST_T_SU_STO;
       t_su_dat_q <= RST_T_SU_DAT;
       t_hd_dat_q <= RST_T_HD_DAT;
-      cmd_staging_valid_q <= 1'b0;
-      cmd_dword0_q <= '0;
       for (int i = 0; i < DatDepth; i++) begin
         dat_mem[i] <= '0;
       end
@@ -143,14 +148,6 @@ module csr_registers
           ADDR_T_SU_STO: t_su_sto_q <= wdata_i[19:0];
           ADDR_T_SU_DAT: t_su_dat_q <= wdata_i[19:0];
           ADDR_T_HD_DAT: t_hd_dat_q <= wdata_i[19:0];
-          ADDR_CMD_QUEUE: begin
-            if (!cmd_staging_valid_q) begin
-              cmd_dword0_q <= wdata_i;
-              cmd_staging_valid_q <= 1'b1;
-            end else begin
-              cmd_staging_valid_q <= '0;
-            end
-          end
           default: begin
             if (addr_i >= ADDR_DAT_BASE && addr_i <= (ADDR_DAT_END - 4)) begin
               dat_mem[(addr_i-ADDR_DAT_BASE) >> 2] <= dat_entry_t'(wdata_i);
@@ -158,9 +155,38 @@ module csr_registers
           end
         endcase
       end
-      if (sw_reset_q) begin
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : cmd_write
+    if (!rst_ni) begin
+      cmd_staging_valid_q <= 1'b0;
+      cmd_wvalid_q <= '0;
+      cmd_dword0_q <= '0;
+      cmd_wdata_q <= '0;
+    end else if (sw_reset_q || (cmd_wvalid_q && cmd_wready_i)) begin
+      cmd_wvalid_q <= '0;
+    end else if (wen_i && (addr_i == ADDR_CMD_QUEUE) && !cmd_wvalid_q) begin
+      if (!cmd_staging_valid_q) begin
+        cmd_dword0_q <= wdata_i;
+        cmd_staging_valid_q <= 1'b1;
+      end else begin
+        cmd_wdata_q <= {wdata_i, cmd_dword0_q};
+        cmd_wvalid_q <= 1'b1;
         cmd_staging_valid_q <= '0;
       end
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : tx_write
+    if (!rst_ni) begin
+      tx_wdata_q <= '0;
+      tx_wvalid_q <= '0;
+    end else if (tx_wvalid_q && tx_wready_i) begin
+      tx_wvalid_q <= '0; 
+    end else if (wen_i && (addr_i == ADDR_TX_DATA) && !tx_wvalid_q) begin
+      tx_wdata_q <= wdata_i;
+      tx_wvalid_q <= 1'b1;
     end
   end
 
@@ -180,11 +206,11 @@ module csr_registers
 
   assign ready_o = 1'b1;
 
-  assign cmd_wvalid_o = wen_i && (addr_i == ADDR_CMD_QUEUE) && cmd_staging_valid_q;
-  assign cmd_wdata_o = {wdata_i, cmd_dword0_q};
+  assign cmd_wvalid_o = cmd_wvalid_q;
+  assign cmd_wdata_o = cmd_wdata_q;
 
-  assign tx_wvalid_o = wen_i && (addr_i == ADDR_TX_DATA);
-  assign tx_wdata_o  = wdata_i;
+  assign tx_wvalid_o = tx_wvalid_q;
+  assign tx_wdata_o  = tx_wdata_q;
 
   logic [DataWidth-1:0] hc_control =  {30'b0, sw_reset_q, hc_enable_q};
   logic [DataWidth-1:0] hc_status = {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i};
@@ -208,12 +234,16 @@ module csr_registers
         ADDR_T_SU_DAT: rdata_o = {12'b0, t_su_dat_q};
         ADDR_T_HD_DAT: rdata_o = {12'b0, t_hd_dat_q};
         ADDR_RX_DATA: begin
-          rdata_o = rx_rdata_i;
-          rx_rready_o = rx_rvalid_i;
+          rx_rready_o = ren_i;
+          if (rx_rvalid_i) begin
+            rdata_o = rx_rdata_i;
+          end
         end
         ADDR_RESP: begin
-          rdata_o = resp_rdata_i;
-          resp_rready_o = resp_rvalid_i;
+          if (resp_rvalid_i) begin
+            rdata_o = resp_rdata_i;
+          end
+          resp_rready_o = ren_i;
         end
         ADDR_QUEUE_STATUS: rdata_o = queue_status; 
         default: begin
