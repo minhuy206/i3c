@@ -37,7 +37,7 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 - `bus_tx_flow` — Byte/bit transmission
 - `bus_rx_flow` — Byte/bit reception
 - `scl_generator` — Clock and START/STOP generation
-- `ccc` — CCC command execution
+- `ccc` — ENTDAA engine (ENEC/DISEC handled directly in `flow_active`)
 - `bus_monitor` — Bus state feedback
 
 ## 3. Parameters
@@ -125,38 +125,40 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 
 ### SCL Generator Control
 
-| Signal           | Direction | Width | Description                      |
-| ---------------- | --------- | ----- | -------------------------------- |
-| `gen_start_o`    | Output    | 1     | Request START                    |
-| `gen_rstart_o`   | Output    | 1     | Request Repeated START           |
-| `gen_stop_o`     | Output    | 1     | Request STOP                     |
-| `gen_clock_o`    | Output    | 1     | Enable clock generation          |
-| `gen_idle_o`     | Output    | 1     | Force return to idle (abort)     |
-| `sel_i3c_i2c_o`  | Output    | 1     | 0 = I2C FM, 1 = I3C SDR          |
-| `scl_gen_done_i` | Input     | 1     | SCL generator operation complete |
-| `scl_gen_busy_i` | Input     | 1     | SCL generator is busy            |
+| Signal           | Direction | Width | Description                                                                                |
+| ---------------- | --------- | ----- | ------------------------------------------------------------------------------------------ |
+| `gen_start_o`    | Output    | 1     | Request START                                                                              |
+| `gen_rstart_o`   | Output    | 1     | Request Repeated START (driven both by flow_active and in response to `ccc_req_restart_i`) |
+| `gen_stop_o`     | Output    | 1     | Request STOP                                                                               |
+| `gen_clock_o`    | Output    | 1     | Enable clock generation                                                                    |
+| `gen_idle_o`     | Output    | 1     | Force return to idle (abort)                                                               |
+| `sel_i3c_i2c_o`  | Output    | 1     | 0 = I2C FM, 1 = I3C SDR                                                                    |
+| `scl_gen_done_i` | Input     | 1     | SCL generator operation complete                                                           |
+| `scl_gen_busy_i` | Input     | 1     | SCL generator is busy                                                                      |
 
-### CCC Control (to ccc module)
+### CCC Control (to ccc module — ENTDAA only)
 
-| Signal            | Direction | Width | Description                                |
-| ----------------- | --------- | ----- | ------------------------------------------ |
-| `ccc_valid_o`     | Output    | 1     | Start CCC execution                        |
-| `ccc_code_o`      | Output    | 8     | CCC command code (maps to `ccc.ccc_i`)     |
-| `ccc_def_byte_o`  | Output    | 8     | Defining byte                              |
-| `ccc_dev_addr_o`  | Output    | 7     | Target address (direct CCC)                |
-| `ccc_dev_count_o` | Output    | 4     | Device count (ENTDAA)                      |
-| `ccc_done_i`      | Input     | 1     | CCC execution complete (from `ccc.done_o`) |
-| `ccc_invalid_i`   | Input     | 1     | Unsupported CCC (from `ccc.invalid_ccc_o`) |
+> **Note:** The `ccc` module is now an ENTDAA-only engine. ENEC and DISEC are handled entirely within `flow_active` via the `I3CWriteImmediate` state and do not involve this interface.
+
+| Signal              | Direction | Width | Description                                                               |
+| ------------------- | --------- | ----- | ------------------------------------------------------------------------- |
+| `ccc_valid_o`       | Output    | 1     | Start ENTDAA; held high until `ccc_done_i`                                |
+| `ccc_dev_count_o`   | Output    | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)        |
+| `ccc_dev_idx_o`     | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
+| `ccc_done_i`        | Input     | 1     | ENTDAA complete (from `ccc.done_o`)                                       |
+| `ccc_req_restart_i` | Input     | 1     | Pulse: `ccc` requests a Repeated START for next device round              |
 
 ### CCC DAA Results (from ccc module)
 
-| Signal                | Direction | Width | Description                       |
-| --------------------- | --------- | ----- | --------------------------------- |
-| `daa_address_i`       | Input     | 7     | Assigned dynamic address          |
-| `daa_address_valid_i` | Input     | 1     | Address assignment valid pulse    |
-| `daa_pid_i`           | Input     | 48    | Provisioned ID of assigned device |
-| `daa_bcr_i`           | Input     | 8     | BCR of assigned device            |
-| `daa_dcr_i`           | Input     | 8     | DCR of assigned device            |
+> The `ccc` module reads the pre-populated DAT address itself (via its own DAT read port) and outputs results here after each successful device assignment. `flow_active` does **not** need to write addresses back to DAT — SW pre-populates them before issuing the ENTDAA command.
+
+| Signal                | Direction | Width | Description                                          |
+| --------------------- | --------- | ----- | ---------------------------------------------------- |
+| `daa_address_i`       | Input     | 7     | Dynamic address just assigned                        |
+| `daa_address_valid_i` | Input     | 1     | Pulse: one assignment was accepted (ACK from target) |
+| `daa_pid_i`           | Input     | 48    | Provisioned ID received from the target              |
+| `daa_bcr_i`           | Input     | 8     | BCR received from the target                         |
+| `daa_dcr_i`           | Input     | 8     | DCR received from the target                         |
 
 ### OD/PP Mode Control
 
@@ -252,8 +254,8 @@ stateDiagram-v2
 - **Actions:** Capture `dat_rdata_hw_i` after 1-cycle latency
 - **Transition (on `dat_captured`):**
   - `cmd_attr == Immediate && i2c_cmd` → `I2CWriteImmediate`
-  - `cmd_attr == Immediate && !i2c_cmd` → `I3CWriteImmediate`
-  - `cmd_attr == AddressAssignment` → `IssueCmd` (ENTDAA via CCC)
+  - `cmd_attr == Immediate && !i2c_cmd` → `I3CWriteImmediate` (covers private writes and ENEC/DISEC CCCs)
+  - `cmd_attr == AddressAssignment` → `IssueCmd` (ENTDAA; no DAT read needed here — ccc reads DAT per round)
   - `cmd_dir == Write` → `FetchTxData`
   - `cmd_dir == Read` → `IssueCmd`
 
@@ -272,20 +274,40 @@ stateDiagram-v2
 
 #### I3CWriteImmediate (State 3) — **NEW (was TODO)**
 
-- **Purpose:** Execute immediate data transfer to an I3C device (CCC with inline data)
-- **Actions:**
-  - Generate START via `scl_generator` (Open-Drain)
-  - Send broadcast header `{7'h7E, 1'b0}` if `cp` (command present) bit set
-  - Read ACK
-  - If CCC: send CCC code byte, read ACK
-  - Generate Repeated START (switch to Push-Pull)
-  - Send `{dynamic_address, RnW}` — target address
-  - Read ACK (Open-Drain for ACK only)
-  - Send inline data bytes (up to 4, from descriptor) with T-bit (parity)
-  - Generate STOP (if `toc` bit set)
+- **Purpose:** Execute immediate data transfers on the I3C bus. Covers three sub-cases determined by the `cp` flag and `cmd[7]` (broadcast vs direct CCC):
+
+**Sub-case A — Private I3C write (`cp = 0`):**
+
+1. Generate START (Open-Drain)
+2. Send `{dynamic_address, RnW}` from DAT entry
+3. Read ACK (Open-Drain)
+4. Switch to Push-Pull; send inline data bytes from descriptor with T-bit parity
+5. Generate STOP (if `toc`)
+
+**Sub-case B — Broadcast CCC (`cp = 1`, `cmd[7] = 0`, e.g. ENEC 0x00, DISEC 0x01):**
+
+1. Generate START (Open-Drain)
+2. Send `{7'h7E, 1'b0}` broadcast address
+3. Read ACK
+4. Send CCC code byte (`cmd` field); read ACK
+5. Send defining byte (`def_or_data_byte1`) if `dtt >= 5`; read ACK
+6. Generate STOP (if `toc`)
+
+- **No Repeated START or device address — the entire frame stays Open-Drain**
+
+**Sub-case C — Direct CCC (`cp = 1`, `cmd[7] = 1`, e.g. ENEC 0x80, DISEC 0x81):**
+
+1. Generate START (Open-Drain)
+2. Send `{7'h7E, 1'b0}` broadcast address; read ACK
+3. Send CCC code byte; read ACK
+4. Generate Repeated START (switch to Push-Pull)
+5. Send `{dynamic_address, 1'b0}` (target address + write from DAT entry); read ACK (Open-Drain)
+6. Send defining byte with T-bit parity; generate STOP (if `toc`)
+
+- **Counter:** `transfer_cnt` tracks current byte position within inline data
 - **OD/PP switching:**
-  - Open-Drain: START, broadcast header, ACK bits
-  - Push-Pull: After Sr, address, data bytes
+  - Sub-cases A, B: Open-Drain for address/ACK phases; Push-Pull for data bytes (A only)
+  - Sub-case C: Open-Drain through the broadcast header + CCC code; Push-Pull from Sr onward (data only)
 - **Transition:** → `WriteResp` when complete
 
 #### FetchTxData (State 5) — **NEW (was TODO)**
@@ -363,10 +385,14 @@ stateDiagram-v2
   - When `data_length` reached or target signals end (T-bit=0): → `WriteResp`
 - **Actions (ENTDAA):**
   - Set `sel_i3c_i2c_o = 1` (I3C mode)
-  - Activate CCC module: `ccc_valid_o = 1`, `ccc_code_o = 0x07`
-  - On each `daa_address_valid_i`: capture `daa_address_i`, `daa_pid_i`, `daa_bcr_i`, `daa_dcr_i` and optionally write assigned address to DAT or report via RX FIFO
-  - Wait for `ccc_done_i`
-  - → `WriteResp`
+  - Generate START (Open-Drain)
+  - Send `{7'h7E, 1'b0}` broadcast header; read ACK
+  - Send ENTDAA code `8'h07`; read ACK
+  - Activate CCC module: assert `ccc_valid_o = 1`, provide `ccc_dev_count_o` and `ccc_dev_idx_o` from command descriptor fields
+  - While `ccc_valid_o` is held high, respond to `ccc_req_restart_i` by asserting `gen_rstart_o` to scl_generator; hold `gen_rstart_o` until `scl_gen_done_i`
+  - On each `daa_address_valid_i` pulse: forward `daa_address_i`, `daa_pid_i`, `daa_bcr_i`, `daa_dcr_i` to RX FIFO for SW readback
+  - Wait for `ccc_done_i`; deassert `ccc_valid_o`
+  - Generate STOP; → `WriteResp`
 - **OD/PP switching:**
   - I2C transfers: always Open-Drain
   - I3C transfers: Open-Drain for address/ACK, Push-Pull for data
@@ -408,8 +434,9 @@ assign cmd_dir  = cmd_desc[29] ? Read : Write;
 
 **Address Assignment (`attr = 3'b010`):**
 
-- `dev_count` in bits [29:26]
-- Triggers ENTDAA via CCC module
+- `dev_count` in bits [29:26] → drives `ccc_dev_count_o`
+- `dev_idx` in bits [20:16] → drives `ccc_dev_idx_o` (starting DAT index; ccc reads DAT entries `[dev_idx .. dev_idx + dev_count - 1]`)
+- Triggers ENTDAA via CCC module; `flow_active` sends the opening broadcast header + ENTDAA code before activating `ccc_valid_o`
 
 ### 5.4. Error Accumulation
 
@@ -476,15 +503,15 @@ end
 
 ## 8. Error Handling
 
-| Error        | Detection                                | Response Code                             |
-| ------------ | ---------------------------------------- | ----------------------------------------- |
-| Address NACK | ACK bit = 1 after address byte           | `AddrHeader`                              |
-| Data NACK    | ACK bit = 1 after data byte              | `Nack`                                    |
-| Parity error | T-bit != calculated odd parity           | `Parity`                                  |
-| TX underflow | TX FIFO empty when data needed           | Stall (StallWrite), then `Ovl` if timeout |
-| RX overflow  | RX FIFO full when data received          | Stall (StallRead), then `Ovl` if timeout  |
-| Frame error  | Unexpected bus condition during transfer | `Frame`                                   |
-| CCC invalid  | `ccc.invalid_ccc_o` pulse                | `NotSupported`                            |
+| Error            | Detection                                           | Response Code                             |
+| ---------------- | --------------------------------------------------- | ----------------------------------------- |
+| Address NACK     | ACK bit = 1 after address byte                      | `AddrHeader`                              |
+| Data NACK        | ACK bit = 1 after data byte                         | `Nack`                                    |
+| Parity error     | T-bit != calculated odd parity                      | `Parity`                                  |
+| TX underflow     | TX FIFO empty when data needed                      | Stall (StallWrite), then `Ovl` if timeout |
+| RX overflow      | RX FIFO full when data received                     | Stall (StallRead), then `Ovl` if timeout  |
+| Frame error      | Unexpected bus condition during transfer            | `Frame`                                   |
+| ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses | `Nack` (no targets responded)             |
 
 ## 9. Test Plan
 
@@ -496,15 +523,16 @@ end
 4. **I2C Write (immediate):** Send immediate write to I2C legacy device; verify OD signaling
 5. **I2C Write (regular):** Regular write via TX FIFO to I2C device
 6. **I2C Read:** Read from I2C device; verify data in RX FIFO
-7. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify address assignment
-8. **CCC ENEC/DISEC:** Execute CCC commands; verify bus frames
-9. **TX FIFO stall:** Large write with slow TX FIFO fill; verify StallWrite recovery
-10. **RX FIFO stall:** Large read with full RX FIFO; verify StallRead recovery
-11. **Address NACK:** Target NACKs address; verify AddrHeader error in response
-12. **Parity error:** Corrupt T-bit; verify Parity error in response
-13. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
-14. **Multiple commands:** Enqueue 3 commands; verify all execute sequentially with correct responses
-15. **Back-to-back transfers:** No idle gap between commands; verify performance
+7. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify broadcast header + ENTDAA code sent, ccc activated with correct dev_count/dev_idx, gen_rstart_o driven on ccc_req_restart_i
+8. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5; verify [S][0x7E+W][ACK][0x00][ACK][DefByte][P] frame
+9. **CCC DISEC direct:** ImmediateDataTransfer with cp=1, cmd=0x81; verify [S][0x7E+W][ACK][0x81][ACK][Sr][DA+W][ACK][DefByte][P] frame
+10. **TX FIFO stall:** Large write with slow TX FIFO fill; verify StallWrite recovery
+11. **RX FIFO stall:** Large read with full RX FIFO; verify StallRead recovery
+12. **Address NACK:** Target NACKs address; verify AddrHeader error in response
+13. **Parity error:** Corrupt T-bit; verify Parity error in response
+14. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
+15. **Multiple commands:** Enqueue 3 commands; verify all execute sequentially with correct responses
+16. **Back-to-back transfers:** No idle gap between commands; verify performance
 
 ### Corner Cases
 
@@ -548,4 +576,5 @@ verification/uvm/
 - The `transfer_cnt` counter is used in both immediate and regular transfers but with different semantics: for immediate, it counts bytes within the descriptor; for regular, it counts bytes within the current DWORD from TX FIFO. A separate `remaining_length` counter tracks the total transfer progress.
 - The `cmd_desc` register is loaded once in `WaitForCmd` and remains stable throughout the transaction. Individual fields are extracted combinationally.
 - OD/PP switching must happen at byte boundaries — never mid-byte. The `sel_od_pp_o` output changes only when transitioning between bus phases (address → data, ACK → data).
-- For ENTDAA, `flow_active` generates the initial broadcast header and CCC code, then hands off to the `ccc` module for the DAA loop. After `ccc_done_i`, `flow_active` generates STOP and writes the response.
+- For ENTDAA, `flow_active` generates the initial broadcast header (`{7'h7E, 1'b0}`) and ENTDAA code (`0x07`) with ACK checks, then activates the `ccc` module (`ccc_valid_o = 1`) for the multi-device DAA loop. During the loop, `flow_active` services `ccc_req_restart_i` by asserting `gen_rstart_o` to the SCL generator. After `ccc_done_i`, `flow_active` generates STOP and writes the response. The `ccc` module reads DAT entries independently — `flow_active` does not need to perform DAT reads for ENTDAA rounds.
+- For ENEC and DISEC, `flow_active` handles the full CCC frame within `I3CWriteImmediate`. No `ccc_valid_o` is ever asserted for these CCCs. The `cp` flag and `cmd` field of the `ImmediateDataTransfer` descriptor carry all necessary information.

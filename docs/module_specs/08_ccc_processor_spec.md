@@ -1,25 +1,22 @@
-# Module: ccc + ccc_entdaa (CCC Processor)
+# Module: ccc + ccc_entdaa (ENTDAA Engine)
 
-> Status: Simplify
-> Reference: `i3c-core/src/ctrl/ccc.sv` (1,406 lines) + `i3c-core/src/ctrl/ccc_entdaa.sv` (238 lines)
-> Estimated LoC: ~400 lines (combined)
+> Status: Implement (New design — master-only)
+> Reference: `i3c-core/src/ctrl/ccc.sv` (1,406 lines, target-side) + `i3c-core/src/ctrl/ccc_entdaa.sv` (238 lines, target-side)
+> **Important:** Both reference modules live in `controller_standby_i3c.sv` and implement the **target (standby) perspective**. They are not used by `controller_active` at all. This design creates master-only equivalents from scratch.
+> Estimated LoC: ~270 lines (combined)
 
 ## 1. Purpose
 
-The CCC (Common Command Code) processor handles the execution of CCC commands on the I3C bus. In this simplified design, it supports only 3 CCCs:
+The `ccc` + `ccc_entdaa` pair implements the master-side **ENTDAA (Enter Dynamic Address Assignment)** procedure, the only CCC requiring a dedicated sub-FSM.
 
-| CCC Code | Mnemonic | Type      | Description                      |
-| -------- | -------- | --------- | -------------------------------- |
-| 0x07     | ENTDAA   | Broadcast | Enter Dynamic Address Assignment |
-| 0x00     | ENEC     | Broadcast | Enable Events (broadcast)        |
-| 0x80     | ENEC     | Direct    | Enable Events (specific target)  |
-| 0x01     | DISEC    | Broadcast | Disable Events (broadcast)       |
-| 0x81     | DISEC    | Direct    | Disable Events (specific target) |
+**ENEC (0x00/0x80) and DISEC (0x01/0x81) are handled entirely by `flow_active`** via the `I3CWriteImmediate` state using `ImmediateDataTransfer` command descriptors (`cp=1`, CCC code in `cmd`, defining byte in `def_or_data_byte1`). They do not go through this module.
 
-The module is split into two tightly coupled components:
+The split of responsibilities:
 
-- **`ccc`** — Top-level CCC dispatcher FSM that handles ENEC/DISEC and delegates ENTDAA
-- **`ccc_entdaa`** — Dedicated sub-FSM for the ENTDAA arbitration procedure
+| Module       | Role                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| `ccc`        | ENTDAA loop manager: multi-device iteration, DAT lookup, bus mux                                        |
+| `ccc_entdaa` | Per-device ENTDAA round: sends `0x7E+R`, reads 64 raw PID/BCR/DCR bits, sends address+parity, reads ACK |
 
 ## 2. Dependencies
 
@@ -29,20 +26,22 @@ The module is split into two tightly coupled components:
 
 ### Parent modules
 
-- `controller_active` (connected to bus_tx_flow, bus_rx_flow, bus_monitor)
+- `controller_active` (connects to `bus_tx_flow`, `bus_rx_flow`, `bus_monitor`, and `flow_active`)
 
 ### Packages
 
-- `controller_pkg` — For `dat_entry_t`
-- `i3c_pkg` — For bus state types
+- `controller_pkg` — For `dat_entry_t` (to extract `dynamic_address` field)
+- `i3c_pkg` — For `I3C_RSVD_ADDR` (7'h7E), `I3C_RSVD_BYTE` (8'hFC)
 
 ## 3. Parameters
 
-None.
+| Parameter  | Type | Default | Description                                          |
+| ---------- | ---- | ------- | ---------------------------------------------------- |
+| `DatDepth` | int  | 16      | DAT table depth (inherited from `i3c_pkg::DatDepth`) |
 
 ## 4. Ports / Interfaces
 
-### ccc (Top-Level CCC Processor)
+### 4.1. ccc (ENTDAA Loop Manager)
 
 #### Clock and Reset
 
@@ -53,35 +52,38 @@ None.
 
 #### Command Interface (from flow_active)
 
-| Signal          | Direction | Width | Description                      |
-| --------------- | --------- | ----- | -------------------------------- |
-| `ccc_i`         | Input     | 8     | CCC command code                 |
-| `ccc_valid_i`   | Input     | 1     | Assert to start CCC execution    |
-| `def_byte_i`    | Input     | 8     | Defining byte (for ENEC/DISEC)   |
-| `dev_addr_i`    | Input     | 7     | Target address (for Direct CCCs) |
-| `dev_count_i`   | Input     | 4     | Number of devices (for ENTDAA)   |
-| `done_o`        | Output    | 1     | CCC execution complete           |
-| `invalid_ccc_o` | Output    | 1     | Unsupported CCC code received    |
+| Signal        | Direction | Width | Description                                                               |
+| ------------- | --------- | ----- | ------------------------------------------------------------------------- |
+| `ccc_valid_i` | Input     | 1     | Assert to start ENTDAA; held high until `done_o`                          |
+| `dev_count_i` | Input     | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)        |
+| `dev_idx_i`   | Input     | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
+| `done_o`      | Output    | 1     | ENTDAA execution complete (all devices addressed or no device responded)  |
 
-#### Bus TX Interface
+#### Repeated-Start Request (to flow_active)
 
-| Signal               | Direction | Width | Description                  |
-| -------------------- | --------- | ----- | ---------------------------- |
-| `bus_tx_done_i`      | Input     | 1     | TX completed current request |
-| `bus_tx_idle_i`      | Input     | 1     | TX is idle                   |
-| `bus_tx_req_byte_o`  | Output    | 1     | Request byte transmission    |
-| `bus_tx_req_bit_o`   | Output    | 1     | Request bit transmission     |
-| `bus_tx_req_value_o` | Output    | 8     | Value to transmit            |
-| `bus_tx_sel_od_pp_o` | Output    | 1     | OD/PP mode for this TX       |
+| Signal          | Direction | Width | Description                                               |
+| --------------- | --------- | ----- | --------------------------------------------------------- |
+| `req_restart_o` | Output    | 1     | Pulse: request `flow_active` to issue Repeated START (Sr) |
 
-#### Bus RX Interface
+#### Bus TX Interface (to bus_tx_flow)
 
-| Signal              | Direction | Width | Description                  |
-| ------------------- | --------- | ----- | ---------------------------- |
-| `bus_rx_data_i`     | Input     | 8     | Received data                |
-| `bus_rx_done_i`     | Input     | 1     | RX completed current request |
-| `bus_rx_req_bit_o`  | Output    | 1     | Request bit reception        |
-| `bus_rx_req_byte_o` | Output    | 1     | Request byte reception       |
+| Signal               | Direction | Width | Description                                       |
+| -------------------- | --------- | ----- | ------------------------------------------------- |
+| `bus_tx_done_i`      | Input     | 1     | TX completed current request                      |
+| `bus_tx_idle_i`      | Input     | 1     | TX is idle                                        |
+| `bus_tx_req_byte_o`  | Output    | 1     | Request byte transmission                         |
+| `bus_tx_req_bit_o`   | Output    | 1     | Unused; tied `0` (ENTDAA uses byte-level TX only) |
+| `bus_tx_req_value_o` | Output    | 8     | Value to transmit                                 |
+| `bus_tx_sel_od_pp_o` | Output    | 1     | Always `0` (Open-Drain) during ENTDAA             |
+
+#### Bus RX Interface (to bus_rx_flow)
+
+| Signal              | Direction | Width | Description                                            |
+| ------------------- | --------- | ----- | ------------------------------------------------------ |
+| `bus_rx_data_i`     | Input     | 8     | Received data (only bit [0] used for single-bit reads) |
+| `bus_rx_done_i`     | Input     | 1     | RX completed current request                           |
+| `bus_rx_req_bit_o`  | Output    | 1     | Request single-bit reception                           |
+| `bus_rx_req_byte_o` | Output    | 1     | Request byte reception (unused; tied `0`)              |
 
 #### Bus Monitor Interface
 
@@ -91,289 +93,435 @@ None.
 | `bus_rstart_det_i` | Input     | 1     | Repeated START detected |
 | `bus_stop_det_i`   | Input     | 1     | STOP detected           |
 
-#### DAA Output (for ENTDAA)
+#### DAT Read Port (to csr_registers)
 
-| Signal                | Direction | Width | Description                       |
-| --------------------- | --------- | ----- | --------------------------------- |
-| `daa_address_o`       | Output    | 7     | Assigned dynamic address          |
-| `daa_address_valid_o` | Output    | 1     | Address assignment valid pulse    |
-| `daa_pid_o`           | Output    | 48    | Provisioned ID of assigned device |
-| `daa_bcr_o`           | Output    | 8     | BCR of assigned device            |
-| `daa_dcr_o`           | Output    | 8     | DCR of assigned device            |
+| Signal             | Direction | Width              | Description                              |
+| ------------------ | --------- | ------------------ | ---------------------------------------- |
+| `dat_read_valid_o` | Output    | 1                  | Request DAT read (1-cycle pulse)         |
+| `dat_index_o`      | Output    | `$clog2(DatDepth)` | DAT entry index: `dev_idx_i + dev_round` |
+| `dat_rdata_i`      | Input     | 32                 | DAT entry (`dat_entry_t`)                |
 
-### ccc_entdaa (ENTDAA Sub-FSM)
+#### DAA Outputs (to flow_active)
 
-#### Identity Inputs (from master — addresses to assign)
+| Signal                | Direction | Width | Description                             |
+| --------------------- | --------- | ----- | --------------------------------------- |
+| `daa_address_o`       | Output    | 7     | Dynamic address just assigned           |
+| `daa_address_valid_o` | Output    | 1     | Pulse: one valid assignment captured    |
+| `daa_pid_o`           | Output    | 48    | Provisioned ID received from the target |
+| `daa_bcr_o`           | Output    | 8     | BCR received from the target            |
+| `daa_dcr_o`           | Output    | 8     | DCR received from the target            |
 
-| Signal  | Direction | Width | Description                                        |
-| ------- | --------- | ----- | -------------------------------------------------- |
-| `id_i`  | Input     | 48    | Provisioned ID (unused in master mode; for target) |
-| `dcr_i` | Input     | 8     | DCR (unused in master mode)                        |
-| `bcr_i` | Input     | 8     | BCR (unused in master mode)                        |
+---
 
-#### DAA Control
+### 4.2. ccc_entdaa (Per-Device ENTDAA Round)
 
-| Signal              | Direction | Width | Description                 |
-| ------------------- | --------- | ----- | --------------------------- |
-| `start_daa_i`       | Input     | 1     | Start DAA procedure         |
-| `done_daa_o`        | Output    | 1     | DAA round complete          |
-| `process_virtual_i` | Input     | 1     | Use virtual ID (tied to '0) |
+#### Clock and Reset
 
-#### Bus TX/RX/Monitor
+| Signal   | Direction | Width | Description            |
+| -------- | --------- | ----- | ---------------------- |
+| `clk_i`  | Input     | 1     | System clock           |
+| `rst_ni` | Input     | 1     | Active-low async reset |
 
-Same as `ccc` TX/RX/Monitor interfaces (directly connected).
+#### DAA Control (from ccc)
 
-#### Address Output
+| Signal         | Direction | Width | Description                                                    |
+| -------------- | --------- | ----- | -------------------------------------------------------------- |
+| `start_daa_i`  | Input     | 1     | Pulse: start one ENTDAA device round                           |
+| `daa_addr_i`   | Input     | 7     | Dynamic address to assign, from DAT entry                      |
+| `done_daa_o`   | Output    | 1     | Pulse: round complete (check `addr_valid_o` or `no_device_o`)  |
+| `addr_valid_o` | Output    | 1     | High with `done_daa_o`: address was accepted (ACK)             |
+| `no_device_o`  | Output    | 1     | High with `done_daa_o`: no target responded (NACK on `0x7E+R`) |
 
-| Signal               | Direction | Width | Description                                      |
-| -------------------- | --------- | ----- | ------------------------------------------------ |
-| `address_o`          | Output    | 7     | Received dynamic address (from master to target) |
-| `address_valid_o`    | Output    | 1     | Address valid pulse                              |
-| `arbitration_lost_i` | Input     | 1     | Arbitration lost signal                          |
+#### Received Device Information (to ccc)
+
+| Signal  | Direction | Width | Description                           |
+| ------- | --------- | ----- | ------------------------------------- |
+| `pid_o` | Output    | 48    | Provisioned ID shifted in (MSB first) |
+| `bcr_o` | Output    | 8     | Bus Characteristics Register          |
+| `dcr_o` | Output    | 8     | Device Characteristics Register       |
+
+#### Bus TX Interface
+
+| Signal               | Direction | Width | Description                  |
+| -------------------- | --------- | ----- | ---------------------------- |
+| `bus_tx_done_i`      | Input     | 1     | TX completed current request |
+| `bus_tx_req_byte_o`  | Output    | 1     | Request byte transmission    |
+| `bus_tx_req_bit_o`   | Output    | 1     | Unused; tied `0`             |
+| `bus_tx_req_value_o` | Output    | 8     | Byte value to transmit       |
+| `bus_tx_sel_od_pp_o` | Output    | 1     | Always `0` (Open-Drain)      |
+
+#### Bus RX Interface
+
+| Signal              | Direction | Width | Description                  |
+| ------------------- | --------- | ----- | ---------------------------- |
+| `bus_rx_data_i`     | Input     | 8     | `[0]` = single received bit  |
+| `bus_rx_done_i`     | Input     | 1     | RX completed                 |
+| `bus_rx_req_bit_o`  | Output    | 1     | Request single-bit reception |
+| `bus_rx_req_byte_o` | Output    | 1     | Unused; tied `0`             |
+
+#### Bus Monitor Interface
+
+| Signal           | Direction | Width | Description           |
+| ---------------- | --------- | ----- | --------------------- |
+| `bus_stop_det_i` | Input     | 1     | STOP detected (abort) |
 
 ## 5. Functional Description
 
-### 5.1. CCC Dispatcher FSM (ccc module)
+### 5.1. Division of Work with flow_active
 
-The simplified CCC module handles three paths:
+`flow_active` performs the opening frame and final STOP; `ccc` owns the multi-device loop:
+
+```
+flow_active:  [S]  [0x7E+W]  [ACK]  [0x07]  [ACK]
+              ^^^  open-drain broadcast header + ENTDAA code
+              → then sets ccc_valid_o=1, ccc_dev_count_o, ccc_dev_idx_o
+
+ccc (per round):
+              →  pulse req_restart_o  →  flow_active drives [Sr]
+              →  wait bus_rstart_det_i
+              →  read DAT[dev_idx + round].dynamic_address
+              →  start ccc_entdaa round
+
+  ccc_entdaa:   [0x7E+R]  [ACK/NoDev]  [64 raw bits]  [Addr+P]  [ACK]
+
+              → if addr_valid_o: latch PID/BCR/DCR, pulse daa_address_valid_o
+              → if no_device_o:  all devices assigned, exit loop
+
+flow_active:  [P]  ← STOP on done_o
+```
+
+**Why raw bits?** The 64-bit PID+BCR+DCR are received bit-by-bit because per-target arbitration happens simultaneously across all unaddressed targets. There are no byte boundaries, T-bits, or framing — the master reads 64 individual `bus_rx_req_bit` cycles.
+
+### 5.2. ccc FSM (Loop Manager) — 7 States
+
+```systemverilog
+typedef enum logic [2:0] {
+  Idle           = 3'd0,
+  StartLoop      = 3'd1,
+  RequestRestart = 3'd2,
+  WaitRestart    = 3'd3,
+  ReadDAT        = 3'd4,
+  RunEntdaa      = 3'd5,
+  Done           = 3'd6
+} ccc_state_e;
+```
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
 
-    Idle --> DecodeCmd: ccc_valid_i
+    Idle --> StartLoop: ccc_valid_i
 
-    DecodeCmd --> SendBroadcastHeader: valid CCC
-    DecodeCmd --> ReportInvalid: unsupported CCC
+    StartLoop --> RequestRestart: dev_round_q < dev_count_i
+    StartLoop --> Done: dev_round_q >= dev_count_i
 
-    state "Broadcast Header" as SendBroadcastHeader
-    SendBroadcastHeader --> SendCCCCode: ACK received
-    SendBroadcastHeader --> Error: NACK
+    RequestRestart --> WaitRestart
 
-    SendCCCCode --> WaitCCCAck: byte sent
-    WaitCCCAck --> EntdaaLoop: CCC == ENTDAA
-    WaitCCCAck --> SendDefByte: CCC == ENEC/DISEC (broadcast)
-    WaitCCCAck --> SendDirectAddr: CCC == ENEC/DISEC (direct)
+    WaitRestart --> ReadDAT: bus_rstart_det_i
 
-    state "ENTDAA" as EntdaaLoop
-    EntdaaLoop --> EntdaaRound: start_daa
-    EntdaaRound --> EntdaaLoop: round done, more devices
-    EntdaaRound --> Done: all devices assigned
+    ReadDAT --> RunEntdaa: 1 cycle latency
 
-    SendDefByte --> Done: byte sent & ACK
-    SendDirectAddr --> SendDefByteDirect: ACK
-    SendDefByteDirect --> Done: byte sent
+    RunEntdaa --> StartLoop: done_daa_o && addr_valid_o
+    RunEntdaa --> Done: done_daa_o && no_device_o
 
     Done --> Idle: done_o pulse
-    Error --> Idle
-    ReportInvalid --> Idle: invalid_ccc_o pulse
 ```
 
-### 5.2. Broadcast CCC Frame (ENEC/DISEC)
+#### State Descriptions
 
+**Idle:** Wait for `ccc_valid_i`. On entry, clear `dev_round_q` counter.
+
+**StartLoop:** Check `dev_round_q < dev_count_i`. Route to `RequestRestart` to run the next device, or to `Done` when all `dev_count_i` devices have been addressed.
+
+**RequestRestart:** Assert `req_restart_o` for one cycle. `flow_active` receives this and drives `gen_rstart_o` to the SCL generator, which generates the Sr bus condition.
+
+**WaitRestart:** Deassert `req_restart_o`. Hold until `bus_rstart_det_i` confirms Sr was emitted. Simultaneously assert `dat_read_valid_o` and `dat_index_o = dev_idx_i + dev_round_q` so the DAT read arrives before ccc_entdaa begins.
+
+**ReadDAT:** Capture `dat_rdata_i` into `dat_entry_t`. Extract `dynamic_address[22:16]` as `daa_addr_next`. Advance to `RunEntdaa` after one cycle.
+
+**RunEntdaa:** Assert `start_daa_i` and provide `daa_addr_i`. Wait for `done_daa_o` from `ccc_entdaa`.
+
+- If `addr_valid_o`: latch `pid_o`, `bcr_o`, `dcr_o`; pulse `daa_address_valid_o` and `daa_address_o`; increment `dev_round_q`; return to `StartLoop`.
+- If `no_device_o`: no more responsive targets; go to `Done` immediately regardless of remaining count.
+
+**Done:** Assert `done_o` for one cycle. Return to `Idle`.
+
+On `bus_stop_det_i` in any active state: forced transition to `Done` (synchronous override in the FF block).
+
+---
+
+### 5.3. ccc_entdaa FSM (Per-Device Round) — 8 States
+
+```systemverilog
+typedef enum logic [2:0] {
+  Idle           = 3'd0,
+  SendRsvdByte   = 3'd1,
+  ReadRsvdAck    = 3'd2,
+  ReceiveIDBit   = 3'd3,
+  SendAddr       = 3'd4,
+  ReadAddrAck    = 3'd5,
+  Done           = 3'd6,
+  NoDev          = 3'd7
+} entdaa_state_e;
 ```
-[S] [0x7E + W] [ACK] [CCC Code] [ACK] [Defining Byte] [ACK] [P]
-```
-
-The CCC module drives this sequence by:
-
-1. Requesting bus_tx to send broadcast address byte `{7'h7E, 1'b0}` (0xFC)
-2. Reading ACK via bus_rx (1-bit)
-3. Sending CCC code byte
-4. Reading ACK
-5. Sending defining byte
-6. Reading ACK
-7. Signaling done (flow_active generates STOP)
-
-**Defining byte for ENEC/DISEC:**
-
-| Bit   | Meaning                 |
-| ----- | ----------------------- |
-| [0]   | Interrupt Request (IBI) |
-| [1]   | Controller Role Request |
-| [2]   | Hot-Join                |
-| [7:3] | Reserved                |
-
-### 5.3. Direct CCC Frame (ENEC/DISEC)
-
-```
-[S] [0x7E + W] [ACK] [CCC Code] [ACK] [Sr] [Target Addr + W] [ACK] [Defining Byte] [T] [P]
-```
-
-Additional steps for direct CCC:
-
-1. After CCC code ACK: signal flow_active to generate Repeated START
-2. Send target address byte `{dev_addr_i, 1'b0}`
-3. Read ACK
-4. Send defining byte
-5. Signal done
-
-### 5.4. ENTDAA Procedure
-
-ENTDAA is handled by the `ccc_entdaa` sub-FSM. The master-side flow differs from the reference (which is target-side):
-
-**Master-side ENTDAA sequence:**
-
-1. Send broadcast header `[S] [0x7E + W]`
-2. Read ACK
-3. Send ENTDAA code (0x07)
-4. Read ACK
-5. **Loop for each device:**
-   a. Send `[Sr] [0x7E + R]` (Repeated START with read)
-   b. Read ACK
-   c. Receive 48-bit PID (6 bytes, MSB first) — arbitration happens here
-   d. Receive 8-bit BCR
-   e. Receive 8-bit DCR
-   f. Send 7-bit dynamic address + parity bit
-   g. Read ACK (target accepts address)
-   h. Output `daa_address_valid_o` with address and PID/BCR/DCR
-6. Send `[P]` STOP
-
-### 5.5. ccc_entdaa FSM (Reused — Adapted for Master)
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> WaitStart: start_daa_i
-    WaitStart --> ReceiveRsvdByte: bus_rstart_det_i
-    ReceiveRsvdByte --> AckRsvdByte: reserved word detected (0x7E+R)
-    ReceiveRsvdByte --> SendNack: unexpected byte
-    AckRsvdByte --> SendID: ACK sent
-    SendID --> PrepareIDBit: load 64-bit counter
-    PrepareIDBit --> SendIDBit: counter > 0
-    SendIDBit --> PrepareIDBit: bit sent, more bits
-    SendIDBit --> LostArbitration: arbitration_lost_i
-    SendIDBit --> ReceiveAddr: all 64 bits done
-    ReceiveAddr --> AckAddr: parity OK
-    ReceiveAddr --> SendNack: parity error
-    AckAddr --> Done: ACK sent
-    SendNack --> Error
-    LostArbitration --> Error
-    Done --> Idle
-    Error --> Idle
+
+    Idle --> SendRsvdByte: start_daa_i
+
+    SendRsvdByte --> ReadRsvdAck: bus_tx_done_i
+
+    ReadRsvdAck --> ReceiveIDBit: ack==0
+    ReadRsvdAck --> NoDev: ack==1
+
+    ReceiveIDBit --> ReceiveIDBit: bus_rx_done_i && bit_cnt_q > 0
+    ReceiveIDBit --> SendAddr: bus_rx_done_i && bit_cnt_q == 0
+
+    SendAddr --> ReadAddrAck: bus_tx_done_i
+
+    ReadAddrAck --> Done: ack==0
+    ReadAddrAck --> Done: ack==1 (error flag set)
+
+    Done --> Idle: done_daa_o pulse
+    NoDev --> Idle: done_daa_o pulse
 ```
 
-**Note:** The `ccc_entdaa` module in the reference is designed from the TARGET perspective (it sends its own PID and receives an address). For master-side operation, the roles are reversed:
+#### State Descriptions
 
-- Master RECEIVES the 64-bit PID+BCR+DCR (via bus_rx)
-- Master SENDS the dynamic address (via bus_tx)
+**Idle:** Wait for `start_daa_i`. On entry reset `bit_cnt_q` to 63 and clear `id_shift_q`.
 
-The reuse requires adapting the data flow direction while keeping the FSM structure.
+**SendRsvdByte:** Transmit the reserved address with read bit:
 
-### 5.6. Output Logic
+```systemverilog
+bus_tx_req_byte_o  = 1'b1;
+bus_tx_req_value_o = {I3C_RSVD_ADDR, 1'b1};  // 8'hFD
+bus_tx_sel_od_pp_o = 1'b0;                    // Open-Drain
+```
 
-The `ccc` module multiplexes bus_tx/bus_rx control between its own logic and the `ccc_entdaa` sub-module based on the current CCC being executed:
+Advance to `ReadRsvdAck` when `bus_tx_done_i`.
+
+**ReadRsvdAck:** Request one bit read (`bus_rx_req_bit_o = 1`). When `bus_rx_done_i`:
+
+- `bus_rx_data_i[0] == 0` (ACK) → at least one target responded → `ReceiveIDBit`
+- `bus_rx_data_i[0] == 1` (NACK) → no target on bus → `NoDev`
+
+**ReceiveIDBit:** Read one bit per cycle (`bus_rx_req_bit_o = 1`). Shift into `id_shift_q`:
+
+```systemverilog
+id_shift_q <= {id_shift_q[62:0], bus_rx_data_i[0]};
+bit_cnt_q  <= bit_cnt_q - 1;
+```
+
+When `bit_cnt_q` reaches 0, all 64 bits (PID[47:0] = `id_shift_q[63:16]`, BCR = `id_shift_q[15:8]`, DCR = `id_shift_q[7:0]`) are captured. Advance to `SendAddr`.
+
+**SendAddr:** Compute odd parity over 7 address bits:
+
+```systemverilog
+parity = ~^daa_addr_i;   // odd parity: XOR of all bits, then invert
+bus_tx_req_byte_o  = 1'b1;
+bus_tx_req_value_o = {daa_addr_i, parity};
+bus_tx_sel_od_pp_o = 1'b0;
+```
+
+Advance to `ReadAddrAck` when `bus_tx_done_i`.
+
+**ReadAddrAck:** Read one bit (`bus_rx_req_bit_o = 1`). When `bus_rx_done_i`:
+
+- `bus_rx_data_i[0] == 0` → target accepted address → `Done` with `addr_valid = 1`
+- `bus_rx_data_i[0] == 1` → target rejected address → `Done` with `addr_valid = 0`
+
+Both cases go to `Done`; the error flag distinguishes them for the parent `ccc` module.
+
+**Done:** Outputs are valid for one cycle:
+
+```systemverilog
+done_daa_o  = 1'b1;
+addr_valid_o = addr_valid_q;
+no_device_o  = 1'b0;
+pid_o        = id_shift_q[63:16];
+bcr_o        = id_shift_q[15:8];
+dcr_o        = id_shift_q[7:0];
+```
+
+Return to `Idle` next cycle.
+
+**NoDev:** No target responded:
+
+```systemverilog
+done_daa_o   = 1'b1;
+no_device_o  = 1'b1;
+addr_valid_o = 1'b0;
+```
+
+Return to `Idle` next cycle.
+
+On `bus_stop_det_i` in any non-Idle state: synchronous override → `NoDev` (cleanly terminates the current round).
+
+---
+
+### 5.4. Bus TX/RX Multiplexing (in controller_active)
+
+The `ccc` module takes exclusive control of `bus_tx_flow` and `bus_rx_flow` while `ccc_valid_i` is high. `controller_active` implements a simple mux using `ccc_valid_i` as the select signal (same pattern as the old design, but without the ENEC/DISEC branch):
 
 ```systemverilog
 always_comb begin
-  if (entdaa_active) begin
-    bus_tx_req_byte_o  = entdaa_tx_req_byte;
-    bus_tx_req_bit_o   = entdaa_tx_req_bit;
-    bus_tx_req_value_o = entdaa_tx_req_value;
-    bus_rx_req_byte_o  = entdaa_rx_req_byte;
-    bus_rx_req_bit_o   = entdaa_rx_req_bit;
+  // ccc_active = ccc_valid_i held by flow_active during ENTDAA
+  if (ccc_valid_i) begin
+    tx_req_byte  = ccc_tx_req_byte;   // always from ccc_entdaa submodule
+    tx_req_bit   = ccc_tx_req_bit;
+    tx_req_value = ccc_tx_req_value;
+    tx_sel_od_pp = 1'b0;              // always OD during ENTDAA
+    rx_req_bit   = ccc_rx_req_bit;
+    rx_req_byte  = 1'b0;
   end else begin
-    // CCC module's own TX/RX control for ENEC/DISEC
-    bus_tx_req_byte_o  = ccc_tx_req_byte;
-    // ...
+    tx_req_byte  = flow_tx_req_byte;
+    tx_req_bit   = flow_tx_req_bit;
+    tx_req_value = flow_tx_req_value;
+    tx_sel_od_pp = flow_sel_od_pp;
+    rx_req_bit   = flow_rx_req_bit;
+    rx_req_byte  = flow_rx_req_byte;
   end
 end
 ```
 
+The `ccc` module itself muxes between its own requests and `ccc_entdaa`'s requests:
+
+```systemverilog
+assign bus_tx_req_bit_o  = 1'b0;  // never used
+assign bus_rx_req_byte_o = 1'b0;  // never used
+assign bus_tx_sel_od_pp_o = 1'b0; // always Open-Drain
+
+always_comb begin
+  if (state_q == RunEntdaa) begin
+    bus_tx_req_byte_o  = entdaa_tx_req_byte;
+    bus_tx_req_value_o = entdaa_tx_req_value;
+    bus_rx_req_bit_o   = entdaa_rx_req_bit;
+  end else begin
+    bus_tx_req_byte_o  = 1'b0;
+    bus_tx_req_value_o = 8'h00;
+    bus_rx_req_bit_o   = 1'b0;
+  end
+end
+```
+
+### 5.5. DAT Address Lookup
+
+During `WaitRestart`, the `ccc` module issues a DAT read request. The `dat_entry_t` struct (from `controller_pkg`) provides the pre-configured dynamic address:
+
+```systemverilog
+// During WaitRestart:
+dat_read_valid_o = 1'b1;
+dat_index_o      = dev_idx_i + dev_round_q;  // saturate at DatDepth-1
+
+// During ReadDAT (capture):
+dat_entry_t entry;
+assign entry = dat_entry_t'(dat_rdata_i);
+daa_addr_next = entry.dynamic_address;  // bits [22:16]
+```
+
+Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` with the addresses to assign before issuing the ENTDAA command.
+
+### 5.6. DAA Output Routing
+
+`flow_active` receives DAA outputs to update the DAT:
+
+```
+ccc.daa_address_valid_o → flow_active.daa_address_valid_i
+ccc.daa_address_o       → flow_active.daa_address_i
+ccc.daa_pid_o           → flow_active.daa_pid_i
+ccc.daa_bcr_o           → flow_active.daa_bcr_i
+ccc.daa_dcr_o           → flow_active.daa_dcr_i
+```
+
+On each `daa_address_valid_i` pulse, `flow_active` forwards the PID/BCR/DCR and assigned address to the RX FIFO for software readback. No DAT write-back is required — SW pre-populates the dynamic addresses in the DAT before issuing the ENTDAA command.
+
 ## 6. Timing Requirements
 
-| Aspect                | Requirement                                                  |
-| --------------------- | ------------------------------------------------------------ |
-| ENTDAA per-device     | 64 SCL cycles (PID+BCR+DCR) + 9 cycles (addr+ACK) + overhead |
-| ENEC/DISEC            | 3 bytes + ACKs = ~27 SCL cycles + START/STOP                 |
-| Arbitration detection | Must detect within 1 SCL cycle (SDA readback)                |
+| Aspect              | Requirement                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Per-device round    | 2 bytes TX (`0x7E+R`, `Addr+P`) + 65 bit RX (ACK + 64 ID bits) = ~74 SCL cycles minimum                                         |
+| DAT read latency    | 1 system clock cycle (registered synchronous read)                                                                              |
+| Sr-to-`0x7E+R` gap  | DAT read (1 cycle) + `start_daa_i` → `SendRsvdByte` (1 cycle); SCL generator Sr takes many SCL cycles — no bus timing violation |
+| No-device detection | NACK detected on the ACK bit after `0x7E+R` = 1 RX bit cycle                                                                    |
+| Address parity      | Computed combinationally (`~^daa_addr_i`) in `SendAddr`                                                                         |
 
 ## 7. Changes from Reference Design
 
-| Aspect                   | Reference                         | This Design                    |
-| ------------------------ | --------------------------------- | ------------------------------ |
-| CCC count                | 40+ CCCs (23 FSM states)          | 3 CCCs (ENTDAA, ENEC, DISEC)   |
-| Target-side CCC handling | Full decode/response for all CCCs | Removed (master only)          |
-| Virtual device support   | `process_virtual_i` logic         | Tied to '0 (removed)           |
-| HDR mode outputs         | 8 `ent_hdr_*` signals             | Removed                        |
-| ccc.sv FSM states        | 23 states                         | ~8 states                      |
-| ccc_entdaa               | 13 states (target perspective)    | Adapted for master perspective |
-| MWL/MRL/SETDASA outputs  | Full set of CSR write ports       | Removed                        |
-| Error handling           | NACK detection, timeout           | Basic NACK detection           |
-
-### CCC Module Size Reduction
-
-```
-Reference ccc.sv:    1,406 lines, 23 states, handles both controller and target CCCs
-This design:         ~200 lines, ~8 states, master-side only, 3 CCCs
-
-Reference ccc_entdaa.sv: 238 lines (reused with adaptation)
-This design:             ~200 lines (adapted for master perspective)
-```
+| Aspect                           | Reference (`i3c-core`)                                                                                                                                   | This Design                                                                                  |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Location in design               | `controller_standby_i3c.sv` (target/standby path)                                                                                                        | `controller_active` (master path — new module)                                               |
+| ccc.sv: CCCs handled             | 40+ CCCs (23 FSM states, both broadcast and direct)                                                                                                      | ENTDAA only (7 FSM states)                                                                   |
+| ccc.sv: perspective              | Target receives CCC commands from a master                                                                                                               | Master issues ENTDAA; manages per-device loop                                                |
+| ccc_entdaa: perspective          | Target sends its own PID, receives assigned address                                                                                                      | Master receives PID/BCR/DCR, sends the address                                               |
+| ccc_entdaa: states               | 13 states (Idle, WaitStart, ReceiveRsvdByte, AckRsvdByte, SendNack, SendID, PrepareIDBit, SendIDBit, LostArbitration, ReceiveAddr, AckAddr, Done, Error) | 8 states (Idle, SendRsvdByte, ReadRsvdAck, ReceiveIDBit, SendAddr, ReadAddrAck, Done, NoDev) |
+| ccc_entdaa: `id_i/bcr_i/dcr_i`   | Inputs: target's own identity to send to master                                                                                                          | Removed (master does not send its identity)                                                  |
+| ccc_entdaa: `arbitration_lost_i` | Target detects arbitration loss on SDA during PID transmission                                                                                           | Removed (master reads bus, arbitration is among targets)                                     |
+| ccc_entdaa: `process_virtual_i`  | Caliptra virtual device support                                                                                                                          | Removed                                                                                      |
+| ccc_entdaa: `address_o`          | Output: address received FROM master                                                                                                                     | Replaced by `daa_addr_i` (input: address TO assign)                                          |
+| ENEC/DISEC                       | Full FSM dispatch in ccc.sv                                                                                                                              | Handled by `flow_active` (`I3CWriteImmediate` state)                                         |
+| HDR mode                         | `ent_hdr_*` outputs, `is_in_hdr_mode_i`                                                                                                                  | Removed (SDR only)                                                                           |
+| CSR side-effects                 | Extensive: MWL, MRL, DASA, AASA, RSTACT, GETCAPS, etc.                                                                                                   | Removed entirely                                                                             |
+| DAT integration                  | None (controller_standby has no DAT write)                                                                                                               | Added: DAT read port for address lookup per round                                            |
+| LoC (`ccc.sv`)                   | 1,406 lines                                                                                                                                              | ~120 lines                                                                                   |
+| LoC (`ccc_entdaa.sv`)            | 238 lines                                                                                                                                                | ~150 lines                                                                                   |
 
 ## 8. Error Handling
 
-| Error                  | Detection                                  | Action                       |
-| ---------------------- | ------------------------------------------ | ---------------------------- |
-| NACK on broadcast addr | ACK bit == 1 after 0x7E+W                  | `err_status = AddrHeader`    |
-| NACK on CCC code       | ACK bit == 1 after CCC byte                | `err_status = Nack`          |
-| NACK on ENTDAA address | ACK bit == 1 after dynamic addr            | Retry with different address |
-| Parity error (ENTDAA)  | Calculated parity != received parity       | NACK, retry round            |
-| Arbitration lost       | SDA readback != SDA driven                 | End round, try next device   |
-| Unsupported CCC        | CCC code not in {0x00,0x01,0x07,0x80,0x81} | `invalid_ccc_o` pulse        |
-| STOP during ENTDAA     | `bus_stop_det_i` during active DAA         | End DAA, go to Done          |
+| Error                       | Detection                                        | Action                                                 |
+| --------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| No target on bus (NoDev)    | NACK after `0x7E+R` (`bus_rx_data_i[0] == 1`)    | `no_device_o` pulse; `ccc` exits loop early; `done_o`  |
+| Target rejects address      | NACK after `Addr+P` (`bus_rx_data_i[0] == 1`)    | `addr_valid_o = 0` in `Done`; `ccc` can skip DAT write |
+| Unexpected STOP during loop | `bus_stop_det_i` in any active state             | `ccc_entdaa` → `NoDev`; `ccc` → `Done`                 |
+| dev_count exhausted         | `dev_round_q >= dev_count_i` in `StartLoop`      | Normal termination → `Done`                            |
+| DAT index out of range      | SW must ensure `dev_idx + dev_count <= DatDepth` | No hardware check; SW responsibility                   |
+
+Error status (`Nack`) is propagated to the response descriptor by `flow_active` when it detects that `ccc_done_i` fires but fewer devices were assigned than `dev_count_i`.
 
 ## 9. Test Plan
 
 ### Scenarios
 
-1. **ENEC broadcast:** Send ENEC with defining byte 0x01; verify complete frame on bus
-2. **DISEC broadcast:** Send DISEC with defining byte 0x07; verify frame
-3. **ENEC direct:** Send ENEC to specific target; verify Sr + target address + defining byte
-4. **DISEC direct:** Same as ENEC direct but with DISEC code
-5. **ENTDAA single device:** One target responds; verify PID/BCR/DCR capture and address assignment
-6. **ENTDAA multiple devices:** 3 targets respond; verify all get unique addresses across 3 rounds
-7. **ENTDAA arbitration:** Two targets with different PIDs; verify only winner gets addressed per round
-8. **ENTDAA NACK:** Target NACKs assigned address; verify retry behavior
-9. **ENTDAA parity error:** Send address with bad parity; verify NACK and error state
-10. **Invalid CCC:** Send unsupported CCC code; verify `invalid_ccc_o` pulses
-11. **NACK on broadcast header:** No targets on bus; verify AddrHeader error
-12. **STOP during ENTDAA:** External STOP; verify clean termination
+1. **ENTDAA single device:** One target on bus; verify `0x7E+R` + 64 bits received + `Addr+P` sent + ACK read; check `daa_address_valid_o` pulse with correct PID/BCR/DCR
+2. **ENTDAA multiple devices (sequential):** 3 targets assigned in 3 rounds; verify unique addresses and PID/BCR/DCR per device; verify `dev_round_q` increments
+3. **ENTDAA all assigned:** After `dev_count` rounds, verify `done_o` fires with `dev_round_q == dev_count_i`
+4. **ENTDAA no device (first round):** First `0x7E+R` gets NACK; verify `no_device_o`, `done_o` immediately
+5. **ENTDAA fewer devices than count:** 2 targets, `dev_count=4`; verify loop exits after second round when NoDev
+6. **Address NACK:** Target NACKs assigned address; verify `addr_valid_o = 0`, `done_daa_o` fires, loop continues (or reports error)
+7. **STOP during ReceiveIDBit:** External STOP mid-PID; verify `ccc_entdaa` → `NoDev` → `ccc` → `Done`
+8. **DAT address correctness:** `dev_idx=2`, round 1: verify `dat_index_o = 3`; round 2: `dat_index_o = 4`
+9. **Multiple ENTDAA commands:** Issue two consecutive `AddressAssignment` descriptors; verify second round starts cleanly
+10. **Parity calculation:** Verify `Addr+P` byte has correct odd parity for various 7-bit addresses
 
 ### UVM Test Structure
 
 ```
 verification/uvm/
-  tb_top.sv                    # DUT instantiation + clock/reset generation
-  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
-  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
-  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
-  i3c_driver.sv                # Drives SCL/SDA and register bus
-  i3c_monitor.sv               # Samples bus transactions
-  i3c_scoreboard.sv            # Checks responses vs expected
-  i3c_coverage.sv              # Functional coverage groups
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_entdaa_seq.sv        # ENTDAA sequence: stimulates CCC + simulates target responses
   tests/
-    i3c_base_test.sv
-    i3c_entdaa_test.sv
-    i3c_private_rw_test.sv
-    i3c_i2c_test.sv
-    i3c_error_test.sv
+    i3c_entdaa_test.sv       # Exercises all ENTDAA scenarios above
 ```
 
-**Module coverage note:** `ccc` is exercised by `i3c_entdaa_test` (ENTDAA DAA loop — PID/BCR/DCR reception and dynamic address assignment) and `i3c_enec_disec_seq` (ENEC/DISEC broadcast CCC transmission).
+**Module coverage note:** `ccc` and `ccc_entdaa` are exercised exclusively by `i3c_entdaa_test` and `i3c_entdaa_seq`. The sequence driver must simulate target behavior: pull SDA low on `0x7E+R` ACK slot, drive 64-bit PID/BCR/DCR bits one at a time, and ACK/NACK the assigned address.
 
 ## 10. Implementation Notes
 
-- The reference `ccc_entdaa.sv` is written from the TARGET perspective. For the master, the data flow reverses: the master receives PID/BCR/DCR (using bus_rx) and sends the dynamic address (using bus_tx). The FSM structure (states, transitions) remains similar but the bus_tx/bus_rx assignments in each state must be swapped.
-- The `id_i`, `dcr_i`, `bcr_i` inputs of `ccc_entdaa` are unused in master mode (they represent the target's own identity). For master mode, these can be tied to '0.
-- The `process_virtual_i` input is tied to '0 (no virtual target support).
-- ENTDAA's `arbitration_lost_i` signal is derived by the master by reading back SDA after driving: if `sda_readback != sda_driven`, arbitration is lost. This logic is in `controller_active`.
-- The `done_o` output from `ccc` should trigger `flow_active` to either continue (next device in ENTDAA) or generate STOP and write response.
-- For ENEC/DISEC, the defining byte value comes from the command descriptor's data fields, passed through `flow_active`.
+- **No `ccc_i` port:** The `ccc` module handles only ENTDAA, so there is no command code input. The `flow_active` spec (09) has already removed `ccc_code_o`, `ccc_def_byte_o`, `ccc_dev_addr_o`, and `ccc_invalid_i` from its port list.
+
+- **64-bit reception is bit-serial:** `ReceiveIDBit` uses `bus_rx_req_bit_o` for 64 consecutive cycles. The `id_shift_q` register is 64 bits wide (MSB first per I3C spec). After all bits are received: `pid_o = id_shift_q[63:16]`, `bcr_o = id_shift_q[15:8]`, `dcr_o = id_shift_q[7:0]`.
+
+- **Arbitration transparency:** The master does not detect arbitration — it simply reads whatever bit combination the wired-AND of all competing targets produces. The target that loses arbitration (drives `1` but sees `0`) will stop participating in subsequent bits. The master reads the arbitration result naturally.
+
+- **No `ccc_i` or `invalid_ccc_o`:** Since ENTDAA is the only operation, there is no dispatch or decode logic. The `ccc_valid_i` handshake is sufficient.
+
+- **`req_restart_o` handshake:** `flow_active` must add a new input port `ccc_req_restart_i` and drive `gen_rstart_o` when it is asserted. The `ccc` module asserts `req_restart_o` for one cycle and then transitions to `WaitRestart`; it does not need a ready signal back — the `bus_rstart_det_i` from `bus_monitor` confirms the Sr was placed on the bus.
+
+- **OD/PP mode:** `bus_tx_sel_od_pp_o = 1'b0` (Open-Drain) throughout all ENTDAA bus activity. This is required because targets drive the ACK slots and PID bits (wired-AND with master). Push-Pull is never used in `ccc` or `ccc_entdaa`.
+
+- **DAT pre-population:** Software must fill DAT entries `[dev_idx .. dev_idx + dev_count - 1]` with valid dynamic addresses before issuing the ENTDAA `AddressAssignment` command. The `ccc` module reads these sequentially without validating them.
+
+- **Address parity:** I3C requires odd parity: the 8th bit is set such that the total number of `1`s across all 8 bits is odd. In SystemVerilog: `parity = ~^daa_addr_i` (XOR-reduce over 7 bits, then invert gives odd parity).
+
+- **STOP override:** Both `ccc` and `ccc_entdaa` synchronously force a terminal state on `bus_stop_det_i`. In `ccc`, any active state transitions to `Done`; in `ccc_entdaa`, any non-Idle state transitions to `NoDev`. This avoids hanging when a STOP occurs unexpectedly (e.g., due to a bus error or SW abort).
