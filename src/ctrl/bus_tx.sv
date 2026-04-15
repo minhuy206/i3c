@@ -1,26 +1,26 @@
 module bus_tx #(
   parameter int CNTR_W = 20;
 )(
-  input logic clk_i;
-  input logic rst_ni;
+  input logic clk_i,
+  input logic rst_ni,
 
-  input logic [CNTR_W-1:0] t_r_t;
-  input logic [CNTR_W-1:0] t_su_dat_i;
-  input logic [CNTR_W-1:0] t_hd_dat_i;
+  input logic [CNTR_W-1:0] t_r_t,
+  input logic [CNTR_W-1:0] t_su_dat_i,
+  input logic [CNTR_W-1:0] t_hd_dat_i,
 
-  input logic driver_i;
-  input logic driver_value_i;
-  output logic tx_idle_o;
-  output logic tx_done_o;
+  input logic driver_i,
+  input logic driver_value_i,
+  output logic tx_idle_o,
+  output logic tx_done_o,
 
-  input logic scl_negedge_i;
-  input logic scl_posedge_i;
-  input logic scl_stable_low_i;
+  input logic scl_negedge_i,
+  input logic scl_posedge_i,
+  input logic scl_stable_low_i,
 
-  input logic sel_od_pp_i;
-  output logic sel_od_pp_o;
+  input logic sel_od_pp_i,
+  output logic sel_od_pp_o,
 
-  output logic sda_o;
+  output logic sda_o,
 );
   logic [19:0] tcount_q;
   logic [19:0] tcount_d;
@@ -65,7 +65,7 @@ module bus_tx #(
     end
   end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin : clk_counter
+  always_ff @(posedge clk_i or negedge rst_ni) begin : clk_counter
     if (~rst_ni) begin
       tcount_q <= '0;
     end else begin

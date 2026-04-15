@@ -29,8 +29,8 @@ src/
   sync_fifo.sv            # Generic FIFO primitive — new
   hci_queues.sv           # 4-FIFO wrapper — new
   csr_registers.sv        # Register file + DAT — new (replaces 14K auto-gen)
-  ccc_entdaa.sv           # ENTDAA FSM — rewrite for master perspective
-  ccc.sv                  # CCC processor — rewrite (3 CCCs, master-side)
+  entdaa_fsm.sv           # ENTDAA FSM — rewrite for master perspective
+  entdaa_controller.sv    # ENTDAA loop manager — rewrite (master-side, ENEC/DISEC in flow_active)
   flow_active.sv          # Command FSM — rewrite (all 13 states)
   controller_active.sv    # Controller wrapper — rewrite (new architecture)
   i3c_controller_top.sv   # Top-level integration — new
@@ -184,7 +184,7 @@ Based on spec 07. Replaces the PeakRDL-generated CSR.
 
 Depends on Phases 0–2.
 
-### 3.1 `src/ccc_entdaa.sv` — REWRITE (master perspective)
+### 3.1 `src/entdaa_fsm.sv` — REWRITE (master perspective)
 
 **Source:** `i3c-core/src/ctrl/ccc_entdaa.sv` — **target-side, TX/RX roles must be reversed**
 
@@ -208,11 +208,11 @@ The reference module is target-side: it _sends_ PID/BCR/DCR and _receives_ an ad
 - Add: `daa_address_i[6:0]` (address to assign, from `flow_active`)
 - Add outputs: `daa_pid_o[47:0]`, `daa_bcr_o[7:0]`, `daa_dcr_o[7:0]`
 
-### 3.2 `src/ccc.sv` — REWRITE (master-side, 3 CCCs only)
+### 3.2 `src/entdaa_controller.sv` — REWRITE (master-side, ENTDAA only)
 
 **Source concept:** `i3c-core/src/ctrl/ccc.sv` (target-side, 40+ CCCs) — complete rewrite
 
-Handles only: ENTDAA (0x07), ENEC (0x00/0x80), DISEC (0x01/0x81).
+Handles only: ENTDAA (0x07). ENEC (0x00/0x80) and DISEC (0x01/0x81) are handled by `flow_active`.
 
 The broadcast header (0x7E+W) and START are sent by `flow_active` before delegating here. This module handles from the CCC code byte onward.
 
@@ -228,7 +228,7 @@ The broadcast header (0x7E+W) and START are sent by `flow_active` before delegat
 | `WaitDefByteAck` | Read ACK bit                                    |
 | `Done`           | Pulse `ccc_done_o`                              |
 
-**Key ports:** `ccc_i[7:0]`, `ccc_valid_i`, `def_byte_i[7:0]`, `dev_addr_i[6:0]`, `ccc_done_o`, `invalid_ccc_o`. Instantiates `ccc_entdaa` internally; passes through `daa_*` outputs.
+**Key ports:** `daa_valid_i`, `dev_count_i[3:0]`, `dev_idx_i[4:0]`, `done_o`, `req_restart_o`. Instantiates `entdaa_fsm` internally; passes through `daa_*` outputs.
 
 ### 3.3 `src/flow_active.sv` — REWRITE (all 13 states)
 
@@ -298,7 +298,7 @@ Depends on all preceding phases.
 
 The reference instantiates separate `i2c_controller_fsm` and `i3c_controller_fsm`. Our design uses a single `flow_active` driving `bus_tx_flow`/`bus_rx_flow` directly.
 
-**Sub-module instances:** `flow_active`, `bus_tx_flow`, `bus_rx_flow`, `bus_monitor`, `scl_generator`, `ccc`
+**Sub-module instances:** `flow_active`, `bus_tx_flow`, `bus_rx_flow`, `bus_monitor`, `scl_generator`, `entdaa_controller`
 
 **Key combinational logic (not just wiring):**
 
@@ -399,9 +399,9 @@ Phase 2 (infrastructure, parallel):
   sync_fifo  hci_queues  csr_registers ← new
   ↓
 Phase 3 (protocol, sequential within):
-  ccc_entdaa ← master rewrite (depends on bus_rx/tx)
-  ccc        ← master rewrite (depends on ccc_entdaa)
-  flow_active ← most critical: 8 states from scratch
+  entdaa_fsm        ← master rewrite (depends on bus_rx/tx)
+  entdaa_controller ← master rewrite (depends on entdaa_fsm)
+  flow_active       ← most critical: 13 states implementation
   ↓
 Phase 4 (integration):
   controller_active  →  i3c_controller_top
@@ -419,7 +419,7 @@ Phase 5 (verification):
 | Risk                                                                  | Mitigation                                                                                                 |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `flow_active` complexity — 8 states with no reference implementation  | Implement incrementally: `InitI2CWrite` first (simplest), then `I3CWriteImmediate`, then regular transfers |
-| `ccc_entdaa` role reversal — protocol is the inverse of the reference | Draw a bus trace for master ENTDAA (who sends what in each bit) before writing a single line of RTL        |
+| `entdaa_fsm` role reversal — protocol is the inverse of the reference | Draw a bus trace for master ENTDAA (who sends what in each bit) before writing a single line of RTL        |
 | SDA MUX glitch — `scl_gen_busy` boundary must be clean                | Simulate START/STOP sequences in isolation; verify no glitch on the `scl_gen_busy` edge                    |
 | OD/PP mid-byte switch — corrupts current bit                          | Gate `sel_od_pp_o` update behind `bus_tx_idle`; add assertion in simulation                                |
 | FIFO stall deadlock — `StallWrite`/`StallRead` never exit             | Add timeout counter per stall state; drive `WriteResp` with timeout error if exceeded                      |

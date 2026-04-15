@@ -37,8 +37,8 @@ Three-layer design operating in a single clock domain (minimum 333 MHz system cl
 i3c_controller_top
 ├── controller_active       ← Protocol engine
 │   ├── flow_active         ← 13-state command FSM (critical module)
-│   ├── ccc                 ← CCC processor (ENTDAA, ENEC, DISEC)
-│   │   └── ccc_entdaa      ← DAA arbitration sub-FSM
+│   ├── entdaa_controller   ← ENTDAA loop manager (ENEC/DISEC in flow_active)
+│   │   └── entdaa_fsm      ← Per-device DAA arbitration sub-FSM
 │   ├── bus_tx_flow         ← TX serializer (4-state)
 │   ├── bus_rx_flow         ← RX deserializer (4-state)
 │   ├── bus_monitor         ← START/STOP/Sr edge detection
@@ -86,8 +86,8 @@ i3c/
 │   └── ctrl/
 │       ├── controller_active.sv ← Structural wrapper + OD/PP switching
 │       ├── flow_active.sv       ← 13-state command FSM (most critical module)
-│       ├── ccc.sv               ← CCC processor: ENTDAA, ENEC, DISEC
-│       ├── ccc_entdaa.sv        ← 9-state DAA arbitration sub-FSM
+│       ├── entdaa_controller.sv ← ENTDAA loop manager (ENEC/DISEC in flow_active)
+│       ├── entdaa_fsm.sv        ← 8-state per-device DAA arbitration FSM
 │       ├── bus_tx_flow.sv       ← 4-state TX serializer
 │       ├── bus_rx_flow.sv       ← 4-state RX deserializer
 │       ├── bus_monitor.sv       ← START/STOP/Sr edge detection
