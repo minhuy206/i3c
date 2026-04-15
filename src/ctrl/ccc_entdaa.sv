@@ -29,7 +29,7 @@ module ccc_entdaa
   output logic bus_tx_sel_od_pp_o,
 
   // Bus Monitor interface
-  input logic bus_stop_det_i,
+  input logic bus_stop_det_i
 );
   typedef enum logic [2:0] {
     Idle           = 3'd0,
