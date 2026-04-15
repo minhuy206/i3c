@@ -12,14 +12,14 @@ The `controller_active` module is the structural wrapper that instantiates and i
 
 ### Sub-modules
 
-| Module          | Instance   | Role                                |
-| --------------- | ---------- | ----------------------------------- |
-| `flow_active`   | `flow_fsm` | Command flow FSM                    |
-| `bus_tx_flow`   | `tx_flow`  | TX serializer                       |
-| `bus_rx_flow`   | `rx_flow`  | RX deserializer                     |
-| `bus_monitor`   | `bus_mon`  | START/STOP/Sr detection             |
-| `scl_generator` | `scl_gen`  | SCL clock generation                |
-| `ccc`           | `ccc_proc` | ENTDAA engine (includes ccc_entdaa) |
+| Module               | Instance   | Role                               |
+| -------------------- | ---------- | ---------------------------------- |
+| `flow_active`        | `flow_fsm` | Command flow FSM                   |
+| `bus_tx_flow`        | `tx_flow`  | TX serializer                      |
+| `bus_rx_flow`        | `rx_flow`  | RX deserializer                    |
+| `bus_monitor`        | `bus_mon`  | START/STOP/Sr detection            |
+| `scl_generator`      | `scl_gen`  | SCL clock generation               |
+| `entdaa_controller`  | `daa_ctrl` | ENTDAA engine (includes entdaa_fsm)|
 
 ### Parent modules
 
@@ -65,7 +65,7 @@ Same as `flow_active` FIFO interfaces (CMD, TX, RX, RESP) — passed through.
 
 ### DAT Interface
 
-Two independent read-only DAT connections are needed: one for `flow_active` and one for `ccc`. They are never active simultaneously (`flow_active` reads DAT in `FetchDAT` before handing off to `ccc`; `ccc` reads DAT during ENTDAA rounds while `flow_active` waits). Both are passed through to `csr_registers` as separate read ports.
+Two independent read-only DAT connections are needed: one for `flow_active` and one for `entdaa_controller`. They are never active simultaneously (`flow_active` reads DAT in `FetchDAT` before handing off to `entdaa_controller`; `entdaa_controller` reads DAT during ENTDAA rounds while `flow_active` waits). Both are passed through to `csr_registers` as separate read ports.
 
 **flow_active read port** (same naming as before):
 
@@ -75,13 +75,13 @@ Two independent read-only DAT connections are needed: one for `flow_active` and 
 | `dat_index_hw_o`      | Output    | `$clog2(DatDepth)` | `flow_active` DAT entry index  |
 | `dat_rdata_hw_i`      | Input     | 32                 | `flow_active` DAT read data    |
 
-**ccc read port** (new — added for ENTDAA address lookup):
+**entdaa_controller read port** (new — added for ENTDAA address lookup):
 
-| Signal                 | Direction | Width              | Description            |
-| ---------------------- | --------- | ------------------ | ---------------------- |
-| `dat_read_valid_ccc_o` | Output    | 1                  | `ccc` DAT read request |
-| `dat_index_ccc_o`      | Output    | `$clog2(DatDepth)` | `ccc` DAT entry index  |
-| `dat_rdata_ccc_i`      | Input     | 32                 | `ccc` DAT read data    |
+| Signal                 | Direction | Width              | Description                          |
+| ---------------------- | --------- | ------------------ | ------------------------------------ |
+| `dat_read_valid_daa_o` | Output    | 1                  | `entdaa_controller` DAT read request |
+| `dat_index_daa_o`      | Output    | `$clog2(DatDepth)` | `entdaa_controller` DAT entry index  |
+| `dat_rdata_daa_i`      | Input     | 32                 | `entdaa_controller` DAT read data    |
 
 ### Timing Configuration (from CSR)
 
@@ -122,9 +122,9 @@ The module primarily routes signals between sub-modules. The key connections:
                     │       │                          │             │
                     │       ├──► scl_generator ────────┼──► SCL      │
                     │       │                          │             │
-                    │       ├──►◄── ccc ───────────────┤             │
+                    │       ├──►◄── entdaa_ctrl ───────┤             │
                     │       │         │                │             │
-  DAT ─────────────┤────┬──┘         └──► DAT (ccc)   │             │
+  DAT ─────────────┤────┬──┘         └──► DAT (daa)   │             │
                     │   │                              │             │
                     │   └──────────────────────────────┤◄── SCL/SDA  │
                     │          bus_monitor             │             │
@@ -134,8 +134,8 @@ The module primarily routes signals between sub-modules. The key connections:
 
 Key connections:
 
-- `flow_active` ↔ `ccc`: `ccc_valid`, `ccc_dev_count`, `ccc_dev_idx`, `ccc_done`, `ccc_req_restart`, DAA result signals
-- `ccc` → DAT: separate read port (`dat_read_valid_ccc_o`, `dat_index_ccc_o`, `dat_rdata_ccc_i`) for per-round address lookup
+- `flow_active` ↔ `entdaa_controller`: `daa_valid`, `daa_dev_count`, `daa_dev_idx`, `daa_done`, `daa_req_restart`, DAA result signals
+- `entdaa_controller` → DAT: separate read port (`dat_read_valid_daa_o`, `dat_index_daa_o`, `dat_rdata_daa_i`) for per-round address lookup
 - `flow_active` → DAT: existing read port for `FetchDAT` state
 
 ### 5.2. Bus Monitor Connection
@@ -173,7 +173,7 @@ The `bus_state` signals are distributed to sub-modules by unpacking the `bus_sta
 // flow_active connections (bus events):
 // (routed via internal signals for START/STOP/Sr detection)
 
-// ccc connections:
+// entdaa_controller connections:
 .bus_start_det_i (bus_state.start_det),
 .bus_rstart_det_i(bus_state.rstart_det),
 .bus_stop_det_i  (bus_state.stop_det),
@@ -226,20 +226,20 @@ assign phy_sel_od_pp_o[1] = '0;  // Always open-drain
 
 ### 5.6. Bus TX/RX Multiplexing for CCC
 
-When the CCC module is active (`ccc_active = ccc_valid_i`, held high by `flow_active` during ENTDAA), it takes exclusive control of `bus_tx_flow` and `bus_rx_flow`. Because `ccc` is ENTDAA-only, it uses only `bus_tx_req_byte` and `bus_rx_req_bit` (never `rx_req_byte` or `tx_req_bit`), and always operates in Open-Drain:
+When the ENTDAA controller module is active (`daa_active = daa_valid_i`, held high by `flow_active` during ENTDAA), it takes exclusive control of `bus_tx_flow` and `bus_rx_flow`. Because `entdaa_controller` is ENTDAA-only, it uses only `bus_tx_req_byte` and `bus_rx_req_bit` (never `rx_req_byte` or `tx_req_bit`), and always operates in Open-Drain:
 
 ```systemverilog
 // ccc_active is driven by ccc_valid_i from flow_active
 assign ccc_active = ccc_valid_i;
 
 always_comb begin
-  if (ccc_active) begin
-    tx_req_byte  = ccc_tx_req_byte;
-    tx_req_bit   = 1'b0;               // ccc never uses bit-level TX
-    tx_req_value = ccc_tx_req_value;
+  if (daa_active) begin
+    tx_req_byte  = daa_tx_req_byte;
+    tx_req_bit   = 1'b0;               // entdaa_controller never uses bit-level TX
+    tx_req_value = daa_tx_req_value;
     tx_sel_od_pp = 1'b0;               // always Open-Drain during ENTDAA
-    rx_req_byte  = 1'b0;               // ccc never uses byte-level RX
-    rx_req_bit   = ccc_rx_req_bit;
+    rx_req_byte  = 1'b0;               // entdaa_controller never uses byte-level RX
+    rx_req_bit   = daa_rx_req_bit;
   end else begin
     tx_req_byte  = flow_tx_req_byte;
     tx_req_bit   = flow_tx_req_bit;
@@ -253,18 +253,18 @@ end
 
 ### 5.7. DAA Results Routing
 
-The `ccc` module produces DAA results that `flow_active` forwards to the RX FIFO for software readback:
+The `entdaa_controller` module produces DAA results that `flow_active` forwards to the RX FIFO for software readback:
 
 ```systemverilog
-// ccc → flow_active (via controller_active wiring)
-.daa_address_i      (ccc_daa_address),
+// entdaa_controller → flow_active (via controller_active wiring)
+.daa_address_i      (daa_daa_address),
 .daa_address_valid_i(ccc_daa_address_valid),
 .daa_pid_i          (ccc_daa_pid),
 .daa_bcr_i          (ccc_daa_bcr),
 .daa_dcr_i          (ccc_daa_dcr),
 ```
 
-`flow_active` receives a `daa_address_valid_i` pulse for each successfully assigned device and forwards the PID/BCR/DCR to the RX FIFO for software. No DAT write is required — the dynamic addresses were pre-populated by SW before issuing the ENTDAA command; the `ccc` module reads them from DAT and assigns them.
+`flow_active` receives a `daa_address_valid_i` pulse for each successfully assigned device and forwards the PID/BCR/DCR to the RX FIFO for software. No DAT write is required — the dynamic addresses were pre-populated by SW before issuing the ENTDAA command; the `entdaa_controller` module reads them from DAT and assigns them.
 
 ### 5.8. I3C/I2C Mode Selection
 
@@ -302,13 +302,13 @@ No additional timing constraints beyond those of sub-modules. All connections ar
 | I2C event signals          | 8 `unused_*` signals                                                | Removed                                                                            |
 | `phy_mux_select_i`         | 2-bit MUX for dual bus                                              | Removed (single bus)                                                               |
 | I2C timing                 | Hardcoded `16'd1` / `16'd10`                                        | CSR-driven via timing registers                                                    |
-| DAT connections            | Single read port for controller FSM                                 | Two read ports: one for `flow_active`, one for `ccc`                               |
+| DAT connections            | Single read port for controller FSM                                 | Two read ports: one for `flow_active`, one for `entdaa_controller`                 |
 | Arbitration lost detection | `arbitration_lost` compared SDA driven vs read, fed to `ccc_entdaa` | Removed — master-side ENTDAA reads bus as-is; targets handle their own arbitration |
 | Line count                 | 292 lines                                                           | ~210 lines                                                                         |
 
 ## 8. Error Handling
 
-No additional error logic. Errors are detected by sub-modules (`flow_active`, `bus_monitor`, `ccc`) and reported through the response FIFO.
+No additional error logic. Errors are detected by sub-modules (`flow_active`, `bus_monitor`, `entdaa_controller`) and reported through the response FIFO.
 
 ## 9. Test Plan
 
@@ -351,12 +351,12 @@ verification/uvm/
     i3c_error_test.sv
 ```
 
-**Module coverage note:** `controller_active` is exercised by all tests — it integrates all sub-modules (scl_generator, bus_tx_flow, bus_rx_flow, ccc, flow_active) and performs bus arbitration and SDA MUX control for every transaction.
+**Module coverage note:** `controller_active` is exercised by all tests — it integrates all sub-modules (scl_generator, bus_tx_flow, bus_rx_flow, entdaa_controller, flow_active) and performs bus arbitration and SDA MUX control for every transaction.
 
 ## 10. Implementation Notes
 
 - The reference design uses a dual-bus architecture (`ctrl_bus_i[2]`, `ctrl_scl_o[2]`) with separate I2C and I3C bus instances multiplexed by `phy_mux_select_i`. This design uses a **single bus** — the same SCL/SDA lines carry both I2C and I3C traffic, distinguished by timing and OD/PP mode.
 - The removal of `i2c_controller_fsm` is a significant simplification. In the reference, I2C transactions went through a separate FSM with its own `fmt_fifo_*` interface. In this design, `flow_active` handles I2C directly by sending bytes through `bus_tx_flow` and reading through `bus_rx_flow` — the only difference from I3C is the timing (400 kHz vs 12.5 MHz) and always-OD mode.
-- The `ccc_active` signal (for TX/RX MUX) is simply `ccc_valid_i` — `flow_active` holds it high for the entire ENTDAA loop, and this is sufficient to select the `ccc` module's bus outputs.
+- The `daa_active` signal (for TX/RX MUX) is simply `daa_valid_i` — `flow_active` holds it high for the entire ENTDAA loop, and this is sufficient to select the `entdaa_controller` module's bus outputs.
 - There is no arbitration-lost detection in this module. In the reference design, a target detects arbitration loss by comparing its driven SDA value with the bus readback. On the master side, the master is a passive observer during the PID transmission — it reads the bit-by-bit result of target arbitration without needing to compare drive vs readback.
-- The two DAT read ports (`flow_active` and `ccc`) are never active simultaneously: `flow_active` reads DAT in `FetchDAT` before activating `ccc`; `ccc` reads DAT during each ENTDAA round while `flow_active` is blocked waiting for `ccc_done_i`. The `csr_registers` module must expose two independent synchronous read ports for the DAT array.
+- The two DAT read ports (`flow_active` and `entdaa_controller`) are never active simultaneously: `flow_active` reads DAT in `FetchDAT` before activating `entdaa_controller`; `entdaa_controller` reads DAT during each ENTDAA round while `flow_active` is blocked waiting for `daa_done_i`. The `csr_registers` module must expose two independent synchronous read ports for the DAT array.

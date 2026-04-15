@@ -16,7 +16,7 @@ The RX flow module deserializes data from the SDA bus line into bytes and indivi
 
 ### Parent modules
 
-- `controller_active` (via `ccc` and `flow_active` control signals)
+- `controller_active` (via `entdaa_controller` and `flow_active` control signals)
 
 ### Packages
 
@@ -48,7 +48,7 @@ None.
 | ------- | --------- | ----- | ------------------------- |
 | `sda_i` | Input     | 1     | Synchronized SDA from PHY |
 
-### Request Interface (from flow_active / ccc)
+### Request Interface (from flow_active / entdaa_controller)
 
 | Signal          | Direction | Width | Description                        |
 | --------------- | --------- | ----- | ---------------------------------- |
@@ -184,7 +184,7 @@ Note: The output uses combinational `sda_i` for the last bit to avoid an extra c
 | Abort            | Request deasserted during reception        | Return to Idle          |
 | Parity error     | NOT detected here — checked by flow_active | N/A                     |
 
-The module does not validate parity or T-bit semantics. It simply delivers raw received data. Parity checking is the responsibility of `flow_active` or `ccc`.
+The module does not validate parity or T-bit semantics. It simply delivers raw received data. Parity checking is the responsibility of `flow_active` or `entdaa_controller`.
 
 ## 9. Test Plan
 

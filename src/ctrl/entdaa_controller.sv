@@ -1,4 +1,4 @@
-module ccc
+module entdaa_controller
   import i3c_pkg::*;
   import controller_pkg::*;
 #(
@@ -71,7 +71,7 @@ module ccc
   logic entdaa_rx_req_bit;
   logic entdaa_rx_req_byte;
 
-  ccc_entdaa u_ccc_entdaa (
+  entdaa_fsm u_entdaa_fsm (
     .clk_i,
     .rst_ni,
     .start_daa_i     (start_daa),

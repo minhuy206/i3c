@@ -10,7 +10,7 @@ The `flow_active` module is the **central command processor** of the I3C control
 
 1. Fetching command descriptors from the CMD FIFO
 2. Looking up target information in the DAT
-3. Coordinating bus operations via `bus_tx_flow`, `bus_rx_flow`, `scl_generator`, and `ccc`
+3. Coordinating bus operations via `bus_tx_flow`, `bus_rx_flow`, `scl_generator`, and `entdaa_controller`
 4. Managing TX/RX FIFO data flow
 5. Generating response descriptors to the RESP FIFO
 6. Accumulating errors during transactions
@@ -37,7 +37,7 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 - `bus_tx_flow` — Byte/bit transmission
 - `bus_rx_flow` — Byte/bit reception
 - `scl_generator` — Clock and START/STOP generation
-- `ccc` — ENTDAA engine (ENEC/DISEC handled directly in `flow_active`)
+- `entdaa_controller` — ENTDAA engine (ENEC/DISEC handled directly in `flow_active`)
 - `bus_monitor` — Bus state feedback
 
 ## 3. Parameters
@@ -136,21 +136,21 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 | `scl_gen_done_i` | Input     | 1     | SCL generator operation complete                                                           |
 | `scl_gen_busy_i` | Input     | 1     | SCL generator is busy                                                                      |
 
-### CCC Control (to ccc module — ENTDAA only)
+### ENTDAA Control (to entdaa_controller module)
 
-> **Note:** The `ccc` module is now an ENTDAA-only engine. ENEC and DISEC are handled entirely within `flow_active` via the `I3CWriteImmediate` state and do not involve this interface.
+> **Note:** The `entdaa_controller` module is now an ENTDAA-only engine. ENEC and DISEC are handled entirely within `flow_active` via the `I3CWriteImmediate` state and do not involve this interface.
 
 | Signal              | Direction | Width | Description                                                               |
 | ------------------- | --------- | ----- | ------------------------------------------------------------------------- |
 | `ccc_valid_o`       | Output    | 1     | Start ENTDAA; held high until `ccc_done_i`                                |
 | `ccc_dev_count_o`   | Output    | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)        |
-| `ccc_dev_idx_o`     | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
-| `ccc_done_i`        | Input     | 1     | ENTDAA complete (from `ccc.done_o`)                                       |
-| `ccc_req_restart_i` | Input     | 1     | Pulse: `ccc` requests a Repeated START for next device round              |
+| `daa_dev_idx_o`     | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
+| `daa_done_i`        | Input     | 1     | ENTDAA complete (from `entdaa_controller.done_o`)                         |
+| `daa_req_restart_i` | Input     | 1     | Pulse: `entdaa_controller` requests a Repeated START for next device round|
 
-### CCC DAA Results (from ccc module)
+### ENTDAA Results (from entdaa_controller module)
 
-> The `ccc` module reads the pre-populated DAT address itself (via its own DAT read port) and outputs results here after each successful device assignment. `flow_active` does **not** need to write addresses back to DAT — SW pre-populates them before issuing the ENTDAA command.
+> The `entdaa_controller` module reads the pre-populated DAT address itself (via its own DAT read port) and outputs results here after each successful device assignment. `flow_active` does **not** need to write addresses back to DAT — SW pre-populates them before issuing the ENTDAA command.
 
 | Signal                | Direction | Width | Description                                          |
 | --------------------- | --------- | ----- | ---------------------------------------------------- |
@@ -255,7 +255,7 @@ stateDiagram-v2
 - **Transition (on `dat_captured`):**
   - `cmd_attr == Immediate && i2c_cmd` → `I2CWriteImmediate`
   - `cmd_attr == Immediate && !i2c_cmd` → `I3CWriteImmediate` (covers private writes and ENEC/DISEC CCCs)
-  - `cmd_attr == AddressAssignment` → `IssueCmd` (ENTDAA; no DAT read needed here — ccc reads DAT per round)
+  - `cmd_attr == AddressAssignment` → `IssueCmd` (ENTDAA; no DAT read needed here — entdaa_controller reads DAT per round)
   - `cmd_dir == Write` → `FetchTxData`
   - `cmd_dir == Read` → `IssueCmd`
 
@@ -434,9 +434,9 @@ assign cmd_dir  = cmd_desc[29] ? Read : Write;
 
 **Address Assignment (`attr = 3'b010`):**
 
-- `dev_count` in bits [29:26] → drives `ccc_dev_count_o`
-- `dev_idx` in bits [20:16] → drives `ccc_dev_idx_o` (starting DAT index; ccc reads DAT entries `[dev_idx .. dev_idx + dev_count - 1]`)
-- Triggers ENTDAA via CCC module; `flow_active` sends the opening broadcast header + ENTDAA code before activating `ccc_valid_o`
+- `dev_count` in bits [29:26] → drives `daa_dev_count_o`
+- `dev_idx` in bits [20:16] → drives `daa_dev_idx_o` (starting DAT index; entdaa_controller reads DAT entries `[dev_idx .. dev_idx + dev_count - 1]`)
+- Triggers ENTDAA via entdaa_controller module; `flow_active` sends the opening broadcast header + ENTDAA code before activating `daa_valid_o`
 
 ### 5.4. Error Accumulation
 
@@ -523,7 +523,7 @@ end
 4. **I2C Write (immediate):** Send immediate write to I2C legacy device; verify OD signaling
 5. **I2C Write (regular):** Regular write via TX FIFO to I2C device
 6. **I2C Read:** Read from I2C device; verify data in RX FIFO
-7. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify broadcast header + ENTDAA code sent, ccc activated with correct dev_count/dev_idx, gen_rstart_o driven on ccc_req_restart_i
+7. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx, gen_rstart_o driven on daa_req_restart_i
 8. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5; verify [S][0x7E+W][ACK][0x00][ACK][DefByte][P] frame
 9. **CCC DISEC direct:** ImmediateDataTransfer with cp=1, cmd=0x81; verify [S][0x7E+W][ACK][0x81][ACK][Sr][DA+W][ACK][DefByte][P] frame
 10. **TX FIFO stall:** Large write with slow TX FIFO fill; verify StallWrite recovery
@@ -576,5 +576,5 @@ verification/uvm/
 - The `transfer_cnt` counter is used in both immediate and regular transfers but with different semantics: for immediate, it counts bytes within the descriptor; for regular, it counts bytes within the current DWORD from TX FIFO. A separate `remaining_length` counter tracks the total transfer progress.
 - The `cmd_desc` register is loaded once in `WaitForCmd` and remains stable throughout the transaction. Individual fields are extracted combinationally.
 - OD/PP switching must happen at byte boundaries — never mid-byte. The `sel_od_pp_o` output changes only when transitioning between bus phases (address → data, ACK → data).
-- For ENTDAA, `flow_active` generates the initial broadcast header (`{7'h7E, 1'b0}`) and ENTDAA code (`0x07`) with ACK checks, then activates the `ccc` module (`ccc_valid_o = 1`) for the multi-device DAA loop. During the loop, `flow_active` services `ccc_req_restart_i` by asserting `gen_rstart_o` to the SCL generator. After `ccc_done_i`, `flow_active` generates STOP and writes the response. The `ccc` module reads DAT entries independently — `flow_active` does not need to perform DAT reads for ENTDAA rounds.
-- For ENEC and DISEC, `flow_active` handles the full CCC frame within `I3CWriteImmediate`. No `ccc_valid_o` is ever asserted for these CCCs. The `cp` flag and `cmd` field of the `ImmediateDataTransfer` descriptor carry all necessary information.
+- For ENTDAA, `flow_active` generates the initial broadcast header (`{7'h7E, 1'b0}`) and ENTDAA code (`0x07`) with ACK checks, then activates the `entdaa_controller` module (`daa_valid_o = 1`) for the multi-device DAA loop. During the loop, `flow_active` services `daa_req_restart_i` by asserting `gen_rstart_o` to the SCL generator. After `daa_done_i`, `flow_active` generates STOP and writes the response. The `entdaa_controller` module reads DAT entries independently — `flow_active` does not need to perform DAT reads for ENTDAA rounds.
+- For ENEC and DISEC, `flow_active` handles the full CCC frame within `I3CWriteImmediate`. No `daa_valid_o` is ever asserted for these CCCs. The `cp` flag and `cmd` field of the `ImmediateDataTransfer` descriptor carry all necessary information.

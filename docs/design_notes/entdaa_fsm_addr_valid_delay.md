@@ -1,8 +1,8 @@
-# Design Note: `addr_valid_o` 1-Cycle Delay in `ccc_entdaa`
+# Design Note: `addr_valid_o` 1-Cycle Delay in `entdaa_fsm`
 
-**Module:** `src/ctrl/ccc_entdaa.sv`  
+**Module:** `src/ctrl/entdaa_fsm.sv`  
 **Signal:** `addr_valid_o` (and implicitly `pid_o`, `bcr_o`, `dcr_o`)  
-**Status:** TODO — confirm 1-cycle delay contract with parent `ccc` module
+**Status:** TODO — confirm 1-cycle delay contract with parent `entdaa_controller` module
 
 ---
 
@@ -53,14 +53,14 @@ If the parent uses these two signals together to decide what to do next (e.g., w
 
 ## The Contract That Makes It Safe
 
-The 1-cycle delay is only harmless if the parent (`ccc` module) is designed to follow this exact sampling rule:
+The 1-cycle delay is only harmless if the parent (`entdaa_controller` module) is designed to follow this exact sampling rule:
 
 > **Do NOT read `addr_valid_o`, `pid_o`, `bcr_o`, `dcr_o` on the same cycle `done_daa_o` fires. Read them on the NEXT cycle.**
 
 Concretely, the parent must register `done_daa_o` and act on the registered version:
 
 ```systemverilog
-// In ccc module (parent):
+// In entdaa_controller module (parent):
 logic done_daa_q;
 always_ff @(posedge clk_i) done_daa_q <= done_daa_o;
 
@@ -70,7 +70,7 @@ if (done_daa_q) begin
 end
 ```
 
-On the cycle `done_daa_q` (registered) is high, `addr_valid_q` in `ccc_entdaa` is already `0` (cleared by the FF). Everything is consistent.
+On the cycle `done_daa_q` (registered) is high, `addr_valid_q` in `entdaa_fsm` is already `0` (cleared by the FF). Everything is consistent.
 
 ---
 
@@ -81,4 +81,4 @@ On the cycle `done_daa_q` (registered) is high, `addr_valid_q` in `ccc_entdaa` i
 | Samples **same cycle** as `done_daa_o` | Stale (possibly 1) | **No** |
 | Samples **one cycle after** `done_daa_o` | Correctly 0 | **Yes** |
 
-The 1-cycle delay is only a "bug" if the parent samples on the same cycle. If the parent is written to sample one cycle later, it is a valid design — but that contract **must be explicit and enforced** in the `ccc` module.
+The 1-cycle delay is only a "bug" if the parent samples on the same cycle. If the parent is written to sample one cycle later, it is a valid design — but that contract **must be explicit and enforced** in the `entdaa_controller` module.

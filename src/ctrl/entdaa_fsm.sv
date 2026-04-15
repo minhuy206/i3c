@@ -1,4 +1,4 @@
-module ccc_entdaa
+module entdaa_fsm
   import controller_pkg::*;
   import i3c_pkg::*;
 (
@@ -153,9 +153,6 @@ module ccc_entdaa
       NoDev: begin
         done_daa_q = 1'b1;
         no_device_q = 1'b1;
-        // TODO(discuss): addr_valid_q is still stale (possibly 1) when done_daa_o fires this
-        // cycle; it clears to 0 only on the next cycle (Idle). Relies on parent sampling
-        // results one cycle after done_daa_o — confirm this 1-cycle delay contract is acceptable.
         addr_valid_d = 1'b0;
       end
       default: ;

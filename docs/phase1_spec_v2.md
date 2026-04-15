@@ -429,8 +429,8 @@ i3c.sv                        ← Top-level (no bus I/O)
     ├── controller.sv         ← Controller aggregator
     │   ├── controller_active.sv  ← Active controller (HCI queues)
     │   │   ├── flow_active.sv        ← Command flow FSM
-    │   │   ├── ccc.sv                ← CCC processor (40+ commands)
-    │   │   ├── ccc_entdaa.sv         ← ENTDAA state machine
+    │   │   ├── entdaa_controller.sv  ← ENTDAA loop manager
+    │   │   ├── entdaa_fsm.sv         ← ENTDAA FSM (per-device round)
     │   │   ├── bus_tx_flow.sv        ← TX serializer
     │   │   ├── bus_rx_flow.sv        ← RX deserializer
     │   │   └── ibi.sv                ← IBI handler
@@ -449,8 +449,8 @@ i3c.sv                        ← Top-level (no bus I/O)
 | `flow_active` | `src/ctrl/flow_active.sv` | Command flow FSM -- orchestrates transfers, manages command/response queues |
 | `bus_tx_flow` | `src/ctrl/bus_tx_flow.sv` | TX serializer -- bit/byte-level transmission with timing control |
 | `bus_rx_flow` | `src/ctrl/bus_rx_flow.sv` | RX deserializer -- bit counting FSM, SCL-edge synchronized reception |
-| `ccc` | `src/ctrl/ccc.sv` | CCC processor -- handles 40+ CCCs with FSM-based execution |
-| `ccc_entdaa` | `src/ctrl/ccc_entdaa.sv` | ENTDAA FSM -- PID/BCR/DCR arbitration, dynamic address assignment |
+| `entdaa_controller` | `src/ctrl/entdaa_controller.sv` | ENTDAA loop manager -- multi-device iteration, DAT lookup, bus mux |
+| `entdaa_fsm` | `src/ctrl/entdaa_fsm.sv` | ENTDAA FSM -- per-device round: PID/BCR/DCR arbitration, dynamic address assignment |
 | `bus_monitor` | `src/ctrl/bus_monitor.sv` | Bus event detection (START, STOP, Sr) with timing-aware state machines |
 | `i3c_phy` | `src/phy/i3c_phy.sv` | Physical layer -- double FF sync, OD/PP mode switching |
 | `configuration` | `src/ctrl/configuration.sv` | CSR parameter extraction (addressing, timing, mode enables) |
@@ -463,10 +463,10 @@ i3c.sv                        ← Top-level (no bus I/O)
 | `bus_monitor` | **Reuse** | Edge detection logic is fundamental -- reuse as-is |
 | `bus_tx_flow` | **Reuse** | Bit/byte serialization is well-structured |
 | `bus_rx_flow` | **Reuse** | Deserializer with T-bit validation -- reuse as-is |
-| `ccc_entdaa` | **Reuse** | ENTDAA arbitration FSM -- core DAA functionality |
+| `entdaa_fsm` | **Rewrite** | ENTDAA arbitration FSM -- master-side (rewritten from target-side reference) |
 | `controller_active` | **Simplify** | Remove IBI queue interface, simplify HCI to 4 queues |
 | `flow_active` | **Simplify** | Implement 8 missing TODO states, remove HDR mode paths, simplify internal logic |
-| `ccc` | **Simplify** | Reduce from 40+ CCCs to 3 (ENTDAA, ENEC, DISEC) |
+| `entdaa_controller` | **Simplify** | ENTDAA-only (ENEC/DISEC moved to flow_active) |
 | `configuration` | **Simplify** | Remove target-mode and IBI configuration fields |
 | `I3CCSR` | **Improve** | Replace auto-generated RDL with focused manual register map |
 | `controller` | **Improve** | Remove target mode, recovery; cleaner top-level integration |
@@ -507,7 +507,7 @@ graph LR
 
         subgraph CORE["Controller Core"]
             CMD["Command Processor<br/>(flow_active)"]
-            CCC["CCC Processor<br/>(ENTDAA + ENEC/DISEC)"]
+            DAA["ENTDAA Controller<br/>(entdaa_controller + entdaa_fsm)"]
             TX["Bus TX Flow<br/>(serialize)"]
             RX["Bus RX Flow<br/>(deserialize)"]
             MON["Bus Monitor<br/>(S/Sr/P det)"]
@@ -682,7 +682,7 @@ typedef enum logic [3:0] {
 | Immediate  | 3'b001 | CCC with up to 4 inline bytes |
 | AddrAssign | 3'b010 | DAA command (ENTDAA)          |
 
-#### 9.2.7. CCC Processor (`ccc` + `ccc_entdaa`)
+#### 9.2.7. ENTDAA Engine (`entdaa_controller` + `entdaa_fsm`)
 
 Handles CCC encoding/decoding and the DAA state machine. **Simplified:** only 3 CCCs
 (ENTDAA, ENEC, DISEC) instead of 40+.

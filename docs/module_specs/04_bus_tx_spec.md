@@ -21,7 +21,7 @@ The module is split into two layers:
 
 ### Parent modules
 
-- `controller_active` (via `ccc` and `flow_active` control signals)
+- `controller_active` (via `entdaa_controller` and `flow_active` control signals)
 
 ### Packages
 
@@ -58,7 +58,7 @@ None.
 | `scl_posedge_i`    | Input     | 1     | SCL rising edge         |
 | `scl_stable_low_i` | Input     | 1     | SCL stable in LOW state |
 
-#### Request Interface (from flow_active / ccc)
+#### Request Interface (from flow_active / entdaa_controller)
 
 | Signal          | Direction | Width | Description                               |
 | --------------- | --------- | ----- | ----------------------------------------- |

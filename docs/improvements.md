@@ -49,7 +49,7 @@ This document analyzes improvement opportunities from the CHIPS Alliance i3c-cor
 
 ## 4. Controller Core FSMs — **~42% reduction possible**
 
-### 4a. `ccc.sv` (1,406 lines, 23 FSM states) — **Highest priority**
+### 4a. Reference `ccc.sv` (1,406 lines, 23 FSM states) — Simplified to `entdaa_controller.sv`
 
 - Handles BOTH controller AND target CCCs (thesis only needs controller)
 - Virtual device support adds ~15% complexity (Caliptra security feature)
@@ -115,7 +115,7 @@ This document analyzes improvement opportunities from the CHIPS Alliance i3c-cor
 
 **Issues:**
 
-- No dedicated unit test for `ccc_entdaa.sv`
+- No dedicated unit test for reference `ccc_entdaa.sv`
 - UVM environment is Caliptra-coupled
 - Some tests are minimal
 
