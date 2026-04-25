@@ -140,13 +140,13 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 
 > **Note:** The `entdaa_controller` module is now an ENTDAA-only engine. ENEC and DISEC are handled entirely within `flow_active` via the `I3CWriteImmediate` state and do not involve this interface.
 
-| Signal              | Direction | Width | Description                                                               |
-| ------------------- | --------- | ----- | ------------------------------------------------------------------------- |
-| `ccc_valid_o`       | Output    | 1     | Start ENTDAA; held high until `ccc_done_i`                                |
-| `ccc_dev_count_o`   | Output    | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)        |
-| `daa_dev_idx_o`     | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
-| `daa_done_i`        | Input     | 1     | ENTDAA complete (from `entdaa_controller.done_o`)                         |
-| `daa_req_restart_i` | Input     | 1     | Pulse: `entdaa_controller` requests a Repeated START for next device round|
+| Signal              | Direction | Width | Description                                                                |
+| ------------------- | --------- | ----- | -------------------------------------------------------------------------- |
+| `ccc_valid_o`       | Output    | 1     | Start ENTDAA; held high until `ccc_done_i`                                 |
+| `ccc_dev_count_o`   | Output    | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)         |
+| `daa_dev_idx_o`     | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`)  |
+| `daa_done_i`        | Input     | 1     | ENTDAA complete (from `entdaa_controller.done_o`)                          |
+| `daa_req_restart_i` | Input     | 1     | Pulse: `entdaa_controller` requests a Repeated START for next device round |
 
 ### ENTDAA Results (from entdaa_controller module)
 
