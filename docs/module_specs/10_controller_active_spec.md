@@ -115,7 +115,7 @@ The module primarily routes signals between sub-modules. The key connections:
                     ┌────────────────────────────────────────────────┐
                     │              controller_active                 │
                     │                                                │
-  HCI Queues ──────┤──► flow_active ──► bus_tx_flow ──┬──► SDA      │
+  HCI Queues ───────┤──► flow_active ──► bus_tx_flow ──┬──► SDA      │
                     │       │  ▲                       │             │
                     │       │  │ccc_req_restart_i      │             │
                     │       │  ◄── bus_rx_flow ◄───────┤◄── SDA      │
@@ -124,11 +124,11 @@ The module primarily routes signals between sub-modules. The key connections:
                     │       │                          │             │
                     │       ├──►◄── entdaa_ctrl ───────┤             │
                     │       │         │                │             │
-  DAT ─────────────┤────┬──┘         └──► DAT (daa)   │             │
+  DAT ──────────────┤───┬───┘         └──► DAT (daa)   │             │
                     │   │                              │             │
                     │   └──────────────────────────────┤◄── SCL/SDA  │
                     │          bus_monitor             │             │
-  Timing Regs ─────┤──────────────────────────────────►│             │
+  Timing Regs ──────┤─────────────────────────────────►│             │
                     └────────────────────────────────────────────────┘
 ```
 
