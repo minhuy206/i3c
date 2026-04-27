@@ -6,12 +6,13 @@
 
 module csr_registers
   import controller_pkg::*;
+  import i3c_pkg::*;
 #(
   parameter int unsigned DatDepth  = 16,
   parameter int unsigned AddrWidth = 12,
   parameter int unsigned DataWidth = 32,
-  parameter int unsigned CounterWidth = 20;
-  parameter int unsigned CmdDataWidth = 64;
+  parameter int unsigned CounterWidth = 20,
+  parameter int unsigned CmdDataWidth = 64,/
   localparam int unsigned DatAw    = $clog2(DatDepth)
 ) (
   input  logic clk_i,

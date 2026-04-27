@@ -1,5 +1,5 @@
 module i3c_phy #(
-  parameter bit ResetValue = 1'b1;
+  parameter bit ResetValue = 1'b1
 )(
   input logic clk_i,
   input logic rst_ni,
@@ -17,7 +17,7 @@ module i3c_phy #(
   output logic ctrl_sda_o,
 
   input logic sel_od_pp_i,
-  output logic sel_od_pp_o,
+  output logic sel_od_pp_o
 );
 
   logic scl_ff1, scl_ff2;
@@ -28,7 +28,7 @@ module i3c_phy #(
       scl_ff2 <= ResetValue;
     end else begin
       scl_ff1 <= scl_i;
-      scl_ff2 <= scl_ff2;
+      scl_ff2 <= scl_ff1;
     end
   end
   assign ctrl_scl_o = scl_ff2;
@@ -40,7 +40,7 @@ module i3c_phy #(
       sda_ff2 <= ResetValue;
     end else begin
       sda_ff1 <= sda_i;
-      sda_ff2 <= sda_ff2;
+      sda_ff2 <= sda_ff1;
     end
   end
   assign ctrl_sda_o = sda_ff2;

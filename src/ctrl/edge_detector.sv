@@ -1,16 +1,16 @@
 module edge_detector #(
-  parameter int CNTR_W = 20;
-  parameter bit DETECT_NEGEDGE = 1'b0;
+  parameter int CounterWidth = 20,
+  parameter bit DETECT_NEGEDGE = 1'b0
 ) (
   input  logic        clk_i,
   input  logic        rst_ni,
   input  logic        trigger,      // Raw edge detection pulse
   input  logic        line,         // Current line value (registered)
-  input  logic [CNTR_W-1:0] delay_count,  // Rise/fall time in clock cycles
+  input  logic [CounterWidth-1:0] delay_count,  // Rise/fall time in clock cycles
   output logic        detect        // Confirmed edge pulse
 );
 
-  logic [CNTR_W-1:0] count;
+  logic [CounterWidth-1:0] count;
   logic check_in_progress;
   logic detect_line;
   logic detect_internal;

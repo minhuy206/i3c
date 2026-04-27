@@ -1,15 +1,15 @@
 module bus_tx #(
-  parameter int CNTR_W = 20;
+  parameter int CounterWidth = 20
 )(
   input logic clk_i,
   input logic rst_ni,
 
-  input logic [CNTR_W-1:0] t_r_t,
-  input logic [CNTR_W-1:0] t_su_dat_i,
-  input logic [CNTR_W-1:0] t_hd_dat_i,
+  input logic [CounterWidth-1:0] t_r_i,
+  input logic [CounterWidth-1:0] t_su_dat_i,
+  input logic [CounterWidth-1:0] t_hd_dat_i,
 
-  input logic driver_i,
-  input logic driver_value_i,
+  input logic drive_i,
+  input logic drive_value_i,
   output logic tx_idle_o,
   output logic tx_done_o,
 
@@ -20,14 +20,14 @@ module bus_tx #(
   input logic sel_od_pp_i,
   output logic sel_od_pp_o,
 
-  output logic sda_o,
+  output logic sda_o
 );
   logic [19:0] tcount_q;
   logic [19:0] tcount_d;
   logic load_tcount;
 
-  logic [CNTR_W-1:0] t_sd_i;
-  logic [CNTR_W-1:0] t_sd;
+  logic [CounterWidth-1:0] t_sd_i;
+  logic [CounterWidth-1:0] t_sd;
 
   logic t_sd_z;
   logic t_hd_z;

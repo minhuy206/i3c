@@ -1,7 +1,7 @@
 module scl_generator
   import i3c_pkg::*;
 #(
-  parameter int CNTR_W = 20
+  parameter int CounterWidth = 20
 ) (
   input  logic                        clk_i,
   input  logic                        rst_ni,
@@ -15,13 +15,13 @@ module scl_generator
   output logic                        done_o,
   output logic                        busy_o,
 
-  input  logic [CNTR_W-1:0]     t_low_i,
-  input  logic [CNTR_W-1:0]     t_high_i,
-  input  logic [CNTR_W-1:0]     t_su_sta_i,
-  input  logic [CNTR_W-1:0]     t_hd_sta_i,
-  input  logic [CNTR_W-1:0]     t_su_sto_i,
-  input  logic [CNTR_W-1:0]     t_r_i,
-  input  logic [CNTR_W-1:0]     t_f_i,
+  input  logic [CounterWidth-1:0]     t_low_i,
+  input  logic [CounterWidth-1:0]     t_high_i,
+  input  logic [CounterWidth-1:0]     t_su_sta_i,
+  input  logic [CounterWidth-1:0]     t_hd_sta_i,
+  input  logic [CounterWidth-1:0]     t_su_sto_i,
+  input  logic [CounterWidth-1:0]     t_r_i,
+  input  logic [CounterWidth-1:0]     t_f_i,
 
   input  logic                        scl_i,
 
@@ -47,9 +47,9 @@ module scl_generator
 
   state_e state_q, state_d;
 
-  logic [CNTR_W-1:0] tcount;
+  logic [CounterWidth-1:0] tcount;
   logic                    load_tcount;
-  logic [CNTR_W-1:0] tcount_load_val;
+  logic [CounterWidth-1:0] tcount_load_val;
 
   wire tcount_expired = (tcount == '0);
 

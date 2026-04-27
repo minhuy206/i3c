@@ -3,7 +3,7 @@ module bus_monitor
   import i3c_pkg::bus_state_t;
   import i3c_pkg::signal_state_t;
 #(
-    parameter int CNTR_W = 20
+    parameter int CounterWidth = 20
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -12,11 +12,11 @@ module bus_monitor
     input logic scl_i,
     input logic sda_i,
 
-    input logic [CNTR_W-1:0] t_hd_dat_i,
-    input logic [CNTR_W-1:0] t_r_i,
-    input logic [CNTR_W-1:0] t_f_i,
+    input logic [CounterWidth-1:0] t_hd_dat_i,
+    input logic [CounterWidth-1:0] t_r_i,
+    input logic [CounterWidth-1:0] t_f_i,
 
-    output bus_state_t state_o,
+    output bus_state_t state_o
 );
   logic enable;
 
