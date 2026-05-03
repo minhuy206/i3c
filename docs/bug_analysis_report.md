@@ -9,7 +9,7 @@
 ## Summary
 
 | Severity | Count |
-|----------|-------|
+| -------- | ----- |
 | CRITICAL | 3     |
 | HIGH     | 8     |
 | MEDIUM   | 7     |
@@ -29,12 +29,14 @@
 A stray `/` character appears after the comma in the parameter list, causing a parse error.
 
 **Current Code:**
+
 ```systemverilog
   parameter int unsigned CmdDataWidth = 64,/
   localparam int unsigned DatAw    = $clog2(DatDepth)
 ```
 
 **Fix:**
+
 ```systemverilog
   parameter int unsigned CmdDataWidth = 64,
   localparam int unsigned DatAw    = $clog2(DatDepth)
@@ -52,6 +54,7 @@ A stray `/` character appears after the comma in the parameter list, causing a p
 In the `I2CWriteImmediate` and `I3CWriteImmediate` states, `gen_clock_q` is never set to `1`. After the START condition (phase 0), the `scl_generator` transitions through `HoldStart` → `DriveLow` → `WaitCmd` with SCL stuck LOW, because `gen_clock_i` is `0`. The `bus_tx` module enters `TransmitData` (via `scl_stable_low_i`) but then waits indefinitely for `scl_negedge_i` that never arrives, since SCL never toggles again.
 
 **Signal trace:**
+
 ```
 scl_generator: HoldStart → DriveLow (t_low+t_f countdown) → WaitCmd (stuck, gen_clock=0)
 bus_tx:        Idle → SetupData (scl_stable_low) → TransmitData (hangs forever)
@@ -62,6 +65,7 @@ Every `ImmediateDataTransfer` command (both I2C and I3C) hangs after the START c
 
 **Recommended Fix:**
 Set `gen_clock_q = 1'b1` at the top of `I2CWriteImmediate` and `I3CWriteImmediate`, similar to how `IssueCmd` does it:
+
 ```systemverilog
 I2CWriteImmediate: begin
   gen_clock_q = 1'b1;       // <-- ADD THIS
@@ -82,6 +86,7 @@ I2CWriteImmediate: begin
 Received bytes are accumulated into `rx_dword_q` four at a time and flushed to the RX queue only when `rx_byte_idx_q` wraps to `0` (i.e., a full 32-bit DWORD). When a read transfer completes (`remaining_len_q == 0`), the FSM transitions to `WriteResp` without flushing any partial DWORD remaining in `rx_dword_q`.
 
 **Example:** Reading 5 bytes:
+
 - Bytes 0–3 fill `rx_dword_q` → flushed to RX queue (4 bytes).
 - Byte 4 goes into `rx_dword_q[7:0]`, `rx_byte_idx_q = 1`.
 - `remaining_len_q` reaches 0 → FSM goes to `WriteResp`.
@@ -92,6 +97,7 @@ Any read transfer whose length is not a multiple of 4 bytes loses 1–3 trailing
 
 **Recommended Fix:**
 Before transitioning to `WriteResp`, flush the partial DWORD if `rx_byte_idx_q != 0`:
+
 ```systemverilog
 // In the transition to WriteResp for read commands:
 if (rx_byte_idx_q != 2'h0) begin
@@ -116,6 +122,7 @@ In the `IssueCmd` state for I2C writes (`dat_entry.device`), the code asserts `b
 Additionally, `bus_tx_req_byte_q` remains asserted at the top of the block, so `bus_tx_flow` (in `NextTaskDecision`) sees an ongoing request and starts another byte instead of waiting for ACK.
 
 **Current Code:**
+
 ```systemverilog
 bus_tx_req_byte_q = 1'b1;
 bus_tx_req_value_q = current_tx_byte;
@@ -133,6 +140,7 @@ ACK/NACK is never received for I2C write transfers. The TX flow immediately star
 
 **Recommended Fix:**
 Use `issue_phase_q` to separate TX byte and RX ACK into distinct phases:
+
 ```systemverilog
 if (issue_phase_q[0] == 1'b0) begin
   bus_tx_req_byte_q = 1'b1;
@@ -160,6 +168,7 @@ end
 In the I2C read path, `bus_tx_req_bit_q` (for ACK/NACK) is set inside the `bus_rx_done_i` block, then `bus_tx_done_i` is checked in the same combinational block. The TX request only lasts one cycle (gated by `bus_rx_done_i`), and the TX done check can never be true in that same cycle.
 
 **Current Code:**
+
 ```systemverilog
 if (bus_rx_done_i) begin
   // store received data...
@@ -198,6 +207,7 @@ I3C read T-bit (ACK/End-of-data) is never transmitted.
 
 **Description:**
 For `RegularTransfer` commands targeting I3C devices (not I2C legacy), the FSM path is:
+
 - Write: `FetchDAT` → `FetchTxData` → `IssueCmd`
 - Read: `FetchDAT` → `IssueCmd`
 
@@ -221,6 +231,7 @@ Add initial phases in `IssueCmd` for I3C regular transfers that generate START a
 The `cmd_write` always_ff block clears `cmd_wvalid_q` on `sw_reset_q`, but does not clear `cmd_staging_valid_q` or `cmd_dword0_q`. If software writes DWORD0 to `ADDR_CMD_QUEUE` and then issues a software reset, `cmd_staging_valid_q` remains `1`. The next write to `ADDR_CMD_QUEUE` after reset will be interpreted as DWORD1, paired with the stale DWORD0 data.
 
 **Current Code:**
+
 ```systemverilog
 end else if (sw_reset_q || (cmd_wvalid_q && cmd_wready_i)) begin
   cmd_wvalid_q <= '0;
@@ -230,6 +241,7 @@ end
 ```
 
 **Recommended Fix:**
+
 ```systemverilog
 end else if (sw_reset_q || (cmd_wvalid_q && cmd_wready_i)) begin
   cmd_wvalid_q <= '0;
@@ -277,6 +289,7 @@ rx_data_o = {rx_data[6:0], sda_i};
 
 **Recommended Fix:**
 Use `rx_bit` (the registered sample) instead of `sda_i`:
+
 ```systemverilog
 if (rx_done) rx_data[6:0] <= {rx_data[5:0], rx_bit};
 // ...
@@ -292,6 +305,7 @@ rx_data_o = {rx_data[6:0], rx_bit};
 
 **Description:**
 The FIFO uses extra-MSB pointer comparison for full/empty detection:
+
 ```systemverilog
 assign full_o  = (rptr_q == {~wptr_q[PtrW], wptr_q[PtrW-1:0]});
 assign empty_o = (wptr_q == rptr_q);
@@ -304,6 +318,7 @@ The default depths (64) are safe. But any instantiation with a non-power-of-2 de
 
 **Recommended Fix:**
 Add a compile-time assertion:
+
 ```systemverilog
 initial begin
   assert (Depth == (1 << PtrW))
@@ -350,6 +365,7 @@ Uses `count > delay_count_i` (strictly greater) vs edge_detector's `count >= del
 `WaitCmd` handles `gen_stop_i` and `gen_clock_i` but not `gen_rstart_i`. The `DriveHigh` state handles all three. If a repeated START is requested while SCL is held LOW in `WaitCmd`, it will be ignored.
 
 **Recommended Fix:**
+
 ```systemverilog
 WaitCmd: begin
   if (gen_stop_i) begin
@@ -385,6 +401,7 @@ Any external module relying on `ccc_code_o` to identify the CCC type will always
 
 **Description:**
 The T-bit parity check for I3C reads uses a static comparison:
+
 ```systemverilog
 parity_error_d = (bus_rx_data_i[0] != 1'b1);
 ```
@@ -400,6 +417,7 @@ Per the I3C spec, the T-bit should be the odd parity of the preceding data byte.
 **Severity:** MEDIUM — Code clarity / potential synthesis mismatch
 
 **Description:**
+
 ```systemverilog
 if (tcount_q == 20'd0 & scl_stable_low_i)
 ```
@@ -433,6 +451,7 @@ The `ReadBit` state may be entered and immediately aborted due to the timing mis
 In `ReceiveIDBit`, `bit_cnt_d = bit_cnt_q - 1` underflows to 63 when `bit_cnt_q == 0`. The FSM transitions to `SendAddr` at the same time, so the underflowed value doesn't cause harm in the current design. However, if the module is reused or the FSM is modified, the stale wrapped value could cause issues.
 
 **Recommended Fix:**
+
 ```systemverilog
 if (bit_cnt_q != 6'd0)
   bit_cnt_d = bit_cnt_q - 1;
@@ -458,6 +477,7 @@ Many signals use the `_q` suffix but are assigned combinationally (e.g., `i3c_fs
 
 **Description:**
 Uses Verilog-2001 `wire` declarations instead of SystemVerilog `logic`:
+
 ```systemverilog
 wire daa_active = flow_ccc_valid;
 wire gen_rstart_combined = flow_gen_rstart | daa_req_restart | daa_restart_pending_q;
@@ -476,6 +496,7 @@ The ENTDAA CCC command code is hardcoded as `8'h07` instead of using a named con
 
 **Recommended Fix:**
 Add to `i3c_pkg.sv`:
+
 ```systemverilog
 localparam logic [7:0] CCC_ENTDAA = 8'h07;
 ```
@@ -504,23 +525,23 @@ localparam logic [7:0] CCC_ENTDAA = 8'h07;
 
 ## Files Analyzed
 
-| File | Issues Found |
-|------|--------------|
-| `src/i3c_pkg.sv` | None |
-| `src/ctrl/controller_pkg.sv` | None |
-| `src/i3c_controller_top.sv` | None |
-| `src/scl_generator.sv` | BUG-014 |
-| `src/phy/i3c_phy.sv` | None |
-| `src/ctrl/controller_active.sv` | BUG-021 |
-| `src/ctrl/flow_active.sv` | BUG-002, BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-009, BUG-015, BUG-016, BUG-020, BUG-022 |
-| `src/ctrl/bus_tx.sv` | BUG-017 |
-| `src/ctrl/bus_tx_flow.sv` | None |
-| `src/ctrl/bus_rx_flow.sv` | BUG-010, BUG-018 |
-| `src/ctrl/bus_monitor.sv` | None |
-| `src/ctrl/edge_detector.sv` | BUG-012 |
-| `src/ctrl/stable_high_detector.sv` | BUG-013 |
-| `src/ctrl/entdaa_controller.sv` | None |
-| `src/ctrl/entdaa_fsm.sv` | BUG-019 |
-| `src/csr/csr_register.sv` | BUG-001, BUG-008 |
-| `src/hci/sync_fifo.sv` | BUG-011 |
-| `src/hci/hci_queues.sv` | None |
+| File                               | Issues Found                                                                                      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `src/i3c_pkg.sv`                   | None                                                                                              |
+| `src/ctrl/controller_pkg.sv`       | None                                                                                              |
+| `src/i3c_controller_top.sv`        | None                                                                                              |
+| `src/scl_generator.sv`             | BUG-014                                                                                           |
+| `src/phy/i3c_phy.sv`               | None                                                                                              |
+| `src/ctrl/controller_active.sv`    | BUG-021                                                                                           |
+| `src/ctrl/flow_active.sv`          | BUG-002, BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-009, BUG-015, BUG-016, BUG-020, BUG-022 |
+| `src/ctrl/bus_tx.sv`               | BUG-017                                                                                           |
+| `src/ctrl/bus_tx_flow.sv`          | None                                                                                              |
+| `src/ctrl/bus_rx_flow.sv`          | BUG-010, BUG-018                                                                                  |
+| `src/ctrl/bus_monitor.sv`          | None                                                                                              |
+| `src/ctrl/edge_detector.sv`        | BUG-012                                                                                           |
+| `src/ctrl/stable_high_detector.sv` | BUG-013                                                                                           |
+| `src/ctrl/entdaa_controller.sv`    | None                                                                                              |
+| `src/ctrl/entdaa_fsm.sv`           | BUG-019                                                                                           |
+| `src/csr/csr_register.sv`          | BUG-001, BUG-008                                                                                  |
+| `src/hci/sync_fifo.sv`             | BUG-011                                                                                           |
+| `src/hci/hci_queues.sv`            | None                                                                                              |
