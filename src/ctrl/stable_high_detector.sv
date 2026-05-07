@@ -1,11 +1,11 @@
 module stable_high_detector #(
-  parameter int CounterWidth = 20
+    parameter int CounterWidth = 20
 ) (
-  input  logic        clk_i,
-  input  logic        rst_ni,
-  input  logic        line_i,         // Signal to monitor
-  input  logic [CounterWidth-1:0] delay_count_i,  // Required stable duration
-  output logic        stable_o        // Asserted when stable
+    input  logic                    clk_i,
+    input  logic                    rst_ni,
+    input  logic                    line_i,         // Signal to monitor
+    input  logic [CounterWidth-1:0] delay_count_i,  // Required stable duration
+    output logic                    stable_o        // Asserted when stable
 );
 
   logic [CounterWidth-1:0] count;
@@ -16,7 +16,7 @@ module stable_high_detector #(
   assign stable_o = (delay_count_i == 0) ? line_i : stable_internal;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    if(!rst_ni) begin
+    if (!rst_ni) begin
       line <= '0;
     end else begin
       line <= line_i;
@@ -24,9 +24,9 @@ module stable_high_detector #(
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    if(!rst_ni) begin
+    if (!rst_ni) begin
       count <= '0;
-    end else if(line && do_count) begin
+    end else if (line && do_count) begin
       count <= count + 1'b1;
     end else if (!line) begin
       count <= '0;
@@ -43,3 +43,4 @@ module stable_high_detector #(
   end
 
 endmodule
+

@@ -1,32 +1,32 @@
 module scl_generator
   import i3c_pkg::*;
 #(
-  parameter int CounterWidth = 20
+    parameter int CounterWidth = 20
 ) (
-  input  logic                        clk_i,
-  input  logic                        rst_ni,
+    input logic clk_i,
+    input logic rst_ni,
 
-  input  logic                        gen_start_i,
-  input  logic                        gen_rstart_i,
-  input  logic                        gen_stop_i,
-  input  logic                        gen_clock_i,
-  input  logic                        gen_idle_i,
-  input  logic                        sel_i3c_i2c_i,  // informational; timing via CSR
-  output logic                        done_o,
-  output logic                        busy_o,
+    input  logic gen_start_i,
+    input  logic gen_rstart_i,
+    input  logic gen_stop_i,
+    input  logic gen_clock_i,
+    input  logic gen_idle_i,
+    input  logic sel_i3c_i2c_i,  // informational; timing via CSR
+    output logic done_o,
+    output logic busy_o,
 
-  input  logic [CounterWidth-1:0]     t_low_i,
-  input  logic [CounterWidth-1:0]     t_high_i,
-  input  logic [CounterWidth-1:0]     t_su_sta_i,
-  input  logic [CounterWidth-1:0]     t_hd_sta_i,
-  input  logic [CounterWidth-1:0]     t_su_sto_i,
-  input  logic [CounterWidth-1:0]     t_r_i,
-  input  logic [CounterWidth-1:0]     t_f_i,
+    input logic [CounterWidth-1:0] t_low_i,
+    input logic [CounterWidth-1:0] t_high_i,
+    input logic [CounterWidth-1:0] t_su_sta_i,
+    input logic [CounterWidth-1:0] t_hd_sta_i,
+    input logic [CounterWidth-1:0] t_su_sto_i,
+    input logic [CounterWidth-1:0] t_r_i,
+    input logic [CounterWidth-1:0] t_f_i,
 
-  input  logic                        scl_i,
+    input logic scl_i,
 
-  output logic                        scl_o,
-  output logic                        sda_o
+    output logic scl_o,
+    output logic sda_o
 );
 
   typedef enum logic [3:0] {
@@ -51,25 +51,22 @@ module scl_generator
   logic                    load_tcount;
   logic [CounterWidth-1:0] tcount_load_val;
 
-  wire tcount_expired = (tcount == '0);
+  wire                     tcount_expired = (tcount == '0);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_tcount
-    if (!rst_ni)
-      tcount <= '0;
-    else if (load_tcount)
-      tcount <= tcount_load_val;
-    else if (!tcount_expired)
-      tcount <= tcount - 1'b1;
+    if (!rst_ni) tcount <= '0;
+    else if (load_tcount) tcount <= tcount_load_val;
+    else if (!tcount_expired) tcount <= tcount - 1'b1;
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_fsm_state
     if (!rst_ni) state_q <= Idle;
-    else         state_q <= state_d;
+    else state_q <= state_d;
   end
 
   always_comb begin : update_tcount_load_value
     load_tcount     = 1'b0;
-    tcount_load_val = '0; 
+    tcount_load_val = '0;
 
     unique case (state_q)
       Idle: begin
@@ -88,16 +85,16 @@ module scl_generator
       end
 
       // 1-cycle state: SDA is now LOW — immediately load t_hd_sta
-      SdaFall, RstartSdaFall : begin
-          load_tcount = 1'b1;
-          tcount_load_val = t_hd_sta_i;
+      SdaFall, RstartSdaFall: begin
+        load_tcount = 1'b1;
+        tcount_load_val = t_hd_sta_i;
       end
 
       // Hold SDA LOW for t_hd_sta, then begin clocking
-      HoldStart : begin
+      HoldStart: begin
         if (tcount_expired) begin
           load_tcount = 1'b1;
-          tcount_load_val = t_low_i + t_f_i; 
+          tcount_load_val = t_low_i + t_f_i;
         end
       end
 
@@ -110,35 +107,35 @@ module scl_generator
       end
 
       // SCL HIGH for t_high + t_r; gen_stop/gen_rstart checked at expiry
-      DriveHigh : begin
+      DriveHigh: begin
         if (tcount_expired && gen_clock_i) begin
-            load_tcount     = 1'b1;
-            tcount_load_val = t_low_i + t_f_i;
+          load_tcount     = 1'b1;
+          tcount_load_val = t_low_i + t_f_i;
         end
       end
 
       // SCL LOW for t_low + t_f
-      DriveLow : begin
+      DriveLow: begin
         if (tcount_expired && gen_clock_i) begin
-            load_tcount     = 1'b1;
-            tcount_load_val = t_high_i + t_r_i;
+          load_tcount     = 1'b1;
+          tcount_load_val = t_high_i + t_r_i;
         end
       end
 
       // SDA LOW, release SCL; wait for SCL confirmed HIGH on bus
-      GenerateStop : begin
+      GenerateStop: begin
         if (scl_i) begin
           load_tcount = 1'b1;
           tcount_load_val = t_su_sto_i;
         end
       end
 
-      default : ;
+      default: ;
     endcase
   end
 
   always_comb begin : scl_fsm_state
-    state_d      = state_q;
+    state_d = state_q;
 
     // gen_idle_i is a priority override from any state_q
     if (gen_idle_i) begin
@@ -147,7 +144,7 @@ module scl_generator
       unique case (state_q)
         Idle: begin
           if (gen_start_i) begin
-            state_d      = GenerateStart;
+            state_d = GenerateStart;
           end else if (gen_rstart_i) begin
             // Rstart directly from idle (abnormal but handled)
             state_d = GenerateRstart;
@@ -156,24 +153,23 @@ module scl_generator
 
         // Wait t_su_sta with SCL/SDA HIGH, then fall SDA
         GenerateStart: begin
-          if (tcount_expired)
-            state_d = SdaFall;
+          if (tcount_expired) state_d = SdaFall;
         end
 
         SdaFall: begin
-          state_d      = HoldStart;
+          state_d = HoldStart;
         end
 
         HoldStart: begin
           if (tcount_expired) begin
-            state_d      = DriveLow;
+            state_d = DriveLow;
           end
         end
 
         DriveLow: begin
           if (tcount_expired) begin
             if (gen_clock_i) begin
-              state_d      = DriveHigh;
+              state_d = DriveHigh;
             end else begin
               state_d = WaitCmd;
             end
@@ -187,7 +183,7 @@ module scl_generator
             end else if (gen_rstart_i) begin
               state_d = GenerateRstart;
             end else if (gen_clock_i) begin
-              state_d      = DriveLow;
+              state_d = DriveLow;
             end else begin
               // No command ready — hold SCL LOW until flow_active responds
               state_d = WaitCmd;
@@ -199,37 +195,35 @@ module scl_generator
           if (gen_stop_i) begin
             state_d = GenerateStop;
           end else if (gen_clock_i) begin
-            state_d      = DriveLow;
+            state_d = DriveLow;
           end
         end
 
         GenerateRstart: begin
           if (scl_i) begin
-            state_d      = SclHigh;
+            state_d = SclHigh;
           end
         end
 
         // Wait t_su_sta with SCL/SDA HIGH before pulling SDA LOW for Sr
         SclHigh: begin
-          if (tcount_expired)
-            state_d = RstartSdaFall;
+          if (tcount_expired) state_d = RstartSdaFall;
         end
 
         // 1-cycle state: SDA falls for Sr — load t_hd_sta
         RstartSdaFall: begin
-          state_d      = HoldStart;
+          state_d = HoldStart;
         end
 
         GenerateStop: begin
           if (scl_i) begin
-            state_d      = SclHighForStop;
+            state_d = SclHighForStop;
           end
         end
 
         // SCL HIGH, SDA LOW; hold for t_su_sto then rise SDA
         SclHighForStop: begin
-          if (tcount_expired)
-            state_d = SdaRise;
+          if (tcount_expired) state_d = SdaRise;
         end
 
         // 1-cycle state: SDA released HIGH (STOP complete) → back to Idle
@@ -248,12 +242,9 @@ module scl_generator
     sda_o = 1'b1;  // default: release HIGH
 
     case (state_q)
-      DriveLow, WaitCmd:
-        scl_o = 1'b0;
+      DriveLow, WaitCmd: scl_o = 1'b0;
 
-      SdaFall, HoldStart, RstartSdaFall,
-      GenerateStop, SclHighForStop:
-        sda_o = 1'b0;
+      SdaFall, HoldStart, RstartSdaFall, GenerateStop, SclHighForStop: sda_o = 1'b0;
 
       default: ;
     endcase

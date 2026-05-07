@@ -160,7 +160,7 @@ module bus_rx_flow (
   end
 
   // Make sure we never attempt to receive byte and bit at the same time
-  RxBitAndByte_A : assert property (@(posedge clk_i) disable iff (!rst_ni)
-    !(rx_req_bit_i && rx_req_byte_i)
-  ) else $error("bus_rx_flow: rx_req_bit_i and rx_req_byte_i must not be asserted simultaneously");
+  RxBitAndByte_A :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) !(rx_req_bit_i && rx_req_byte_i))
+  else $error("bus_rx_flow: rx_req_bit_i and rx_req_byte_i must not be asserted simultaneously");
 endmodule
