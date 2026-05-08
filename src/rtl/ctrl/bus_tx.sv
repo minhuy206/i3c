@@ -1,26 +1,26 @@
 module bus_tx #(
-  parameter int CounterWidth = 20
-)(
-  input logic clk_i,
-  input logic rst_ni,
+    parameter int CounterWidth = 20
+) (
+    input logic clk_i,
+    input logic rst_ni,
 
-  input logic [CounterWidth-1:0] t_r_i,
-  input logic [CounterWidth-1:0] t_su_dat_i,
-  input logic [CounterWidth-1:0] t_hd_dat_i,
+    input logic [CounterWidth-1:0] t_r_i,
+    input logic [CounterWidth-1:0] t_su_dat_i,
+    input logic [CounterWidth-1:0] t_hd_dat_i,
 
-  input logic drive_i,
-  input logic drive_value_i,
-  output logic tx_idle_o,
-  output logic tx_done_o,
+    input  logic drive_i,
+    input  logic drive_value_i,
+    output logic tx_idle_o,
+    output logic tx_done_o,
 
-  input logic scl_negedge_i,
-  input logic scl_posedge_i,
-  input logic scl_stable_low_i,
+    input logic scl_negedge_i,
+    input logic scl_posedge_i,
+    input logic scl_stable_low_i,
 
-  input logic sel_od_pp_i,
-  output logic sel_od_pp_o,
+    input  logic sel_od_pp_i,
+    output logic sel_od_pp_o,
 
-  output logic sda_o
+    output logic sda_o
 );
   logic [19:0] tcount_q;
   logic [19:0] tcount_d;
@@ -154,27 +154,21 @@ module bus_tx #(
     unique case (state_q)
       Idle: begin
         if (drive_i) begin
-          if (scl_stable_low_i | scl_negedge_i)
-            state_d = (t_sd_z) ? TransmitData : SetupData;
-          else
-            state_d = AwaitClockNegedge;
+          if (scl_stable_low_i | scl_negedge_i) state_d = (t_sd_z) ? TransmitData : SetupData;
+          else state_d = AwaitClockNegedge;
         end
       end
       AwaitClockNegedge: begin
-        if (scl_stable_low_i | scl_negedge_i)
-          state_d = (t_sd_z) ? TransmitData : SetupData;
+        if (scl_stable_low_i | scl_negedge_i) state_d = (t_sd_z) ? TransmitData : SetupData;
       end
       SetupData: begin
-        if (tcount_q == 20'd1)
-          state_d = TransmitData;
+        if (tcount_q == 20'd1) state_d = TransmitData;
       end
       TransmitData: begin
-        if (scl_negedge_i)
-          state_d = (t_hd_z) ? Idle : HoldData;
+        if (scl_negedge_i) state_d = (t_hd_z) ? Idle : HoldData;
       end
       HoldData: begin
-        if (tcount_q == 20'd0 & scl_stable_low_i)
-          state_d = Idle;
+        if (tcount_q == 20'd0 & scl_stable_low_i) state_d = Idle;
       end
       default: begin
         state_d = state_q;
@@ -188,5 +182,4 @@ module bus_tx #(
   end
 
   assign sel_od_pp_o = sel_od_pp_i;  // Pass through the OD/PP selection
-  
 endmodule

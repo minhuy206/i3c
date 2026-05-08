@@ -110,7 +110,7 @@ module bus_tx_flow (
 
     unique case (state_q)
       Idle: begin
-        bus_tx_idle  = tx_idle;
+        bus_tx_idle = tx_idle;
         drive_bit_en = tx_idle ? req : 1'b0;
         drive_bit_value = req_byte_i ? req_value_i[7] : req_value_i[0];
       end

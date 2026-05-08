@@ -1,5 +1,5 @@
 
-module bus_monitor 
+module bus_monitor
   import i3c_pkg::bus_state_t;
   import i3c_pkg::signal_state_t;
 #(
@@ -134,7 +134,7 @@ module bus_monitor
       .stable_o(scl_stable_low)
   );
 
-    // Synchronize input SDA/SCL to edge detectors
+  // Synchronize input SDA/SCL to edge detectors
   logic sda_r;
   logic scl_r;
 
@@ -144,7 +144,7 @@ module bus_monitor
     end else begin
       if (sda_posedge) begin
         sda_r <= '1;
-      end else if(sda_negedge) begin
+      end else if (sda_negedge) begin
         sda_r <= '0;
       end
     end
@@ -156,7 +156,7 @@ module bus_monitor
     end else begin
       if (scl_posedge) begin
         scl_r <= '1;
-      end else if(scl_negedge) begin
+      end else if (scl_negedge) begin
         scl_r <= '0;
       end
     end
@@ -209,20 +209,19 @@ module bus_monitor
   assign stop_det = enable & stop_det_pending;
 
   // Detection output
-  assign state_o.sda.value          = sda;
-  assign state_o.sda.pos_edge       = sda_posedge;
-  assign state_o.sda.neg_edge       = sda_negedge;
-  assign state_o.sda.stable_high    = sda_stable_high;
-  assign state_o.sda.stable_low     = '0; // Unused
+  assign state_o.sda.value = sda;
+  assign state_o.sda.pos_edge = sda_posedge;
+  assign state_o.sda.neg_edge = sda_negedge;
+  assign state_o.sda.stable_high = sda_stable_high;
+  assign state_o.sda.stable_low = '0;  // Unused
 
-  assign state_o.scl.value          = scl;
-  assign state_o.scl.pos_edge       = scl_posedge;
-  assign state_o.scl.neg_edge       = scl_negedge;
-  assign state_o.scl.stable_high    = scl_stable_high;
-  assign state_o.scl.stable_low     = scl_stable_low;
+  assign state_o.scl.value = scl;
+  assign state_o.scl.pos_edge = scl_posedge;
+  assign state_o.scl.neg_edge = scl_negedge;
+  assign state_o.scl.stable_high = scl_stable_high;
+  assign state_o.scl.stable_low = scl_stable_low;
 
-  assign state_o.start_det  = start_det & ~rstart_detection_en;
-  assign state_o.rstart_det = start_det &  rstart_detection_en;
-  assign state_o.stop_det   = stop_det;
-
+  assign state_o.start_det = start_det & ~rstart_detection_en;
+  assign state_o.rstart_det = start_det & rstart_detection_en;
+  assign state_o.stop_det = stop_det;
 endmodule

@@ -57,10 +57,10 @@ package i3c_pkg;
 
   // Response descriptor (See TCRI 7.1.3 Table 11)
   typedef struct packed {
-    i3c_resp_err_status_e err_status;  // [31:28]
-    logic [3:0]           tid;         // [27:24]
-    logic [7:0]           __rsvd23_16; // [23:16]
-    logic [15:0]          data_length; // [15:0]
+    i3c_resp_err_status_e err_status;   // [31:28]
+    logic [3:0]           tid;          // [27:24]
+    logic [7:0]           __rsvd23_16;  // [23:16]
+    logic [15:0]          data_length;  // [15:0]
   } i3c_response_desc_t;
 
   // ---------------------------------------------------------------------------
@@ -96,17 +96,17 @@ package i3c_pkg;
     logic [7:0] def_or_data_byte1;
 
     // DWORD 0
-    logic                toc;           // Terminate on completion
-    logic                wroc;          // Response on completion
-    logic                rnw;           // Direction (write-only for immediate)
-    i3c_trans_mode_e     mode;
-    logic [2:0]          dtt;           // Number of valid data bytes
-    logic [1:0]          __rsvd22_21;
-    logic [4:0]          dev_idx;
-    logic                cp;            // Command present
-    logic [7:0]          cmd;           // CCC / HDR command code
-    logic [3:0]          tid;           // Transaction ID
-    i3c_cmd_attr_e       attr;
+    logic            toc;          // Terminate on completion
+    logic            wroc;         // Response on completion
+    logic            rnw;          // Direction (write-only for immediate)
+    i3c_trans_mode_e mode;
+    logic [2:0]      dtt;          // Number of valid data bytes
+    logic [1:0]      __rsvd22_21;
+    logic [4:0]      dev_idx;
+    logic            cp;           // Command present
+    logic [7:0]      cmd;          // CCC / HDR command code
+    logic [3:0]      tid;          // Transaction ID
+    i3c_cmd_attr_e   attr;
   } immediate_data_trans_desc_t;
 
   // Regular transfer command descriptor (See TCRI 7.1.2.2)
@@ -117,18 +117,18 @@ package i3c_pkg;
     logic [7:0]  def_byte;
 
     // DWORD 0
-    logic                toc;
-    logic                wroc;
-    logic                rnw;
-    i3c_trans_mode_e     mode;
-    logic                dbp;           // Defining byte present
-    logic                sre;           // Short read error
-    logic [2:0]          __rsvd23_21;
-    logic [4:0]          dev_idx;
-    logic                cp;
-    logic [7:0]          cmd;
-    logic [3:0]          tid;
-    i3c_cmd_attr_e       attr;
+    logic            toc;
+    logic            wroc;
+    logic            rnw;
+    i3c_trans_mode_e mode;
+    logic            dbp;          // Defining byte present
+    logic            sre;          // Short read error
+    logic [2:0]      __rsvd23_21;
+    logic [4:0]      dev_idx;
+    logic            cp;
+    logic [7:0]      cmd;
+    logic [3:0]      tid;
+    i3c_cmd_attr_e   attr;
   } regular_trans_desc_t;
 
   // Combo transfer command descriptor (See TCRI 7.1.2.3)
@@ -138,19 +138,19 @@ package i3c_pkg;
     logic [15:0] offset;
 
     // DWORD 0
-    logic                toc;
-    logic                wroc;
-    logic                rnw;
-    i3c_trans_mode_e     mode;
-    logic                sub_16_off;
-    logic                fpm;
-    logic [1:0]          dlp;
-    logic                __rsvd21;
-    logic [4:0]          dev_idx;
-    logic                cp;
-    logic [7:0]          cmd;
-    logic [3:0]          tid;
-    i3c_cmd_attr_e       attr;
+    logic            toc;
+    logic            wroc;
+    logic            rnw;
+    i3c_trans_mode_e mode;
+    logic            sub_16_off;
+    logic            fpm;
+    logic [1:0]      dlp;
+    logic            __rsvd21;
+    logic [4:0]      dev_idx;
+    logic            cp;
+    logic [7:0]      cmd;
+    logic [3:0]      tid;
+    i3c_cmd_attr_e   attr;
   } combo_trans_desc_t;
 
   // Address assignment command descriptor (See TCRI 7.1.2.3)
@@ -159,15 +159,14 @@ package i3c_pkg;
     logic [31:0] __rsvd63_32;
 
     // DWORD 0
-    logic                toc;
-    logic                wroc;
-    logic [3:0]          dev_count;
-    logic [4:0]          __rsvd25_21;
-    logic [4:0]          dev_idx;
-    logic                __rsvd15;
-    logic [7:0]          cmd;
-    logic [3:0]          tid;
-    i3c_cmd_attr_e       attr;
+    logic          toc;
+    logic          wroc;
+    logic [3:0]    dev_count;
+    logic [4:0]    __rsvd25_21;
+    logic [4:0]    dev_idx;
+    logic          __rsvd15;
+    logic [7:0]    cmd;
+    logic [3:0]    tid;
+    i3c_cmd_attr_e attr;
   } addr_assign_desc_t;
-
 endpackage
