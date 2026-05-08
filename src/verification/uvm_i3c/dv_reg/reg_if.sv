@@ -14,7 +14,7 @@ interface reg_if (
     output addr, wdata, wen, ren;
   endclocking
 
-  modport dv(clocking cb, input clk_i, input rst_ni);
+  modport drv(clocking cb, input clk_i, input rst_ni);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
