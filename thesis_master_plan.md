@@ -232,7 +232,7 @@ Back Matter
 | 3.1 CHIPS Alliance `i3c-core` overview | Repository, target use case (Caliptra RoT), key statistics (LoC, modules) | phase1 §8.1 | 2 pp | F9 (reference hierarchy) |
 | 3.2 Reference top-level hierarchy | 3-level wrapper structure; AXI4 + AHB-Lite adapters; `ifdef` matrix | phase1 §8.1 | 1.5 pp | — |
 | 3.3 Modules relevant to basic master | Table of 9 key modules | phase1 §8.2 | 1 p | T6 (relevant modules) |
-| 3.4 Reuse/Simplify/Rewrite/Improve classification | Full action table; discussion of *why* each decision | phase1 §8.3 | 2 pp | T7 (classification table) |
+| 3.4 Reuse/Simplify/Rewrite/Improve classification | Full action table; discussion of *why* each decision | phase1 §8.3, improvements.md | 2 pp | T7 (classification table) |
 | 3.5 Out-of-scope reference modules | Why each is excluded (target FSM, IBI, recovery, HDR, standby) | phase1 §8.4 | 1.5 pp | T8 (excluded modules) |
 | 3.6 Methodology process | 4-step pipeline per module | — | 1 p | — |
 | 3.7 Quantitative simplification summary | Before/after LoC across all modules | §1.6 above | 1.5 pp | T9 (LoC reduction), F10 (hierarchy comparison) |
@@ -1142,6 +1142,8 @@ Final:
 | `09_flow_active_spec.md` | Command FSM | 5.7 |
 | `10_controller_active_spec.md` | Controller wrapper | 5.8 |
 | `11_i3c_controller_top_spec.md` | Top-level integration | 5.8 |
+| `improvements.md` | Design decisions & simplifications vs. reference (quantitative + rationale) | 3, 5 |
+| `Vo_Minh_Huy_Graduation_Thesis_Outline.pdf` | Original submitted thesis outline; reference for structure and front matter | 1, 2 |
 
 ### B. Key Figures by Chapter
 
