@@ -105,7 +105,7 @@ module bus_tx_flow (
     bus_tx_idle = '0;
     bus_tx_done = '0;
     drive_bit_en = '0;
-    drive_bit_value = 1'b1;  // Pullup by default
+    drive_bit_value = 1'b1;  // Pull-up by default
     bit_counter_en = '0;
 
     unique case (state_q)

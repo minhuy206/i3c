@@ -115,6 +115,22 @@ task body();
 endtask
 ```
 
+### 4.4.1. Driver → Sequence Handshake (`rsp` fields)
+
+When the driver finishes the transaction it calls `seq_item_port.item_done(rsp)` (ref `../i3c-core/verification/uvm_i3c/dv_i3c/i3c_driver.sv:96`), and the sequence consumes it via `get_response(rsp)`. The driver populates the following fields in `rsp` based on bus observation — the sequence MUST treat them as outputs, not inputs:
+
+| `rsp` field | Driver source line(s) | Meaning |
+|-------------|-----------------------|---------|
+| `rsp.addr[i]` | 471 / 507 / 518 (device mode) | Sampled host address bits |
+| `rsp.dir` | 489 (device mode) | Sampled R/W direction |
+| `rsp.dev_ack` | populated by `DrvAck` (525) using `req.dev_ack` | Driven ACK/NACK echoed back |
+| `rsp.data[]` | 603 (`DrvWr`) / 619 (`DrvWrPushPull`) | Bytes captured during host→device write |
+| `rsp.T_bit[]` | 621 (`DrvWrPushPull`) | Per-byte T-bit observed on PP write |
+| `rsp.end_with_rstart` | 87 / 91 (`get_and_drive`) | `0` if frame ended with STOP, `1` if RSTART |
+| `rsp.IBI`, `rsp.IBI_ADDR` | 253 / 254 (host mode, Phase 2 only) | IBI arbitration outcome |
+
+Consequently, the sequence body should NOT pre-set these fields except as initial values that the driver may overwrite.
+
 ### 4.5. Usage in Virtual Sequences
 
 ```systemverilog
@@ -162,6 +178,22 @@ Future sequences will extend this to support:
 | `i3c_device_ccc_response_seq` | Respond to specific CCCs (GETPID, GETBCR, etc.) |
 | `i3c_device_ibi_seq` | Initiate In-Band Interrupt |
 | `i3c_device_nack_seq` | NACK address for error testing |
+
+## 5.1. Mapping from Reference seq_lib
+
+The reference at `../i3c-core/verification/uvm_i3c/dv_i3c/seq_lib/` ships 9 sequences that collectively cover what this spec collapses into one `i3c_device_response_seq`. When porting, treat the reference sequences as templates for individual *transaction shapes* and merge them under our parameterized device-response seq:
+
+| Reference sequence | Maps to | Notes |
+|---|---|---|
+| `i3c_direct_data_seq.sv` (192 LoC) | `i3c_device_response_seq` with `is_i3c=1`, single-frame | Closest analogue; use as primary template for `body()` |
+| `i3c_direct_data_with_rstart_seq.sv` (30 LoC) | Same, with `req.end_with_rstart=1` and a follow-up `start_item` | Phase 2 |
+| `i2c_direct_data_seq.sv` (182 LoC) | `i3c_device_response_seq` with `is_i3c=0` | Reuse byte/T-bit handling |
+| `i2c_direct_data_with_rstart_seq.sv` (22 LoC) | Same, with RSTART | Phase 2 |
+| `i3c_broadcast_followed_by_data_seq.sv` (90 LoC) | Phase 2 (CCC handling) | `addr=7'h7E`, then re-issued |
+| `i3c_broadcast_followed_by_data_with_rstart_seq.sv` (68 LoC) | Phase 2 | — |
+| `i3c_broadcast_followed_by_i2c_data_seq.sv` (88 LoC) | Phase 2 | — |
+| `i3c_broadcast_followed_by_i2c_data_with_rstart_seq.sv` (51 LoC) | Phase 2 | — |
+| `i3c_seq_list.sv` (8 LoC) | Replaced by our `i3c_seq_lib.sv` | Different include set |
 
 ## 6. Implementation Notes
 

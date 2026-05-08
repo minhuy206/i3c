@@ -89,33 +89,42 @@ endclocking
 
 ### 3.7. Helper Tasks
 
-Copied from reference with no functional changes:
+Copied from reference with no functional changes. Line numbers below refer to `../i3c-core/verification/uvm_i3c/dv_i3c/i3c_if.sv` (429 LoC) — copy each task verbatim from the cited line.
 
-| Task | Description |
-|------|-------------|
-| `p_edge_scl()` | Wait for SCL positive edge |
-| `sample_target_data(output bit)` | Sample SDA on SCL rising edge |
-| `wait_for_host_start()` | Detect START condition (SDA↓ while SCL=1) |
-| `get_bit_data(src, output bit)` | Sample one data bit |
-| `wait_for_device_ack(ack_bit)` | Wait for ACK/NACK from device |
-| `wait_for_device_ack_or_nack(output ack)` | Wait for either ACK or NACK |
-| `wait_for_host_rstart(output rstart)` | Detect RSTART condition |
-| `wait_for_host_stop(delay, output stop)` | Detect STOP condition |
-| `wait_for_i2c_host_stop_or_rstart(tc, rstart, stop)` | Wait for either with I2C timing |
-| `wait_for_i3c_host_stop_or_rstart(tc, rstart, stop)` | Wait for either with I3C timing |
-| `wait_for_host_ack()` / `wait_for_host_nack()` | Wait for host ACK/NACK |
-| `host_i2c_start(tc)` / `host_i3c_start(tc)` | Drive START with timing |
-| `host_i2c_rstart(tc)` / `host_i3c_rstart(tc)` | Drive RSTART with timing |
-| `host_i2c_stop(tc)` / `host_i3c_stop(tc)` | Drive STOP with timing |
-| `host_i2c_data(tc, bit)` / `host_i3c_data(tc, bit)` | Drive one data bit |
-| `device_i2c_send_bit(tc, bit)` | Device sends one OD bit (I2C) |
-| `device_i3c_od_send_bit(tc, bit)` | Device sends one OD bit (I3C) |
-| `device_i3c_send_bit(tc, bit)` | Device sends one PP bit (I3C) |
-| `device_send_T_bit(tc, bit)` | Device sends T-bit with Tsco |
-| `device_i2c_send_ack(tc)` / `device_i2c_send_nack(tc)` | ACK/NACK helpers |
-| `time_check(delay, exp, wire, msg)` | Timing constraint checker |
+| Task | Ref line | Description |
+|------|---------:|-------------|
+| `p_edge_scl()` | 80 | Wait for SCL positive edge |
+| `sample_target_data(output bit)` | 85 | Sample SDA on SCL rising edge |
+| `wait_for_host_start()` | 90 | Detect START condition (SDA↓ while SCL=1) |
+| `get_bit_data(src, output bit)` | 98 | Sample one data bit |
+| `wait_for_device_ack(ack_bit)` | 111 | Wait for ACK/NACK from device |
+| `wait_for_device_ack_or_nack(output ack)` | 120 | Wait for either ACK or NACK |
+| `wait_for_host_rstart(output rstart)` | 142 | Detect RSTART condition |
+| `wait_for_host_stop(delay, output stop)` | 154 | Detect STOP condition |
+| `wait_for_i2c_host_stop_or_rstart(tc, rstart, stop)` | 169 | Wait for either with I2C timing |
+| `wait_for_i3c_host_stop_or_rstart(tc, rstart, stop)` | 184 | Wait for either with I3C timing |
+| `wait_for_host_ack()` | 199 | Wait for host ACK |
+| `wait_for_host_nack()` | 210 | Wait for host NACK |
+| `wait_for_host_ack_or_nack(output ack)` | 222 | Wait for either host ACK or NACK |
+| `time_check(delay, exp, wire, msg)` | 244 | Timing constraint checker |
+| `host_i2c_start(tc)` | 262 | Drive I2C START |
+| `host_i3c_start(tc)` | 270 | Drive I3C START |
+| `host_i2c_rstart(tc)` | 285 | Drive I2C RSTART |
+| `host_i3c_rstart(tc)` | 297 | Drive I3C RSTART |
+| `host_i2c_stop(tc)` | 309 | Drive I2C STOP |
+| `host_i3c_stop(tc)` | 323 | Drive I3C STOP |
+| `host_i2c_data(tc, bit)` | 341 | Drive one I2C data bit |
+| `host_i3c_data(tc, bit)` | 350 | Drive one I3C data bit |
+| `device_i2c_send_bit(tc, bit)` | 359 | Device sends one OD bit (I2C) |
+| `device_i2c_send_ack(tc)` | 375 | Device ACK helper (I2C) |
+| `device_i2c_send_nack(tc)` | 379 | Device NACK helper (I2C) |
+| `device_i3c_od_send_bit(tc, bit)` | 383 | Device sends one OD bit (I3C) |
+| `device_i3c_send_bit(tc, bit)` | 398 | Device sends one PP bit (I3C) |
+| `device_send_T_bit(tc, bit)` | 414 | Device sends T-bit with Tsco |
 
 ### 3.8. Connection to DUT
+
+The DUT's PHY (`src/rtl/i3c_controller_top.sv:23-26`) is **direct-drive** (separate `scl_i`/`scl_o` and `sda_i`/`sda_o` pairs), not tri-state. The agent's `i3c_if.sv` therefore owns the open-drain emulation that a real bus would provide. See spec 07 §5 for the bus-model wiring at `tb_i3c_top` and how DUT outputs feed `scl_io`/`sda_io`.
 
 In `tb_i3c_top.sv`, the open-drain bus is emulated with wires:
 
@@ -142,6 +151,7 @@ i3c_if i3c_bus(.clk_i(clk), .rst_ni(rst_n), .scl_io(scl_bus), .sda_io(sda_bus));
 
 - The `time_check` task uses `#(delay * 1ns)` — timing is in nanoseconds, not clock cycles
 - Since our DUT uses clock-cycle-count timing internally, there is a domain translation: the I3C interface uses real timing for bus protocol while the DUT counts system clocks
+- ns-to-cycle formula: with the testbench timescale `1ns/1ps` (spec 07 §3) and a 10 ns clock period, *N* cycles in the CSR timing registers (e.g., `T_LOW=13`) correspond to `N × 10 ns` of real time. The agent's `i3c_tc` / `i2c_tc` constants are populated in ns, so they can be compared directly against bus events sampled by `time_check`.
 - The `scl_spinwait_timeout_ns` should be set large enough for the DUT's default timing (e.g., 10ms)
 
 ---
@@ -333,21 +343,27 @@ stateDiagram-v2
 
 ### 7.5. Device Mode Key Operations
 
-| State | Action |
-|-------|--------|
-| `DrvIdle` | Wait for host START condition |
-| `DrvAddrArbit` | Sample address from bus (7 bits + R/W) |
-| `DrvAck` | Drive ACK (SDA=0) or NACK (SDA=1) using `device_i3c_od_send_bit` or `device_i2c_send_bit` |
-| `DrvWr` | For each byte: sample 8 SDA bits on SCL edges, send ACK/NACK per T_bit[] |
-| `DrvWrPushPull` | Same but sample T-bit (9th bit) for I3C PP write |
-| `DrvRd` | For each byte: drive 8 SDA bits from `req.data[]`, wait for host ACK/NACK |
-| `DrvRdPushPull` | Drive 8 bits + T-bit using `device_i3c_send_bit` and `device_send_T_bit` |
-| `DrvDAA` | Send 64-bit PID+BCR+DCR (8 bytes), receive assigned address byte, send ACK |
-| `DrvStop` | Release bus, wait for STOP or RSTART |
+The device-mode case statement in the reference is at `../i3c-core/verification/uvm_i3c/dv_i3c/i3c_driver.sv:447` (the second `case (bus_state)` block — the first one at line 119 is host mode and is **not** exercised in Phase 1). Copy each arm verbatim from the line cited.
+
+| State | Ref line | Action |
+|-------|---------:|--------|
+| `DrvIdle` | 448 | Wait for host START condition |
+| `DrvStart` | 456 | Latch START detected by `wait_for_host_start()` |
+| `DrvAddrArbit` | 461 | Sample address from bus (7 bits + R/W) |
+| `DrvAddr` | 503 | Sample address bits (I2C path) |
+| `DrvAddrPushPull` | 514 | Sample address bits (I3C PP path) |
+| `DrvAck` | 525 | Drive ACK (SDA=0) or NACK (SDA=1) using `device_i3c_od_send_bit` or `device_i2c_send_bit` |
+| `DrvSelectNext` | 536 | Branch into `DrvWr`/`DrvWrPushPull`/`DrvRd`/`DrvRdPushPull`/`DrvDAA`/`DrvStop` based on `req.dir`, `req.i3c`, `req.dev_ack`, `req.is_daa` |
+| `DrvStop` | 553 | Release bus, wait for STOP or RSTART |
+| `DrvDAA` | 557 | Send 64-bit PID+BCR+DCR (8 bytes), receive assigned address byte, send ACK |
+| `DrvRd` | 573 | For each byte: drive 8 SDA bits from `req.data[]`, wait for host ACK/NACK |
+| `DrvRdPushPull` | 587 | Drive 8 bits + T-bit using `device_i3c_send_bit` and `device_send_T_bit` |
+| `DrvWr` | 596 | For each byte: sample 8 SDA bits on SCL edges, send ACK/NACK per `req.T_bit[]` |
+| `DrvWrPushPull` | 611 | Same as `DrvWr` but sample T-bit (9th bit) for I3C PP write |
 
 ### 7.6. Stop/RStart Detection
 
-The main loop (`get_and_drive`) forks the device item processing against stop/rstart detection. If STOP is detected first, the transaction ends. If RSTART is detected, the state moves to `DrvAddr` for the next sub-frame.
+The main loop (`get_and_drive`, ref lines 50–105) forks the device item processing against stop/rstart detection. If STOP is detected first (line 85), the transaction ends with `rsp.end_with_rstart = 0`. If RSTART is detected (line 89), the FSM re-enters `DrvAddrArbit` for the next sub-frame and `rsp.end_with_rstart = 1`.
 
 ### 7.7. Implementation Notes
 
