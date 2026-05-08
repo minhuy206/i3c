@@ -238,5 +238,4 @@ module entdaa_controller
       bus_rx_req_byte_o  = 1'b0;
     end
   end
-
 endmodule

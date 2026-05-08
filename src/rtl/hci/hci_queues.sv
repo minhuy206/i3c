@@ -140,4 +140,3 @@ module hci_queues #(
       .depth_o (resp_depth_o)
   );
 endmodule
-

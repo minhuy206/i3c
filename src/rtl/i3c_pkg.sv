@@ -169,5 +169,4 @@ package i3c_pkg;
     logic [3:0]    tid;
     i3c_cmd_attr_e attr;
   } addr_assign_desc_t;
-
 endpackage

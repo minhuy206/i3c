@@ -189,6 +189,14 @@ virtual task read_rx_data(output bit [31:0] data);
 endtask
 ```
 
+For multi-byte reads, the RX FIFO holds 32-bit words (LSB-first byte packing — bytes 0..3 in word 0, bytes 4..7 in word 1, …). To drain *N* bytes, call `read_rx_data` `ceil(N/4)` times. The last word is partially valid when `N` is not a multiple of 4; the upper bytes are don't-care. Example for 6-byte read:
+
+```systemverilog
+bit [31:0] w0, w1;
+read_rx_data(w0);      // bytes 0..3
+read_rx_data(w1);      // bytes 4..5 in low half, upper half don't-care
+```
+
 #### read_response(output data)
 ```systemverilog
 virtual task read_response(output bit [31:0] data);

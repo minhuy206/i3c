@@ -254,5 +254,4 @@ module scl_generator
                   ((state_q == SdaRise) && (state_d == Idle));
 
   assign busy_o = (state_q != Idle);
-
 endmodule

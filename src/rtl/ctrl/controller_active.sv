@@ -320,5 +320,4 @@ module controller_active
       .daa_bcr_o          (daa_bcr),
       .daa_dcr_o          (daa_dcr)
   );
-
 endmodule

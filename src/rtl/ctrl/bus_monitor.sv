@@ -224,6 +224,4 @@ module bus_monitor
   assign state_o.start_det = start_det & ~rstart_detection_en;
   assign state_o.rstart_det = start_det & rstart_detection_en;
   assign state_o.stop_det = stop_det;
-
 endmodule
-

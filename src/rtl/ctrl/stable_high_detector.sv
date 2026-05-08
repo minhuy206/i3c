@@ -41,6 +41,4 @@ module stable_high_detector #(
       stable_internal = line;
     end
   end
-
 endmodule
-

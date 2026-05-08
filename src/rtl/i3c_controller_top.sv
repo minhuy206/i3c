@@ -258,5 +258,4 @@ module i3c_controller_top
       .sel_od_pp_i(ctrl_sel_od_pp),
       .sel_od_pp_o
   );
-
 endmodule

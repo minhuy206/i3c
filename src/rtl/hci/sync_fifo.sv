@@ -81,6 +81,4 @@ module sync_fifo #(
   assign rvalid_o = ~empty_o;
 
   assign rdata_o  = mem[rptr_q[PtrW-1:0]];
-
 endmodule
-

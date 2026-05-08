@@ -182,6 +182,4 @@ module bus_tx #(
   end
 
   assign sel_od_pp_o = sel_od_pp_i;  // Pass through the OD/PP selection
-
 endmodule
-

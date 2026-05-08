@@ -1,3 +1,12 @@
 CLAUDE.md
 .DS_Store
 AGENTS.md
+
+# Xcelium generated files
+xcelium.d/
+INCA_libs/
+xrun.history
+xrun.log
+xrun.key
+*.shm/
+*.diag

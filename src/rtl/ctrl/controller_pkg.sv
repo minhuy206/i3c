@@ -17,5 +17,4 @@ package controller_pkg;
     logic [8:0] reserved_15_7;    // [15:7]  Reserved
     logic [6:0] static_address;   // [6:0]   I2C static address
   } dat_entry_t;
-
 endpackage

@@ -1163,5 +1163,4 @@ module flow_active
   assign ccc_dev_count_o = ccc_dev_count_q;
 
   assign sel_od_pp_o = sel_od_pp_q;
-
 endmodule

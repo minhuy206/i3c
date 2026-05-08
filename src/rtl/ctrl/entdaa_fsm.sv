@@ -231,5 +231,4 @@ module entdaa_fsm
   assign bus_rx_req_bit_o = bus_rx_req_bit_q;
   assign bus_rx_req_byte_o = 1'b0;
   assign bus_tx_req_bit_o = 1'b0;
-
 endmodule

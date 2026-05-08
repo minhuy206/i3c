@@ -36,6 +36,4 @@ module edge_detector #(
       detect_internal <= 1'b0;
     end
   end
-
 endmodule
-
