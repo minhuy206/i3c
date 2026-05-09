@@ -1,6 +1,31 @@
 CLAUDE.md
 .DS_Store
 AGENTS.md
+docs/architecture_qa_session.md
+
+# LaTeX compiler output
+*.aux
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.synctex.gz
+*.toc
+*.bbl
+*.blg
+*.idx
+*.ind
+*.ilg
+*.nav
+*.snm
+*.vrb
+*.bcf
+*.run.xml
+*.glg
+*.glo
+*.gls
 
 # Xcelium generated files
 xcelium.d/
