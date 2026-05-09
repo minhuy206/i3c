@@ -1,3 +1,9 @@
+// Control and Status Registers (CSR) + Device Address Table (DAT).
+// Hand-written register file; replaces 14,342-line auto-generated PeakRDL output.
+// Provides: HC_CONTROL, HC_STATUS, 9 timing registers, queue port registers,
+//           QUEUE_STATUS, and 16-entry DAT.
+// Spec: docs/module_specs/07_csr_registers_spec.md
+
 module csr_registers
   import controller_pkg::*;
   import i3c_pkg::*;
