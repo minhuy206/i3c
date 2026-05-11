@@ -250,10 +250,6 @@ Driver-side transaction item. Sequences create these to instruct the driver how 
 | `T_bit` | `bit [$]` | Yes | T-bits (I3C) or ACK/NACK (I2C) per byte |
 | `end_with_rstart` | `bit` | Yes | 1 = end with RSTART, 0 = end with STOP |
 | `is_daa` | `bit` | Yes | 1 = DAA transaction |
-| `IBI` | `bit` | Yes | IBI transaction (Phase 2) |
-| `IBI_ADDR` | `bit [6:0]` | Yes | IBI device address |
-| `IBI_START` | `bit` | Yes | Device triggers START |
-| `IBI_ACK` | `bit` | Yes | Host ACKs IBI |
 
 ### 5.3. Adapted from Reference
 
@@ -324,8 +320,7 @@ run_phase() forks:
 stateDiagram-v2
     [*] --> DrvIdle
     DrvIdle --> DrvAddrArbit: wait_for_host_start()
-    DrvAddrArbit --> DrvAck: No IBI arbitration
-    DrvAddrArbit --> DrvSelectNext: IBI won (Phase 2)
+    DrvAddrArbit --> DrvAck: sample addr + R/W
     DrvAck --> DrvSelectNext: Send ACK/NACK
     DrvSelectNext --> DrvWr: Write transfer
     DrvSelectNext --> DrvWrPushPull: I3C write
@@ -348,10 +343,7 @@ The device-mode case statement in the reference is at `../i3c-core/verification/
 | State | Ref line | Action |
 |-------|---------:|--------|
 | `DrvIdle` | 448 | Wait for host START condition |
-| `DrvStart` | 456 | Latch START detected by `wait_for_host_start()` |
 | `DrvAddrArbit` | 461 | Sample address from bus (7 bits + R/W) |
-| `DrvAddr` | 503 | Sample address bits (I2C path) |
-| `DrvAddrPushPull` | 514 | Sample address bits (I3C PP path) |
 | `DrvAck` | 525 | Drive ACK (SDA=0) or NACK (SDA=1) using `device_i3c_od_send_bit` or `device_i2c_send_bit` |
 | `DrvSelectNext` | 536 | Branch into `DrvWr`/`DrvWrPushPull`/`DrvRd`/`DrvRdPushPull`/`DrvDAA`/`DrvStop` based on `req.dir`, `req.i3c`, `req.dev_ack`, `req.is_daa` |
 | `DrvStop` | 553 | Release bus, wait for STOP or RSTART |
@@ -514,7 +506,7 @@ Connect `driver.seq_item_port` to `sequencer.seq_item_export` when active with d
 | Agent modes used | Host + Device | **Device only** (Phase 1) |
 | I3C targets | Multiple possible | **Single device** |
 | AXI interaction | AXI agent planned | Not applicable (reg_agent used) |
-| IBI support | Full IBI arbitration | Retained in driver FSM but not tested |
+| IBI support | Full IBI arbitration | Not implemented — out of RTL scope |
 | i3c_if connection | Direct to DUT tristate pins | Via **open-drain emulation wires** |
 
 ## 13. Implementation Notes

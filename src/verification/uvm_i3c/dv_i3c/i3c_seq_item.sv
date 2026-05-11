@@ -13,11 +13,6 @@ class i3c_seq_item extends uvm_sequence_item;
   rand bit        end_with_rstart;
   rand bit        is_daa;
 
-  rand bit        IBI;
-  rand bit [ 6:0] IBI_ADDR;  // IBI device's address
-  rand bit        IBI_START;  // Device triggers Start condition
-  rand bit        IBI_ACK;  // Acknowledge device IBI
-
   function new(string name = "");
     super.new(name);
   endfunction : new
@@ -32,10 +27,6 @@ class i3c_seq_item extends uvm_sequence_item;
     `uvm_field_int(data_cnt, UVM_DEFAULT)
     `uvm_field_queue_int(T_bit, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(end_with_rstart, UVM_DEFAULT | UVM_NOCOMPARE)
-    `uvm_field_int(IBI, UVM_DEFAULT | UVM_NOCOMPARE)
-    `uvm_field_int(IBI_ADDR, UVM_DEFAULT | UVM_NOCOMPARE)
-    `uvm_field_int(IBI_START, UVM_DEFAULT | UVM_NOCOMPARE)
-    `uvm_field_int(IBI_ACK, UVM_DEFAULT | UVM_NOCOMPARE)
   `uvm_object_utils_end
 
 endclass : i3c_seq_item

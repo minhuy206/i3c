@@ -127,7 +127,6 @@ When the driver finishes the transaction it calls `seq_item_port.item_done(rsp)`
 | `rsp.data[]` | 603 (`DrvWr`) / 619 (`DrvWrPushPull`) | Bytes captured during host→device write |
 | `rsp.T_bit[]` | 621 (`DrvWrPushPull`) | Per-byte T-bit observed on PP write |
 | `rsp.end_with_rstart` | 87 / 91 (`get_and_drive`) | `0` if frame ended with STOP, `1` if RSTART |
-| `rsp.IBI`, `rsp.IBI_ADDR` | 253 / 254 (host mode, Phase 2 only) | IBI arbitration outcome |
 
 Consequently, the sequence body should NOT pre-set these fields except as initial values that the driver may overwrite.
 
@@ -166,7 +165,6 @@ Future sequences will extend this to support:
 - NACK on specific bytes
 - Data corruption
 - Unexpected STOP
-- IBI during transfer
 
 ---
 
@@ -176,7 +174,6 @@ Future sequences will extend this to support:
 |----------|-------------|
 | `i3c_device_daa_response_seq` | Respond to ENTDAA with PID+BCR+DCR, accept assigned address |
 | `i3c_device_ccc_response_seq` | Respond to specific CCCs (GETPID, GETBCR, etc.) |
-| `i3c_device_ibi_seq` | Initiate In-Band Interrupt |
 | `i3c_device_nack_seq` | NACK address for error testing |
 
 ## 5.1. Mapping from Reference seq_lib
