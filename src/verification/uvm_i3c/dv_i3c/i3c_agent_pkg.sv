@@ -1,8 +1,6 @@
 package i3c_agent_pkg;
-  // dep packages
   import uvm_pkg::*;
 
-  // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
 
@@ -16,17 +14,13 @@ package i3c_agent_pkg;
     BusOpRead  = 1'b1
   } bus_op_e;
 
-  // Driver phase
   typedef enum int {
     DrvIdle,
-    DrvStart,
-    DrvRStart,
-    DrvRStartPushPull,
     DrvAddr,
     DrvAddrArbit,
     DrvAddrPushPull,
     DrvAck,
-    DrvSelectNext,  // Intermediate state
+    DrvSelectNext,
     DrvWr,
     DrvWrPushPull,
     DrvRd,
@@ -50,38 +44,42 @@ package i3c_agent_pkg;
 
   bit [1:0] defining_byte_for_CCC[logic [7:0]] = '{
       // {optional defining byte, required defining byte}
-      8'h00 : 2'b00,  // ENEC
+      8'h00 :
+      2'b00,  // ENEC
       8'h01 : 2'b00,  // DISEC
       8'h07 : 2'b00,  // ENTDAA
       8'h80 : 2'b00,  // DIR_ENEC
-      8'h81 : 2'b00   // DIR_DISEC
+      8'h81 : 2'b00  // DIR_DISEC
   };
 
   bit [1:0] data_for_CCC[logic [7:0]] = '{
       // {optional data, required data}
-      8'h00 : 2'b01,  // ENEC
+      8'h00 :
+      2'b01,  // ENEC
       8'h01 : 2'b01,  // DISEC
       8'h07 : 2'b00,  // ENTDAA
       8'h80 : 2'b01,  // DIR_ENEC
-      8'h81 : 2'b01   // DIR_DISEC
+      8'h81 : 2'b01  // DIR_DISEC
   };
 
   bit [1:0] subcmd_byte_for_CCC[logic [7:0]] = '{
       // {optional sub-command, required sub-command}
-      8'h00 : 2'b00,  // ENEC
+      8'h00 :
+      2'b00,  // ENEC
       8'h01 : 2'b00,  // DISEC
       8'h07 : 2'b00,  // ENTDAA
       8'h80 : 2'b00,  // DIR_ENEC
-      8'h81 : 2'b00   // DIR_DISEC
+      8'h81 : 2'b00  // DIR_DISEC
   };
 
   bit data_direction_for_CCC[logic [7:0]] = '{
       // 0 - host to device, 1 - device to host
-      8'h00 : 1'b0,  // ENEC
+      8'h00 :
+      1'b0,  // ENEC
       8'h01 : 1'b0,  // DISEC
       8'h07 : 1'b0,  // ENTDAA
       8'h80 : 1'b0,  // DIR_ENEC
-      8'h81 : 1'b0   // DIR_DISEC
+      8'h81 : 1'b0  // DIR_DISEC
   };
 
   typedef struct {
@@ -106,17 +104,6 @@ package i3c_agent_pkg;
       tSetupStop  : 1_300
   };
 
-  i2c_timing_t i2c_1000 = '{
-      tHoldStop   : 500,
-      tHoldStart  : 260,
-      tSetupStart : 260,
-      tSetupBit   : 50,
-      tHoldBit    : 0,
-      tClockPulse : 380,
-      tClockLow   : 620,
-      tSetupStop  : 500
-  };
-
   typedef struct {
     int tHoldStop   = 1_300; // 1.3 us
     int tHoldStart  = 39;
@@ -136,10 +123,10 @@ package i3c_agent_pkg;
   } bus_timing_t;
 
   typedef struct {
-    bit [6:0]  static_addr;
-    bit        static_addr_valid;
-    bit [6:0]  dynamic_addr;
-    bit        dynamic_addr_valid;
+    bit [6:0] static_addr;
+    bit       static_addr_valid;
+    bit [6:0] dynamic_addr;
+    bit       dynamic_addr_valid;
 
     bit [7:0]  bcr;
     bit [7:0]  dcr;
@@ -148,14 +135,13 @@ package i3c_agent_pkg;
     bit [15:0] max_read_length;
     bit [15:0] device_write_limit;
     bit [15:0] max_write_length;
+    bit [15:0] status;
   } I3C_device;
 
-  // forward declare classes to allow typedefs below
   typedef class i3c_item;
   typedef class i3c_seq_item;
   typedef class i3c_agent_cfg;
 
-  // package sources
   `include "i3c_item.sv"
   `include "i3c_seq_item.sv"
   `include "i3c_agent_cfg.sv"

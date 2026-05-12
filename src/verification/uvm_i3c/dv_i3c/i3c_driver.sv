@@ -11,7 +11,6 @@ class i3c_driver extends uvm_driver #(
   bit under_reset;
   i3c_agent_cfg cfg;
 
-  int scl_spinwait_timeout_ns = 1_000_000;  // 1ms
   i3c_drv_phase_e bus_state;
   bit stop, rstart;
 
@@ -26,15 +25,25 @@ class i3c_driver extends uvm_driver #(
     end
   endtask : reset_signal
 
+  virtual task process_reset();
+    @(negedge cfg.vif.rst_ni);
+    release_bus();
+    `uvm_info(`gfn, "\n driver is reset", UVM_DEBUG)
+  endtask : process_reset
+
+  virtual task release_bus();
+    `uvm_info(`gfn, $sformatf("%s driver released the bus",
+                              cfg.if_mode == Host ? "Host" : "Device"), UVM_HIGH)
+    if (cfg.if_mode == Device) begin
+      cfg.vif.device_sda_pp_en = 1'b0;
+      cfg.vif.device_sda_o = 1'b1;
+    end
+  endtask : release_bus
+
   virtual task run_phase(uvm_phase phase);
     fork
       reset_signal();
       get_and_drive();
-      begin
-        if (cfg.if_mode == Host) begin
-          // drive_scl(); // drive scl if design support
-        end
-      end
     join_none
   endtask : run_phase
 
@@ -52,9 +61,6 @@ class i3c_driver extends uvm_driver #(
             begin
               seq_item_port.get_next_item(req);
               if (cfg.if_mode == Device) drive_device_item(.req(req), .rsp(rsp));
-              else begin
-                // drive_host_item if design support act as host
-              end
             end
             begin
               if (cfg.if_mode == Device) begin
@@ -100,9 +106,6 @@ class i3c_driver extends uvm_driver #(
     end
   endtask : get_and_drive
 
-  virtual task drive_host_item(i3c_seq_item req, ref i3c_seq_item rsp);
-  endtask
-
   virtual task drive_device_item(i3c_seq_item req, ref i3c_seq_item rsp);
     rsp = new();
     if (bus_state == DrvAddr || bus_state == DrvAddrPushPull) begin
@@ -127,11 +130,27 @@ class i3c_driver extends uvm_driver #(
         end
 
         DrvAddr: begin
-          // phase 2
+          for (int i = 6; i >= 0; i--) begin
+            // Only I2C addresses
+            cfg.vif.sample_target_data(.data(rsp.addr[i]));
+            `uvm_info(get_full_name(), $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]),
+                      UVM_MEDIUM)
+          end
+          cfg.vif.sample_target_data(.data(rsp.dir));
+          bus_state = DrvAck;
+          break;
         end
 
         DrvAddrPushPull: begin
-          // phase 2
+          for (int i = 6; i >= 0; i--) begin
+            // Only I3C addresses
+            cfg.vif.sample_target_data(.data(rsp.addr[i]));
+            `uvm_info(get_full_name(), $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]),
+                      UVM_HIGH)
+          end
+          cfg.vif.sample_target_data(.data(rsp.dir));
+          bus_state = DrvAck;
+          break;
         end
 
         DrvAck: begin
@@ -250,25 +269,4 @@ class i3c_driver extends uvm_driver #(
       endcase
     end
   endtask : drive_device_item
-
-  virtual task process_reset();
-    @(negedge cfg.vif.rst_ni);
-    release_bus();
-    `uvm_info(`gfn, "\n driver is reset", UVM_DEBUG)
-  endtask : process_reset
-
-  virtual task release_bus();
-    `uvm_info(`gfn, $sformatf("%s driver released the bus",
-                              cfg.if_mode == Host ? "Host" : "Device"), UVM_HIGH)
-    if (cfg.if_mode == Host) begin
-      // TODO for host mode
-    end else begin
-      cfg.vif.device_sda_pp_en = 1'b0;
-      cfg.vif.device_sda_o = 1'b1;
-    end
-  endtask : release_bus
-
-  task drive_scl();
-    // TODO for host mode
-  endtask
 endclass
