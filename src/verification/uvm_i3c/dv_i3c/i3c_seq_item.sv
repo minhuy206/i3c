@@ -5,11 +5,11 @@ class i3c_seq_item extends uvm_sequence_item;
   rand bit        dir;
   rand bit        dev_ack;
   // Common for both I2C and I3C
-  rand bit [ 7:0] data                                          [$];
+  rand bit [ 7:0] data            [$];
   rand bit [15:0] data_cnt;
   // Contains I2C ACK/NACK if i3c is false,
-  // or I3C T bits if i3c = ture
-  rand bit        T_bit                                         [$];
+  // or I3C T bits if i3c = true
+  rand bit        T_bit           [$];
   rand bit        end_with_rstart;
   rand bit        is_daa;
 

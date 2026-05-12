@@ -2,6 +2,7 @@ CLAUDE.md
 .DS_Store
 AGENTS.md
 docs/architecture_qa_session.md
+docs/i3c_scope_analysis.md
 
 # LaTeX compiler output
 *.aux
@@ -35,3 +36,5 @@ xrun.log
 xrun.key
 *.shm/
 *.diag
+docs/verification_specs/04b_i3c_driver_instruction.md
+docs/verification_specs/04c_i3c_monitor_instruction.md

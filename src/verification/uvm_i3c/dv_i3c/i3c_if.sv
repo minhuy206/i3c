@@ -8,8 +8,6 @@ interface i3c_if (
   logic scl_o = 1'b1;
   logic scl_pp_en = 1'b0;
   logic sda_i;
-  logic host_sda_o = 1'b1;
-  logic host_sda_pp_en = 1'b0;
   logic device_sda_o = 1'b1;
   logic device_sda_pp_en = 1'b1;
 
@@ -19,7 +17,6 @@ interface i3c_if (
   assign scl_io = scl_pp_en ? scl_o : (scl_o ? 1'bz : scl_o);
   assign (highz0, weak1) scl_io = 1'b1;
 
-  assign sda_io = host_sda_pp_en ? host_sda_o : (host_sda_o ? 1'bz : host_sda_o);
   assign sda_io = device_sda_pp_en ? device_sda_o : (device_sda_o ? 1'bz : device_sda_o);
 
   assign (highz0, weak1) sda_io = 1'b1;
@@ -32,10 +29,8 @@ interface i3c_if (
     input scl_i;
     input sda_i;
     output scl_o;
-    output host_sda_o;
     output device_sda_o;
     output scl_pp_en;
-    output host_sda_pp_en;
     output device_sda_pp_en;
   endclocking
 
@@ -76,6 +71,13 @@ interface i3c_if (
     data = cb.sda_i;
   endtask
 
+  task automatic get_bit_data(input string src = "host", output bit bit_o);
+    @(posedge scl_i);
+    bit_o = sda_i;
+    `uvm_info(msg_id, $sformatf("get bit data %d from %s", bit_o, src), UVM_DEBUG)
+    @(negedge scl_i);
+  endtask : get_bit_data
+
   task automatic wait_for_host_start();
     forever begin
       @(negedge sda_i);
@@ -83,50 +85,6 @@ interface i3c_if (
       break;
     end
   endtask : wait_for_host_start
-
-  task automatic get_bit_data(input string src = "host", output bit bit_o);
-    @(posedge scl_i);
-    bit_o = sda_i;
-
-    if (src == "host") begin
-      `uvm_info(msg_id, $sformatf("get bit data %d", bit_o), UVM_DEBUG)
-      @(negedge scl_i);
-    end else begin
-      @(negedge scl_i);
-    end
-  endtask : get_bit_data
-
-  task automatic wait_for_device_ack(input bit ack_bit = 1'b1);
-    forever begin
-      @(posedge scl_i);
-      if (sda_i == ack_bit) begin
-        break;
-      end
-    end
-  endtask : wait_for_device_ack
-
-  task automatic wait_for_device_ack_or_nack(output bit ack_r);
-    bit ack = 1'b0;
-    bit nack = 1'b0;
-    fork
-      begin : iso_fork
-        fork
-          begin
-            wait_for_device_ack(.ack_bit(1'b0));
-            ack = 1'b1;
-          end
-          begin
-            wait_for_device_ack(.ack_bit(1'b1));
-            nack = 1'b1;
-          end
-        join_any
-        disable fork;
-      end : iso_fork
-    join
-
-    wait (scl_io == 0);
-    ack_r = ack && !nack;
-  endtask : wait_for_device_ack_or_nack
 
   task automatic wait_for_host_rstart(output bit rstart);
     rstart = 1'b0;
@@ -247,22 +205,6 @@ interface i3c_if (
                 ), UVM_HIGH)
   endtask
 
-  task automatic host_i2c_start(ref i2c_timing_t tc);
-    `DV_WAIT(scl_i === 1'b1,, scl_spinwait_timeout_ns, "host_start");
-    #(tc.tSetupStart * 1ns);
-    host_sda_o = 1'b0;
-    #(tc.tHoldStart * 1ns);
-    scl_o = 1'b0;
-  endtask : host_i2c_start
-
-  task automatic host_i3c_start(ref i3c_timing_t tc);
-    `DV_WAIT(scl_i === 1'b1,, scl_spinwait_timeout_ns, "host_start");
-    #(tc.tSetupStart * 1ns);
-    host_sda_o = 1'b0;
-    #(tc.tHoldStart * 1ns);
-    scl_o = 1'b0;
-  endtask : host_i3c_start
-
   task automatic device_i3c_start(ref i3c_timing_t tc);
     `DV_WAIT(scl_i === 1'b1,, scl_spinwait_timeout_ns, "host_start");
     #(tc.tSetupStart * 1ns);
@@ -270,80 +212,6 @@ interface i3c_if (
     #(tc.tHoldStart * 1ns);
     scl_o = 1'b0;
   endtask : device_i3c_start
-
-  task automatic host_i2c_rstart(ref i2c_timing_t tc);
-    if (scl_i === 1'b1 && sda_i === 1'b0) begin
-      `uvm_fatal(msg_id, "Cannot begin host_rstart when scl is high and sda is low")
-    end
-
-    if (scl_i == 1'b0) @(posedge scl_i && sda_i);
-    #(tc.tSetupStart * 1ns);
-    host_sda_o = 1'b0;
-    #(tc.tHoldRStart * 1ns);
-    #(tc.tHoldBit * 1ns);
-  endtask : host_i2c_rstart
-
-  task automatic host_i3c_rstart(ref i3c_timing_t tc);
-    if (scl_i === 1'b1 && sda_i === 1'b0) begin
-      `uvm_fatal(msg_id, "Cannot begin host_rstart when scl is high and sda is low")
-    end
-
-    if (scl_i == 1'b0) @(posedge scl_i && sda_i);
-    #(tc.tSetupStart * 1ns);
-    host_sda_o = 1'b0;
-    #(tc.tHoldRStart * 1ns);
-    #(tc.tHoldBit * 1ns);
-  endtask : host_i3c_rstart
-
-  task automatic host_i2c_stop(ref i2c_timing_t tc);
-    if (scl_i === 1'b1 && sda_i === 1'b1) begin
-      `uvm_fatal(msg_id, "Cannot begin host_stop when both scl and sda are high")
-    end
-
-    host_sda_o = 1'b0;
-    #(tc.tClockLow * 1ns);
-    scl_o = 1'b1;
-    wait (scl_i === 1'b1);
-    #(tc.tSetupStop * 1ns);
-    host_sda_o = 1'b1;
-    #(tc.tHoldStop * 1ns);
-  endtask : host_i2c_stop
-
-  task automatic host_i3c_stop(ref i3c_timing_t tc);
-    if (scl_i === 1'b1 && sda_i === 1'b1) begin
-      `uvm_fatal(msg_id, "Cannot begin host_stop when both scl and sda are high")
-    end
-
-    host_sda_o = 1'b0;
-    if (!scl_pp_en) begin
-      #(tc.tClockLowOD * 1ns);
-    end else begin
-      #(tc.tClockLowPP * 1ns);
-    end
-    scl_o = 1'b1;
-    wait (scl_i === 1'b1);
-    #(tc.tSetupStop * 1ns);
-    host_sda_o = 1'b1;
-    #(tc.tHoldStop * 1ns);
-  endtask : host_i3c_stop
-
-  task automatic host_i2c_data(ref i2c_timing_t tc, input bit bit_i);
-    wait (scl_i === 1'b0);
-    host_sda_o = bit_i;
-    time_check(tc.tSetupBit, 1'b1, scl_i, "I2C host bit setup");
-    time_check(tc.tClockPulse, 1'b0, scl_i, "I2C host bit clock high pulse width");
-    #(tc.tHoldBit * 1ns);
-    host_sda_o = 1;
-  endtask : host_i2c_data
-
-  task automatic host_i3c_data(ref i3c_timing_t tc, input bit bit_i);
-    wait (scl_i === 1'b0);
-    host_sda_o = bit_i;
-    time_check(tc.tSetupBit, 1'b1, scl_i, "I3C host bit setup");
-    time_check(tc.tClockPulse, 1'b0, scl_i, "I3C host bit clock high pulse width");
-    #(tc.tHoldBit * 1ns);
-    host_sda_o = 1;
-  endtask : host_i3c_data
 
   task automatic device_i2c_send_bit(ref i2c_timing_t tc, input bit bit_i);
     device_sda_pp_en = 0;
