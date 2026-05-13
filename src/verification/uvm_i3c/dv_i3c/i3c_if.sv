@@ -183,7 +183,7 @@ interface i3c_if (
     ack_r = ack && !nack;
   endtask : wait_for_host_ack_or_nack
 
-  task automatic time_check(input int delay, input bit exp_value, ref check_wire, input string msg);
+  task automatic time_check(input int delay, input bit exp_value, ref logic check_wire, input string msg);
     time valid_time;
     time exp_value_time;
     fork
