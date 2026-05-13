@@ -16,15 +16,6 @@ interface reg_if (
 
   modport drv(clocking cb, input clk_i, input rst_ni);
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      addr  <= '0;
-      wdata <= '0;
-      wen   <= 1'b0;
-      ren   <= 1'b0;
-    end
-  end
-
   task automatic read(input bit [11:0] a, output bit [31:0] d);
     @(cb);
     cb.addr <= a;

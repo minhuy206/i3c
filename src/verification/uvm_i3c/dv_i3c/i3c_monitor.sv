@@ -32,7 +32,7 @@ class i3c_monitor extends uvm_monitor;
             end
             begin
               wait_for_reset_and_drop_item();
-              `uvm_info(`gfn, $sformatf("`n monitor is reset, drop item\n"), UVM_DEBUG)
+              `uvm_info(`gfn, $sformatf("\n monitor is reset, drop item\n"), UVM_DEBUG)
             end
           join_any
           disable fork;
@@ -500,7 +500,7 @@ class i3c_monitor extends uvm_monitor;
                                           output i3c_item updated_transaction);
     transaction.stop   = 1'b0;
     transaction.rstart = 1'b0;
-    `uvm_info(`gfn, $sformatf("host_write_thread begin: tran_id:%0d num_data%0d",
+    `uvm_info(`gfn, $sformatf("host_write_thread begin: tran_id:%0d num_data:%0d",
                               transaction.tran_id, transaction.num_data), UVM_HIGH)
 
     while (!transaction.stop && !transaction.rstart) begin

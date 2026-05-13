@@ -1,10 +1,10 @@
-class req_seq_item extends uvm_sequence_item;
+class reg_seq_item extends uvm_sequence_item;
   rand bit [11:0] addr;
   rand bit [31:0] wdata;
   rand bit is_write;
   bit [31:0] rdata;
 
-  `uvm_object_utils_begin(req_seq_item)
+  `uvm_object_utils_begin(reg_seq_item)
     `uvm_field_int(addr, UVM_DEFAULT)
     `uvm_field_int(wdata, UVM_DEFAULT)
     `uvm_field_int(is_write, UVM_DEFAULT)

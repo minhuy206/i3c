@@ -4,7 +4,7 @@ class reg_monitor extends uvm_monitor;
   reg_agent_cfg cfg;
   virtual reg_if vif;
 
-  uvm_analysis_port #(reg_seq_item) ap;
+  uvm_analysis_port #(reg_seq_item) analysis_port;
 
   function new(string name = "", uvm_component parent = null);
     super.new(name, parent);
@@ -12,9 +12,9 @@ class reg_monitor extends uvm_monitor;
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    ap = new("ap", this);
-    if (!uvm_config_db#(virtual reg_if)::get(this, "", "vif", vif));
-    `uvm_fatal(`gfn, "reg_monitor: failed to get vif from config_db")
+    analysis_port = new("analysis_port", this);
+    if (!uvm_config_db#(virtual reg_if)::get(this, "", "vif", vif))
+      `uvm_fatal(`gfn, "reg_monitor: failed to get vif from config_db")
   endfunction
 
   task run_phase(uvm_phase phase);
@@ -28,7 +28,7 @@ class reg_monitor extends uvm_monitor;
         item.addr = vif.addr;
         item.wdata = vif.wdata;
         `uvm_info(`gfn, item.convert2string(), UVM_HIGH)
-        ap.write(item);
+        analysis_port.write(item);
       end
 
       if (vif.ren) begin
@@ -38,7 +38,7 @@ class reg_monitor extends uvm_monitor;
         @(posedge vif.clk_i);
         item.rdata = vif.rdata;
         `uvm_info(`gfn, item.convert2string(), UVM_HIGH)
-        ap.write(item);
+        analysis_port.write(item);
       end
     end
   endtask

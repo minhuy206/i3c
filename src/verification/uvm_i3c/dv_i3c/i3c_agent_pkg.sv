@@ -149,7 +149,7 @@ package i3c_agent_pkg;
   `include "i3c_driver.sv"
   `include "i3c_sequencer.sv"
   `include "i3c_agent.sv"
-  `include "seq_lib/i3c_seq_list.sv"
+  `include "seq_lib/i3c_seq_lib.sv"
 
 endpackage : i3c_agent_pkg
 

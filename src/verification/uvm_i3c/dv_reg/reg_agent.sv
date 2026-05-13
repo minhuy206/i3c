@@ -14,13 +14,13 @@ class reg_agent extends uvm_agent;
     function void build_phase(uvm_phase phase);
         super.build_phase(phase);
 
-        if(!uvm_config_db#(reg_agent_cfg)::get(this, "", "vif", vif))
+        if(!uvm_config_db#(reg_agent_cfg)::get(this, "", "cfg", cfg))
             `uvm_fatal(`gfn, "Failed to get reg_agent_cfg")
 
         monitor = reg_monitor::type_id::create("monitor", this);
 
         if(cfg.is_active) begin
-            sequencer = reg_sequencer:;type_id::create("sequencer", this);
+            sequencer = reg_sequencer::type_id::create("sequencer", this);
             if(cfg.has_driver)
                 driver = reg_driver::type_id::create("driver", this);
         end
@@ -30,7 +30,7 @@ class reg_agent extends uvm_agent;
     endfunction
 
     function void connect_phase(uvm_phase phase);
-        super.connect_phase(phase)
+        super.connect_phase(phase);
 
         uvm_config_db#(reg_agent_cfg)::set(this, "*", "cfg", cfg);
 

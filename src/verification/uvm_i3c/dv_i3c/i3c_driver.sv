@@ -256,7 +256,7 @@ class i3c_driver extends uvm_driver #(
             `uvm_info(`gfn, $sformatf(
                       "Device sampled data[%0d]=%d, T_bit=%b", i, rsp.data[i], rsp.T_bit[i]),
                       UVM_MEDIUM)
-            if ((^data) ^ t_bit == 0) begin
+            if (((^data) ^ t_bit) == 0) begin
               `uvm_warning(`gfn, $sformatf("Device sampled data is incorrect!"))
               break;
             end
