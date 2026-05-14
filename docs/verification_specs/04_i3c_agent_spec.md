@@ -1,7 +1,7 @@
 # Component: I3C Bus Agent (dv_i3c/)
 
 > Status: Adapt from reference
-> Location: `verification/uvm_i3c/dv_i3c/`
+> Location: `src/verification/uvm_i3c/dv_i3c/`
 > Reference: `i3c-core/verification/uvm_i3c/dv_i3c/` (~70KB, 10 files)
 > Estimated LoC: ~1500 lines total (10 files)
 
@@ -156,28 +156,14 @@ i3c_if i3c_bus(.clk_i(clk), .rst_ni(rst_n), .scl_io(scl_bus), .sda_io(sda_bus));
 
 ---
 
-## 4. File: i3c_agent_pkg.sv
+## 4. File: i3c_timing_pkg.sv
 
 ### 4.1. Purpose
 
-Package containing all I3C agent types, enums, timing structs, CCC definitions, and source includes.
+Package containing the timing structs shared by `i3c_if.sv` and `i3c_agent_pkg.sv`.
+This keeps the interface compilable before the agent package in Xcelium.
 
-### 4.2. Adapted from Reference
-
-Directly from `i3c-core/verification/uvm_i3c/dv_i3c/i3c_agent_pkg.sv` (282 lines).
-
-### 4.3. Key Contents
-
-#### Enums
-
-| Enum | Values | Description |
-|------|--------|-------------|
-| `if_mode_e` | `Host`, `Device` | Agent mode (Phase 1: Device only) |
-| `bus_op_e` | `BusOpWrite`, `BusOpRead` | Transfer direction |
-| `i3c_drv_phase_e` | `DrvIdle`, `DrvStart`, `DrvRStart`, `DrvAddr`, ... | Driver FSM states |
-| `i3c_ccc_e` | `ENEC`, `DISEC`, `ENTDAA`, ... | CCC command codes |
-
-#### Timing Structs
+### 4.2. Key Contents
 
 ```systemverilog
 typedef struct {
@@ -195,6 +181,37 @@ typedef struct {
   i2c_timing_t i2c_tc;
   i3c_timing_t i3c_tc;
 } bus_timing_t;
+```
+
+---
+
+## 5. File: i3c_agent_pkg.sv
+
+### 5.1. Purpose
+
+Package containing all I3C agent types, enums, CCC definitions, compatibility timing type aliases, and source includes.
+
+### 5.2. Adapted from Reference
+
+Directly from `i3c-core/verification/uvm_i3c/dv_i3c/i3c_agent_pkg.sv` (282 lines).
+
+### 5.3. Key Contents
+
+#### Enums
+
+| Enum | Values | Description |
+|------|--------|-------------|
+| `if_mode_e` | `Host`, `Device` | Agent mode (Phase 1: Device only) |
+| `bus_op_e` | `BusOpWrite`, `BusOpRead` | Transfer direction |
+| `i3c_drv_phase_e` | `DrvIdle`, `DrvStart`, `DrvRStart`, `DrvAddr`, ... | Driver FSM states |
+| `i3c_ccc_e` | `ENEC`, `DISEC`, `ENTDAA`, ... | CCC command codes |
+
+#### Timing Type Aliases
+
+```systemverilog
+typedef i3c_timing_pkg::i2c_timing_t i2c_timing_t;
+typedef i3c_timing_pkg::i3c_timing_t i3c_timing_t;
+typedef i3c_timing_pkg::bus_timing_t bus_timing_t;
 ```
 
 #### I3C Device Struct
@@ -231,13 +248,13 @@ typedef struct {
 
 ---
 
-## 5. File: i3c_seq_item.sv
+## 6. File: i3c_seq_item.sv
 
-### 5.1. Purpose
+### 6.1. Purpose
 
 Driver-side transaction item. Sequences create these to instruct the driver how to behave during a bus transaction.
 
-### 5.2. Fields
+### 6.2. Fields
 
 | Field | Type | Rand | Description |
 |-------|------|------|-------------|
@@ -251,19 +268,19 @@ Driver-side transaction item. Sequences create these to instruct the driver how 
 | `end_with_rstart` | `bit` | Yes | 1 = end with RSTART, 0 = end with STOP |
 | `is_daa` | `bit` | Yes | 1 = DAA transaction |
 
-### 5.3. Adapted from Reference
+### 6.3. Adapted from Reference
 
 Identical to `i3c-core/verification/uvm_i3c/dv_i3c/i3c_seq_item.sv` (42 lines).
 
 ---
 
-## 6. File: i3c_item.sv
+## 7. File: i3c_item.sv
 
-### 6.1. Purpose
+### 7.1. Purpose
 
 Monitor-side transaction item. Created by `i3c_monitor` to represent an observed bus transaction.
 
-### 6.2. Fields
+### 7.2. Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -282,30 +299,30 @@ Monitor-side transaction item. Created by `i3c_monitor` to represent an observed
 | `num_data` | `int` | Valid data count |
 | `tran_id` | `int` | Transaction ID from monitor |
 
-### 6.3. Utility Methods
+### 7.3. Utility Methods
 
 - `clear_data()` — reset data fields
 - `clear_flag()` — reset condition flags
 - `clear_all()` — reset everything
 - `convert2string()` — human-readable representation for debug
 
-### 6.4. Adapted from Reference
+### 7.4. Adapted from Reference
 
 Identical to `i3c-core/verification/uvm_i3c/dv_i3c/i3c_item.sv` (108 lines).
 
 ---
 
-## 7. File: i3c_driver.sv
+## 8. File: i3c_driver.sv
 
-### 7.1. Purpose
+### 8.1. Purpose
 
 Drives the I3C bus interface based on sequence items. In Phase 1, operates exclusively in **Device mode** — responds to host-initiated transactions.
 
-### 7.2. Adapted from Reference
+### 8.2. Adapted from Reference
 
 Based on `i3c-core/verification/uvm_i3c/dv_i3c/i3c_driver.sv` (714 lines).
 
-### 7.3. Key Architecture
+### 8.3. Key Architecture
 
 ```
 run_phase() forks:
@@ -314,7 +331,7 @@ run_phase() forks:
   └── drive_scl()         — SCL clock generation (Host mode only, NOT used in Phase 1)
 ```
 
-### 7.4. Device Mode FSM (get_and_drive → drive_device_item)
+### 8.4. Device Mode FSM (get_and_drive → drive_device_item)
 
 ```mermaid
 stateDiagram-v2
@@ -336,7 +353,7 @@ stateDiagram-v2
     DrvStop --> DrvIdle: Bus released
 ```
 
-### 7.5. Device Mode Key Operations
+### 8.5. Device Mode Key Operations
 
 The device-mode case statement in the reference is at `../i3c-core/verification/uvm_i3c/dv_i3c/i3c_driver.sv:447` (the second `case (bus_state)` block — the first one at line 119 is host mode and is **not** exercised in Phase 1). Copy each arm verbatim from the line cited.
 
@@ -353,11 +370,11 @@ The device-mode case statement in the reference is at `../i3c-core/verification/
 | `DrvWr` | 596 | For each byte: sample 8 SDA bits on SCL edges, send ACK/NACK per `req.T_bit[]` |
 | `DrvWrPushPull` | 611 | Same as `DrvWr` but sample T-bit (9th bit) for I3C PP write |
 
-### 7.6. Stop/RStart Detection
+### 8.6. Stop/RStart Detection
 
 The main loop (`get_and_drive`, ref lines 50–105) forks the device item processing against stop/rstart detection. If STOP is detected first (line 85), the transaction ends with `rsp.end_with_rstart = 0`. If RSTART is detected (line 89), the FSM re-enters `DrvAddrArbit` for the next sub-frame and `rsp.end_with_rstart = 1`.
 
-### 7.7. Implementation Notes
+### 8.7. Implementation Notes
 
 - **Phase 1 simplification**: Only Device mode is used (Host mode code is retained but not exercised)
 - The driver does NOT drive SCL in Device mode — only the DUT drives SCL
@@ -366,23 +383,23 @@ The main loop (`get_and_drive`, ref lines 50–105) forks the device item proces
 
 ---
 
-## 8. File: i3c_monitor.sv
+## 9. File: i3c_monitor.sv
 
-### 8.1. Purpose
+### 9.1. Purpose
 
 Passively monitors the I3C bus and constructs `i3c_item` transactions for analysis.
 
-### 8.2. Adapted from Reference
+### 9.2. Adapted from Reference
 
 Based on `i3c-core/verification/uvm_i3c/dv_i3c/i3c_monitor.sv` (~700 lines).
 
-### 8.3. Analysis Port
+### 9.3. Analysis Port
 
 ```systemverilog
 uvm_analysis_port#(i3c_item) ap;
 ```
 
-### 8.4. Behavior Overview
+### 9.4. Behavior Overview
 
 ```
 run_phase() forks:
@@ -401,20 +418,20 @@ run_phase() forks:
 6. Detect STOP or RSTART to complete transaction
 7. Build `i3c_item` and write to analysis port
 
-### 8.5. CCC Detection
+### 9.5. CCC Detection
 
 - Address `7'h7E` with W indicates broadcast CCC
 - Next byte after ACK is the CCC code
 - Monitor decodes CCC type using `i3c_ccc_e` enum
 - For direct CCCs, capture per-target address + data
 
-### 8.6. I3C vs I2C Detection
+### 9.6. I3C vs I2C Detection
 
 - If bus uses push-pull mode after address (detected by timing or mode signal), it's I3C
 - Otherwise, treated as I2C legacy frame
 - For Phase 1, the monitor infers this from the address (7'h7E = I3C, others depend on DAT configuration)
 
-### 8.7. Implementation Notes
+### 9.7. Implementation Notes
 
 - The monitor is always enabled (`cfg.en_monitor = 1`)
 - It does not affect bus timing or behavior
@@ -423,13 +440,13 @@ run_phase() forks:
 
 ---
 
-## 9. File: i3c_sequencer.sv
+## 10. File: i3c_sequencer.sv
 
-### 9.1. Purpose
+### 10.1. Purpose
 
 Standard UVM sequencer parameterized with `i3c_seq_item`.
 
-### 9.2. Implementation
+### 10.2. Implementation
 
 ```systemverilog
 class i3c_sequencer extends uvm_sequencer#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
@@ -441,13 +458,13 @@ endclass
 
 ---
 
-## 10. File: i3c_agent_cfg.sv
+## 11. File: i3c_agent_cfg.sv
 
-### 10.1. Purpose
+### 11.1. Purpose
 
 Configuration object for the I3C agent.
 
-### 10.2. Fields
+### 11.2. Fields
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -463,7 +480,7 @@ Configuration object for the I3C agent.
 | `driver_rst` | `bit` | `0` | Agent reset without DUT reset |
 | `monitor_rst` | `bit` | `0` | Monitor reset without DUT reset |
 
-### 10.3. Phase 1 Configuration
+### 11.3. Phase 1 Configuration
 
 ```systemverilog
 cfg.if_mode = Device;
@@ -476,30 +493,30 @@ cfg.i3c_target0.static_addr = 7'h50;
 
 ---
 
-## 11. File: i3c_agent.sv
+## 12. File: i3c_agent.sv
 
-### 11.1. Purpose
+### 12.1. Purpose
 
 Top-level agent class. Builds and connects driver, sequencer, and monitor.
 
-### 11.2. Adapted from Reference
+### 12.2. Adapted from Reference
 
 Identical structure to `i3c-core/verification/uvm_i3c/dv_i3c/i3c_agent.sv` (47 lines).
 
-### 11.3. build_phase
+### 12.3. build_phase
 
 1. Get `i3c_agent_cfg` from `uvm_config_db`
 2. Always create `i3c_monitor`
 3. If active: create `i3c_sequencer` and optionally `i3c_driver`
 4. Get `virtual i3c_if` from `uvm_config_db` into `cfg.vif`
 
-### 11.4. connect_phase
+### 12.4. connect_phase
 
 Connect `driver.seq_item_port` to `sequencer.seq_item_export` when active with driver.
 
 ---
 
-## 12. Changes from Reference
+## 13. Changes from Reference
 
 | Aspect | Reference | This Design |
 |--------|-----------|-------------|
@@ -509,7 +526,7 @@ Connect `driver.seq_item_port` to `sequencer.seq_item_export` when active with d
 | IBI support | Full IBI arbitration | Not implemented — out of RTL scope |
 | i3c_if connection | Direct to DUT tristate pins | Via **open-drain emulation wires** |
 
-## 13. Implementation Notes
+## 14. Implementation Notes
 
 - The entire agent should be largely copy-adaptable from the reference
 - The most critical adaptation is in `i3c_if.sv` — the open-drain bus model must properly interact with the DUT's non-tristate PHY

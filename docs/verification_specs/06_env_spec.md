@@ -1,7 +1,7 @@
 # Component: UVM Environment (i3c_core/)
 
 > Status: New (structure adapted from reference)
-> Location: `verification/uvm_i3c/i3c_core/`
+> Location: `src/verification/uvm_i3c/i3c_core/`
 > Reference: `i3c-core/verification/uvm_i3c/i3c_core/` (env, cfg, vseq, scoreboard)
 > Estimated LoC: ~400 lines (5 files)
 

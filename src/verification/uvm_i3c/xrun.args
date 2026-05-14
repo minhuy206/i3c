@@ -1,0 +1,9 @@
+-uvm
+-uvmhome CDNS-1.2
+-timescale 1ns/1ps
+-access +rwc
+-define UVM
+-64
+-xceligen on
+-nowarn DSEM2009
+-nowarn CUVIHR

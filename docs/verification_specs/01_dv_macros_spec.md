@@ -2,7 +2,7 @@
 
 > Status: Adapt from reference
 > Reference: `i3c-core/verification/uvm_i3c/dv_inc/dv_macros.svh` (647 lines)
-> Location: `verification/uvm_i3c/dv_inc/dv_macros.svh`
+> Location: `src/verification/uvm_i3c/dv_inc/dv_macros.svh`
 
 ## 1. Purpose
 

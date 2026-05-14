@@ -110,8 +110,9 @@ i3c/
 │       ├── 09_flow_active_spec.md      ← Most critical module
 │       ├── 10_controller_active_spec.md
 │       └── 11_i3c_controller_top_spec.md
-└── verification/
-    └── uvm/                    ← UVM testbench: BFMs, register model, scoreboard, coverage
+└── src/verification/
+    ├── Makefile                ← Xcelium compile/sim targets
+    └── uvm_i3c/                ← UVM testbench: BFMs, scoreboard, tests
 ```
 
 ---
