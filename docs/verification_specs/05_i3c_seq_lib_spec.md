@@ -1,7 +1,7 @@
 # Component: I3C Sequence Library (dv_i3c/seq_lib/)
 
 > Status: Adapt from reference + New
-> Location: `verification/uvm_i3c/dv_i3c/seq_lib/`
+> Location: `src/verification/uvm_i3c/dv_i3c/seq_lib/`
 > Reference: `i3c-core/verification/uvm_i3c/dv_i3c/seq_lib/` (8 sequences)
 > Estimated LoC: ~200 lines (2 files)
 

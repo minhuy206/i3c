@@ -1,7 +1,7 @@
 # Component: Register Agent (dv_reg/)
 
 > Status: New
-> Location: `verification/uvm_i3c/dv_reg/`
+> Location: `src/verification/uvm_i3c/dv_reg/`
 > Reference: Custom (no equivalent in i3c-core — replaces AXI agent placeholder)
 > Estimated LoC: ~350 lines total (8 files)
 

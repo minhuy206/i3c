@@ -1,7 +1,7 @@
 # File: i3c_csr_addr_pkg.sv
 
 > Status: New
-> Location: `verification/uvm_i3c/dv_inc/i3c_csr_addr_pkg.sv`
+> Location: `src/verification/uvm_i3c/dv_inc/i3c_csr_addr_pkg.sv`
 
 ## 1. Purpose
 

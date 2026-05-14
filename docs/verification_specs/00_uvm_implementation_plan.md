@@ -71,7 +71,7 @@ graph TB
 ## File Tree
 
 ```
-verification/
+src/verification/
 ├── README.md
 ├── Makefile
 └── uvm_i3c/
@@ -89,6 +89,7 @@ verification/
     │   ├── reg_agent.sv
     │   └── reg_agent_cfg.sv
     ├── dv_i3c/
+    │   ├── i3c_timing_pkg.sv
     │   ├── i3c_agent_pkg.sv
     │   ├── i3c_if.sv
     │   ├── i3c_seq_item.sv
@@ -174,7 +175,8 @@ sequenceDiagram
 
 ```bash
 # Compile + elaborate
-xrun -compile -elaborate -f verification/uvm_i3c/filelist.f -uvmhome CDNS-1.2
+cd src/verification
+xrun -compile -elaborate -f uvm_i3c/filelist.f -uvmhome CDNS-1.2
 
 # Run smoke test
 xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_smoke_vseq
@@ -182,6 +184,10 @@ xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_smoke_vseq
 # Run with verbosity
 xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_write_vseq +UVM_VERBOSITY=UVM_HIGH
 ```
+
+## Coding Conventions
+
+- Use `uvm_config_db` exclusively for all config passing. Do **not** use the deprecated `get_config_*`/`set_config_*` API (causes `UVM/CFG/GET/DPR` warnings and is removed in IEEE 1800.2).
 
 ## Key Differences from Reference i3c-core
 

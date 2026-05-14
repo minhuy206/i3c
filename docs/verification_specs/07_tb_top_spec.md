@@ -1,7 +1,7 @@
 # Component: Testbench Top Module
 
 > Status: New
-> Location: `verification/uvm_i3c/i3c_core/tb_i3c_top.sv`
+> Location: `src/verification/uvm_i3c/i3c_core/tb_i3c_top.sv`
 > Reference: `i3c-core/verification/uvm_i3c/i3c_core/tb_i3c_core.sv` (52 lines)
 > Estimated LoC: ~120 lines
 

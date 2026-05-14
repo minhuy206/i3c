@@ -1,8 +1,8 @@
 # Component: Build Infrastructure
 
 > Status: New
-> Location: `verification/` (root), `verification/uvm_i3c/`
-> Estimated LoC: ~100 lines (3 files)
+> Location: `src/verification/` (root), `src/verification/uvm_i3c/`
+> Estimated LoC: ~130 lines (4 files)
 
 ## 1. Purpose
 
@@ -19,7 +19,7 @@ Makefile, filelist, and Xcelium arguments for compiling and running UVM simulati
 
 ### 3.1. Location
 
-`verification/Makefile`
+`src/verification/Makefile`
 
 ### 3.2. Variables
 
@@ -45,7 +45,8 @@ compile:
 	  -timescale 1ns/1ps \
 	  -access +rwc \
 	  -define UVM \
-	  $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES,)
+	  -64 \
+	  -xceligen on
 ```
 
 #### `sim`
@@ -56,7 +57,8 @@ sim: compile
 	  +UVM_TESTNAME=$(TEST) \
 	  +UVM_TEST_SEQ=$(SEQ) \
 	  +UVM_VERBOSITY=$(VERBOSITY) \
-	  -svseed $(SEED)
+	  -svseed $(SEED) \
+	  -xceligen on $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES,)
 ```
 
 #### `smoke`
@@ -86,7 +88,8 @@ waves:
 Remove build artifacts:
 ```makefile
 clean:
-	rm -rf xcelium.d INCA_libs *.shm *.log *.key
+	rm -rf xcelium.d INCA_libs waves.shm xrun.history .simvision \
+	       xmsc_run.log *.log *.key *.shm .cxl.*
 ```
 
 ---
@@ -95,15 +98,17 @@ clean:
 
 ### 4.1. Location
 
-`verification/uvm_i3c/filelist.f`
+`src/verification/uvm_i3c/filelist.f`
 
 ### 4.2. Contents
 
 Compilation order: packages → interfaces → agents → env → tests → TB top.
 
 ```
+// Paths relative to src/verification/ (run make from that directory)
+
 // Include paths
--incdir ../src
+-incdir ../rtl
 -incdir uvm_i3c/dv_inc
 -incdir uvm_i3c/dv_reg
 -incdir uvm_i3c/dv_i3c
@@ -112,36 +117,43 @@ Compilation order: packages → interfaces → agents → env → tests → TB t
 -incdir uvm_i3c/i3c_core/i3c_vseqs
 
 // RTL packages (must come first)
-../src/i3c_pkg.sv
-../src/ctrl/controller_pkg.sv
+../rtl/i3c_pkg.sv
+../rtl/ctrl/controller_pkg.sv
 
 // RTL sources
-../src/phy/i3c_phy.sv
-../src/ctrl/edge_detector.sv
-../src/ctrl/stable_high_detector.sv
-../src/ctrl/bus_monitor.sv
-../src/scl_generator.sv
-../src/ctrl/bus_tx.sv
-../src/ctrl/bus_tx_flow.sv
-../src/ctrl/bus_rx_flow.sv
-../src/ctrl/entdaa_fsm.sv
-../src/ctrl/entdaa_controller.sv
-../src/ctrl/flow_active.sv
-../src/ctrl/controller_active.sv
-../src/hci/sync_fifo.sv
-../src/hci/hci_queues.sv
-../src/csr/csr_register.sv
-../src/i3c_controller_top.sv
+../rtl/phy/i3c_phy.sv
+../rtl/ctrl/edge_detector.sv
+../rtl/ctrl/stable_high_detector.sv
+../rtl/ctrl/bus_monitor.sv
+../rtl/scl_generator.sv
+../rtl/ctrl/bus_tx.sv
+../rtl/ctrl/bus_tx_flow.sv
+../rtl/ctrl/bus_rx_flow.sv
+../rtl/ctrl/entdaa_fsm.sv
+../rtl/ctrl/entdaa_controller.sv
+../rtl/ctrl/flow_active.sv
+../rtl/ctrl/controller_active.sv
+../rtl/hci/sync_fifo.sv
+../rtl/hci/hci_queues.sv
+../rtl/csr/csr_register.sv
+../rtl/i3c_controller_top.sv
 
-// Verification packages and includes
+// Verification: CSR address package
 uvm_i3c/dv_inc/i3c_csr_addr_pkg.sv
 
-// Verification interfaces (compiled before packages that reference them)
+// Verification: register interface (no external type deps)
 uvm_i3c/dv_reg/reg_if.sv
+
+// Verification: register agent package
+uvm_i3c/dv_reg/reg_agent_pkg.sv
+
+// Verification: I3C timing package
+uvm_i3c/dv_i3c/i3c_timing_pkg.sv
+
+// Verification: I3C interface (imports timing types from i3c_timing_pkg)
 uvm_i3c/dv_i3c/i3c_if.sv
 
-// Agent packages
-uvm_i3c/dv_reg/reg_agent_pkg.sv
+// Verification: I3C agent package
 uvm_i3c/dv_i3c/i3c_agent_pkg.sv
 
 // Environment package (includes vseqs)
@@ -159,11 +171,14 @@ uvm_i3c/i3c_core/tb_i3c_top.sv
 1. **RTL packages** — `i3c_pkg`, `controller_pkg` define shared types
 2. **RTL sources** — all design modules
 3. **CSR address package** — standalone, no dependencies
-4. **Interfaces** — `reg_if` and `i3c_if` must be compiled before agent packages that reference them via `virtual`
-5. **Agent packages** — `reg_agent_pkg` and `i3c_agent_pkg` include their agent files
-6. **Env package** — includes env, scoreboard, and virtual sequences
-7. **Test package** — includes base test
-8. **TB top** — last, instantiates everything
+4. **`reg_if`** — no external type deps; compile early
+5. **`reg_agent_pkg`** — depends on `reg_if` via `virtual reg_if` (resolved at elaboration)
+6. **`i3c_timing_pkg`** — defines shared timing types used by the interface and agent package
+7. **`i3c_if`** — imports timing types from `i3c_timing_pkg`; compiles before `i3c_agent_pkg` to avoid package/interface cycles
+8. **`i3c_agent_pkg`** — aliases timing types and includes agent classes, including cfg with `virtual i3c_if`
+9. **Env package** — includes env, scoreboard, and virtual sequences
+10. **Test package** — includes base test
+11. **TB top** — last, instantiates everything
 
 ---
 
@@ -171,7 +186,7 @@ uvm_i3c/i3c_core/tb_i3c_top.sv
 
 ### 5.1. Location
 
-`verification/uvm_i3c/xrun.args`
+`src/verification/uvm_i3c/xrun.args`
 
 ### 5.2. Purpose
 
@@ -180,24 +195,26 @@ Xcelium-specific compilation arguments that can be reused.
 ### 5.3. Contents
 
 ```
--sv
+-uvm
 -uvmhome CDNS-1.2
 -timescale 1ns/1ps
 -access +rwc
 -define UVM
+-64
+-xceligen on
 -nowarn DSEM2009
 -nowarn CUVIHR
 ```
 
-Usage: `xrun -f xrun.args -f filelist.f`
+Usage from `src/verification/`: `xrun -f uvm_i3c/xrun.args -f uvm_i3c/filelist.f`
 
 ---
 
-## 6. File: verification/README.md
+## 6. File: src/verification/README.md
 
 ### 6.1. Location
 
-`verification/README.md`
+`src/verification/README.md`
 
 ### 6.2. Contents
 
@@ -213,9 +230,10 @@ Document:
 
 ## 7. Implementation Notes
 
-- The filelist uses relative paths from `verification/` directory — run `make` from `verification/`
+- The filelist uses relative paths from `src/verification/` directory — run `make` from `src/verification/`
 - Xcelium's `-access +rwc` enables waveform probing of all signals
 - The `-define UVM` flag ensures `dv_macros.svh` uses UVM-compatible logging
-- `-nowarn DSEM2009` suppresses common SystemVerilog warnings about `import` in interfaces
+- `i3c_timing_pkg` breaks the dependency cycle between `i3c_if` timing task types and `i3c_agent_pkg`
 - Seed control via `-svseed` allows reproducible randomization
+- `+DUMP_WAVES` is a runtime plusarg and must be passed on `xrun -R`
 - For CI, the `regression` target can be extended with pass/fail reporting

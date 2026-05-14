@@ -1,7 +1,7 @@
 # Component: Tests & Virtual Sequences
 
 > Status: New (structure adapted from reference)
-> Location: `verification/uvm_i3c/i3c_core/`
+> Location: `src/verification/uvm_i3c/i3c_core/`
 > Reference: `i3c-core/verification/uvm_i3c/i3c_core/i3c_base_test.sv`, `i3c_vseqs/`
 > Estimated LoC: ~500 lines (7 files)
 

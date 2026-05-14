@@ -4,6 +4,12 @@ interface i3c_if (
     inout scl_io,
     inout sda_io
 );
+  import uvm_pkg::*;
+  import i3c_timing_pkg::i2c_timing_t;
+  import i3c_timing_pkg::i3c_timing_t;
+  `include "uvm_macros.svh"
+  `include "dv_macros.svh"
+
   logic scl_i;
   logic scl_o = 1'b1;
   logic scl_pp_en = 1'b0;

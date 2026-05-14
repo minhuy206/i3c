@@ -38,3 +38,4 @@ xrun.key
 *.diag
 docs/verification_specs/04b_i3c_driver_instruction.md
 docs/verification_specs/04c_i3c_monitor_instruction.md
+docs/report
