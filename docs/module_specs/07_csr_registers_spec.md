@@ -169,6 +169,14 @@ typedef struct packed {
 | [1]    | `SW_RESET` | RW/SC  | 0     | 1 = Reset FIFOs (self-clearing) |
 | [31:2] | Reserved   | -      | 0     | -                               |
 
+**SW_RESET usage constraint:** SW_RESET flushes the CMD, TX, RX, and RESP FIFOs. It does **not** reset the protocol FSM. Asserting SW_RESET while a transaction is in progress is undefined behavior: the FSM continues driving the bus from its already-latched command descriptor while the FIFOs are empty.
+
+**Safe usage sequence:**
+1. Poll `HC_STATUS[FSM_IDLE]` until it reads 1 (FSM has returned to Idle after the last transaction).
+2. Assert `HC_CONTROL[SW_RESET] = 1`. The pulse is self-clearing (one clock cycle).
+
+**Bus-hang recovery:** If the I3C bus is hung (e.g., a target holds SDA low), the FSM will not reach Idle and `HC_STATUS[FSM_IDLE]` will remain 0. In this case SW_RESET cannot be safely called. Recovery requires asserting `rst_ni` (hardware reset). A hardware watchdog or host-level timeout that drives `rst_ni` is the intended recovery path for this scenario. HALT/RESUME (HC_CONTROL.RESUME) is out of scope for this implementation.
+
 #### HC_STATUS (0x004)
 
 | Bit    | Field        | Access | Reset | Description                |

@@ -1,6 +1,5 @@
 module i3c_controller_top
-  import i3c_pkg::*;
-  import controller_pkg::*;
+  import i3c_pkg::DatAw;
 #(
     parameter int DatDepth      = 16,
     parameter int CmdFifoDepth  = 64,

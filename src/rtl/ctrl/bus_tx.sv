@@ -22,8 +22,7 @@ module bus_tx #(
 
     output logic sda_o
 );
-  logic [19:0] tcount_q;
-  logic [19:0] tcount_d;
+  logic [19:0] tcount_q, tcount_d;
   logic load_tcount;
 
   logic [CounterWidth-1:0] t_sd_i;
@@ -168,7 +167,7 @@ module bus_tx #(
         if (scl_negedge_i) state_d = (t_hd_z) ? Idle : HoldData;
       end
       HoldData: begin
-        if (tcount_q == 20'd0 & scl_stable_low_i) state_d = Idle;
+        if (tcount_q == 20'd0 && scl_stable_low_i) state_d = Idle;
       end
       default: begin
         state_d = state_q;

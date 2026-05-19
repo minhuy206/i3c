@@ -6,6 +6,7 @@ package i3c_pkg;
   // Constants
   localparam logic [6:0] I3C_RSVD_ADDR = 7'h7E;
   localparam logic [7:0] I3C_RSVD_BYTE = 8'hFC;
+  localparam logic [7:0] CCC_ENTDAA    = 8'h07;
 
   // DAT configuration
   localparam int unsigned DatDepth = 16;

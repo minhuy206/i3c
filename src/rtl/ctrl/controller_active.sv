@@ -1,6 +1,5 @@
 module controller_active
-  import i3c_pkg::*;
-  import controller_pkg::*;
+  import i3c_pkg::bus_state_t;
 #(
     parameter int DatDepth = 16
 ) (
@@ -66,7 +65,7 @@ module controller_active
   logic [7:0] flow_tx_req_value;
   logic flow_rx_req_byte, flow_rx_req_bit;
   logic flow_ccc_valid;
-  logic [6:0] flow_ccc_dev_addr;
+  logic [4:0] flow_daa_dev_idx;
   logic [3:0] flow_ccc_dev_count;
   logic flow_dat_read_valid;
   logic [DatAw-1:0] flow_dat_index;
@@ -95,7 +94,8 @@ module controller_active
   logic mux_tx_sel_od_pp;
   logic mux_rx_req_byte, mux_rx_req_bit;
 
-  wire  daa_active = flow_ccc_valid;
+  logic daa_active;
+  assign daa_active = flow_ccc_valid;
 
   // ---------------------------------------------------------------------------
   // Restart latch: entdaa_controller pulses req_restart for 1 cycle, but
@@ -110,7 +110,8 @@ module controller_active
     else if (scl_gen_done || !daa_active) daa_restart_pending_q <= 1'b0;
   end
 
-  wire gen_rstart_combined = flow_gen_rstart | daa_req_restart | daa_restart_pending_q;
+  logic gen_rstart_combined;
+  assign gen_rstart_combined = flow_gen_rstart | daa_req_restart | daa_restart_pending_q;
 
   // ---------------------------------------------------------------------------
   // Bus TX/RX MUX: ENTDAA controller vs flow_active
@@ -272,12 +273,9 @@ module controller_active
       .scl_gen_done_i     (scl_gen_done),
       .scl_gen_busy_i     (scl_gen_busy),
       .ccc_valid_o        (flow_ccc_valid),
-      .ccc_code_o         (),
-      .ccc_def_byte_o     (),
-      .ccc_dev_addr_o     (flow_ccc_dev_addr),
+      .daa_dev_idx_o      (flow_daa_dev_idx),
       .ccc_dev_count_o    (flow_ccc_dev_count),
       .ccc_done_i         (daa_done),
-      .ccc_invalid_i      (1'b0),
       .daa_address_i      (daa_address),
       .daa_address_valid_i(daa_address_valid),
       .daa_pid_i          (daa_pid),
@@ -295,7 +293,7 @@ module controller_active
       .rst_ni,
       .ccc_valid_i        (flow_ccc_valid),
       .dev_count_i        (flow_ccc_dev_count),
-      .dev_idx_i          (flow_ccc_dev_addr[4:0]),
+      .dev_idx_i          (flow_daa_dev_idx),
       .done_o             (daa_done),
       .req_restart_o      (daa_req_restart),
       .bus_tx_done_i      (tx_flow_done),

@@ -177,6 +177,7 @@ stateDiagram-v2
 
     WaitCmd --> DriveLow: gen_clock_i
     WaitCmd --> GenerateStop: gen_stop_i
+    WaitCmd --> GenerateRstart: gen_rstart_i
 
     GenerateStop --> SclHighForStop: SCL released HIGH
     SclHighForStop --> SdaRise: t_su_sto expired

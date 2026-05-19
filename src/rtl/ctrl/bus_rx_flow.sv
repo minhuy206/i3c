@@ -19,17 +19,8 @@ module bus_rx_flow (
   logic rx_bit_en;
   logic rx_done;
   logic req;
-  logic rx_req_bit;
 
   assign req = rx_req_bit_i | rx_req_byte_i;
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin : ff_bit_request
-    if (~rst_ni) begin
-      rx_req_bit <= '0;
-    end else begin
-      rx_req_bit <= rx_req_bit_i;
-    end
-  end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : read_bit_from_bus
     if (~rst_ni) begin
@@ -51,7 +42,7 @@ module bus_rx_flow (
       rx_data <= '0;
     end else begin
       if (bit_counter_en) begin
-        if (rx_done) rx_data[6:0] <= {rx_data[5:0], sda_i};
+        if (rx_done) rx_data[6:0] <= {rx_data[5:0], rx_bit};
       end else begin
         rx_data <= '0;
       end
@@ -75,7 +66,7 @@ module bus_rx_flow (
     if (rx_req_bit_i) begin
       rx_data_o = {7'b0, rx_bit};
     end else begin
-      rx_data_o = {rx_data[6:0], sda_i};
+      rx_data_o = {rx_data[6:0], rx_bit};
     end
   end
 
@@ -129,7 +120,7 @@ module bus_rx_flow (
 
     unique case (state_q)
       Idle: begin
-        state_d = rx_req_byte_i ? ReadByte : rx_req_bit ? ReadBit : Idle;
+        state_d = rx_req_byte_i ? ReadByte : rx_req_bit_i ? ReadBit : Idle;
       end
       ReadByte: begin
         if (!rx_req_byte_i) begin
@@ -146,7 +137,7 @@ module bus_rx_flow (
         end
       end
       NextTaskDecision: begin
-        state_d = rx_req_byte_i ? ReadByte : rx_req_bit ? ReadBit : Idle;
+        state_d = rx_req_byte_i ? ReadByte : rx_req_bit_i ? ReadBit : Idle;
       end
       default: begin
         state_d = Idle;

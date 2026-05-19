@@ -1,6 +1,4 @@
-module scl_generator
-  import i3c_pkg::*;
-#(
+module scl_generator #(
     parameter int CounterWidth = 20
 ) (
     input logic clk_i,
@@ -51,7 +49,7 @@ module scl_generator
   logic                    load_tcount;
   logic [CounterWidth-1:0] tcount_load_val;
 
-  wire                     tcount_expired = (tcount == '0);
+  logic                    tcount_expired = (tcount == '0);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_tcount
     if (!rst_ni) tcount <= '0;
@@ -194,6 +192,8 @@ module scl_generator
         WaitCmd: begin
           if (gen_stop_i) begin
             state_d = GenerateStop;
+          end else if (gen_rstart_i) begin
+            state_d = GenerateRstart;
           end else if (gen_clock_i) begin
             state_d = DriveLow;
           end

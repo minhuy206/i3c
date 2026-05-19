@@ -28,7 +28,7 @@ module edge_detector #(
       count <= '0;
     end else if (check_in_progress && detect_line) begin
       count <= count + 1'b1;
-      if (count >= delay_count) begin
+      if (count > delay_count) begin
         check_in_progress <= 1'b0;
         detect_internal   <= 1'b1;
       end
