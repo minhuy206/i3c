@@ -81,9 +81,9 @@ module sync_fifo #(
   end
 
   // Extra-MSB pointer comparison for full/empty detection
-  assign full_o   = (rptr_q == {~wptr_q[PtrW], wptr_q[PtrW-1:0]});
-  assign empty_o  = (wptr_q == rptr_q);
-  assign depth_o  = wptr_q - rptr_q;
+  assign full_o  = (rptr_q == {~wptr_q[PtrW], wptr_q[PtrW-1:0]});
+  assign empty_o = (wptr_q == rptr_q);
+  assign depth_o = wptr_q - rptr_q;
 
   assert property (@(posedge clk_i) disable iff (!rst_ni) (depth_o <= Depth))
   else $error("sync_fifo: depth_o (%0d) exceeds Depth (%0d)", depth_o, Depth);

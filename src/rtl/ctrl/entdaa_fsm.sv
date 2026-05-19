@@ -151,8 +151,8 @@ module entdaa_fsm
       end
 
       NoDev: begin
-        done_daa   = 1'b1;
-        no_device  = 1'b1;
+        done_daa = 1'b1;
+        no_device = 1'b1;
         addr_valid_d = 1'b0;
       end
       default: ;
