@@ -1,6 +1,5 @@
-module csr_registers
-  import controller_pkg::*;
-  import i3c_pkg::*;
+module csr_register
+  import controller_pkg::dat_entry_t;
 #(
     parameter int unsigned DatDepth  = 16,
     parameter int unsigned AddrWidth = 12,
@@ -86,11 +85,11 @@ module csr_registers
 
   localparam logic [CounterWidth-1:0] RST_T_R = 20'd4;
   localparam logic [CounterWidth-1:0] RST_T_F = 20'd4;
-  localparam logic [CounterWidth-1:0] RST_T_LOW = 20'd13;
-  localparam logic [CounterWidth-1:0] RST_T_HIGH = 20'd13;
-  localparam logic [CounterWidth-1:0] RST_T_SU_STA = 20'd13;
-  localparam logic [CounterWidth-1:0] RST_T_HD_STA = 20'd13;
-  localparam logic [CounterWidth-1:0] RST_T_SU_STO = 20'd13;
+  localparam logic [CounterWidth-1:0] RST_T_LOW = 20'd8;
+  localparam logic [CounterWidth-1:0] RST_T_HIGH = 20'd8;
+  localparam logic [CounterWidth-1:0] RST_T_SU_STA = 20'd8;
+  localparam logic [CounterWidth-1:0] RST_T_HD_STA = 20'd8;
+  localparam logic [CounterWidth-1:0] RST_T_SU_STO = 20'd4;
   localparam logic [CounterWidth-1:0] RST_T_SU_DAT = 20'd1;
   localparam logic [CounterWidth-1:0] RST_T_HD_DAT = 20'd4;
 
@@ -132,6 +131,7 @@ module csr_registers
         unique case (addr_i)
           ADDR_HC_CONTROL: begin
             hc_enable_q <= wdata_i[0];
+            // SW_RESET only safe when HC_STATUS[FSM_IDLE]=1; see spec §HC_CONTROL[1]
             sw_reset_q  <= wdata_i[1];
           end
           ADDR_T_R: t_r_q <= wdata_i[19:0];
@@ -160,6 +160,7 @@ module csr_registers
       cmd_dword0_q <= '0;
       cmd_wdata_q <= '0;
     end else if (sw_reset_q || (cmd_wvalid_q && cmd_wready_i)) begin
+      cmd_staging_valid_q <= 1'b0;
       cmd_wvalid_q <= '0;
     end else if (wen_i && (addr_i == ADDR_CMD_QUEUE) && !cmd_wvalid_q) begin
       if (!cmd_staging_valid_q) begin
@@ -207,9 +208,10 @@ module csr_registers
   assign tx_wvalid_o   = tx_wvalid_q;
   assign tx_wdata_o    = tx_wdata_q;
 
-  logic [DataWidth-1:0] hc_control = {30'b0, sw_reset_q, hc_enable_q};
-  logic [DataWidth-1:0] hc_status = {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i};
-  logic [DataWidth-1:0] queue_status = {
+  logic [DataWidth-1:0] hc_control, hc_status, queue_status;
+  assign hc_control  = {30'b0, sw_reset_q, hc_enable_q};
+  assign hc_status   = {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i};
+  assign queue_status = {
     24'b0,
     resp_empty_i,
     resp_full_i,

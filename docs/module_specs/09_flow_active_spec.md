@@ -15,7 +15,7 @@ The `flow_active` module is the **central command processor** of the I3C control
 5. Generating response descriptors to the RESP FIFO
 6. Accumulating errors during transactions
 
-This is the **most critical module** in the design. The reference has 8 out of 13 states unimplemented (TODO). This design implements all 13 states.
+This is the **most critical module** in the design. The reference has 8 out of 13 states unimplemented (TODO). This design implements all 14 states.
 
 ## 2. Dependencies
 
@@ -191,7 +191,8 @@ typedef enum logic [3:0] {
   StallWrite       = 4'd9,   // Wait for TX FIFO data (underflow prevention)
   StallRead        = 4'd10,  // Wait for RX FIFO space (overflow prevention)
   IssueCmd         = 4'd11,  // Drive command bytes on bus
-  WriteResp        = 4'd12   // Generate and write response descriptor
+  WriteResp        = 4'd12,  // Generate and write response descriptor
+  WaitDAT          = 4'd13   // Wait for dat_entry capture to settle (M-6 fix)
 } flow_fsm_state_e;
 ```
 
@@ -202,11 +203,13 @@ stateDiagram-v2
 
     WaitForCmd --> FetchDAT: cmd available
 
-    FetchDAT --> I2CWriteImmediate: I2C + Immediate
-    FetchDAT --> I3CWriteImmediate: I3C + Immediate
-    FetchDAT --> FetchTxData: Regular/Combo + Write
-    FetchDAT --> IssueCmd: Regular/Combo + Read
-    FetchDAT --> IssueCmd: AddressAssignment (ENTDAA)
+    FetchDAT --> WaitDAT: dat_read_valid_hw_q=1
+
+    WaitDAT --> I2CWriteImmediate: q=0, I2C + Immediate
+    WaitDAT --> I3CWriteImmediate: q=0, I3C + Immediate
+    WaitDAT --> FetchTxData: q=0, Regular/Combo + Write
+    WaitDAT --> IssueCmd: q=0, Regular/Combo + Read
+    WaitDAT --> IssueCmd: q=0, AddressAssignment (ENTDAA)
 
     I2CWriteImmediate --> WriteResp: transfer complete
     I3CWriteImmediate --> WriteResp: transfer complete
@@ -249,15 +252,22 @@ stateDiagram-v2
 
 #### FetchDAT (State 2) — IMPLEMENTED in reference
 
-- **Purpose:** Read the DAT entry pointed to by `dev_index` field of command descriptor
+- **Purpose:** Assert DAT read request; hold `dat_read_valid_hw_o = 1` for 2 cycles so the CSR FF can latch `dat_mem[dat_index]` into `dat_rdata_o`
 - **Outputs:** `dat_read_valid_hw_o = 1`, `dat_index_hw_o = dev_index`
-- **Actions:** Capture `dat_rdata_hw_i` after 1-cycle latency
-- **Transition (on `dat_captured`):**
+- **Transition:** → `WaitDAT` unconditionally when `dat_read_valid_hw_q = 1`
+
+#### WaitDAT (State 13) — new (M-6 fix)
+
+- **Purpose:** Allow the `dat_entry` capture FF to re-fire with the correct `dat_rdata_o` before using `dat_entry.device` to select the next state.
+- **Background:** `dat_rdata_o` in `csr_register` is a FF updated by `dat_read_valid_hw_q`. The `dat_entry` capture FF in `flow_active` is also gated by `dat_read_valid_hw_q`. Both fire at the same posedge (K+2), so `dat_entry` captures the OLD `dat_rdata_o`. Staying in WaitDAT one extra cycle lets `dat_read_valid_hw_q` fall to 0 while `dat_rdata_o` is already NEW; the capture FF re-fires at posedge K+3 reading the correct value.
+- **Outputs:** none (all defaults; `dat_read_valid_hw_d = 0` is critical — lets `q` drop to 0)
+- **Transition (on `!dat_read_valid_hw_q`):**
   - `cmd_attr == Immediate && i2c_cmd` → `I2CWriteImmediate`
-  - `cmd_attr == Immediate && !i2c_cmd` → `I3CWriteImmediate` (covers private writes and ENEC/DISEC CCCs)
-  - `cmd_attr == AddressAssignment` → `IssueCmd` (ENTDAA; no DAT read needed here — entdaa_controller reads DAT per round)
+  - `cmd_attr == Immediate && !i2c_cmd` → `I3CWriteImmediate`
+  - `cmd_attr == AddressAssignment` → `IssueCmd` (ENTDAA)
   - `cmd_dir == Write` → `FetchTxData`
   - `cmd_dir == Read` → `IssueCmd`
+- **Timing cost:** +2 cycles vs original FetchDAT direct dispatch (negligible vs SCL timing)
 
 #### I2CWriteImmediate (State 4) — IMPLEMENTED in reference
 

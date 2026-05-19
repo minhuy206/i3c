@@ -1,6 +1,5 @@
 module entdaa_controller
-  import i3c_pkg::*;
-  import controller_pkg::*;
+  import controller_pkg::dat_entry_t;
 #(
     parameter int DatDepth = 16,
     localparam int unsigned DatAw = $clog2(DatDepth)
@@ -63,6 +62,8 @@ module entdaa_controller
   logic [47:0] pid;
   logic [7:0] bcr;
   logic [7:0] dcr;
+
+  logic [5:0] dat_sum;
 
   logic entdaa_tx_req_byte;
   logic entdaa_tx_req_bit;
@@ -167,6 +168,7 @@ module entdaa_controller
   always_comb begin
     dat_read_valid_o = 1'b0;
     dat_index_o = '0;
+    dat_sum = '0;
     req_restart_o = 1'b0;
     start_daa = 1'b0;
     done_o = 1'b0;
@@ -189,10 +191,11 @@ module entdaa_controller
 
       WaitRestart: begin
         dat_read_valid_o = 1'b1;
-        if ((dev_idx_i + dev_round_q) >= DatDepth) begin
+        dat_sum = {1'b0, dev_idx_i} + {2'b00, dev_round_q};
+        if (dat_sum >= DatDepth) begin
           dat_index_o = DatDepth - 1;
         end else begin
-          dat_index_o = dev_idx_i[DatAw-1:0] + dev_round_q[DatAw-1:0];
+          dat_index_o = dat_sum[DatAw-1:0];
         end
       end
 
