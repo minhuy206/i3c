@@ -1,4 +1,4 @@
-module csr_register
+module csr_registers
   import controller_pkg::dat_entry_t;
 #(
     parameter int unsigned DatDepth  = 16,

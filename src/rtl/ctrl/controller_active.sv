@@ -1,5 +1,6 @@
 module controller_active
-  import i3c_pkg::bus_state_t;
+  import i3c_pkg::bus_state_t,
+         i3c_pkg::DatAw;
 #(
     parameter int DatDepth = 16
 ) (

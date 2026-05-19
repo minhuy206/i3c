@@ -49,7 +49,8 @@ module scl_generator #(
   logic                    load_tcount;
   logic [CounterWidth-1:0] tcount_load_val;
 
-  logic                    tcount_expired = (tcount == '0);
+  logic                    tcount_expired;
+  assign tcount_expired = (tcount == '0);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_tcount
     if (!rst_ni) tcount <= '0;
