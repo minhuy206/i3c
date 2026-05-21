@@ -137,7 +137,8 @@ module flow_active
   logic nack_detected_d, nack_detected_q;
   logic short_read_d, short_read_q;
   logic addr_nack_d, addr_nack_q;
-  logic scl_done_pending_q;
+  logic scl_done_pending_d, scl_done_pending_q;
+  logic entdaa_stop_req_d, entdaa_stop_req_q;
 
   logic gen_start;
   logic gen_rstart;
@@ -332,10 +333,17 @@ module flow_active
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_scl_done_pending
     if (!rst_ni) begin
       scl_done_pending_q <= 1'b0;
-    end else if (state_q != IssueCmd) begin
-      scl_done_pending_q <= 1'b0;
-    end else if (scl_gen_done_i) begin
-      scl_done_pending_q <= 1'b1;
+    end else begin
+      scl_done_pending_q <= scl_done_pending_d;
+    end
+  end
+
+  // M-5 latch: ENTDAA STOP request, held until scl_generator signals completion.
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_entdaa_stop_req
+    if (!rst_ni) begin
+      entdaa_stop_req_q <= 1'b0;
+    end else begin
+      entdaa_stop_req_q <= entdaa_stop_req_d;
     end
   end
 
@@ -484,7 +492,7 @@ module flow_active
 
       IssueCmd: begin
         if (cmd_attr == AddressAssignment) begin
-          if (ccc_done_i && issue_phase_q >= 8'd5) begin
+          if (entdaa_stop_req_q && scl_gen_done_i) begin
             state_d = WriteResp;
           end
         end else if (cmd_dir == Write) begin
@@ -536,6 +544,7 @@ module flow_active
     i3c_fsm_idle = 1'b0;
     cmd_queue_rready = 1'b0;
     dat_read_valid_hw_d = 1'b0;
+    scl_done_pending_d = 1'b0;
     dat_index_hw = '0;
 
     tx_queue_rready = 1'b0;
@@ -559,6 +568,7 @@ module flow_active
     addr_nack_d = addr_nack_q;
     nack_detected_d = nack_detected_q;
     short_read_d = short_read_q;
+    entdaa_stop_req_d = entdaa_stop_req_q;
 
     gen_start = 1'b0;
     gen_rstart = 1'b0;
@@ -595,6 +605,7 @@ module flow_active
         addr_nack_d = 1'b0;
         nack_detected_d = 1'b0;
         short_read_d = 1'b0;
+        entdaa_stop_req_d = 1'b0;
       end
 
       WaitForCmd: begin
@@ -983,6 +994,9 @@ module flow_active
       IssueCmd: begin
         gen_clock = 1'b1;
 
+        scl_done_pending_d = scl_done_pending_q;
+        if (scl_gen_done_i) scl_done_pending_d = 1'b1;
+
         if (cmd_attr == AddressAssignment) begin
           sel_i3c_i2c = 1'b1;
           sel_od_pp   = 1'b0;
@@ -1053,7 +1067,9 @@ module flow_active
                   daa_wr_phase_d = daa_wr_phase_q + 2'd1;
                 end
               end
-              if (ccc_done_i) begin
+              if (entdaa_stop_req_q && scl_gen_done_i) entdaa_stop_req_d = 1'b0;
+              if (ccc_done_i)                          entdaa_stop_req_d = 1'b1;
+              if (ccc_done_i || entdaa_stop_req_q) begin
                 gen_stop = 1'b1;
               end
             end
