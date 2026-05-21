@@ -104,11 +104,17 @@ module controller_active
   // ---------------------------------------------------------------------------
 
   logic daa_restart_pending_q;
+  logic daa_restart_pending_d;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_daa_restart_pending
     if (!rst_ni) daa_restart_pending_q <= 1'b0;
-    else if (daa_req_restart) daa_restart_pending_q <= 1'b1;
-    else if (scl_gen_done || !daa_active) daa_restart_pending_q <= 1'b0;
+    else         daa_restart_pending_q <= daa_restart_pending_d;
+  end
+
+  always_comb begin : compute_daa_restart_pending_d
+    daa_restart_pending_d = daa_restart_pending_q;
+    if (daa_req_restart)                  daa_restart_pending_d = 1'b1;
+    else if (scl_gen_done || !daa_active) daa_restart_pending_d = 1'b0;
   end
 
   logic gen_rstart_combined;
@@ -169,7 +175,6 @@ module controller_active
       .enable_i(ctrl_enable_i),
       .scl_i   (ctrl_scl_i),
       .sda_i   (ctrl_sda_i),
-      .t_hd_dat_i,
       .t_r_i,
       .t_f_i,
       .state_o (bus_state)

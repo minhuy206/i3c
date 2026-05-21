@@ -12,7 +12,6 @@ module bus_monitor
     input logic scl_i,
     input logic sda_i,
 
-    input logic [CounterWidth-1:0] t_hd_dat_i,
     input logic [CounterWidth-1:0] t_r_i,
     input logic [CounterWidth-1:0] t_f_i,
 

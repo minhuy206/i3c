@@ -33,10 +33,16 @@ module bus_tx #(
 
   assign t_sd_i = t_r_i + t_su_dat_i;
 
-  always_ff @(posedge clk_i) begin
-    t_sd   <= t_sd_i;
-    t_sd_z <= t_sd_i == 20'd0;
-    t_hd_z <= t_hd_dat_i == 20'd0;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      t_sd   <= '0;
+      t_sd_z <= 1'b0;
+      t_hd_z <= 1'b0;
+    end else begin
+      t_sd   <= t_sd_i;
+      t_sd_z <= t_sd_i == 20'd0;
+      t_hd_z <= t_hd_dat_i == 20'd0;
+    end
   end
 
   // Clock counter implementation

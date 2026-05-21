@@ -156,8 +156,11 @@ module entdaa_controller
           end
         end
 
+        // M-7 fix: hold Done state (and thus done_o) until flow_active leaves
+        // IssueCmd (ccc_valid_i drops). Prevents missed-pulse hang if future
+        // changes add gating to flow_active's entdaa_stop_req_q latch.
         Done: begin
-          state_d = Idle;
+          if (!ccc_valid_i) state_d = Idle;
         end
 
         default: ;
