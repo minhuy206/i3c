@@ -1,13 +1,12 @@
-module i3c_controller_top
-  import i3c_pkg::DatAw;
-#(
-    parameter int DatDepth      = 16,
-    parameter int CmdFifoDepth  = 64,
-    parameter int TxFifoDepth   = 64,
-    parameter int RxFifoDepth   = 64,
-    parameter int RespFifoDepth = 64,
-    parameter int AddrWidth     = 12,
-    parameter int DataWidth     = 32
+module i3c_controller_top #(
+    parameter  int unsigned DatDepth      = 16,
+    parameter  int unsigned CmdFifoDepth  = 64,
+    parameter  int unsigned TxFifoDepth   = 64,
+    parameter  int unsigned RxFifoDepth   = 64,
+    parameter  int unsigned RespFifoDepth = 64,
+    parameter  int unsigned AddrWidth     = 12,
+    parameter  int unsigned DataWidth     = 32,
+    localparam int unsigned DatAw         = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,

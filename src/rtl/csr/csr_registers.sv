@@ -1,4 +1,4 @@
-module csr_register
+module csr_registers
   import controller_pkg::dat_entry_t;
 #(
     parameter int unsigned DatDepth  = 16,
@@ -209,8 +209,8 @@ module csr_register
   assign tx_wdata_o    = tx_wdata_q;
 
   logic [DataWidth-1:0] hc_control, hc_status, queue_status;
-  assign hc_control  = {30'b0, sw_reset_q, hc_enable_q};
-  assign hc_status   = {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i};
+  assign hc_control = {30'b0, sw_reset_q, hc_enable_q};
+  assign hc_status = {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i};
   assign queue_status = {
     24'b0,
     resp_empty_i,
@@ -262,7 +262,9 @@ module csr_register
     end
   end
 
-  always_ff @(posedge clk_i) begin
-    if (dat_read_valid_i) dat_rdata_o <= dat_mem[dat_index_i];
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) dat_rdata_o <= '0;
+    else if (dat_read_valid_i) dat_rdata_o <= dat_mem[dat_index_i];
   end
+
 endmodule

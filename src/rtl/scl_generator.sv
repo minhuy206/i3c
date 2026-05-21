@@ -4,14 +4,15 @@ module scl_generator #(
     input logic clk_i,
     input logic rst_ni,
 
-    input  logic gen_start_i,
-    input  logic gen_rstart_i,
-    input  logic gen_stop_i,
-    input  logic gen_clock_i,
-    input  logic gen_idle_i,
-    input  logic sel_i3c_i2c_i,  // informational; timing via CSR
+    input logic gen_start_i,
+    input logic gen_rstart_i,
+    input logic gen_stop_i,
+    input logic gen_clock_i,
+    input logic gen_idle_i,
+    input logic sel_i3c_i2c_i,  // informational; timing via CSR
     output logic done_o,
     output logic busy_o,
+    output logic sda_ctrl_active_o,
 
     input logic [CounterWidth-1:0] t_low_i,
     input logic [CounterWidth-1:0] t_high_i,
@@ -49,7 +50,8 @@ module scl_generator #(
   logic                    load_tcount;
   logic [CounterWidth-1:0] tcount_load_val;
 
-  logic                    tcount_expired = (tcount == '0);
+  logic                    tcount_expired;
+  assign tcount_expired = (tcount == '0);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_tcount
     if (!rst_ni) tcount <= '0;
@@ -254,4 +256,15 @@ module scl_generator #(
                   ((state_q == SdaRise) && (state_d == Idle));
 
   assign busy_o = (state_q != Idle);
+
+  // HIGH during START/Sr/STOP generation — scl_gen owns SDA in these states
+  assign sda_ctrl_active_o = (state_q == GenerateStart)  |
+                              (state_q == SdaFall)         |
+                              (state_q == HoldStart)       |
+                              (state_q == GenerateRstart)  |
+                              (state_q == SclHigh)         |
+                              (state_q == RstartSdaFall)   |
+                              (state_q == GenerateStop)    |
+                              (state_q == SclHighForStop)  |
+                              (state_q == SdaRise);
 endmodule

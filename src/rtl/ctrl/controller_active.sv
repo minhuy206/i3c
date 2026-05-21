@@ -1,7 +1,8 @@
 module controller_active
   import i3c_pkg::bus_state_t;
 #(
-    parameter int DatDepth = 16
+    parameter  int unsigned DatDepth = 16,
+    localparam int unsigned DatAw    = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -55,7 +56,7 @@ module controller_active
   bus_state_t bus_state;
 
   logic scl_gen_scl, scl_gen_sda;
-  logic scl_gen_done, scl_gen_busy;
+  logic scl_gen_done, scl_gen_busy, scl_gen_driving_sda;
 
   logic flow_gen_start, flow_gen_rstart, flow_gen_stop;
   logic flow_gen_clock, flow_gen_idle;
@@ -153,9 +154,10 @@ module controller_active
   // Output assignments
   // ---------------------------------------------------------------------------
 
-  assign ctrl_scl_o  = scl_gen_scl;
-  assign ctrl_sda_o  = scl_gen_sda & tx_flow_sda;
-  assign sel_od_pp_o = tx_flow_sel_od_pp;
+  assign ctrl_scl_o = scl_gen_scl;
+  assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda  // M-2: priority MUX
+      : !tx_flow_idle ? tx_flow_sda : 1'b1;
+  assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;  // M-4: force OD
 
   // ---------------------------------------------------------------------------
   // Sub-module instances
@@ -176,14 +178,15 @@ module controller_active
   scl_generator u_scl_gen (
       .clk_i,
       .rst_ni,
-      .gen_start_i  (flow_gen_start),
-      .gen_rstart_i (gen_rstart_combined),
-      .gen_stop_i   (flow_gen_stop),
-      .gen_clock_i  (flow_gen_clock),
-      .gen_idle_i   (flow_gen_idle),
-      .sel_i3c_i2c_i(flow_sel_i3c_i2c),
-      .done_o       (scl_gen_done),
-      .busy_o       (scl_gen_busy),
+      .gen_start_i      (flow_gen_start),
+      .gen_rstart_i     (gen_rstart_combined),
+      .gen_stop_i       (flow_gen_stop),
+      .gen_clock_i      (flow_gen_clock),
+      .gen_idle_i       (flow_gen_idle),
+      .sel_i3c_i2c_i    (flow_sel_i3c_i2c),
+      .done_o           (scl_gen_done),
+      .busy_o           (scl_gen_busy),
+      .sda_ctrl_active_o(scl_gen_driving_sda),
       .t_low_i,
       .t_high_i,
       .t_su_sta_i,
@@ -191,9 +194,9 @@ module controller_active
       .t_su_sto_i,
       .t_r_i,
       .t_f_i,
-      .scl_i        (bus_state.scl.value),
-      .scl_o        (scl_gen_scl),
-      .sda_o        (scl_gen_sda)
+      .scl_i            (bus_state.scl.value),
+      .scl_o            (scl_gen_scl),
+      .sda_o            (scl_gen_sda)
   );
 
   bus_tx_flow u_tx_flow (
