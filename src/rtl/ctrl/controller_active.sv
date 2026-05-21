@@ -175,7 +175,6 @@ module controller_active
       .enable_i(ctrl_enable_i),
       .scl_i   (ctrl_scl_i),
       .sda_i   (ctrl_sda_i),
-      .t_hd_dat_i,
       .t_r_i,
       .t_f_i,
       .state_o (bus_state)
