@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Adapted from CHIPS Alliance i3c-core for simplified I3C Master Controller
-
 package i3c_pkg;
 
   // Constants

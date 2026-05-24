@@ -1,8 +1,8 @@
 # Module: bus_monitor
 
-> Status: Reuse
+> Status: Complete
 > Reference: `i3c-core/src/ctrl/bus_monitor.sv` (229 lines)
-> Estimated LoC: ~230 lines
+> Estimated LoC: ~226 lines
 
 ## 1. Purpose
 
@@ -12,8 +12,8 @@ The bus monitor detects bus events (START, Repeated START, STOP) by observing tr
 
 ### Sub-modules
 
-- `edge_detector` — Timing-aware edge detector (parameterized for rising/falling)
-- `stable_high_detector` — Detects stable HIGH/LOW level for a configurable duration
+- `edge_detector` — Timing-aware edge detector (no own spec; cross-referenced here)
+- `stable_high_detector` — Detects stable HIGH/LOW level for a configurable duration (no own spec; cross-referenced here)
 
 ### Parent modules
 
@@ -45,7 +45,9 @@ typedef struct packed {
 
 ## 3. Parameters
 
-None (timing is configured via input ports).
+| Parameter      | Type | Default | Description                        |
+| -------------- | ---- | ------- | ---------------------------------- |
+| `CounterWidth` | int  | 20      | Width of timing delay counters     |
 
 ## 4. Ports / Interfaces
 
@@ -71,11 +73,10 @@ None (timing is configured via input ports).
 
 ### Timing Configuration
 
-| Signal       | Direction | Width | Description                          |
-| ------------ | --------- | ----- | ------------------------------------ |
-| `t_hd_dat_i` | Input     | 20    | Data hold time (system clock cycles) |
-| `t_r_i`      | Input     | 20    | Rise time (system clock cycles)      |
-| `t_f_i`      | Input     | 20    | Fall time (system clock cycles)      |
+| Signal  | Direction | Width        | Description                     |
+| ------- | --------- | ------------ | ------------------------------- |
+| `t_r_i` | Input     | CounterWidth | Rise time (system clock cycles) |
+| `t_f_i` | Input     | CounterWidth | Fall time (system clock cycles) |
 
 ### Output
 
@@ -92,7 +93,6 @@ flowchart LR
     sda_i["sda_i\n(sync)"]
     t_r_i["t_r_i"]
     t_f_i["t_f_i"]
-    t_hd_dat_i["t_hd_dat_i\n(unused here)"]
     enable_i["enable_i"]
 
     %% ── bus_monitor boundary ─────────────────────────────────────────────────
@@ -176,7 +176,7 @@ The module instantiates 4 `edge_detector` instances and 3 `stable_high_detector`
 | `stable_detector_scl_high`  | SCL stable HIGH  | `t_r_i` | `scl_stable_high` |
 | `stable_detector_scl_low`   | SCL stable LOW   | `t_f_i` | `scl_stable_low`  |
 
-The timing delays account for rise/fall times on the physical bus — an edge is only confirmed after the signal has been stable for the specified duration.
+The timing delays account for rise/fall times on the physical bus — an edge is only confirmed after the signal has been stable for the specified duration. Only `t_r_i` and `t_f_i` are consumed by this module; `t_hd_dat_i` and other timing registers are not connected to `bus_monitor`.
 
 ### 6.2. Edge Detector Sub-module (`edge_detector`)
 
@@ -186,16 +186,16 @@ module edge_detector #(
 )(
   input  logic        clk_i,
   input  logic        rst_ni,
-  input  logic        trigger,      // Raw edge detection pulse
-  input  logic        line,         // Current line value (registered)
-  input  logic [19:0] delay_count,  // Rise/fall time in clock cycles
-  output logic        detect        // Confirmed edge pulse
+  input  logic        trigger,
+  input  logic        line,
+  input  logic [CounterWidth-1:0] delay_count,
+  output logic        detect
 );
 ```
 
 **Behavior:**
 
-- `trigger` fires on raw edge (combinational from previous/current sample)
+- `trigger` fires on raw edge
 - If `delay_count == 0`: `detect = trigger` (immediate)
 - If `delay_count > 0`: Start counter, confirm edge only if `line` remains stable for `delay_count` cycles
 
@@ -205,9 +205,9 @@ module edge_detector #(
 module stable_high_detector (
   input  logic        clk_i,
   input  logic        rst_ni,
-  input  logic        line_i,         // Signal to monitor
-  input  logic [19:0] delay_count_i,  // Required stable duration
-  output logic        stable_o        // Asserted when stable
+  input  logic        line_i,
+  input  logic [CounterWidth-1:0] delay_count_i,
+  output logic        stable_o
 );
 ```
 
@@ -257,14 +257,14 @@ state_o.rstart_det = start_det &  rstart_detection_en  (subsequent STARTs)
 
 ```systemverilog
 // SDA state
-state_o.sda.value       = sda;          // Filtered SDA value
+state_o.sda.value       = sda;
 state_o.sda.pos_edge    = sda_posedge;
 state_o.sda.neg_edge    = sda_negedge;
 state_o.sda.stable_high = sda_stable_high;
 state_o.sda.stable_low  = '0;           // Unused
 
 // SCL state
-state_o.scl.value       = scl;          // Filtered SCL value
+state_o.scl.value       = scl;
 state_o.scl.pos_edge    = scl_posedge;
 state_o.scl.neg_edge    = scl_negedge;
 state_o.scl.stable_high = scl_stable_high;
@@ -276,7 +276,7 @@ state_o.rstart_det = start_det &  rstart_detection_en;
 state_o.stop_det   = stop_det;
 ```
 
-Note: `sda.stable_low` is permanently `'0` (unused in the reference design).
+Note: `sda.stable_low` is permanently `'0` (unused).
 
 ## 7. Timing Requirements
 
@@ -288,15 +288,18 @@ Note: `sda.stable_low` is permanently `'0` (unused in the reference design).
 
 ### Timing Register Values (at 333 MHz system clock, T_clk = 3 ns)
 
-| Parameter    | I3C SDR Value | I2C FM Value | Unit   |
-| ------------ | ------------- | ------------ | ------ |
-| `t_r_i`      | 4 (12 ns)     | 100 (300 ns) | cycles |
-| `t_f_i`      | 4 (12 ns)     | 100 (300 ns) | cycles |
-| `t_hd_dat_i` | 4 (12 ns)     | 0            | cycles |
+| Parameter | I3C SDR Value | I2C FM Value | Unit   |
+| --------- | ------------- | ------------ | ------ |
+| `t_r_i`   | 4 (12 ns)     | 100 (300 ns) | cycles |
+| `t_f_i`   | 4 (12 ns)     | 100 (300 ns) | cycles |
 
 ## 8. Changes from Reference Design
 
-None. This module is reused as-is from the reference design. The sub-modules (`edge_detector`, `stable_high_detector`) are also reused unchanged.
+| Aspect               | Reference                             | This Design                  |
+| -------------------- | ------------------------------------- | ---------------------------- |
+| Sub-module origin    | `caliptra_prim_*` primitives          | Generic `edge_detector`, `stable_high_detector` |
+| Timing port list     | Same `t_r_i`, `t_f_i` only           | Same (no `t_hd_dat_i`)       |
+| `CounterWidth` param | 20 (hardcoded)                        | Parameterized `CounterWidth` |
 
 ## 9. Error Handling
 
@@ -320,22 +323,13 @@ None. This module is reused as-is from the reference design. The sub-modules (`e
 ### UVM Test Structure
 
 ```
-verification/uvm/
-  tb_top.sv                    # DUT instantiation + clock/reset generation
-  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
-  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
-  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
-  i3c_driver.sv                # Drives SCL/SDA and register bus
-  i3c_monitor.sv               # Samples bus transactions
-  i3c_scoreboard.sv            # Checks responses vs expected
-  i3c_coverage.sv              # Functional coverage groups
+src/verification/uvm_i3c/
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_base_vseq.sv
+    i3c_entdaa_vseq.sv
+    i3c_private_write_vseq.sv
+    i3c_private_read_vseq.sv
+    i3c_i2c_write_vseq.sv
   tests/
     i3c_base_test.sv
     i3c_entdaa_test.sv
@@ -348,6 +342,7 @@ verification/uvm/
 
 ## 11. Implementation Notes
 
-- The `sda` and `scl` internal signals (used for output `.value`) are registered versions that update only on confirmed edges — they are NOT the raw `sda_i`/`sda_i_q` signals. This provides additional filtering.
+- `bus_monitor` receives **only** `t_r_i` and `t_f_i` from the timing register bus. It does not receive `t_hd_dat_i`, `t_low_i`, `t_high_i`, or any other timing inputs. `controller_active` routes only these two signals to `u_bus_mon`.
+- The `sda` and `scl` internal signals (used for output `.value`) are registered versions that update only on confirmed edges — they are NOT the raw `sda_i`/`sda_i_q` signals.
 - The pending mechanism (`start_det_pending`, `stop_det_pending`) creates a 1-cycle pulse. The pending flag is cleared when: the detection fires, `enable` is deasserted, `scl` goes LOW, or the opposite condition triggers.
-- The `t_hd_dat_i` input is accepted but not used within this module — it is only needed by `bus_tx_flow`. It exists in the port list for interface consistency with the parent module.
+- `edge_detector` and `stable_high_detector` are utility sub-modules with no own spec; they are cross-referenced in the Dependencies section.

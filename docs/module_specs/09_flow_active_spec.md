@@ -1,8 +1,8 @@
 # Module: flow_active (Command Flow FSM)
 
-> Status: Simplify + Improve
+> Status: Complete
 > Reference: `i3c-core/src/ctrl/flow_active.sv` (580 lines)
-> Estimated LoC: ~500 lines
+> Estimated LoC: ~1300 lines
 
 ## 1. Purpose
 
@@ -15,7 +15,7 @@ The `flow_active` module is the **central command processor** of the I3C control
 5. Generating response descriptors to the RESP FIFO
 6. Accumulating errors during transactions
 
-This is the **most critical module** in the design. The reference has 8 out of 13 states unimplemented (TODO). This design implements all 14 states.
+This is the **most critical module** in the design. The reference has 8 out of 14 states unimplemented (TODO). This design implements all 14 states.
 
 ## 2. Dependencies
 
@@ -125,28 +125,27 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 
 ### SCL Generator Control
 
-| Signal           | Direction | Width | Description                                                                                |
-| ---------------- | --------- | ----- | ------------------------------------------------------------------------------------------ |
-| `gen_start_o`    | Output    | 1     | Request START                                                                              |
-| `gen_rstart_o`   | Output    | 1     | Request Repeated START (driven both by flow_active and in response to `ccc_req_restart_i`) |
-| `gen_stop_o`     | Output    | 1     | Request STOP                                                                               |
-| `gen_clock_o`    | Output    | 1     | Enable clock generation                                                                    |
-| `gen_idle_o`     | Output    | 1     | Force return to idle (abort)                                                               |
-| `sel_i3c_i2c_o`  | Output    | 1     | 0 = I2C FM, 1 = I3C SDR                                                                    |
-| `scl_gen_done_i` | Input     | 1     | SCL generator operation complete                                                           |
-| `scl_gen_busy_i` | Input     | 1     | SCL generator is busy                                                                      |
+| Signal           | Direction | Width | Description                      |
+| ---------------- | --------- | ----- | -------------------------------- |
+| `gen_start_o`    | Output    | 1     | Request START                    |
+| `gen_rstart_o`   | Output    | 1     | Request Repeated START           |
+| `gen_stop_o`     | Output    | 1     | Request STOP                     |
+| `gen_clock_o`    | Output    | 1     | Enable clock generation          |
+| `gen_idle_o`     | Output    | 1     | Force return to idle (abort)     |
+| `sel_i3c_i2c_o`  | Output    | 1     | 0 = I2C FM, 1 = I3C SDR          |
+| `scl_gen_done_i` | Input     | 1     | SCL generator operation complete |
+| `scl_gen_busy_i` | Input     | 1     | SCL generator is busy            |
 
 ### ENTDAA Control (to entdaa_controller module)
 
-> **Note:** The `entdaa_controller` module is now an ENTDAA-only engine. ENEC and DISEC are handled entirely within `flow_active` via the `I3CWriteImmediate` state and do not involve this interface.
+> **Note:** The `entdaa_controller` module is an ENTDAA-only engine. ENEC and DISEC are handled entirely within `flow_active` via the `I3CWriteImmediate` state. The restart signal between `entdaa_controller` and `scl_generator` is handled by `controller_active`'s `daa_restart_pending_q` latch — `flow_active` does not service restart requests directly.
 
-| Signal              | Direction | Width | Description                                                                |
-| ------------------- | --------- | ----- | -------------------------------------------------------------------------- |
-| `ccc_valid_o`       | Output    | 1     | Start ENTDAA; held high until `ccc_done_i`                                 |
-| `ccc_dev_count_o`   | Output    | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)         |
-| `daa_dev_idx_o`     | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`)  |
-| `daa_done_i`        | Input     | 1     | ENTDAA complete (from `entdaa_controller.done_o`)                          |
-| `daa_req_restart_i` | Input     | 1     | Pulse: `entdaa_controller` requests a Repeated START for next device round |
+| Signal            | Direction | Width | Description                                                               |
+| ----------------- | --------- | ----- | ------------------------------------------------------------------------- |
+| `ccc_valid_o`     | Output    | 1     | Start ENTDAA; held high until `ccc_done_i`                                |
+| `ccc_dev_count_o` | Output    | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)        |
+| `daa_dev_idx_o`   | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
+| `ccc_done_i`      | Input     | 1     | ENTDAA complete (from `entdaa_controller.done_o`)                         |
 
 ### ENTDAA Results (from entdaa_controller module)
 
@@ -235,7 +234,7 @@ stateDiagram-v2
     WriteResp --> Idle: response written
 ```
 
-### 5.2. State Descriptions (All 13 States)
+### 5.2. State Descriptions (All 14 States)
 
 #### Idle (State 0) — IMPLEMENTED in reference
 
@@ -392,16 +391,15 @@ stateDiagram-v2
   - Receive bytes via `bus_rx_flow`, check T-bit
   - Drive ACK/NACK (ACK if more data expected, NACK on last byte)
   - Accumulate into 32-bit DWORD, push to RX FIFO when full
-  - When `data_length` reached or target signals end (T-bit=0): → `WriteResp`
+  - When `data_length` reached or target signals end (T-bit=0): → `WriteResp` with `I3cShortReadErr` if fewer bytes than requested
 - **Actions (ENTDAA):**
   - Set `sel_i3c_i2c_o = 1` (I3C mode)
   - Generate START (Open-Drain)
   - Send `{7'h7E, 1'b0}` broadcast header; read ACK
   - Send ENTDAA code `8'h07`; read ACK
-  - Activate CCC module: assert `ccc_valid_o = 1`, provide `ccc_dev_count_o` and `ccc_dev_idx_o` from command descriptor fields
-  - While `ccc_valid_o` is held high, respond to `ccc_req_restart_i` by asserting `gen_rstart_o` to scl_generator; hold `gen_rstart_o` until `scl_gen_done_i`
+  - Activate entdaa_controller: assert `ccc_valid_o = 1`, provide `ccc_dev_count_o` and `daa_dev_idx_o` from command descriptor
+  - Wait for `ccc_done_i`; deassert `ccc_valid_o` (the `daa_restart_pending_q` latch in `controller_active` routes each restart pulse from `entdaa_controller` to `scl_generator` automatically — `flow_active` does not service restart requests)
   - On each `daa_address_valid_i` pulse: forward `daa_address_i`, `daa_pid_i`, `daa_bcr_i`, `daa_dcr_i` to RX FIFO for SW readback
-  - Wait for `ccc_done_i`; deassert `ccc_valid_o`
   - Generate STOP; → `WriteResp`
 - **OD/PP switching:**
   - I2C transfers: always Open-Drain
@@ -444,24 +442,24 @@ assign cmd_dir  = cmd_desc[29] ? Read : Write;
 
 **Address Assignment (`attr = 3'b010`):**
 
-- `dev_count` in bits [29:26] → drives `daa_dev_count_o`
+- `dev_count` in bits [29:26] → drives `ccc_dev_count_o`
 - `dev_idx` in bits [20:16] → drives `daa_dev_idx_o` (starting DAT index; entdaa_controller reads DAT entries `[dev_idx .. dev_idx + dev_count - 1]`)
-- Triggers ENTDAA via entdaa_controller module; `flow_active` sends the opening broadcast header + ENTDAA code before activating `daa_valid_o`
+- Triggers ENTDAA via entdaa_controller module; `flow_active` sends the opening broadcast header + ENTDAA code before activating `ccc_valid_o`
 
 ### 5.4. Error Accumulation
 
-Errors are accumulated during a transaction and reported in the response:
+Errors are accumulated during a transaction and reported in the response. Only the codes emitted by the RTL are listed:
 
 ```systemverilog
 always_ff @(posedge clk_i or negedge rst_ni) begin
   if (!rst_ni || i3c_fsm_idle_o)
     resp_err_status_d <= Success;
+  else if (addr_nack_detected)
+    resp_err_status_d <= AddrHeader;
   else if (nack_detected)
     resp_err_status_d <= Nack;
-  else if (parity_error)
-    resp_err_status_d <= Parity;
-  else if (addr_nack)
-    resp_err_status_d <= AddrHeader;
+  else if (short_read_detected)
+    resp_err_status_d <= I3cShortReadErr;
   // First error wins — once set, don't overwrite
 end
 ```
@@ -494,34 +492,34 @@ end
 
 ## 7. Changes from Reference Design
 
-| Aspect                    | Reference                                    | This Design                     |
-| ------------------------- | -------------------------------------------- | ------------------------------- |
-| Implemented states        | 5 of 13 (8 TODO)                             | All 13 implemented              |
-| I3CWriteImmediate         | Empty TODO                                   | Full implementation             |
-| FetchTxData / FetchRxData | Empty TODO                                   | Full implementation             |
-| InitI2CWrite/Read         | Empty TODO                                   | Full implementation             |
-| StallWrite/Read           | Empty TODO                                   | Full implementation             |
-| IssueCmd                  | Empty TODO                                   | Full implementation             |
-| Error handling            | Always returns `Success`                     | Proper error accumulation       |
-| IBI interface             | 8 ports, always `'0`                         | Removed entirely                |
-| DCT interface             | Full DCT read/write ports                    | Removed (SW stores PID/BCR/DCR) |
-| I2C controller interface  | `fmt_fifo_*` signals to `i2c_controller_fsm` | Direct bus_tx/bus_rx control    |
-| HCI threshold signals     | 10+ threshold ports per queue                | Removed (use full/empty only)   |
-| `rx_queue_wvalid_o`       | Tied to `'0` (disabled)                      | Fully functional                |
-| Parameters                | 10 HCI width/threshold parameters            | 5 essential parameters          |
-| OD/PP control             | Not implemented (hardcoded OD)               | Proper phase-based switching    |
+| Aspect                    | Reference                                    | This Design                        |
+| ------------------------- | -------------------------------------------- | ---------------------------------- |
+| Implemented states        | 6 of 14 (8 TODO)                             | All 14 implemented                 |
+| I3CWriteImmediate         | Empty TODO                                   | Full implementation                |
+| FetchTxData / FetchRxData | Empty TODO                                   | Full implementation                |
+| InitI2CWrite/Read         | Empty TODO                                   | Full implementation                |
+| StallWrite/Read           | Empty TODO                                   | Full implementation                |
+| IssueCmd                  | Empty TODO                                   | Full implementation                |
+| WaitDAT (State 13)        | Not present                                  | Added for M-6 DAT capture fix      |
+| Error handling            | Always returns `Success`                     | Proper error accumulation          |
+| Error codes emitted       | `Success` only                               | `Success`, `AddrHeader`, `Nack`, `I3cShortReadErr` |
+| IBI interface             | 8 ports, always `'0`                         | Removed entirely                   |
+| DCT interface             | Full DCT read/write ports                    | Removed (SW stores PID/BCR/DCR)    |
+| I2C controller interface  | `fmt_fifo_*` signals to `i2c_controller_fsm` | Direct bus_tx/bus_rx control       |
+| HCI threshold signals     | 10+ threshold ports per queue                | Removed (use full/empty only)      |
+| `rx_queue_wvalid_o`       | Tied to `'0` (disabled)                      | Fully functional                   |
+| Parameters                | 10 HCI width/threshold parameters            | 5 essential parameters             |
+| OD/PP control             | Not implemented (hardcoded OD)               | Proper phase-based switching       |
+| ENTDAA restart handling   | Not present                                  | Via `controller_active` latch (not in this module) |
 
 ## 8. Error Handling
 
-| Error            | Detection                                           | Response Code                             |
-| ---------------- | --------------------------------------------------- | ----------------------------------------- |
-| Address NACK     | ACK bit = 1 after address byte                      | `AddrHeader`                              |
-| Data NACK        | ACK bit = 1 after data byte                         | `Nack`                                    |
-| Parity error     | T-bit != calculated odd parity                      | `Parity`                                  |
-| TX underflow     | TX FIFO empty when data needed                      | Stall (StallWrite), then `Ovl` if timeout |
-| RX overflow      | RX FIFO full when data received                     | Stall (StallRead), then `Ovl` if timeout  |
-| Frame error      | Unexpected bus condition during transfer            | `Frame`                                   |
-| ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses | `Nack` (no targets responded)             |
+| Error            | Detection                                              | Response Code    |
+| ---------------- | ------------------------------------------------------ | ---------------- |
+| Address NACK     | ACK bit = 1 after address byte                         | `AddrHeader`     |
+| Data NACK        | ACK bit = 1 after data byte                            | `Nack`           |
+| Short read       | Target drives T-bit=0 before all requested bytes sent  | `I3cShortReadErr`|
+| ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses    | `Nack`           |
 
 ## 9. Test Plan
 
@@ -533,13 +531,13 @@ end
 4. **I2C Write (immediate):** Send immediate write to I2C legacy device; verify OD signaling
 5. **I2C Write (regular):** Regular write via TX FIFO to I2C device
 6. **I2C Read:** Read from I2C device; verify data in RX FIFO
-7. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx, gen_rstart_o driven on daa_req_restart_i
+7. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx
 8. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5; verify [S][0x7E+W][ACK][0x00][ACK][DefByte][P] frame
 9. **CCC DISEC direct:** ImmediateDataTransfer with cp=1, cmd=0x81; verify [S][0x7E+W][ACK][0x81][ACK][Sr][DA+W][ACK][DefByte][P] frame
 10. **TX FIFO stall:** Large write with slow TX FIFO fill; verify StallWrite recovery
 11. **RX FIFO stall:** Large read with full RX FIFO; verify StallRead recovery
-12. **Address NACK:** Target NACKs address; verify AddrHeader error in response
-13. **Parity error:** Corrupt T-bit; verify Parity error in response
+12. **Address NACK:** Target NACKs address; verify `AddrHeader` error in response
+13. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` in response
 14. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
 15. **Multiple commands:** Enqueue 3 commands; verify all execute sequentially with correct responses
 16. **Back-to-back transfers:** No idle gap between commands; verify performance
@@ -554,22 +552,13 @@ end
 ### UVM Test Structure
 
 ```
-verification/uvm/
-  tb_top.sv                    # DUT instantiation + clock/reset generation
-  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
-  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
-  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
-  i3c_driver.sv                # Drives SCL/SDA and register bus
-  i3c_monitor.sv               # Samples bus transactions
-  i3c_scoreboard.sv            # Checks responses vs expected
-  i3c_coverage.sv              # Functional coverage groups
+src/verification/uvm_i3c/
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_base_vseq.sv
+    i3c_entdaa_vseq.sv
+    i3c_private_write_vseq.sv
+    i3c_private_read_vseq.sv
+    i3c_i2c_write_vseq.sv
   tests/
     i3c_base_test.sv
     i3c_entdaa_test.sv
@@ -586,5 +575,6 @@ verification/uvm/
 - The `transfer_cnt` counter is used in both immediate and regular transfers but with different semantics: for immediate, it counts bytes within the descriptor; for regular, it counts bytes within the current DWORD from TX FIFO. A separate `remaining_length` counter tracks the total transfer progress.
 - The `cmd_desc` register is loaded once in `WaitForCmd` and remains stable throughout the transaction. Individual fields are extracted combinationally.
 - OD/PP switching must happen at byte boundaries — never mid-byte. The `sel_od_pp_o` output changes only when transitioning between bus phases (address → data, ACK → data).
-- For ENTDAA, `flow_active` generates the initial broadcast header (`{7'h7E, 1'b0}`) and ENTDAA code (`0x07`) with ACK checks, then activates the `entdaa_controller` module (`daa_valid_o = 1`) for the multi-device DAA loop. During the loop, `flow_active` services `daa_req_restart_i` by asserting `gen_rstart_o` to the SCL generator. After `daa_done_i`, `flow_active` generates STOP and writes the response. The `entdaa_controller` module reads DAT entries independently — `flow_active` does not need to perform DAT reads for ENTDAA rounds.
-- For ENEC and DISEC, `flow_active` handles the full CCC frame within `I3CWriteImmediate`. No `daa_valid_o` is ever asserted for these CCCs. The `cp` flag and `cmd` field of the `ImmediateDataTransfer` descriptor carry all necessary information.
+- For ENTDAA, `flow_active` generates the initial broadcast header (`{7'h7E, 1'b0}`) and ENTDAA code (`0x07`) with ACK checks, then activates `entdaa_controller` (`ccc_valid_o = 1`) for the multi-device DAA loop. The restart signal flow is: `entdaa_controller.req_restart_o` → `daa_restart_pending_q` (in `controller_active`) → `scl_generator` — entirely bypassing `flow_active`. After `ccc_done_i`, `flow_active` generates STOP and writes the response.
+- For ENEC and DISEC, `flow_active` handles the full CCC frame within `I3CWriteImmediate`. No `ccc_valid_o` is ever asserted for these CCCs. The `cp` flag and `cmd` field of the `ImmediateDataTransfer` descriptor carry all necessary information.
+- The only error codes actually emitted by the RTL are: `Success`, `AddrHeader`, `Nack`, `I3cShortReadErr`. Error codes `Ovl`, `Frame`, and `Parity` are defined in the package but not used.

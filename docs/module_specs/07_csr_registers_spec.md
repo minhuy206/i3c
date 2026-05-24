@@ -1,8 +1,8 @@
 # Module: CSR Registers + Device Address Table (DAT)
 
-> Status: Improve
+> Status: Complete
 > Reference: `i3c-core/src/csr/I3CCSR.sv` (7,710 lines) + `I3CCSR_pkg.sv` (2,640 lines)
-> Estimated LoC: ~300 lines
+> Estimated LoC: ~270 lines
 
 ## 1. Purpose
 
@@ -43,11 +43,13 @@ typedef struct packed {
 
 ## 3. Parameters
 
-| Parameter   | Type | Default | Description                |
-| ----------- | ---- | ------- | -------------------------- |
-| `DatDepth`  | int  | 16      | Number of DAT entries      |
-| `AddrWidth` | int  | 12      | Register bus address width |
-| `DataWidth` | int  | 32      | Register bus data width    |
+| Parameter      | Type | Default | Description                    |
+| -------------- | ---- | ------- | ------------------------------ |
+| `DatDepth`     | int  | 16      | Number of DAT entries          |
+| `AddrWidth`    | int  | 12      | Register bus address width     |
+| `DataWidth`    | int  | 32      | Register bus data width        |
+| `CounterWidth` | int  | 20      | Width of timing counter fields |
+| `CmdDataWidth` | int  | 64      | Width of CMD descriptor        |
 
 ## 4. Ports / Interfaces
 
@@ -79,17 +81,17 @@ typedef struct packed {
 
 ### Hardware Interface — Timing Outputs (system clock cycles)
 
-| Signal       | Direction | Width | Description      |
-| ------------ | --------- | ----- | ---------------- |
-| `t_r_o`      | Output    | 20    | Rise time        |
-| `t_f_o`      | Output    | 20    | Fall time        |
-| `t_low_o`    | Output    | 20    | SCL LOW period   |
-| `t_high_o`   | Output    | 20    | SCL HIGH period  |
-| `t_su_sta_o` | Output    | 20    | START setup time |
-| `t_hd_sta_o` | Output    | 20    | START hold time  |
-| `t_su_sto_o` | Output    | 20    | STOP setup time  |
-| `t_su_dat_o` | Output    | 20    | Data setup time  |
-| `t_hd_dat_o` | Output    | 20    | Data hold time   |
+| Signal       | Direction | Width        | Description      |
+| ------------ | --------- | ------------ | ---------------- |
+| `t_r_o`      | Output    | CounterWidth | Rise time        |
+| `t_f_o`      | Output    | CounterWidth | Fall time        |
+| `t_low_o`    | Output    | CounterWidth | SCL LOW period   |
+| `t_high_o`   | Output    | CounterWidth | SCL HIGH period  |
+| `t_su_sta_o` | Output    | CounterWidth | START setup time |
+| `t_hd_sta_o` | Output    | CounterWidth | START hold time  |
+| `t_su_sto_o` | Output    | CounterWidth | STOP setup time  |
+| `t_su_dat_o` | Output    | CounterWidth | Data setup time  |
+| `t_hd_dat_o` | Output    | CounterWidth | Data hold time   |
 
 ### Hardware Interface — DAT Access (from controller_active)
 
@@ -101,20 +103,20 @@ typedef struct packed {
 
 ### Hardware Interface — Queue Ports (bridge to HCI queues)
 
-| Signal          | Direction | Width | Description                                            |
-| --------------- | --------- | ----- | ------------------------------------------------------ |
-| `cmd_wvalid_o`  | Output    | 1     | CMD FIFO write valid (from SW write to CMD_QUEUE_PORT) |
-| `cmd_wdata_o`   | Output    | 64    | CMD descriptor assembled                               |
-| `cmd_wready_i`  | Input     | 1     | CMD FIFO ready                                         |
-| `tx_wvalid_o`   | Output    | 1     | TX FIFO write valid                                    |
-| `tx_wdata_o`    | Output    | 32    | TX data                                                |
-| `tx_wready_i`   | Input     | 1     | TX FIFO ready                                          |
-| `rx_rvalid_i`   | Input     | 1     | RX FIFO has data                                       |
-| `rx_rdata_i`    | Input     | 32    | RX data                                                |
-| `rx_rready_o`   | Output    | 1     | RX FIFO read acknowledge                               |
-| `resp_rvalid_i` | Input     | 1     | RESP FIFO has data                                     |
-| `resp_rdata_i`  | Input     | 32    | Response descriptor                                    |
-| `resp_rready_o` | Output    | 1     | RESP FIFO read acknowledge                             |
+| Signal          | Direction | Width        | Description                                            |
+| --------------- | --------- | ------------ | ------------------------------------------------------ |
+| `cmd_wvalid_o`  | Output    | 1            | CMD FIFO write valid (from SW write to CMD_QUEUE_PORT) |
+| `cmd_wdata_o`   | Output    | CmdDataWidth | CMD descriptor assembled                               |
+| `cmd_wready_i`  | Input     | 1            | CMD FIFO ready                                         |
+| `tx_wvalid_o`   | Output    | 1            | TX FIFO write valid                                    |
+| `tx_wdata_o`    | Output    | DataWidth    | TX data                                                |
+| `tx_wready_i`   | Input     | 1            | TX FIFO ready                                          |
+| `rx_rvalid_i`   | Input     | 1            | RX FIFO has data                                       |
+| `rx_rdata_i`    | Input     | DataWidth    | RX data                                                |
+| `rx_rready_o`   | Output    | 1            | RX FIFO read acknowledge                               |
+| `resp_rvalid_i` | Input     | 1            | RESP FIFO has data                                     |
+| `resp_rdata_i`  | Input     | DataWidth    | Response descriptor                                    |
+| `resp_rready_o` | Output    | 1            | RESP FIFO read acknowledge                             |
 
 ### Hardware Interface — Queue Status (from HCI queues)
 
@@ -169,13 +171,11 @@ typedef struct packed {
 | [1]    | `SW_RESET` | RW/SC  | 0     | 1 = Reset FIFOs (self-clearing) |
 | [31:2] | Reserved   | -      | 0     | -                               |
 
-**SW_RESET usage constraint:** SW_RESET flushes the CMD, TX, RX, and RESP FIFOs. It does **not** reset the protocol FSM. Asserting SW_RESET while a transaction is in progress is undefined behavior: the FSM continues driving the bus from its already-latched command descriptor while the FIFOs are empty.
+**SW_RESET usage constraint:** SW_RESET flushes the CMD, TX, RX, and RESP FIFOs. It does **not** reset the protocol FSM. Asserting SW_RESET while a transaction is in progress is undefined behavior.
 
 **Safe usage sequence:**
-1. Poll `HC_STATUS[FSM_IDLE]` until it reads 1 (FSM has returned to Idle after the last transaction).
+1. Poll `HC_STATUS[FSM_IDLE]` until it reads 1.
 2. Assert `HC_CONTROL[SW_RESET] = 1`. The pulse is self-clearing (one clock cycle).
-
-**Bus-hang recovery:** If the I3C bus is hung (e.g., a target holds SDA low), the FSM will not reach Idle and `HC_STATUS[FSM_IDLE]` will remain 0. In this case SW_RESET cannot be safely called. Recovery requires asserting `rst_ni` (hardware reset). A hardware watchdog or host-level timeout that drives `rst_ni` is the intended recovery path for this scenario. HALT/RESUME (HC_CONTROL.RESUME) is out of scope for this implementation.
 
 #### HC_STATUS (0x004)
 
@@ -188,10 +188,10 @@ typedef struct packed {
 
 #### Timing Registers (0x010–0x030)
 
-| Bits    | Field    | Description                         |
-| ------- | -------- | ----------------------------------- |
-| [19:0]  | `VALUE`  | Timing value in system clock cycles |
-| [31:20] | Reserved | -                                   |
+| Bits             | Field    | Description                         |
+| ---------------- | -------- | ----------------------------------- |
+| [CounterWidth-1:0]| `VALUE` | Timing value in system clock cycles |
+| [31:CounterWidth] | Reserved| -                                   |
 
 Default values assume 333 MHz system clock targeting I3C SDR mode.
 
@@ -200,9 +200,7 @@ Default values assume 333 MHz system clock targeting I3C SDR mode.
 First write stores DWORD0 in a staging register. Second write provides DWORD1 and triggers a 64-bit write to the CMD FIFO.
 
 ```systemverilog
-logic cmd_staging_valid;
-logic [31:0] cmd_dword0;
-
+// cmd_write FF block (one of three FF processes in this module)
 always_ff @(posedge clk_i or negedge rst_ni) begin
   if (!rst_ni || sw_reset) begin
     cmd_staging_valid <= 1'b0;
@@ -215,6 +213,22 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
       // Trigger 64-bit write: {wdata_i (DWORD1), cmd_dword0 (DWORD0)}
       cmd_staging_valid <= 1'b0;
     end
+  end
+end
+```
+
+#### TX_DATA_PORT (0x104) — Write Only
+
+```systemverilog
+// tx_write FF block (one of three FF processes in this module)
+always_ff @(posedge clk_i or negedge rst_ni) begin
+  if (!rst_ni || sw_reset) begin
+    tx_wvalid_o <= 1'b0;
+    tx_wdata_o  <= '0;
+  end else begin
+    tx_wvalid_o <= wen_i && (addr_i == 12'h104);
+    if (wen_i && addr_i == 12'h104)
+      tx_wdata_o <= wdata_i;
   end
 end
 ```
@@ -245,7 +259,15 @@ end
 | [30:23] | Reserved          | -      | -                     |
 | [31]    | `DEVICE`          | RW     | 1 = I2C legacy device |
 
-### 5.3. Read Logic
+### 5.3. Three FF Processes
+
+The module has exactly three `always_ff` blocks:
+
+1. **`reg_write`** — Latches `hc_enable_q`, `sw_reset_q`, all 9 timing registers, and the 16-entry `dat_mem[]` on write cycles (`wen_i`). This is the main configuration register FF.
+2. **`cmd_write`** — 64-bit two-DWORD staging for `CMD_QUEUE_PORT`. Holds DWORD0 until DWORD1 arrives, then pulses `cmd_wvalid_o`.
+3. **`tx_write`** — TX FIFO push: pulses `tx_wvalid_o` and latches `tx_wdata_o` on each write to `TX_DATA_PORT`.
+
+### 5.4. Read Logic
 
 ```systemverilog
 always_comb begin
@@ -258,7 +280,7 @@ always_comb begin
     case (addr_i)
       12'h000: rdata_o = hc_control;
       12'h004: rdata_o = hc_status;
-      12'h010: rdata_o = {12'b0, t_r_reg};
+      12'h010: rdata_o = {'0, t_r_reg};
       // ... other timing regs ...
       12'h108: begin
         rdata_o = rx_rdata_i;
@@ -278,18 +300,19 @@ always_comb begin
 end
 ```
 
-### 5.4. DAT Hardware Read Path
+### 5.5. DAT Hardware Read Path
 
 The controller hardware reads DAT entries using a separate read port (no bus contention):
 
 ```systemverilog
+// Part of reg_write FF block:
 always_ff @(posedge clk_i) begin
   if (dat_read_valid_i)
     dat_rdata_o <= dat_mem[dat_index_i];
 end
 ```
 
-This is a 1-cycle latency read (registered output).
+This is a 1-cycle latency read (registered output). `flow_active` and `entdaa_controller` share this port via a MUX in `controller_active`.
 
 ## 6. Timing Requirements
 
@@ -305,7 +328,7 @@ This is a 1-cycle latency read (registered output).
 
 | Aspect           | Reference                            | This Design                     |
 | ---------------- | ------------------------------------ | ------------------------------- |
-| Size             | 14,342 lines (auto-generated)        | ~300 lines (manual)             |
+| Size             | 14,342 lines (auto-generated)        | ~270 lines (manual)             |
 | Generation tool  | PeakRDL toolchain                    | Hand-written                    |
 | Register count   | 530+ typedefs, ~100 registers        | ~15 registers + 16 DAT entries  |
 | Access patterns  | 5-level nested struct navigation     | Direct `case` statement         |
@@ -346,22 +369,13 @@ This is a 1-cycle latency read (registered output).
 ### UVM Test Structure
 
 ```
-verification/uvm/
-  tb_top.sv                    # DUT instantiation + clock/reset generation
-  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
-  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
-  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
-  i3c_driver.sv                # Drives SCL/SDA and register bus
-  i3c_monitor.sv               # Samples bus transactions
-  i3c_scoreboard.sv            # Checks responses vs expected
-  i3c_coverage.sv              # Functional coverage groups
+src/verification/uvm_i3c/
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_base_vseq.sv
+    i3c_entdaa_vseq.sv
+    i3c_private_write_vseq.sv
+    i3c_private_read_vseq.sv
+    i3c_i2c_write_vseq.sv
   tests/
     i3c_base_test.sv
     i3c_entdaa_test.sv
@@ -370,11 +384,12 @@ verification/uvm/
     i3c_error_test.sv
 ```
 
-**Module coverage note:** `csr_registers` is exercised by all tests — CSR configuration (timing parameters, CORE_CONFIG, DAT) must be written before any transaction can be initiated.
+**Module coverage note:** `csr_registers` is exercised by all tests — CSR configuration (timing parameters, HC_CONTROL, DAT) must be written before any transaction can be initiated.
 
 ## 10. Implementation Notes
 
-- The `ready_o` output is always HIGH (single-cycle access, no wait states). This simplifies the bus protocol at the cost of not supporting stall conditions. If a FIFO is full when SW writes, the write is silently dropped — software must check QUEUE_STATUS first.
-- The CMD staging register introduces state — if only DWORD0 is written and then a reset occurs, the staging state is lost (by design). Software should always write both DWORDs in sequence.
-- DAT entries use 32-bit width (not 64-bit as in reference). The reference's upper 32 bits contained DCR/BCR/PID fields which are now stored in software after ENTDAA.
+- The `ready_o` output is always HIGH (single-cycle access, no wait states). If a FIFO is full when SW writes, the write is silently dropped — software must check QUEUE_STATUS first.
+- The CMD staging register introduces state — if only DWORD0 is written before a reset, the staging state is lost (by design). Software always writes both DWORDs in sequence.
+- DAT entries use 32-bit width (not 64-bit as in reference). The reference's upper 32 bits contained DCR/BCR/PID fields which are stored in software after ENTDAA.
 - Timing register defaults target I3C SDR at 333 MHz. For I2C FM mode, software must write the appropriate timing values before initiating I2C transfers.
+- The three FF processes (`reg_write`, `cmd_write`, `tx_write`) are kept separate for clarity — each handles a distinct write destination type.

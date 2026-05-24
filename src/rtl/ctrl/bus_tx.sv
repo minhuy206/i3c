@@ -35,8 +35,10 @@ module bus_tx #(
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
+      // Invariant: t_sd_z == (t_sd == 0). Keep them consistent at reset so a
+      // hypothetical drive_i on cycle 0 cannot enter SetupData with tcount=0.
       t_sd   <= '0;
-      t_sd_z <= 1'b0;
+      t_sd_z <= 1'b1;
       t_hd_z <= 1'b0;
     end else begin
       t_sd   <= t_sd_i;

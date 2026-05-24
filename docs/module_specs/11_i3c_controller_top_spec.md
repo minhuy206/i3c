@@ -1,8 +1,8 @@
 # Module: i3c_controller_top (Top-Level Integration)
 
-> Status: New
+> Status: Complete
 > Reference: `i3c-core/src/i3c.sv` (1,279 lines) + `i3c-core/src/i3c_wrapper.sv` (298 lines)
-> Estimated LoC: ~150 lines
+> Estimated LoC: ~260 lines
 
 ## 1. Purpose
 
@@ -287,7 +287,7 @@ No error logic at this level. All errors are handled by sub-modules and reported
 ### UVM Test Structure
 
 ```
-verification/uvm/
+src/verification/uvm_i3c/
   tb_top.sv                    # DUT instantiation + clock/reset generation
   i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
   i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
@@ -297,12 +297,11 @@ verification/uvm/
   i3c_scoreboard.sv            # Checks responses vs expected
   i3c_coverage.sv              # Functional coverage groups
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_base_vseq.sv
+    i3c_entdaa_vseq.sv
+    i3c_private_write_vseq.sv
+    i3c_private_read_vseq.sv
+    i3c_i2c_write_vseq.sv
   tests/
     i3c_base_test.sv
     i3c_entdaa_test.sv
@@ -315,9 +314,9 @@ verification/uvm/
 
 ### Target Models
 
-For system-level testing, behavioral models of I3C and I2C targets are needed:
+For system-level testing, behavioral models of I3C and I2C targets are instantiated in `tb_top.sv`:
 
-**I3C Target Model (`i3c_target_model.py`):**
+**I3C Target Model:**
 
 - Responds to broadcast address 0x7E
 - Participates in ENTDAA (drives PID/BCR/DCR, accepts address)
@@ -325,7 +324,7 @@ For system-level testing, behavioral models of I3C and I2C targets are needed:
 - Responds to Private Read/Write
 - Drives T-bit correctly
 
-**I2C Target Model (`i2c_target_model.py`):**
+**I2C Target Model:**
 
 - Responds to configured static address
 - ACKs address and data bytes
@@ -333,8 +332,9 @@ For system-level testing, behavioral models of I3C and I2C targets are needed:
 
 ## 10. Implementation Notes
 
-- This module should be entirely structural — no logic beyond `assign` statements for signal routing. All behavioral logic lives in sub-modules.
+- This module is entirely structural — no logic beyond `assign` statements for signal routing. All behavioral logic lives in sub-modules.
 - The register bus is intentionally simple (no handshaking complexity). For integration into an SoC with AXI or APB, a thin adapter can be placed outside this module.
-- The `sel_od_pp_o` output should connect to the FPGA/ASIC pad driver configuration. On Xilinx FPGAs, this controls whether an IOBUF is configured for open-drain or push-pull.
-- For simulation, SCL and SDA should be modeled as wired-AND buses (open-drain behavior): the simulated bus value is the AND of all drivers. A pull-up resistor holds the line HIGH when no driver is active.
+- The `sel_od_pp_o` output connects to the FPGA/ASIC pad driver configuration. On Xilinx FPGAs, this controls whether an IOBUF is configured for open-drain or push-pull.
+- For simulation, SCL and SDA are modeled as wired-AND buses (open-drain behavior): the simulated bus value is the AND of all drivers. A pull-up resistor holds the line HIGH when no driver is active.
 - The module has no `ifdef` blocks — all configuration is done through parameters and CSR registers at runtime.
+- FIFO depth parameters (`CmdFifoDepth`, `TxFifoDepth`, `RxFifoDepth`, `RespFifoDepth`) live here at the top level and are passed down to `hci_queues`. `controller_active` does not carry FIFO depth parameters.
