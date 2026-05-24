@@ -13,7 +13,11 @@ class i3c_env_cfg extends uvm_object;
     `uvm_field_object(m_i3c_agent_cfg, UVM_DEFAULT)
   `uvm_object_utils_end
 
-  virtual function initialize();
+  function new(string name = "i3c_env_cfg");
+    super.new(name);
+  endfunction
+
+  virtual function void initialize();
     is_initialized = 1'b1;
 
     m_reg_agent_cfg = reg_agent_cfg::type_id::create("m_reg_agent_cfg");

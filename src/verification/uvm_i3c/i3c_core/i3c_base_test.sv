@@ -28,7 +28,7 @@ class i3c_base_test extends uvm_test;
         uvm_sequence test_seq;
         string test_seq_s = "i3c_smoke_vseq";
 
-        void($value$plusargs("UVM_TEST_SEQ=%0s", test_seq_s));
+        void'($value$plusargs("UVM_TEST_SEQ=%0s", test_seq_s));
 
         factory = uvm_factory::get();
         obj = factory.create_object_by_name(test_seq_s, "", test_seq_s);
@@ -40,6 +40,7 @@ class i3c_base_test extends uvm_test;
       `uvm_fatal(get_full_name(), $sformatf("cast failed - %0s is not a uvm_sequence", test_seq_s))
     end
         phase.raise_objection(this);
+        @(posedge cfg.m_i3c_agent_cfg.vif.rst_ni);
         test_seq.start(env.m_vsequencer);
         phase.drop_objection(this);
     endtask

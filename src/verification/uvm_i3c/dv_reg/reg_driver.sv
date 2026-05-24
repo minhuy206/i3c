@@ -22,6 +22,7 @@ class reg_driver extends uvm_driver #(reg_seq_item);
   endtask
 
   task get_and_drive();
+    wait (this.vif.rst_ni);
     forever begin
       this.seq_item_port.get_next_item(this.req);
 
@@ -32,7 +33,7 @@ class reg_driver extends uvm_driver #(reg_seq_item);
       end
 
       `uvm_info(`gfn, this.req.convert2string(), UVM_HIGH)
-      this.seq_item_port.item_done(this.req);
+      this.seq_item_port.item_done();
     end
   endtask
 

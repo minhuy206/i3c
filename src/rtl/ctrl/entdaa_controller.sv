@@ -110,7 +110,6 @@ module entdaa_controller
   always_comb begin
     state_d = state_q;
     dev_round_d = dev_round_q;
-    daa_addr_d = daa_addr_q;
 
     if (bus_stop_det_i && state_q != Idle && state_q != Done) begin
       state_d = Done;
@@ -177,6 +176,7 @@ module entdaa_controller
     daa_pid_o = 48'h0;
     daa_bcr_o = 8'h0;
     daa_dcr_o = 8'h0;
+    daa_addr_d = daa_addr_q;
 
     unique case (state_q)
       RequestRestart: begin

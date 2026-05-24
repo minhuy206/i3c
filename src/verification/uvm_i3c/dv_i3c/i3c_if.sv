@@ -117,7 +117,7 @@ interface i3c_if (
     #(wait_delay * 1ns);
   endtask : wait_for_host_stop
 
-  task automatic wait_for_i2c_host_stop_or_rstart(ref i2c_timing_t tc, output bit rstart,
+  task automatic wait_for_i2c_host_stop_or_rstart(input i2c_timing_t tc, output bit rstart,
                                                   output bit stop);
     int delay = tc.tHoldStop;
     fork
@@ -131,7 +131,7 @@ interface i3c_if (
     join
   endtask : wait_for_i2c_host_stop_or_rstart
 
-  task automatic wait_for_i3c_host_stop_or_rstart(ref i3c_timing_t tc, output bit rstart,
+  task automatic wait_for_i3c_host_stop_or_rstart(input i3c_timing_t tc, output bit rstart,
                                                   output bit stop);
     int delay = tc.tHoldStop;
     fork
@@ -189,6 +189,12 @@ interface i3c_if (
     ack_r = ack && !nack;
   endtask : wait_for_host_ack_or_nack
 
+  task automatic wait_for_device_ack_or_nack(output bit ack_r);
+    bit data;
+    get_bit_data("device", data);
+    ack_r = !data;
+  endtask : wait_for_device_ack_or_nack
+
   task automatic time_check(input int delay, input bit exp_value, ref logic check_wire, input string msg);
     time valid_time;
     time exp_value_time;
@@ -211,7 +217,7 @@ interface i3c_if (
                 ), UVM_HIGH)
   endtask
 
-  task automatic device_i3c_start(ref i3c_timing_t tc);
+  task automatic device_i3c_start(input i3c_timing_t tc);
     `DV_WAIT(scl_i === 1'b1,, scl_spinwait_timeout_ns, "host_start");
     #(tc.tSetupStart * 1ns);
     device_sda_o = 1'b0;
@@ -219,7 +225,7 @@ interface i3c_if (
     scl_o = 1'b0;
   endtask : device_i3c_start
 
-  task automatic device_i2c_send_bit(ref i2c_timing_t tc, input bit bit_i);
+  task automatic device_i2c_send_bit(input i2c_timing_t tc, input bit bit_i);
     device_sda_pp_en = 0;
     device_sda_o = 1'b1;
     wait (!scl_i);
@@ -234,15 +240,15 @@ interface i3c_if (
     device_sda_o = 1'b1;
   endtask : device_i2c_send_bit
 
-  task automatic device_i2c_send_ack(ref i2c_timing_t tc);
+  task automatic device_i2c_send_ack(input i2c_timing_t tc);
     device_i2c_send_bit(tc, 1'b0);
   endtask : device_i2c_send_ack
 
-  task automatic device_i2c_send_nack(ref i2c_timing_t tc);
+  task automatic device_i2c_send_nack(input i2c_timing_t tc);
     device_i2c_send_bit(tc, 1'b1);
   endtask : device_i2c_send_nack
 
-  task automatic device_i3c_od_send_bit(ref i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_od_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 0;
     `uvm_info(msg_id, "device_send_bit::Drive bit", UVM_DEBUG)
@@ -254,7 +260,7 @@ interface i3c_if (
     device_sda_o = 1;
   endtask : device_i3c_od_send_bit
 
-  task automatic device_i3c_send_bit(ref i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
     `uvm_info(msg_id, "device_send_bit::Drive bit", UVM_DEBUG)
@@ -267,7 +273,7 @@ interface i3c_if (
     device_sda_o = 1;
   endtask : device_i3c_send_bit
 
-  task automatic device_send_T_bit(ref i3c_timing_t tc, input bit bit_i);
+  task automatic device_send_T_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
     `uvm_info(msg_id, "device_send_bit::Drive bit", UVM_DEBUG)

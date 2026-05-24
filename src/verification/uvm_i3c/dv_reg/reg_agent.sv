@@ -37,6 +37,6 @@ class reg_agent extends uvm_agent;
         uvm_config_db#(virtual reg_if)::set(this, "*", "vif", vif);
 
         if(cfg.is_active && cfg.has_driver)
-            driver.seq_item_port.connect(sequencer.req_item_export);
+            driver.seq_item_port.connect(sequencer.seq_item_export);
     endfunction
 endclass

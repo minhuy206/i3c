@@ -28,7 +28,7 @@
 ../rtl/ctrl/controller_active.sv
 ../rtl/hci/sync_fifo.sv
 ../rtl/hci/hci_queues.sv
-../rtl/csr/csr_register.sv
+../rtl/csr/csr_registers.sv
 ../rtl/i3c_controller_top.sv
 
 // ─── Verification: CSR address package ───────────────────────────────────────

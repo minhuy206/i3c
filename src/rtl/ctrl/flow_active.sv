@@ -1099,7 +1099,7 @@ module flow_active
               end
               default: begin
                 sel_od_pp = 1'b1;
-                if ((issue_phase_q - 8'd3)[0] == 1'b0) begin
+                if (issue_phase_q[0]) begin
                   bus_tx_req_byte  = 1'b1;
                   bus_tx_req_value = current_tx_byte;
                   if (bus_tx_done_i) issue_phase_d = issue_phase_q + 8'h1;
@@ -1177,7 +1177,7 @@ module flow_active
               default: begin
                 if (!short_read_q) begin
                   sel_od_pp = 1'b1;
-                  if ((issue_phase_q - 8'd3)[0] == 1'b0) begin
+                  if (issue_phase_q[0]) begin
                     bus_rx_req_byte = 1'b1;
                     if (bus_rx_done_i) begin
                       unique case (rx_byte_idx_q)

@@ -1,15 +1,4 @@
 class i3c_agent_cfg extends uvm_object;
-  `uvm_object_utils_begin(i3c_agent_cfg)
-    `uvm_field_int(is_active, UVM_DEFAULT)
-    `uvm_field_enum(if_mode_e, if_mode, UVM_DEFAULT)
-    `uvm_field_int(has_driver, UVM_DEFAULT)
-    `uvm_field_int(ok_to_end_delay_ns, UVM_DEFAULT)
-    `uvm_field_int(in_reset, UVM_DEFAULT)
-    `uvm_field_int(en_monitor, UVM_DEFAULT)
-    `uvm_field_int(driver_rst, UVM_DEFAULT)
-    `uvm_field_int(monitor_rst, UVM_DEFAULT)
-  `uvm_object_utils_end
-
   bit                  is_active          = 1'b1;
   if_mode_e            if_mode            = Device;
   bit                  has_driver         = 1'b1;
@@ -20,6 +9,17 @@ class i3c_agent_cfg extends uvm_object;
   bit                  monitor_rst        = 1'b0;
 
   int                  ok_to_end_delay_ns = 1000;
+
+  `uvm_object_utils_begin(i3c_agent_cfg)
+    `uvm_field_int(is_active, UVM_DEFAULT)
+    `uvm_field_enum(if_mode_e, if_mode, UVM_DEFAULT)
+    `uvm_field_int(has_driver, UVM_DEFAULT)
+    `uvm_field_int(ok_to_end_delay_ns, UVM_DEFAULT)
+    `uvm_field_int(in_reset, UVM_DEFAULT)
+    `uvm_field_int(en_monitor, UVM_DEFAULT)
+    `uvm_field_int(driver_rst, UVM_DEFAULT)
+    `uvm_field_int(monitor_rst, UVM_DEFAULT)
+  `uvm_object_utils_end
 
   virtual i3c_if       vif;
 

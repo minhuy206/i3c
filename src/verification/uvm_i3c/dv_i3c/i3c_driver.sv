@@ -84,11 +84,11 @@ class i3c_driver extends uvm_driver #(
       if (cfg.if_mode == Device && stop) begin
         `uvm_info(`gfn, "Device got Stop", UVM_HIGH)
         bus_state = DrvIdle;
-        rsp.end_with_rstart = 0;
+        if (rsp != null) rsp.end_with_rstart = 0;
       end else if (cfg.if_mode == Device && rstart) begin
         `uvm_info(`gfn, "Device got RStart", UVM_HIGH)
         bus_state = DrvAddr;
-        rsp.end_with_rstart = 1;
+        if (rsp != null) rsp.end_with_rstart = 1;
       end
 
       if (rsp != null) begin
