@@ -1,8 +1,8 @@
 # Module: bus_rx_flow
 
-> Status: Reuse
+> Status: Complete
 > Reference: `i3c-core/src/ctrl/bus_rx_flow.sv` (169 lines)
-> Estimated LoC: ~170 lines
+> Estimated LoC: ~160 lines
 
 ## 1. Purpose
 
@@ -12,7 +12,7 @@ The RX flow module deserializes data from the SDA bus line into bytes and indivi
 
 ### Sub-modules
 
-- None (single-module implementation, unlike TX which has bus_tx sub-module)
+- None (single-module implementation, unlike TX which has `bus_tx` sub-module)
 
 ### Parent modules
 
@@ -40,7 +40,7 @@ None.
 | Signal              | Direction | Width | Description     |
 | ------------------- | --------- | ----- | --------------- |
 | `scl_posedge_i`     | Input     | 1     | SCL rising edge |
-| `scl_stable_high_i` | Input     | 1     | SCL stable HIGH |
+| `scl_stable_high_i` | Input     | 1     | SCL stable HIGH (port exists; not used in current implementation) |
 
 ### Bus Data Input
 
@@ -60,7 +60,16 @@ None.
 
 ## 5. Functional Description
 
-### 5.1. FSM States
+### 5.1. FSM States (4 states)
+
+```systemverilog
+typedef enum logic [1:0] {
+  Idle             = 2'd0,
+  ReadByte         = 2'd1,
+  ReadBit          = 2'd2,
+  NextTaskDecision = 2'd3
+} rx_state_e;
+```
 
 ```mermaid
 stateDiagram-v2
@@ -90,8 +99,6 @@ stateDiagram-v2
 | `NextTaskDecision` | `rx_req_byte_i`           | `ReadByte`         |
 | `NextTaskDecision` | `rx_req_bit_i`            | `ReadBit`          |
 | `NextTaskDecision` | neither                   | `Idle`             |
-
-Global abort: if `~req` (neither request asserted), always transition to `Idle`.
 
 ### 5.3. Output Logic
 
@@ -123,7 +130,7 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
 end
 ```
 
-Key: `rx_bit_en` gates sampling. It is asserted when the FSM is in ReadByte/ReadBit and `rx_done` has not yet fired for the current bit.
+`rx_bit_en` gates sampling. It is asserted when the FSM is in ReadByte/ReadBit and `rx_done` has not yet fired for the current bit.
 
 ### 5.5. Byte Assembly
 
@@ -150,14 +157,14 @@ The bit counter starts at 7 and decrements on each `rx_done`. When it reaches 0,
 ```systemverilog
 always_comb begin
   if (rx_req_bit_i) begin
-    rx_data_o = {7'b0, rx_bit};  // Single bit in LSB
+    rx_data_o = {7'b0, rx_bit};        // Single bit in LSB
   end else begin
-    rx_data_o = {rx_data[6:0], sda_i};  // Full byte (combinational last bit)
+    rx_data_o = {rx_data[6:0], sda_i}; // Full byte (combinational last bit)
   end
 end
 ```
 
-Note: The output uses combinational `sda_i` for the last bit to avoid an extra cycle of latency. The 7-bit shift register holds bits [7:1], and `sda_i` provides bit [0] at the moment `rx_done_o` fires.
+The output uses combinational `sda_i` for the last bit to avoid an extra cycle of latency.
 
 ## 6. Timing Requirements
 
@@ -170,11 +177,10 @@ Note: The output uses combinational `sda_i` for the last bit to avoid an extra c
 
 ## 7. Changes from Reference Design
 
-| Aspect                     | Reference                                                   | This Design                                                                                              |
-| -------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `rx_req_bit` latch         | Stored in FF but uses `rx_req_bit_i` directly in output mux | Keep as-is (registered copy used in FSM transitions, direct input used for output — consistent behavior) |
-| Assertion `RxBitAndByte_A` | Uses `` `I3C_ASSERT `` macro                                | Replace with standard `assert` or SVA                                                                    |
-| `scl_stable_high_i`        | Port exists but unused internally                           | Keep port for interface consistency                                                                      |
+| Aspect                     | Reference                                                   | This Design                                                             |
+| -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `rx_req_bit` latch         | Stored in FF but uses `rx_req_bit_i` directly in output mux | Keep as-is (registered copy for FSM decisions, direct input for output) |
+| `scl_stable_high_i`        | Port exists but unused internally                           | Port retained for interface consistency                                 |
 
 ## 8. Error Handling
 
@@ -182,9 +188,9 @@ Note: The output uses combinational `sda_i` for the last bit to avoid an extra c
 | ---------------- | ------------------------------------------ | ----------------------- |
 | Simultaneous req | `rx_req_bit_i & rx_req_byte_i`             | Assertion (design rule) |
 | Abort            | Request deasserted during reception        | Return to Idle          |
-| Parity error     | NOT detected here — checked by flow_active | N/A                     |
+| Parity/T-bit     | NOT detected here — checked by flow_active | N/A                     |
 
-The module does not validate parity or T-bit semantics. It simply delivers raw received data. Parity checking is the responsibility of `flow_active` or `entdaa_controller`.
+The module does not validate parity or T-bit semantics. It delivers raw received data; parity checking is the responsibility of `flow_active` or `entdaa_controller`.
 
 ## 9. Test Plan
 
@@ -195,7 +201,7 @@ The module does not validate parity or T-bit semantics. It simply delivers raw r
 3. **Single bit RX (NACK):** Drive SDA=1; verify `rx_data_o[0] == 1` (NACK)
 4. **Back-to-back bytes:** Receive byte1 → byte2 without returning to Idle; verify seamless transition through NextTaskDecision
 5. **Byte then bit (T-bit):** Receive 8-bit byte → 1 bit T-bit; verify correct data for both
-6. **MSB-first order:** Drive bits 1,0,1,0,0,1,0,1 sequentially; verify assembled byte is 0xA5 (not 0xA5 reversed)
+6. **MSB-first order:** Drive bits 1,0,1,0,0,1,0,1 sequentially; verify assembled byte is 0xA5
 7. **Abort mid-byte:** Deassert `rx_req_byte_i` after 4 bits; verify return to Idle and `rx_data` reset
 8. **Idle assertion:** Verify `rx_idle_o == 1` when in Idle state, `== 0` otherwise
 9. **SCL edge alignment:** Verify that SDA is sampled at the exact cycle of `scl_posedge_i` assertion
@@ -203,35 +209,19 @@ The module does not validate parity or T-bit semantics. It simply delivers raw r
 ### UVM Test Structure
 
 ```
-verification/uvm/
-  tb_top.sv                    # DUT instantiation + clock/reset generation
-  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
-  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
-  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
-  i3c_driver.sv                # Drives SCL/SDA and register bus
-  i3c_monitor.sv               # Samples bus transactions
-  i3c_scoreboard.sv            # Checks responses vs expected
-  i3c_coverage.sv              # Functional coverage groups
+src/verification/uvm_i3c/
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_private_read_vseq.sv   # RX byte path (private reads)
+    i3c_entdaa_vseq.sv         # RX bit path (PID/BCR/DCR reception)
   tests/
-    i3c_base_test.sv
-    i3c_entdaa_test.sv
     i3c_private_rw_test.sv
-    i3c_i2c_test.sv
-    i3c_error_test.sv
+    i3c_entdaa_test.sv
 ```
 
-**Module coverage note:** `bus_rx_flow` is exercised by `i3c_private_rw_test` (read data reception from target) and `i3c_entdaa_test` (receiving PID/BCR/DCR bytes from each target during DAA).
+**Module coverage note:** `bus_rx_flow` is exercised by `i3c_private_rw_test` (read data reception) and `i3c_entdaa_test` (receiving PID/BCR/DCR bits during DAA).
 
 ## 10. Implementation Notes
 
 - Unlike `bus_tx_flow` which has a sub-module (`bus_tx`) for bit-level timing, `bus_rx_flow` is self-contained. RX is simpler because the controller only needs to sample on SCL posedge — there are no setup/hold timing concerns on the receive side.
-- The `scl_stable_high_i` port exists in the interface but is not used in the current implementation. It is kept for forward compatibility (could be used for clock stretching detection in future).
-- The `rx_req_bit` FF (line 31-37 in reference) registers the bit request but the FSM transition uses the registered copy while the output mux uses the direct input. This is intentional — the registered copy provides a stable signal for FSM decisions while the direct input ensures the output mux reflects the current request type.
-- The assertion `` `I3C_ASSERT(RxBitAndByte_A, ~rx_req_bit_i | ~rx_req_byte_i) `` should be replaced with a standard SystemVerilog assertion since we don't use the Caliptra assertion macros.
+- The `scl_stable_high_i` port exists in the interface but is not used in the current implementation. It is retained for forward compatibility.
+- The `rx_req_bit` FF registers the bit request but the FSM transition uses the registered copy while the output mux uses the direct input. This is intentional — the registered copy provides a stable signal for FSM decisions while the direct input ensures the output mux reflects the current request type.

@@ -1,8 +1,8 @@
 # Module: i3c_phy
 
-> Status: Reuse
+> Status: Complete
 > Reference: `i3c-core/src/phy/i3c_phy.sv` (63 lines)
-> Estimated LoC: ~50 lines
+> Estimated LoC: ~52 lines
 
 ## 1. Purpose
 
@@ -15,7 +15,7 @@ The PHY (Physical Layer) module provides the electrical interface between the I3
 
 ### Sub-modules
 
-- None (the reference uses `caliptra_prim_flop_2sync`, which will be replaced with inline 2FF logic)
+- None (the reference uses `caliptra_prim_flop_2sync`, replaced with inline 2FF logic)
 
 ### Parent modules
 
@@ -107,8 +107,8 @@ sda_i -> [FF1] -> [FF2] -> ctrl_sda_o
 logic scl_ff1, scl_ff2;
 always_ff @(posedge clk_i or negedge rst_ni) begin
   if (!rst_ni) begin
-    scl_ff1 <= 1'b1;
-    scl_ff2 <= 1'b1;
+    scl_ff1 <= ResetValue;
+    scl_ff2 <= ResetValue;
   end else begin
     scl_ff1 <= scl_i;
     scl_ff2 <= scl_ff1;
@@ -124,17 +124,15 @@ Same pattern for SDA.
 The output path is purely combinational — no additional latency:
 
 ```systemverilog
-assign scl_o = ctrl_scl_i;
-assign sda_o = ctrl_sda_i;
+assign scl_o       = ctrl_scl_i;
+assign sda_o       = ctrl_sda_i;
 assign sel_od_pp_o = sel_od_pp_i;
 ```
 
 The actual OD/PP behavior is determined by the external bus driver (pad cell or FPGA tri-state buffer):
 
-- **Open-Drain (sel_od_pp = 0):** Output can only pull LOW or release to high-impedance. The bus pull-up resistor drives HIGH.
+- **Open-Drain (sel_od_pp = 0):** Output can only pull LOW or release to high-impedance.
 - **Push-Pull (sel_od_pp = 1):** Output actively drives both HIGH and LOW.
-
-> **Note:** The OD/PP mode switching happens at the pad level, not inside this module. This module only passes the mode selection signal through. The `controller_active` module is responsible for setting `sel_od_pp_i` correctly based on the current bus phase.
 
 ## 7. Timing Requirements
 
@@ -167,33 +165,16 @@ The actual OD/PP behavior is determined by the external bus driver (pad cell or 
 2. **Input synchronization latency:** Apply a transition on `scl_i`/`sda_i` and verify it appears on `ctrl_scl_o`/`ctrl_sda_o` exactly 2 clock cycles later
 3. **Output pass-through:** Verify `scl_o == ctrl_scl_i` and `sda_o == ctrl_sda_i` at all times (combinational)
 4. **OD/PP pass-through:** Verify `sel_od_pp_o == sel_od_pp_i` at all times
-5. **Glitch filtering:** Apply a pulse shorter than 1 clock cycle on `sda_i` and verify it is filtered by the 2FF (may or may not propagate — this tests metastability tolerance)
+5. **Glitch filtering:** Apply a pulse shorter than 1 clock cycle on `sda_i`; metastability tolerance test
 
 ### UVM Test Structure
 
 ```
-verification/uvm/
-  tb_top.sv                    # DUT instantiation + clock/reset generation
-  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
-  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
-  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
-  i3c_driver.sv                # Drives SCL/SDA and register bus
-  i3c_monitor.sv               # Samples bus transactions
-  i3c_scoreboard.sv            # Checks responses vs expected
-  i3c_coverage.sv              # Functional coverage groups
+src/verification/uvm_i3c/
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_base_vseq.sv
   tests/
     i3c_base_test.sv
-    i3c_entdaa_test.sv
-    i3c_private_rw_test.sv
-    i3c_i2c_test.sv
-    i3c_error_test.sv
 ```
 
 **Module coverage note:** `i3c_phy` is exercised by all tests — every test requires SCL/SDA synchronization and OD/PP signal routing through the physical layer.
@@ -201,5 +182,6 @@ verification/uvm/
 ## 11. Implementation Notes
 
 - This is the simplest module in the design — essentially just wires and flip-flops
-- The 2FF synchronizer does NOT guarantee that SCL and SDA are sampled at the same instant. The bus_monitor module handles this by using edge detectors with timing-aware delays.
-- For FPGA prototyping, the OD/PP behavior must be implemented in the top-level I/O constraints (e.g., using IOBUF primitives on Xilinx)
+- The 2FF synchronizer does NOT guarantee that SCL and SDA are sampled at the same instant. The `bus_monitor` module handles this by using edge detectors with timing-aware delays.
+- For FPGA prototyping, the OD/PP behavior must be implemented in the top-level I/O constraints (e.g., using IOBUF primitives on Xilinx).
+- `sel_od_pp_o` passes the mode select signal to the pad driver; the actual switching between OD and PP is a pad-level concern, not a logic concern.

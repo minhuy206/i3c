@@ -1,25 +1,31 @@
 # Module: controller_active
 
-> Status: Simplify
+> Status: Complete
 > Reference: `i3c-core/src/ctrl/controller_active.sv` (292 lines)
-> Estimated LoC: ~200 lines
+> Estimated LoC: ~330 lines
 
 ## 1. Purpose
 
-The `controller_active` module is the structural wrapper that instantiates and interconnects all controller core sub-modules. It is primarily a wiring module with minimal logic — its main added-value logic is the **OD/PP switching control** (which was a TODO in the reference) and **bus signal multiplexing**.
+The `controller_active` module is the structural wrapper that instantiates and interconnects all controller core sub-modules. It is primarily a wiring module — its behavioral additions over a pure pass-through are:
+
+1. **`daa_restart_pending_q` latch** — extends the 1-cycle `req_restart_o` pulse from `entdaa_controller` so `scl_generator` sees it (M-7 fix)
+2. **TX/RX bus MUX** — selects between `flow_active` and `entdaa_controller` as the active bus source
+3. **DAT read MUX** — selects between `flow_active` and `entdaa_controller` on the single hardware DAT read port
+4. **SDA priority MUX** — `scl_generator` wins SDA when driving START/STOP/Sr (M-2 fix)
+5. **OD/PP assignment** — forced open-drain when `scl_generator` drives SDA; otherwise follows `bus_tx_flow` (M-4 fix)
 
 ## 2. Dependencies
 
 ### Sub-modules
 
-| Module               | Instance   | Role                               |
-| -------------------- | ---------- | ---------------------------------- |
-| `flow_active`        | `flow_fsm` | Command flow FSM                   |
-| `bus_tx_flow`        | `tx_flow`  | TX serializer                      |
-| `bus_rx_flow`        | `rx_flow`  | RX deserializer                    |
-| `bus_monitor`        | `bus_mon`  | START/STOP/Sr detection            |
-| `scl_generator`      | `scl_gen`  | SCL clock generation               |
-| `entdaa_controller`  | `daa_ctrl` | ENTDAA engine (includes entdaa_fsm)|
+| Module               | Instance    | Role                                |
+| -------------------- | ----------- | ----------------------------------- |
+| `flow_active`        | `u_flow_fsm`| Command flow FSM                    |
+| `bus_tx_flow`        | `u_tx_flow` | TX serializer                       |
+| `bus_rx_flow`        | `u_rx_flow` | RX deserializer                     |
+| `bus_monitor`        | `u_bus_mon` | START/STOP/Sr detection             |
+| `scl_generator`      | `u_scl_gen` | SCL clock generation                |
+| `entdaa_controller`  | `u_daa_ctrl`| ENTDAA loop manager (7-state FSM)   |
 
 ### Parent modules
 
@@ -27,18 +33,14 @@ The `controller_active` module is the structural wrapper that instantiates and i
 
 ### Packages
 
-- `i3c_pkg` — For `bus_state_t`
-- `controller_pkg` — For `dat_entry_t`
+- `i3c_pkg` — `bus_state_t`
+- `controller_pkg` — `dat_entry_t`
 
 ## 3. Parameters
 
-| Parameter       | Type | Default | Description     |
-| --------------- | ---- | ------- | --------------- |
-| `DatDepth`      | int  | 16      | DAT table depth |
-| `CmdFifoDepth`  | int  | 64      | CMD FIFO depth  |
-| `TxFifoDepth`   | int  | 64      | TX FIFO depth   |
-| `RxFifoDepth`   | int  | 64      | RX FIFO depth   |
-| `RespFifoDepth` | int  | 64      | RESP FIFO depth |
+| Parameter  | Type | Default | Description     |
+| ---------- | ---- | ------- | --------------- |
+| `DatDepth` | int  | 16      | DAT table depth |
 
 ## 4. Ports / Interfaces
 
@@ -61,27 +63,17 @@ The `controller_active` module is the structural wrapper that instantiates and i
 
 ### HCI Queue Interfaces
 
-Same as `flow_active` FIFO interfaces (CMD, TX, RX, RESP) — passed through.
+Passed through from `flow_active`: CMD read, TX read, RX write, RESP write — all using `valid`/`ready` handshake.
 
-### DAT Interface
+### DAT Interface (Single Muxed Hardware Read Port)
 
-Two independent read-only DAT connections are needed: one for `flow_active` and one for `entdaa_controller`. They are never active simultaneously (`flow_active` reads DAT in `FetchDAT` before handing off to `entdaa_controller`; `entdaa_controller` reads DAT during ENTDAA rounds while `flow_active` waits). Both are passed through to `csr_registers` as separate read ports.
+`controller_active` exposes one hardware read port to `csr_registers`. Internally, it arbitrates between `flow_active` and `entdaa_controller` on this single port — they are never simultaneously active.
 
-**flow_active read port** (same naming as before):
-
-| Signal                | Direction | Width              | Description                    |
-| --------------------- | --------- | ------------------ | ------------------------------ |
-| `dat_read_valid_hw_o` | Output    | 1                  | `flow_active` DAT read request |
-| `dat_index_hw_o`      | Output    | `$clog2(DatDepth)` | `flow_active` DAT entry index  |
-| `dat_rdata_hw_i`      | Input     | 32                 | `flow_active` DAT read data    |
-
-**entdaa_controller read port** (new — added for ENTDAA address lookup):
-
-| Signal                 | Direction | Width              | Description                          |
-| ---------------------- | --------- | ------------------ | ------------------------------------ |
-| `dat_read_valid_daa_o` | Output    | 1                  | `entdaa_controller` DAT read request |
-| `dat_index_daa_o`      | Output    | `$clog2(DatDepth)` | `entdaa_controller` DAT entry index  |
-| `dat_rdata_daa_i`      | Input     | 32                 | `entdaa_controller` DAT read data    |
+| Signal                | Direction | Width              | Description                  |
+| --------------------- | --------- | ------------------ | ---------------------------- |
+| `dat_read_valid_hw_o` | Output    | 1                  | DAT read request             |
+| `dat_index_hw_o`      | Output    | `$clog2(DatDepth)` | DAT entry index              |
+| `dat_rdata_hw_i`      | Input     | 32                 | DAT read data                |
 
 ### Timing Configuration (from CSR)
 
@@ -107,164 +99,148 @@ Two independent read-only DAT connections are needed: one for `flow_active` and 
 
 ## 5. Functional Description
 
-### 5.1. Signal Routing
-
-The module primarily routes signals between sub-modules. The key connections:
+### 5.1. Signal Routing Overview
 
 ```
-                    ┌────────────────────────────────────────────────┐
-                    │              controller_active                 │
-                    │                                                │
-  HCI Queues ───────┤──► flow_active ──► bus_tx_flow ──┬──► SDA      │
-                    │       │  ▲                       │             │
-                    │       │  │ccc_req_restart_i      │             │
-                    │       │  ◄── bus_rx_flow ◄───────┤◄── SDA      │
-                    │       │                          │             │
-                    │       ├──► scl_generator ────────┼──► SCL      │
-                    │       │                          │             │
-                    │       ├──►◄── entdaa_ctrl ───────┤             │
-                    │       │         │                │             │
-  DAT ──────────────┤───┬───┘         └──► DAT (daa)   │             │
-                    │   │                              │             │
-                    │   └──────────────────────────────┤◄── SCL/SDA  │
-                    │          bus_monitor             │             │
-  Timing Regs ──────┤─────────────────────────────────►│             │
-                    └────────────────────────────────────────────────┘
+                 ┌──────────────────────────────────────────────────────┐
+                 │                  controller_active                   │
+                 │                                                      │
+ HCI Queues ─────┤──► u_flow_fsm ──┬──► u_tx_flow ──┐                  │
+                 │       │  ▲      │                 ├──► SDA (MUX)    │
+                 │       │  │      └──► u_rx_flow ◄──┘                  │
+                 │       │  │(daa_restart_pending_q)                    │
+                 │       │  ◄── u_daa_ctrl ──────────┐                  │
+                 │       │                           │                  │
+                 │       └──► u_scl_gen ─────────────┼──► SCL          │
+                 │                    └──► SDA (prio) ┘                 │
+                 │       u_bus_mon ◄── SCL/SDA        │                 │
+ Timing Regs ────┤──────────────────────────────────► │                 │
+ DAT ────────────┤──── (MUX: flow / daa_ctrl) ───────►│                 │
+                 └──────────────────────────────────────────────────────┘
 ```
 
-Key connections:
+### 5.2. `daa_restart_pending_q` Latch (M-7 Fix)
 
-- `flow_active` ↔ `entdaa_controller`: `daa_valid`, `daa_dev_count`, `daa_dev_idx`, `daa_done`, `daa_req_restart`, DAA result signals
-- `entdaa_controller` → DAT: separate read port (`dat_read_valid_daa_o`, `dat_index_daa_o`, `dat_rdata_daa_i`) for per-round address lookup
-- `flow_active` → DAT: existing read port for `FetchDAT` state
+`entdaa_controller` asserts `req_restart_o` for exactly one clock cycle when a per-device ENTDAA round ends and another device may respond. `scl_generator` samples this signal at the start of its next active cycle, which may be several cycles later. Without a latch, the pulse would be missed.
 
-### 5.2. Bus Monitor Connection
-
-The bus monitor receives synchronized SCL/SDA from the PHY and produces `bus_state_t`:
+`controller_active` extends the pulse:
 
 ```systemverilog
-bus_monitor bus_mon (
+always_ff @(posedge clk_i or negedge rst_ni) begin
+  if (!rst_ni)
+    daa_restart_pending_q <= 1'b0;
+  else if (daa_ctrl_req_restart)
+    daa_restart_pending_q <= 1'b1;
+  else if (scl_gen_req_restart_ack)
+    daa_restart_pending_q <= 1'b0;
+end
+```
+
+`scl_generator` receives `daa_restart_pending_q` (not the raw 1-cycle pulse) and acknowledges via `req_restart_ack_o` when it acts on it.
+
+### 5.3. TX/RX Bus MUX
+
+When `entdaa_controller` is active (`daa_active = flow_ccc_valid`), it takes exclusive control of `bus_tx_flow` and `bus_rx_flow`:
+
+```systemverilog
+assign daa_active = flow_ccc_valid;
+
+always_comb begin
+  if (daa_active) begin
+    // entdaa_controller drives the bus
+    mux_tx_req_byte  = daa_tx_req_byte;
+    mux_tx_req_bit   = 1'b0;          // entdaa_controller never uses bit-level TX
+    mux_tx_req_value = daa_tx_req_value;
+    mux_tx_sel_od_pp = 1'b0;          // always Open-Drain during ENTDAA
+    mux_rx_req_byte  = 1'b0;          // entdaa_controller never uses byte-level RX
+    mux_rx_req_bit   = daa_rx_req_bit;
+  end else begin
+    // flow_active drives the bus
+    mux_tx_req_byte  = flow_tx_req_byte;
+    mux_tx_req_bit   = flow_tx_req_bit;
+    mux_tx_req_value = flow_tx_req_value;
+    mux_tx_sel_od_pp = flow_tx_sel_od_pp;
+    mux_rx_req_byte  = flow_rx_req_byte;
+    mux_rx_req_bit   = flow_rx_req_bit;
+  end
+end
+```
+
+### 5.4. DAT Read MUX
+
+`flow_active` and `entdaa_controller` share a single hardware DAT read port. They are never simultaneously active (`flow_active` reads DAT in `FetchDAT` before enabling `entdaa_controller`; during ENTDAA rounds `flow_active` waits for `ccc_done_i`):
+
+```systemverilog
+always_comb begin
+  if (daa_active) begin
+    dat_read_valid_hw_o = daa_dat_read_valid;
+    dat_index_hw_o      = daa_dat_index;
+  end else begin
+    dat_read_valid_hw_o = flow_dat_read_valid;
+    dat_index_hw_o      = flow_dat_index;
+  end
+end
+assign daa_dat_rdata  = dat_rdata_hw_i;
+assign flow_dat_rdata = dat_rdata_hw_i;
+```
+
+### 5.5. SDA Priority MUX (M-2 Fix)
+
+SDA is driven from multiple sources. `scl_generator` wins priority during START/STOP/Sr conditions (it signals this via `sda_ctrl_active_o`):
+
+```systemverilog
+assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda
+                  : !tx_flow_idle       ? tx_flow_sda
+                  :                      1'b1;
+```
+
+Where `scl_gen_driving_sda` is `u_scl_gen.sda_ctrl_active_o`. The reference had a race condition where `scl_generator` and `bus_tx_flow` could simultaneously drive SDA at START/STOP boundaries.
+
+### 5.6. OD/PP Assignment (M-4 Fix)
+
+```systemverilog
+assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;
+```
+
+When `scl_generator` controls SDA (START/STOP/Sr), the bus is always open-drain. Otherwise, `bus_tx_flow` determines the mode based on the transaction phase.
+
+### 5.7. Bus Monitor Connection
+
+`bus_monitor` receives only the timing inputs it uses (`t_r_i` and `t_f_i`); the remaining timing registers are not wired to it:
+
+```systemverilog
+bus_monitor #(.CounterWidth(20)) u_bus_mon (
   .clk_i, .rst_ni,
-  .enable_i(1'b1),
-  .scl_i(ctrl_scl_i),
-  .sda_i(ctrl_sda_i),
-  .t_hd_dat_i, .t_r_i, .t_f_i,
-  .state_o(bus_state)
+  .enable_i  (ctrl_enable_i),
+  .scl_i     (ctrl_scl_i),
+  .sda_i     (ctrl_sda_i),
+  .t_r_i     (t_r_i),
+  .t_f_i     (t_f_i),
+  .state_o   (bus_state)
 );
 ```
 
-The `bus_state` signals are distributed to sub-modules by unpacking the `bus_state_t` struct fields:
+The `bus_state_t` struct is unpacked and distributed to sub-modules:
 
 ```systemverilog
-// bus_state_t struct → individual wires for sub-modules
-// bus_tx_flow connections:
-.scl_negedge_i   (bus_state.scl.neg_edge),
-.scl_posedge_i   (bus_state.scl.pos_edge),
-.scl_stable_low_i(bus_state.scl.stable_low),
+// bus_tx_flow
+.scl_negedge_i    (bus_state.scl.neg_edge),
+.scl_posedge_i    (bus_state.scl.pos_edge),
+.scl_stable_low_i (bus_state.scl.stable_low),
 
-// bus_rx_flow connections:
+// bus_rx_flow
 .scl_posedge_i    (bus_state.scl.pos_edge),
 .scl_stable_high_i(bus_state.scl.stable_high),
 .sda_i            (bus_state.sda.value),
 
-// scl_generator connections:
+// scl_generator
 .scl_i            (bus_state.scl.value),
 
-// flow_active connections (bus events):
-// (routed via internal signals for START/STOP/Sr detection)
-
-// entdaa_controller connections:
-.bus_start_det_i (bus_state.start_det),
-.bus_rstart_det_i(bus_state.rstart_det),
-.bus_stop_det_i  (bus_state.stop_det),
+// flow_active (bus events)
+.bus_start_det_i  (bus_state.start_det),
+.bus_rstart_det_i (bus_state.rstart_det),
+.bus_stop_det_i   (bus_state.stop_det),
 ```
-
-### 5.3. SDA Output Multiplexing
-
-SDA is driven by multiple sources depending on the current phase:
-
-```systemverilog
-always_comb begin
-  if (scl_gen_driving_sda) begin
-    // SCL generator drives SDA for START/STOP/Sr conditions
-    ctrl_sda_o = scl_gen_sda;
-  end else if (tx_flow_active) begin
-    // TX flow drives SDA for data/ACK transmission
-    ctrl_sda_o = tx_flow_sda;
-  end else begin
-    // Default: release SDA HIGH (idle)
-    ctrl_sda_o = 1'b1;
-  end
-end
-```
-
-### 5.4. SCL Output
-
-SCL is always driven by the SCL generator:
-
-```systemverilog
-assign ctrl_scl_o = scl_gen_scl;
-```
-
-### 5.5. OD/PP Switching Logic (NEW — was TODO in reference)
-
-The OD/PP mode is determined by `flow_active` based on the current bus phase:
-
-```systemverilog
-// flow_active provides sel_od_pp based on transaction phase
-// This replaces the hardcoded '0 from the reference
-assign sel_od_pp_o = flow_sel_od_pp;
-```
-
-The reference had:
-
-```systemverilog
-// TODO: Handle driver switching in the active controller mode
-assign phy_sel_od_pp_o[0] = '0;  // Always open-drain
-assign phy_sel_od_pp_o[1] = '0;  // Always open-drain
-```
-
-### 5.6. Bus TX/RX Multiplexing for CCC
-
-When the ENTDAA controller module is active (`daa_active = daa_valid_i`, held high by `flow_active` during ENTDAA), it takes exclusive control of `bus_tx_flow` and `bus_rx_flow`. Because `entdaa_controller` is ENTDAA-only, it uses only `bus_tx_req_byte` and `bus_rx_req_bit` (never `rx_req_byte` or `tx_req_bit`), and always operates in Open-Drain:
-
-```systemverilog
-// ccc_active is driven by ccc_valid_i from flow_active
-assign ccc_active = ccc_valid_i;
-
-always_comb begin
-  if (daa_active) begin
-    tx_req_byte  = daa_tx_req_byte;
-    tx_req_bit   = 1'b0;               // entdaa_controller never uses bit-level TX
-    tx_req_value = daa_tx_req_value;
-    tx_sel_od_pp = 1'b0;               // always Open-Drain during ENTDAA
-    rx_req_byte  = 1'b0;               // entdaa_controller never uses byte-level RX
-    rx_req_bit   = daa_rx_req_bit;
-  end else begin
-    tx_req_byte  = flow_tx_req_byte;
-    tx_req_bit   = flow_tx_req_bit;
-    tx_req_value = flow_tx_req_value;
-    tx_sel_od_pp = flow_sel_od_pp;
-    rx_req_byte  = flow_rx_req_byte;
-    rx_req_bit   = flow_rx_req_bit;
-  end
-end
-```
-
-### 5.7. DAA Results Routing
-
-The `entdaa_controller` module produces DAA results that `flow_active` forwards to the RX FIFO for software readback:
-
-```systemverilog
-// entdaa_controller → flow_active (via controller_active wiring)
-.daa_address_i      (daa_daa_address),
-.daa_address_valid_i(ccc_daa_address_valid),
-.daa_pid_i          (ccc_daa_pid),
-.daa_bcr_i          (ccc_daa_bcr),
-.daa_dcr_i          (ccc_daa_dcr),
-```
-
-`flow_active` receives a `daa_address_valid_i` pulse for each successfully assigned device and forwards the PID/BCR/DCR to the RX FIFO for software. No DAT write is required — the dynamic addresses were pre-populated by SW before issuing the ENTDAA command; the `entdaa_controller` module reads them from DAT and assigns them.
 
 ### 5.8. I3C/I2C Mode Selection
 
@@ -275,88 +251,65 @@ The `entdaa_controller` module produces DAA results that `flow_active` forwards 
 .sel_i3c_i2c_i(flow_sel_i3c_i2c),  // 0 = I2C FM, 1 = I3C SDR
 ```
 
-### 5.9. Controller Enable
-
-The CSR `ctrl_enable_o` signal gates the bus monitor enable and can be used to gate the PHY:
-
-```systemverilog
-assign bus_mon_enable = ctrl_enable_i;  // From CSR HC_CONTROL[0]
-```
-
-The `i3c_fsm_en_i` (also from CSR) separately controls the flow_active FSM. Both must be asserted for the controller to operate.
-
 ## 6. Timing Requirements
 
-No additional timing constraints beyond those of sub-modules. All connections are same-cycle (combinational wiring or registered within sub-modules).
+No additional timing constraints beyond those of sub-modules. All behavioral logic is single-cycle registered (the `daa_restart_pending_q` latch uses standard FF timing).
 
 ## 7. Changes from Reference Design
 
-| Aspect                     | Reference                                                           | This Design                                                                        |
-| -------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Bus instances              | Dual bus (`ctrl_bus_i[2]`, `ctrl_scl_o[2]`)                         | Single bus                                                                         |
-| I2C controller FSM         | Full `i2c_controller_fsm` instance                                  | Removed (flow_active drives bus directly)                                          |
-| I3C controller FSM         | Stub (`i3c_controller_fsm`, drives '1)                              | Replaced by `scl_generator`                                                        |
-| OD/PP switching            | Hardcoded to `'0` (TODO)                                            | Proper phase-based switching                                                       |
-| IBI queue ports            | Full IBI FIFO interface                                             | Removed                                                                            |
-| DCT interface              | Full DCT read/write ports                                           | Removed                                                                            |
-| I2C event signals          | 8 `unused_*` signals                                                | Removed                                                                            |
-| `phy_mux_select_i`         | 2-bit MUX for dual bus                                              | Removed (single bus)                                                               |
-| I2C timing                 | Hardcoded `16'd1` / `16'd10`                                        | CSR-driven via timing registers                                                    |
-| DAT connections            | Single read port for controller FSM                                 | Two read ports: one for `flow_active`, one for `entdaa_controller`                 |
-| Arbitration lost detection | `arbitration_lost` compared SDA driven vs read, fed to `ccc_entdaa` | Removed — master-side ENTDAA reads bus as-is; targets handle their own arbitration |
-| Line count                 | 292 lines                                                           | ~210 lines                                                                         |
+| Aspect                     | Reference                                                           | This Design                                                                     |
+| -------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Parameters                 | `DatDepth`, `CmdFifoDepth`, `TxFifoDepth`, `RxFifoDepth`, `RespFifoDepth` | `DatDepth` only — FIFO depths owned by `i3c_controller_top`            |
+| Bus instances              | Dual bus (`ctrl_bus_i[2]`, `ctrl_scl_o[2]`)                         | Single bus                                                                      |
+| I2C controller FSM         | Full `i2c_controller_fsm` instance                                  | Removed (flow_active drives bus directly)                                       |
+| I3C controller FSM         | Stub (`i3c_controller_fsm`, drives '1)                              | Replaced by `scl_generator`                                                     |
+| OD/PP switching            | Hardcoded to `'0` (TODO)                                            | Phase-based: `scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp` (M-4)            |
+| SDA MUX                    | Not present                                                         | Priority MUX: scl_gen > tx_flow > idle (M-2)                                   |
+| DAT read port              | Single read port                                                    | Single muxed port shared between `flow_active` and `entdaa_controller`          |
+| `daa_restart_pending_q`    | Not present                                                         | Added to extend 1-cycle pulse from `entdaa_controller` for `scl_generator` (M-7)|
+| IBI queue ports            | Full IBI FIFO interface                                             | Removed                                                                         |
+| DCT interface              | Full DCT read/write ports                                           | Removed                                                                         |
+| Arbitration lost detection | Compared SDA driven vs read                                         | Removed — master reads bus as-is during ENTDAA                                  |
+| Line count                 | 292 lines                                                           | ~330 lines                                                                      |
 
 ## 8. Error Handling
 
-No additional error logic. Errors are detected by sub-modules (`flow_active`, `bus_monitor`, `entdaa_controller`) and reported through the response FIFO.
+No error logic at this level. Errors are detected by sub-modules (`flow_active`, `bus_monitor`, `entdaa_controller`) and reported through the RESP FIFO.
 
 ## 9. Test Plan
 
 ### Scenarios
 
-1. **Integration: I3C Private Write:** End-to-end write transaction; verify SCL/SDA waveforms match I3C protocol
+1. **Integration: I3C Private Write:** End-to-end write transaction; verify SCL/SDA waveforms
 2. **Integration: I3C Private Read:** End-to-end read transaction; verify correct data flow
 3. **Integration: I2C Write:** Legacy I2C write; verify open-drain-only signaling
 4. **Integration: ENTDAA:** Full DAA sequence with simulated target; verify address assignment
-5. **OD/PP switching:** Verify OD during address phase, PP during data phase of I3C transfer
-6. **SDA MUX:** Verify correct SDA source selection during START (scl_gen) vs data (tx_flow)
-7. **SCL generation:** Verify SCL frequency matches CSR timing values
-8. **Bus monitor feedback:** Verify bus_state correctly distributed to all consumers
+5. **OD/PP switching:** Verify OD during address phase, PP during data phase of I3C transfer (M-4)
+6. **SDA MUX priority:** Verify `scl_generator` wins SDA during START/STOP/Sr vs `bus_tx_flow` (M-2)
+7. **`daa_restart_pending_q`:** Verify 1-cycle pulse is held until `scl_generator` acknowledges (M-7)
+8. **Bus monitor distribution:** Verify `bus_state` correctly distributed to all consumers
 9. **Reset:** Verify all sub-modules enter idle/safe state on reset
 
 ### UVM Test Structure
 
 ```
-verification/uvm/
-  tb_top.sv                    # DUT instantiation + clock/reset generation
-  i3c_if.sv                    # SystemVerilog interface (SCL, SDA, register bus)
-  i3c_env.sv                   # UVM environment (agent + scoreboard + coverage)
-  i3c_agent.sv                 # UVM agent (sequencer + driver + monitor)
-  i3c_driver.sv                # Drives SCL/SDA and register bus
-  i3c_monitor.sv               # Samples bus transactions
-  i3c_scoreboard.sv            # Checks responses vs expected
-  i3c_coverage.sv              # Functional coverage groups
+src/verification/uvm_i3c/
   sequences/
-    i3c_base_seq.sv
-    i3c_entdaa_seq.sv
-    i3c_private_write_seq.sv
-    i3c_private_read_seq.sv
-    i3c_i2c_write_seq.sv
-    i3c_enec_disec_seq.sv
+    i3c_entdaa_vseq.sv       # Exercises daa_restart_pending_q path
+    i3c_private_write_vseq.sv
+    i3c_private_read_vseq.sv
+    i3c_i2c_write_vseq.sv
   tests/
-    i3c_base_test.sv
     i3c_entdaa_test.sv
     i3c_private_rw_test.sv
     i3c_i2c_test.sv
-    i3c_error_test.sv
 ```
-
-**Module coverage note:** `controller_active` is exercised by all tests — it integrates all sub-modules (scl_generator, bus_tx_flow, bus_rx_flow, entdaa_controller, flow_active) and performs bus arbitration and SDA MUX control for every transaction.
 
 ## 10. Implementation Notes
 
-- The reference design uses a dual-bus architecture (`ctrl_bus_i[2]`, `ctrl_scl_o[2]`) with separate I2C and I3C bus instances multiplexed by `phy_mux_select_i`. This design uses a **single bus** — the same SCL/SDA lines carry both I2C and I3C traffic, distinguished by timing and OD/PP mode.
-- The removal of `i2c_controller_fsm` is a significant simplification. In the reference, I2C transactions went through a separate FSM with its own `fmt_fifo_*` interface. In this design, `flow_active` handles I2C directly by sending bytes through `bus_tx_flow` and reading through `bus_rx_flow` — the only difference from I3C is the timing (400 kHz vs 12.5 MHz) and always-OD mode.
-- The `daa_active` signal (for TX/RX MUX) is simply `daa_valid_i` — `flow_active` holds it high for the entire ENTDAA loop, and this is sufficient to select the `entdaa_controller` module's bus outputs.
-- There is no arbitration-lost detection in this module. In the reference design, a target detects arbitration loss by comparing its driven SDA value with the bus readback. On the master side, the master is a passive observer during the PID transmission — it reads the bit-by-bit result of target arbitration without needing to compare drive vs readback.
-- The two DAT read ports (`flow_active` and `entdaa_controller`) are never active simultaneously: `flow_active` reads DAT in `FetchDAT` before activating `entdaa_controller`; `entdaa_controller` reads DAT during each ENTDAA round while `flow_active` is blocked waiting for `daa_done_i`. The `csr_registers` module must expose two independent synchronous read ports for the DAT array.
+- `controller_active` has **no FSM**. Its only sequential logic is `daa_restart_pending_q`. Everything else is combinational wiring or pass-through.
+- FIFO depth parameters (`CmdFifoDepth`, `TxFifoDepth`, `RxFifoDepth`, `RespFifoDepth`) do **not** appear in `controller_active` — they are parameters of `i3c_controller_top` and `hci_queues` only.
+- The `daa_active` signal is simply `flow_ccc_valid` — `flow_active` holds it high for the entire ENTDAA loop, which is sufficient to multiplex bus ownership to `entdaa_controller`.
+- `bus_monitor` is connected to only `t_r_i` and `t_f_i` from the timing bus. The other timing registers (`t_low_i`, `t_high_i`, `t_su_sta_i`, `t_hd_sta_i`, `t_su_sto_i`, `t_su_dat_i`, `t_hd_dat_i`) are routed to `scl_generator` and `flow_active` but not to `bus_monitor`.
+- The single hardware DAT read port design is safe because `flow_active` reads DAT in `FetchDAT` before enabling `entdaa_controller` (via `ccc_valid_o`), and during ENTDAA rounds `flow_active` blocks in a wait state until `ccc_done_i` is asserted.
+- There is no arbitration-lost detection. On the master side, the master is a passive observer during the PID transmission — it reads the bit-by-bit result of target arbitration without needing to compare drive vs readback.
