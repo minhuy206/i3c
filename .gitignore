@@ -34,9 +34,11 @@ INCA_libs/
 xrun.history
 xrun.log
 xrun.key
+.simvision/
 *.shm/
 *.diag
 docs/verification_specs/04b_i3c_driver_instruction.md
 docs/verification_specs/04c_i3c_monitor_instruction.md
 docs/report
 docs/rtl_design_review.md
+docs/dut_i3c_write_immediate_flow.md

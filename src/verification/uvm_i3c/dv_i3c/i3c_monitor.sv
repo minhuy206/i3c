@@ -399,6 +399,84 @@ class i3c_monitor extends uvm_monitor;
                                   input bit device_to_host, int count = -1,
                                   string msg = "Data byte");
     int i;
+    int remaining_count;
+    bit read_rstart;
+    bit read_stop;
+    bit read_end_seen;
+
+    if (device_to_host) begin
+      remaining_count = count;
+      fork : read_stop_or_rstart_watch
+        begin
+          fork
+            cfg.vif.wait_for_host_stop(0, read_stop);
+            cfg.vif.wait_for_host_rstart(read_rstart);
+          join_any
+          disable fork;
+          read_end_seen = 1'b1;
+        end
+      join_none
+
+      forever begin
+        for (i = 8; i > 0; i--) begin
+          cfg.vif.get_bit_data("device", mon_data[i]);
+          `uvm_info(`gfn, $sformatf(
+                    "\nmonitor, %s, trans %0d, byte %0d, bit[%0d] %0b",
+                    msg,
+                    transaction.tran_id,
+                    transaction.num_data + 1,
+                    i,
+                    mon_data[i]
+                    ), UVM_DEBUG)
+        end
+
+        // A target-to-host transfer can end with STOP/RSTART immediately after the
+        // T-bit high phase.  Sample that bit without waiting for a following SCL
+        // falling edge, otherwise the STOP watcher can discard the completed byte.
+        @(posedge cfg.vif.scl_i);
+        mon_data[0] = cfg.vif.sda_i;
+        `uvm_info(`gfn, $sformatf(
+                  "\nmonitor, %s, trans %0d, byte %0d, bit[0] %0b",
+                  msg,
+                  transaction.tran_id,
+                  transaction.num_data + 1,
+                  mon_data[0]
+                  ), UVM_DEBUG)
+
+        transaction.data_q.push_back(mon_data[8:1]);
+        transaction.data_ack_q.push_back(mon_data[0]);
+        transaction.num_data++;
+        `uvm_info(`gfn, $sformatf(
+                  "\nmonitor, %s, trans %0d, 0x%0x", msg, transaction.tran_id, mon_data[8:1]),
+                  UVM_HIGH)
+
+        if (remaining_count > 0) remaining_count--;
+        if (read_end_seen || !mon_data[0] || (count > 0 && remaining_count == 0)) begin
+          fork : wait_read_end
+            begin
+              wait (read_end_seen);
+            end
+            begin
+              #(1 * 1ns);
+              if (cfg.vif.scl_i && cfg.vif.sda_i) begin
+                read_stop = 1'b1;
+                read_end_seen = 1'b1;
+              end
+            end
+          join_any
+          disable wait_read_end;
+          transaction.rstart = read_rstart;
+          transaction.stop = read_stop;
+          break;
+        end
+
+        @(negedge cfg.vif.scl_i);
+      end
+      disable read_stop_or_rstart_watch;
+      updated_transaction = transaction;
+      return;
+    end
+
     fork
       begin : iso_fork
         fork
@@ -551,4 +629,3 @@ class i3c_monitor extends uvm_monitor;
     return (addr == 7'h7E);
   endfunction
 endclass
-

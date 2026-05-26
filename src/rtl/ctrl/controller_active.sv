@@ -58,6 +58,23 @@ module controller_active
   logic scl_gen_scl, scl_gen_sda;
   logic scl_gen_done, scl_gen_busy, scl_gen_driving_sda;
 
+  // 1-cycle delayed copy of the controller's own SCL output.
+  // Used to derive edge/stable signals for bus_tx_flow without routing through
+  // the PHY 2FF synchronizer + bus_monitor chain (~8-cycle latency), which would
+  // cause SDA transitions during SCL-high (spurious RSTART).
+  logic scl_gen_scl_q;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) scl_gen_scl_q <= 1'b1;
+    else         scl_gen_scl_q <= scl_gen_scl;
+  end
+
+  logic scl_tx_negedge;
+  logic scl_tx_posedge;
+  logic scl_tx_stable_low;
+  assign scl_tx_negedge    =  scl_gen_scl_q & ~scl_gen_scl;
+  assign scl_tx_posedge    = ~scl_gen_scl_q &  scl_gen_scl;
+  assign scl_tx_stable_low = ~scl_gen_scl_q & ~scl_gen_scl;
+
   logic flow_gen_start, flow_gen_rstart, flow_gen_stop;
   logic flow_gen_clock, flow_gen_idle;
   logic flow_sel_i3c_i2c;
@@ -210,9 +227,9 @@ module controller_active
       .t_r_i,
       .t_su_dat_i,
       .t_hd_dat_i,
-      .scl_negedge_i   (bus_state.scl.neg_edge),
-      .scl_posedge_i   (bus_state.scl.pos_edge),
-      .scl_stable_low_i(bus_state.scl.stable_low),
+      .scl_negedge_i   (scl_tx_negedge),
+      .scl_posedge_i   (scl_tx_posedge),
+      .scl_stable_low_i(scl_tx_stable_low),
       .req_byte_i      (mux_tx_req_byte),
       .req_bit_i       (mux_tx_req_bit),
       .req_value_i     (mux_tx_req_value),

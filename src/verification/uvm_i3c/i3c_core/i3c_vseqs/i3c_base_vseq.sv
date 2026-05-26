@@ -33,8 +33,8 @@ class i3c_base_vseq extends uvm_sequence;
     reg_write(ADDR_HC_CONTROL, 32'h0000_0001);
   endtask
 
-  virtual task write_dat_entry(int index, bit [6:0] static_addr,
-                               bit [6:0] dynamic_addr, bit is_i2c);
+  virtual task write_dat_entry(int index, bit [6:0] static_addr, bit [6:0] dynamic_addr,
+                               bit is_i2c);
     bit [31:0] dat_val;
     dat_val        = '0;
     dat_val[6:0]   = static_addr;
@@ -65,7 +65,7 @@ class i3c_base_vseq extends uvm_sequence;
     for (int i = 0; i < timeout; i++) begin
       reg_read(ADDR_HC_STATUS, status);
       if (status[HC_STS_FSM_IDLE_BIT]) return;
-      repeat(10) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+      repeat (10) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
     end
     `uvm_fatal("POLL_IDLE", "Timeout waiting for FSM idle")
   endtask

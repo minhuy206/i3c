@@ -223,43 +223,45 @@ module csr_registers
     cmd_full_i
   };
 
-  always_comb begin : reg_read
-    rdata_o = '0;
+  logic [DataWidth-1:0] rdata_comb;
+
+  always_comb begin : reg_read_mux
+    rdata_comb    = '0;
     resp_rready_o = 1'b0;
-    rx_rready_o = 1'b0;
+    rx_rready_o   = 1'b0;
     if (ren_i) begin
       unique case (addr_i)
-        ADDR_HC_CONTROL: rdata_o = hc_control;
-        ADDR_HC_STATUS: rdata_o = hc_status;
-        ADDR_T_R: rdata_o = {12'b0, t_r_q};
-        ADDR_T_F: rdata_o = {12'b0, t_f_q};
-        ADDR_T_LOW: rdata_o = {12'b0, t_low_q};
-        ADDR_T_HIGH: rdata_o = {12'b0, t_high_q};
-        ADDR_T_SU_STA: rdata_o = {12'b0, t_su_sta_q};
-        ADDR_T_HD_STA: rdata_o = {12'b0, t_hd_sta_q};
-        ADDR_T_SU_STO: rdata_o = {12'b0, t_su_sto_q};
-        ADDR_T_SU_DAT: rdata_o = {12'b0, t_su_dat_q};
-        ADDR_T_HD_DAT: rdata_o = {12'b0, t_hd_dat_q};
+        ADDR_HC_CONTROL: rdata_comb = hc_control;
+        ADDR_HC_STATUS:  rdata_comb = hc_status;
+        ADDR_T_R:        rdata_comb = {12'b0, t_r_q};
+        ADDR_T_F:        rdata_comb = {12'b0, t_f_q};
+        ADDR_T_LOW:      rdata_comb = {12'b0, t_low_q};
+        ADDR_T_HIGH:     rdata_comb = {12'b0, t_high_q};
+        ADDR_T_SU_STA:   rdata_comb = {12'b0, t_su_sta_q};
+        ADDR_T_HD_STA:   rdata_comb = {12'b0, t_hd_sta_q};
+        ADDR_T_SU_STO:   rdata_comb = {12'b0, t_su_sto_q};
+        ADDR_T_SU_DAT:   rdata_comb = {12'b0, t_su_dat_q};
+        ADDR_T_HD_DAT:   rdata_comb = {12'b0, t_hd_dat_q};
         ADDR_RX_DATA: begin
           rx_rready_o = ren_i;
-          if (rx_rvalid_i) begin
-            rdata_o = rx_rdata_i;
-          end
+          if (rx_rvalid_i) rdata_comb = rx_rdata_i;
         end
         ADDR_RESP: begin
-          if (resp_rvalid_i) begin
-            rdata_o = resp_rdata_i;
-          end
+          if (resp_rvalid_i) rdata_comb = resp_rdata_i;
           resp_rready_o = ren_i;
         end
-        ADDR_QUEUE_STATUS: rdata_o = queue_status;
+        ADDR_QUEUE_STATUS: rdata_comb = queue_status;
         default: begin
-          if (addr_i >= ADDR_DAT_BASE && addr_i <= (ADDR_DAT_END - 4)) begin
-            rdata_o = dat_mem[(addr_i-ADDR_DAT_BASE)>>2];
-          end
+          if (addr_i >= ADDR_DAT_BASE && addr_i <= (ADDR_DAT_END - 4))
+            rdata_comb = dat_mem[(addr_i-ADDR_DAT_BASE)>>2];
         end
       endcase
     end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : reg_read_reg
+    if (!rst_ni) rdata_o <= '0;
+    else         rdata_o <= rdata_comb;
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin

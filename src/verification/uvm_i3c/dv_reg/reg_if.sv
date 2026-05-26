@@ -21,10 +21,11 @@ interface reg_if (
     cb.addr <= a;
     cb.wen  <= 1'b0;
     cb.ren  <= 1'b1;
-    @(cb);
+    @(cb);                    // T+1: RTL latches rdata_comb into rdata_o
+    cb.ren <= 1'b0;           // 1-cycle ren pulse — preserves FIFO pop semantics
+    @(cb);                    // T+2: rdata_o is now the registered value
     while (!cb.ready) @(cb);  // stall handling
     d = cb.rdata;
-    cb.ren <= 1'b0;
   endtask
 
   task automatic write(input bit [11:0] a, input bit [31:0] d);

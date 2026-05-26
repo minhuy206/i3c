@@ -68,13 +68,23 @@ interface i3c_if (
   endtask
 
   task automatic p_edge_scl();
-    wait (cb.scl_i == 0);
-    wait (cb.scl_i == 1);
+    // Poll SCL on every system clock edge. NOTE: an empty `while(...) @(posedge clk_i);`
+    // body gets optimized out by Xcelium in some configurations, returning in zero
+    // time; the dummy `tick` increment defeats that optimization.
+    int tick;
+    while (scl_i !== 1'b0) begin
+      @(posedge clk_i);
+      tick++;
+    end
+    while (scl_i !== 1'b1) begin
+      @(posedge clk_i);
+      tick++;
+    end
   endtask
 
   task automatic sample_target_data(output bit data);
     p_edge_scl();
-    data = cb.sda_i;
+    data = sda_i;
   endtask
 
   task automatic get_bit_data(input string src = "host", output bit bit_o);

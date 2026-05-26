@@ -25,6 +25,7 @@ class i3c_read_vseq extends i3c_base_vseq;
 
     dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr = 7'h08;
+    dev_seq.dir         = 1'b1;
     dev_seq.is_i3c      = 1'b1;
     dev_seq.read_data.push_back(8'hCA);
     dev_seq.read_data.push_back(8'hFE);

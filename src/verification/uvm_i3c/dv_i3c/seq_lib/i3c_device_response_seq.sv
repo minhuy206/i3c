@@ -4,6 +4,7 @@ class i3c_device_response_seq extends uvm_sequence #(
 );
   bit [6:0] target_addr = 7'h08;
   bit is_i3c = 1;
+  bit dir = 0;
   bit [7:0] read_data[$];
   bit ack_address = 1;
   bit ack_data = 1;
@@ -21,7 +22,7 @@ class i3c_device_response_seq extends uvm_sequence #(
 
     req.i3c = is_i3c;
     req.addr = target_addr;
-    req.dir = 0;
+    req.dir = dir;
     req.dev_ack = ack_address;
     req.is_daa = 0;
     req.end_with_rstart = 0;

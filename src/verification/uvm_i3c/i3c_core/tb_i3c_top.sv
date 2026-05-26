@@ -76,7 +76,7 @@ module tb_i3c_top;
   initial begin
     if ($test$plusargs("DUMP_WAVES")) begin
       $shm_open("waves.shm");
-      $shm_probe(tb_i3c_top, "ACMTF");
+      $shm_probe(tb_i3c_top, "AS");
     end
   end
 
