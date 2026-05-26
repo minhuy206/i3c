@@ -13,12 +13,10 @@ class i3c_agent extends uvm_agent;
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    // get CFG_T object from uvm_config_db
     if (!uvm_config_db#(i3c_agent_cfg)::get(this, "", "cfg", cfg)) begin
-      `uvm_fatal(get_full_name(), $sformatf("failed to get %s from uvm_config_db",
-                                            cfg.get_type_name()))
+      `uvm_fatal(`gfn, $sformatf("failed to get %s from uvm_config_db", cfg.get_type_name()))
     end
-    `uvm_info(get_full_name(), $sformatf("\n%0s", cfg.sprint()), UVM_HIGH)
+    `uvm_info(`gfn, $sformatf("\n%0s", cfg.sprint()), UVM_HIGH)
 
     monitor = i3c_monitor::type_id::create("monitor", this);
     monitor.cfg = cfg;

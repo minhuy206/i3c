@@ -1,13 +1,11 @@
 class i3c_scoreboard extends uvm_scoreboard;
   `uvm_component_utils(i3c_scoreboard)
 
-  i3c_env_cfg cfg;
+  i3c_env_cfg                           cfg;
 
-  // Analysis FIFOs — names match i3c_env connect_phase connections
   uvm_tlm_analysis_fifo #(reg_seq_item) reg_fifo;
   uvm_tlm_analysis_fifo #(i3c_item)     i3c_fifo;
 
-  // Expected I3C transaction, built from CMD FIFO writes
   typedef struct {
     bit [6:0] addr;
     bit       rnw;
@@ -15,15 +13,14 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [3:0] tid;
   } exp_txn_t;
 
-  exp_txn_t  exp_txn_queue[$];   // pending expected I3C transactions
-  bit [31:0] tx_data_queue[$];   // TX data words written to ADDR_TX_DATA
+  exp_txn_t        exp_txn_queue[$];  // pending expected I3C transactions
+  bit       [31:0] tx_data_queue[$];  // TX data words written to ADDR_TX_DATA
 
-  // CMD FIFO accumulator: two 32-bit DWORDs per command
-  bit        got_dw0;
-  bit [31:0] cmd_dw0;
+  bit              got_dw0;
+  bit       [31:0] cmd_dw0;
 
-  int pass_cnt;
-  int fail_cnt;
+  int              pass_cnt;
+  int              fail_cnt;
 
   function new(string name = "", uvm_component parent = null);
     super.new(name, parent);
@@ -42,9 +39,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     join
   endtask
 
-  // ----------------------------------------------------------------
   // Register-side: track CMD writes, TX data, RESP reads
-  // ----------------------------------------------------------------
   task process_req_items();
     reg_seq_item item;
     forever begin
@@ -52,7 +47,7 @@ class i3c_scoreboard extends uvm_scoreboard;
       if (item.is_write) begin
         case (item.addr)
           ADDR_CMD_QUEUE: handle_cmd_dword(item.wdata);
-          ADDR_TX_DATA:   tx_data_queue.push_back(item.wdata);
+          ADDR_TX_DATA: tx_data_queue.push_back(item.wdata);
           default: ;
         endcase
       end else begin
@@ -76,11 +71,11 @@ class i3c_scoreboard extends uvm_scoreboard;
       cmd_dw0 = wdata;
       got_dw0 = 1'b1;
     end else begin
-      exp_txn_t      exp;
-      i3c_cmd_attr_e attr    = i3c_cmd_attr_e'(cmd_dw0[2:0]);
-      bit [3:0]      tid     = cmd_dw0[6:3];
-      bit [4:0]      dev_idx = cmd_dw0[20:16];
-      bit            rnw     = cmd_dw0[29];
+      exp_txn_t            exp;
+      i3c_cmd_attr_e       attr = i3c_cmd_attr_e'(cmd_dw0[2:0]);
+      bit            [3:0] tid = cmd_dw0[6:3];
+      bit            [4:0] dev_idx = cmd_dw0[20:16];
+      bit                  rnw = cmd_dw0[29];
 
       exp.tid  = tid;
       exp.addr = get_device_addr(dev_idx);
@@ -105,8 +100,14 @@ class i3c_scoreboard extends uvm_scoreboard;
       endcase
 
       exp_txn_queue.push_back(exp);
-      `uvm_info(`gfn, $sformatf("CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d",
-                attr.name(), dev_idx, exp.addr, exp.rnw, exp.data_length), UVM_MEDIUM)
+      `uvm_info(`gfn, $sformatf(
+                "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d",
+                attr.name(),
+                dev_idx,
+                exp.addr,
+                exp.rnw,
+                exp.data_length
+                ), UVM_MEDIUM)
       got_dw0 = 1'b0;
     end
   endfunction
@@ -114,27 +115,23 @@ class i3c_scoreboard extends uvm_scoreboard;
   // Resolve dev_idx to dynamic address via cfg.
   // Phase 1: single device only (dev_idx == 0).
   function bit [6:0] get_device_addr(bit [4:0] dev_idx);
-    if (dev_idx == 0 && cfg != null)
-      return cfg.m_i3c_agent_cfg.i3c_target0.dynamic_addr;
+    if (dev_idx == 0 && cfg != null) return cfg.m_i3c_agent_cfg.i3c_target0.dynamic_addr;
     `uvm_warning(`gfn, $sformatf("get_device_addr: unresolved dev_idx=%0d", dev_idx))
     return 7'h00;
   endfunction
 
   function void check_resp(bit [31:0] rdata);
     if (rdata[31:28] != 4'b0000) begin
-      `uvm_error(`gfn, $sformatf("RESP error: err_status=0x%0h rdata=0x%08h",
-                 rdata[31:28], rdata))
+      `uvm_error(`gfn, $sformatf("RESP error: err_status=0x%0h rdata=0x%08h", rdata[31:28], rdata))
       fail_cnt++;
     end else begin
-      `uvm_info(`gfn, $sformatf("RESP OK: tid=0x%0h data_length=%0d",
-                rdata[27:24], rdata[15:0]), UVM_MEDIUM)
+      `uvm_info(`gfn, $sformatf("RESP OK: tid=0x%0h data_length=%0d", rdata[27:24], rdata[15:0]),
+                UVM_MEDIUM)
       pass_cnt++;
     end
   endfunction
 
-  // ----------------------------------------------------------------
   // I3C bus side: compare observed transaction vs expected
-  // ----------------------------------------------------------------
   task process_i3c_items();
     i3c_item item;
     forever begin
@@ -148,8 +145,8 @@ class i3c_scoreboard extends uvm_scoreboard;
     exp_txn_t exp;
 
     if (exp_txn_queue.size() == 0) begin
-      `uvm_error(`gfn, $sformatf("Unexpected I3C txn: addr=0x%02h op=%s",
-                 item.addr, item.bus_op.name()))
+      `uvm_error(`gfn, $sformatf("Unexpected I3C txn: addr=0x%02h op=%s", item.addr,
+                                 item.bus_op.name()))
       fail_cnt++;
       return;
     end
@@ -157,8 +154,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     exp = exp_txn_queue.pop_front();
 
     `DV_CHECK_EQ(item.addr, exp.addr, "Target address mismatch")
-    `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite,
-                 "Transfer direction mismatch")
+    `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite, "Transfer direction mismatch")
 
     if (!exp.rnw) check_tx_data(item);
 
@@ -171,9 +167,8 @@ class i3c_scoreboard extends uvm_scoreboard;
       int word_idx = i / 4;
       int byte_off = (i % 4) * 8;
       if (word_idx < tx_data_queue.size()) begin
-        bit [7:0] exp_byte = tx_data_queue[word_idx][byte_off +: 8];
-        `DV_CHECK_EQ(item.data_q[i], exp_byte,
-                     $sformatf("TX data mismatch at byte[%0d]", i))
+        bit [7:0] exp_byte = tx_data_queue[word_idx][byte_off+:8];
+        `DV_CHECK_EQ(item.data_q[i], exp_byte, $sformatf("TX data mismatch at byte[%0d]", i))
       end
     end
     begin
@@ -184,13 +179,11 @@ class i3c_scoreboard extends uvm_scoreboard;
     end
   endfunction
 
-  // ----------------------------------------------------------------
   // End-of-test: verify all expected transactions were observed
-  // ----------------------------------------------------------------
   function void check_phase(uvm_phase phase);
     if (exp_txn_queue.size() > 0)
-      `uvm_error(`gfn, $sformatf("%0d expected command(s) never observed on I3C bus",
-                 exp_txn_queue.size()))
+      `uvm_error(`gfn, $sformatf(
+                 "%0d expected command(s) never observed on I3C bus", exp_txn_queue.size()))
     if (tx_data_queue.size() > 0)
       `uvm_error(`gfn, $sformatf("%0d TX data word(s) unconsumed", tx_data_queue.size()))
     `uvm_info(`gfn, $sformatf("Scoreboard: pass=%0d fail=%0d", pass_cnt, fail_cnt), UVM_LOW)
