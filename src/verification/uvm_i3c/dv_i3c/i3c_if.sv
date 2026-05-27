@@ -1,6 +1,9 @@
 interface i3c_if (
     input clk_i,
     input rst_ni,
+    input dut_sel_od_pp_i,
+    input dut_sda_oe_i,
+    input dut_sda_o_i,
     inout scl_io,
     inout sda_io
 );
@@ -16,9 +19,15 @@ interface i3c_if (
   logic sda_i;
   logic device_sda_o = 1'b1;
   logic device_sda_pp_en = 1'b1;
+  logic dut_sel_od_pp;
+  logic dut_sda_oe;
+  logic dut_sda_o;
 
   assign scl_i = scl_io;
   assign sda_i = sda_io;
+  assign dut_sel_od_pp = dut_sel_od_pp_i;
+  assign dut_sda_oe = dut_sda_oe_i;
+  assign dut_sda_o = dut_sda_o_i;
 
   assign scl_io = scl_pp_en ? scl_o : (scl_o ? 1'bz : scl_o);
   assign (highz0, weak1) scl_io = 1'b1;
@@ -34,6 +43,9 @@ interface i3c_if (
   clocking cb @(posedge clk_i);
     input scl_i;
     input sda_i;
+    input dut_sel_od_pp;
+    input dut_sda_oe;
+    input dut_sda_o;
     output scl_o;
     output device_sda_o;
     output scl_pp_en;

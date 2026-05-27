@@ -19,10 +19,12 @@ module tb_i3c_top;
 
   wire scl_bus, sda_bus;
   logic scl_out, sda_out;
+  logic sda_oe;
+  logic sel_od_pp;
   logic scl_in, sda_in;
 
   assign scl_bus = (scl_out === 1'b0) ? 1'b0 : 1'bz;
-  assign sda_bus = (sda_out === 1'b0) ? 1'b0 : 1'bz;
+  assign sda_bus = sda_oe ? sda_out : 1'bz;
 
   pullup (weak1) pu_scl (scl_bus);
   pullup (weak1) pu_sda (sda_bus);
@@ -38,6 +40,9 @@ module tb_i3c_top;
   i3c_if i3c_bus (
       .clk_i (clk),
       .rst_ni(rst_n),
+      .dut_sel_od_pp_i(sel_od_pp),
+      .dut_sda_oe_i(sda_oe),
+      .dut_sda_o_i(sda_out),
       .scl_io(scl_bus),
       .sda_io(sda_bus)
   );
@@ -63,7 +68,8 @@ module tb_i3c_top;
       .scl_o      (scl_out),
       .sda_i      (sda_in),
       .sda_o      (sda_out),
-      .sel_od_pp_o()          // unconnected — bus model is always open-drain
+      .sda_oe_o   (sda_oe),
+      .sel_od_pp_o(sel_od_pp)
   );
 
   initial begin

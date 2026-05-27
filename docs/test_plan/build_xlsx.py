@@ -99,8 +99,9 @@ def collect_test_cases(md_text):
         if m:
             level = len(m.group(1))
             heading = m.group(2)
-            # Enter Section 4
-            if re.match(r"^4\.\s+Test Plan", heading, re.IGNORECASE):
+            # Enter Section 4. Accept both the older "Test Plan" title and
+            # the current "Complete Testcase Plan" title.
+            if re.match(r"^4\.\s+.*(?:Test\s*case|Test Plan)", heading, re.IGNORECASE):
                 in_section4 = True
                 continue
             # Exit at Section 5 or higher-level
@@ -108,12 +109,13 @@ def collect_test_cases(md_text):
                 break
             # Sub-section → update category
             if in_section4 and level == 3:
-                # e.g. "4.1 Category 1 — Register Interface Tests"
+                # e.g. "4.1 Category 1 — Register Interface Tests" or
+                # "4.1 CSR, DAT, and Register Bus"
                 cat_m = re.match(r"4\.\d+\s+Category\s+\d+\s+[—–-]+\s+(.*)", heading)
                 if cat_m:
                     current_category = cat_m.group(1).strip()
                 else:
-                    current_category = heading.strip()
+                    current_category = re.sub(r"^4\.\d+\s+", "", heading).strip()
                 header_seen = False
             continue
 
@@ -141,18 +143,48 @@ def collect_test_cases(md_text):
         while len(cells) < 9:
             cells.append("")
 
-        row = {
-            "category": current_category,
-            "no": cells[0],
-            "test_item": cells[1],
-            "test_name": cells[2],
-            "description": cells[3],
-            "test_flow": cells[4],
-            "pass_condition": cells[5],
-            "priority": cells[6],
-            "related_module": cells[7],
-            "coverage_tags": cells[8] if len(cells) > 8 else "",
-        }
+        header_lc = [c.lower() for c in cells]
+        if "id" in header_lc and "test name" in header_lc:
+            continue
+
+        # Current markdown schema:
+        # ID | Test Name | Objective | Preconditions | Stimulus / Actions |
+        # Expected Results | Related Modules / Interfaces | Priority | Coverage Goals
+        if header_seen and cells[0].upper().split("_")[0] in {
+            "CSR", "FIFO", "BUS", "SDRW", "SDRR", "IMM", "CCC", "DAA",
+            "I2C", "ERR", "ARB", "UVM", "STR", "PERF", "NA",
+        }:
+            test_flow = cells[4]
+            if cells[3]:
+                test_flow = f"Preconditions: {cells[3]}\nStimulus / Actions: {cells[4]}"
+            row = {
+                "category": current_category,
+                "no": cells[0],
+                "test_item": cells[2],
+                "test_name": cells[1],
+                "description": cells[2],
+                "test_flow": test_flow,
+                "pass_condition": cells[5],
+                "priority": cells[7],
+                "related_module": cells[6],
+                "coverage_tags": cells[8],
+            }
+        else:
+            # Older markdown schema:
+            # No | Test Item | Test Name | Description | Test flow |
+            # Pass Condition | Priority | Related Module | Coverage Tags
+            row = {
+                "category": current_category,
+                "no": cells[0],
+                "test_item": cells[1],
+                "test_name": cells[2],
+                "description": cells[3],
+                "test_flow": cells[4],
+                "pass_condition": cells[5],
+                "priority": cells[6],
+                "related_module": cells[7],
+                "coverage_tags": cells[8] if len(cells) > 8 else "",
+            }
         rows.append(row)
 
     return rows
@@ -230,6 +262,28 @@ def collect_perf_tests(md_text):
         rows.append(cells)
 
     return rows
+
+
+def perf_rows_from_test_cases(test_cases):
+    """Build performance sheets from PERF_* testcases when Section 5 tables are absent."""
+    overview = []
+    tests = []
+    for tc in test_cases:
+        if not str(tc["no"]).startswith("PERF_"):
+            continue
+        overview.append([
+            tc["test_name"].strip("`"),
+            tc["description"],
+            tc["pass_condition"],
+        ])
+        tests.append([
+            tc["no"],
+            tc["category"],
+            tc["test_name"],
+            tc["description"],
+            tc["coverage_tags"] or tc["pass_condition"],
+        ])
+    return overview, tests
 
 
 # ---------------------------------------------------------------------------
@@ -475,23 +529,28 @@ def main():
     for cp in coverpoints:
         while len(cp) < 3:
             cp.append("")
-        cov_rows.append(["", cp[0], cp[2] if len(cp) > 2 else ""])
+        cov_rows.append(["", cp[0], cp[1] if len(cp) > 1 else ""])
     cov_rows.append(["", "", ""])
     cov_rows.append(["Cross coverage", "", ""])
     for cx in crosses:
         while len(cx) < 3:
             cx.append("")
-        cov_rows.append(["", cx[0], cx[2] if len(cx) > 2 else ""])
+        cov_rows.append(["", cx[0], cx[1] if len(cx) > 1 else ""])
     cov_header = ["Section", "Name / Cross", "Bins / Description"]
     sheet2_xml = build_sheet(cov_rows, ss, header_row=cov_header)
 
     # ---- Sheet 3: Performance ----
     perf_overview = collect_perf_overview(md_text)
+    perf_overview_fallback, perf_tests_fallback = perf_rows_from_test_cases(test_cases)
+    if not perf_overview:
+        perf_overview = perf_overview_fallback
     perf_header = ["Category", "What to Measure", "Notes"]
     sheet3_xml = build_sheet(perf_overview, ss, header_row=perf_header)
 
     # ---- Sheet 4: Performance test ----
     perf_tests = collect_perf_tests(md_text)
+    if not perf_tests:
+        perf_tests = perf_tests_fallback
     pt_header = ["No", "Category", "Test Name", "Description", "Main Metric"]
     sheet4_xml = build_sheet(perf_tests, ss, header_row=pt_header)
 

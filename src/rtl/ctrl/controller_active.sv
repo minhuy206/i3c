@@ -11,6 +11,7 @@ module controller_active
     input  logic ctrl_sda_i,
     output logic ctrl_scl_o,
     output logic ctrl_sda_o,
+    output logic ctrl_sda_oe_o,
     output logic sel_od_pp_o,
 
     input  logic        cmd_queue_empty_i,
@@ -180,6 +181,8 @@ module controller_active
   assign ctrl_scl_o = scl_gen_scl;
   assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda  // M-2: priority MUX
       : !tx_flow_idle ? tx_flow_sda : 1'b1;
+  assign ctrl_sda_oe_o = scl_gen_driving_sda ? ~scl_gen_sda
+      : !tx_flow_idle ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
   assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;  // M-4: force OD
 
   // ---------------------------------------------------------------------------
