@@ -820,9 +820,9 @@ Test này kiểm tra parity bit của assigned address trong ENTDAA.
 
 Target ACK assigned address. Testbench sweep nhiều dynamic address đại diện, ví dụ địa chỉ thấp, địa chỉ cao, pattern xen kẽ bit 0/1, và một vài giá trị random hợp lệ.
 
-Kết quả mong đợi là address byte controller gửi ra bus có parity bit đúng theo odd parity calculation mà MIPI/project spec định nghĩa cho assigned address.
+Kết quả mong đợi là controller gửi assigned address theo format `{dynamic_addr[6:0], PAR}`. Bit `PAR` phải là odd parity của 7-bit dynamic address: `PAR = ~^dynamic_addr[6:0]`. Nói cách khác, tổng số bit `1` trong `{dynamic_addr[6:0], PAR}` phải là số lẻ.
 
-Nếu dynamic address thay đổi, parity bit phải thay đổi tương ứng. Target chỉ ACK khi byte address và parity đúng như expected.
+Nếu dynamic address thay đổi, parity bit phải thay đổi theo công thức trên. Target chỉ ACK khi 7-bit address đúng và `PAR` đúng; nếu `PAR` sai thì target NACK assigned address.
 
 Test này quan trọng vì assigned address không chỉ là 7-bit address. Parity sai có thể làm target reject assignment dù địa chỉ chính đúng.
 
