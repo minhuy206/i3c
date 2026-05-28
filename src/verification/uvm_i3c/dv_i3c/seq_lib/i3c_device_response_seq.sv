@@ -9,6 +9,12 @@ class i3c_device_response_seq extends uvm_sequence #(
   bit ack_address = 1;
   bit ack_data = 1;
   int read_data_cnt = 4;
+  bit observed_rstart;
+  bit done;
+  bit [6:0] sampled_addr;
+  bit sampled_dir;
+  bit [7:0] sampled_data[$];
+  bit sampled_t_bit[$];
 
   `uvm_object_utils(i3c_device_response_seq)
 
@@ -18,7 +24,14 @@ class i3c_device_response_seq extends uvm_sequence #(
 
   task body();
     i3c_seq_item req;
+    i3c_seq_item rsp_item;
     req = i3c_seq_item::type_id::create("req");
+    observed_rstart = 1'b0;
+    done = 1'b0;
+    sampled_addr = '0;
+    sampled_dir = 1'b0;
+    sampled_data.delete();
+    sampled_t_bit.delete();
 
     req.i3c = is_i3c;
     req.addr = target_addr;
@@ -46,6 +59,14 @@ class i3c_device_response_seq extends uvm_sequence #(
     start_item(req);
     finish_item(req);
 
-    get_response(rsp);
+    get_response(rsp_item);
+    if (rsp_item != null) begin
+      observed_rstart = rsp_item.end_with_rstart;
+      sampled_addr = rsp_item.addr;
+      sampled_dir = rsp_item.dir;
+      sampled_data = rsp_item.data;
+      sampled_t_bit = rsp_item.T_bit;
+    end
+    done = 1'b1;
   endtask
 endclass

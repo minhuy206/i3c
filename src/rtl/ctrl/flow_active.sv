@@ -95,19 +95,26 @@ module flow_active
 
   flow_fsm_state_e state_d, state_q;
 
-  logic [HciCmdDataWidth-1:0] cmd_desc;
-  immediate_data_trans_desc_t imm_desc;
-  regular_trans_desc_t reg_desc;
-  addr_assign_desc_t aa_desc;
-  dat_entry_t dat_entry;
+  logic                       [HciCmdDataWidth-1:0] cmd_desc;
+  immediate_data_trans_desc_t                       imm_desc;
+  regular_trans_desc_t                              reg_desc;
+  addr_assign_desc_t                                aa_desc;
+  dat_entry_t                                       dat_entry;
+  i3c_cmd_attr_e                                    cmd_attr;
+  cmd_transfer_dir_e                                cmd_dir;
+  logic                       [                3:0] cmd_tid;
+  logic                       [          DatAw-1:0] dev_index;
+  logic                                             imm_bcast_enec_disec;
+  logic                                             imm_bcast_has_event_byte;
 
-  i3c_cmd_attr_e cmd_attr;
-  cmd_transfer_dir_e cmd_dir;
-  logic [3:0] cmd_tid;
-  logic [DatAw-1:0] dev_index;
+  logic                       [HciCmdDataWidth-1:0] next_cmd_desc;
+  regular_trans_desc_t                              next_reg_desc;
+  i3c_cmd_attr_e                                    next_cmd_attr;
+  logic                                             next_cmd_supported;
+  logic                                             next_cmd_available;
 
-  logic i3c_fsm_idle;
-  logic cmd_queue_rready;
+  logic                                             i3c_fsm_idle;
+  logic                                             cmd_queue_rready;
   logic dat_read_valid_hw_q, dat_read_valid_hw_d;
   logic [DatAw-1:0] dat_index_hw;
 
@@ -123,22 +130,27 @@ module flow_active
   logic rx_queue_wvalid;
   logic [31:0] rx_queue_wdata;
 
-  logic [47:0] daa_pid_d,      daa_pid_q;
-  logic [ 7:0] daa_bcr_d,      daa_bcr_q;
-  logic [ 7:0] daa_dcr_d,      daa_dcr_q;
-  logic [ 6:0] daa_addr_d,     daa_addr_q;
-  logic [ 1:0] daa_wr_phase_d, daa_wr_phase_q;
-  logic        daa_wr_busy_d,  daa_wr_busy_q;
+  logic [47:0] daa_pid_d, daa_pid_q;
+  logic [7:0] daa_bcr_d, daa_bcr_q;
+  logic [7:0] daa_dcr_d, daa_dcr_q;
+  logic [6:0] daa_addr_d, daa_addr_q;
+  logic [1:0] daa_wr_phase_d, daa_wr_phase_q;
+  logic daa_wr_busy_d, daa_wr_busy_q;
 
   logic [15:0] remaining_len_d, remaining_len_q;
   logic [15:0] resp_data_len_d, resp_data_len_q;
 
   i3c_resp_err_status_e resp_err_status_q;
-  logic nack_detected_d, nack_detected_q;
   logic short_read_d, short_read_q;
   logic addr_nack_d, addr_nack_q;
+  logic data_nack_d, data_nack_q;
+  logic hc_aborted_d, hc_aborted_q;
+  logic not_supported_d, not_supported_q;
   logic scl_stop_done_d, scl_stop_done_q;
   logic entdaa_stop_req_d, entdaa_stop_req_q;
+  logic next_start_is_rstart_d, next_start_is_rstart_q;
+  logic addr_after_rstart_d, addr_after_rstart_q;
+  logic cont_pending_d, cont_pending_q;
 
   logic gen_start;
   logic gen_rstart;
@@ -166,14 +178,30 @@ module flow_active
   logic [2:0] data_byte_idx;
   logic [7:0] current_tx_byte;
 
-  assign imm_desc  = immediate_data_trans_desc_t'(cmd_desc);
-  assign reg_desc  = regular_trans_desc_t'(cmd_desc);
-  assign aa_desc   = addr_assign_desc_t'(cmd_desc);
+  assign imm_desc = immediate_data_trans_desc_t'(cmd_desc);
+  assign reg_desc = regular_trans_desc_t'(cmd_desc);
+  assign aa_desc = addr_assign_desc_t'(cmd_desc);
 
-  assign cmd_attr  = i3c_cmd_attr_e'(cmd_desc[2:0]);
-  assign cmd_dir   = cmd_transfer_dir_e'(cmd_desc[29]);
-  assign cmd_tid   = cmd_desc[6:3];
+  assign cmd_attr = i3c_cmd_attr_e'(cmd_desc[2:0]);
+  assign cmd_dir = cmd_transfer_dir_e'(cmd_desc[29]);
+  assign cmd_tid = cmd_desc[6:3];
   assign dev_index = cmd_desc[20:16];
+
+  assign imm_bcast_enec_disec =
+      imm_desc.cp &&
+      !imm_desc.cmd[7] &&
+      ((imm_desc.cmd == 8'h00) || (imm_desc.cmd == 8'h01));
+  assign imm_bcast_has_event_byte = imm_bcast_enec_disec || (imm_desc.dtt >= 3'd5);
+
+  assign next_cmd_desc = cmd_queue_rdata_i;
+  assign next_reg_desc = regular_trans_desc_t'(next_cmd_desc);
+  assign next_cmd_attr = i3c_cmd_attr_e'(next_cmd_desc[2:0]);
+  assign next_cmd_supported =
+      cmd_queue_rvalid_i &&
+      (next_cmd_attr == RegularTransfer) &&
+      (next_reg_desc.mode == sdr0) &&
+      !next_reg_desc.cp;
+  assign next_cmd_available = cmd_queue_rvalid_i && !cmd_queue_empty_i;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_fsm_state_q
     if (!rst_ni) begin
@@ -295,19 +323,19 @@ module flow_active
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : update_nack_detected
-    if (!rst_ni) begin
-      nack_detected_q <= 1'b0;
-    end else begin
-      nack_detected_q <= nack_detected_d;
-    end
-  end
-
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_addr_nack
     if (!rst_ni) begin
       addr_nack_q <= 1'b0;
     end else begin
       addr_nack_q <= addr_nack_d;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_data_nack
+    if (!rst_ni) begin
+      data_nack_q <= 1'b0;
+    end else begin
+      data_nack_q <= data_nack_d;
     end
   end
 
@@ -319,15 +347,35 @@ module flow_active
     end
   end
 
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_hc_aborted
+    if (!rst_ni) begin
+      hc_aborted_q <= 1'b0;
+    end else begin
+      hc_aborted_q <= hc_aborted_d;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_not_supported
+    if (!rst_ni) begin
+      not_supported_q <= 1'b0;
+    end else begin
+      not_supported_q <= not_supported_d;
+    end
+  end
+
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_resp_err_status_q
     if (!rst_ni || i3c_fsm_idle) begin
       resp_err_status_q <= Success;
     end else if (addr_nack_q) begin
       resp_err_status_q <= AddrHeader;
-    end else if (nack_detected_q) begin
+    end else if (data_nack_q) begin
       resp_err_status_q <= Nack;
     end else if (short_read_q) begin
       resp_err_status_q <= I3cShortReadErr;
+    end else if (not_supported_q) begin
+      resp_err_status_q <= NotSupported;
+    end else if (hc_aborted_q) begin
+      resp_err_status_q <= HcAborted;
     end
   end
 
@@ -339,12 +387,35 @@ module flow_active
     end
   end
 
-  // M-5 latch: ENTDAA STOP request, held until scl_generator signals completion.
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_entdaa_stop_req
     if (!rst_ni) begin
       entdaa_stop_req_q <= 1'b0;
     end else begin
       entdaa_stop_req_q <= entdaa_stop_req_d;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_next_start_is_rstart
+    if (!rst_ni) begin
+      next_start_is_rstart_q <= 1'b0;
+    end else begin
+      next_start_is_rstart_q <= next_start_is_rstart_d;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_addr_after_rstart
+    if (!rst_ni) begin
+      addr_after_rstart_q <= 1'b0;
+    end else begin
+      addr_after_rstart_q <= addr_after_rstart_d;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_cont_pending
+    if (!rst_ni) begin
+      cont_pending_q <= 1'b0;
+    end else begin
+      cont_pending_q <= cont_pending_d;
     end
   end
 
@@ -399,7 +470,9 @@ module flow_active
       end
 
       WaitDAT: begin
-        if (!dat_read_valid_hw_q) begin
+        if (cont_pending_q && dat_entry.device) begin
+          if (scl_stop_done_q) state_d = WriteResp;
+        end else if (!dat_read_valid_hw_q) begin
           if (cmd_attr == ImmediateDataTransfer) begin
             state_d = dat_entry.device ? I2CWriteImmediate : I3CWriteImmediate;
           end else if (cmd_attr == AddressAssignment) begin
@@ -423,12 +496,12 @@ module flow_active
       end
 
       I2CWriteImmediate: begin
-        if (addr_nack_q) begin
-          state_d = WriteResp;
-        end else if (transfer_cnt_q > (8'd3 + (imm_desc.dtt << 1))) begin
-          if (imm_desc.toc && scl_gen_done_i) begin
+        if (addr_nack_q || data_nack_q) begin
+          if (scl_stop_done_q) begin
             state_d = WriteResp;
-          end else if (!imm_desc.toc) begin
+          end
+        end else if (transfer_cnt_q > (8'd3 + (imm_desc.dtt << 1))) begin
+          if (scl_stop_done_q) begin
             state_d = WriteResp;
           end
         end
@@ -436,20 +509,28 @@ module flow_active
 
       I3CWriteImmediate: begin
         if (addr_nack_q) begin
-          state_d = WriteResp;
+          if (scl_stop_done_q) begin
+            state_d = WriteResp;
+          end
         end else if (imm_desc.cp) begin
           if (imm_desc.cmd[7]) begin
-            if (issue_phase_q >= 8'd10 && (!imm_desc.toc || scl_gen_done_i)) begin
-              state_d = WriteResp;
+            if (issue_phase_q >= 8'd10) begin
+              if (scl_stop_done_q) begin
+                state_d = WriteResp;
+              end
             end
           end else begin
-            if (issue_phase_q >= 8'd6 && (!imm_desc.toc || scl_gen_done_i)) begin
-              state_d = WriteResp;
+            if (issue_phase_q >= 8'd6) begin
+              if (scl_stop_done_q) begin
+                state_d = WriteResp;
+              end
             end
           end
         end else begin
-          if (issue_phase_q >= (8'd3 + (imm_desc.dtt << 1)) && (!imm_desc.toc || scl_gen_done_i)) begin
-            state_d = WriteResp;
+          if (issue_phase_q >= (8'd3 + (imm_desc.dtt << 1))) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
           end
         end
       end
@@ -472,7 +553,9 @@ module flow_active
 
       InitI2CWrite: begin
         if (addr_nack_q) begin
-          state_d = WriteResp;
+          if (scl_stop_done_q) begin
+            state_d = WriteResp;
+          end
         end else if (transfer_cnt_q >= 8'd3) begin
           state_d = IssueCmd;
         end
@@ -480,7 +563,9 @@ module flow_active
 
       InitI2CRead: begin
         if (addr_nack_q) begin
-          state_d = WriteResp;
+          if (scl_stop_done_q) begin
+            state_d = WriteResp;
+          end
         end else if (transfer_cnt_q >= 8'd3) begin
           state_d = IssueCmd;
         end
@@ -504,29 +589,53 @@ module flow_active
             state_d = WriteResp;
           end
         end else if (cmd_dir == Write) begin
-          if (addr_nack_q && !dat_entry.device) begin
-            state_d = WriteResp;
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (data_nack_q && dat_entry.device) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
           end else if (remaining_len_q == 16'h0 &&
                        issue_phase_q > (dat_entry.device ? 8'h0 : 8'd2)) begin
-            if (reg_desc.toc && scl_stop_done_q && bus_tx_idle_i && bus_rx_idle_i) begin
-              state_d = WriteResp;
-            end else if (!reg_desc.toc) begin
-              state_d = WriteResp;
+            if (bus_tx_idle_i && bus_rx_idle_i) begin
+              if (reg_desc.toc && scl_stop_done_q) begin
+                state_d = WriteResp;
+              end else if (!reg_desc.toc) begin
+                if (!dat_entry.device && next_cmd_available && next_cmd_supported &&
+                    resp_queue_wready_i) begin
+                  state_d = FetchDAT;
+                end else if ((dat_entry.device || !(next_cmd_available && next_cmd_supported)) &&
+                             scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end
+              end
             end
           end else if (tx_byte_idx_q == 2'd3 && remaining_len_q > 16'h1) begin
             state_d = FetchTxData;
           end
         end else begin
-          if (addr_nack_q && !dat_entry.device) begin
-            state_d = WriteResp;
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
           end else if ((remaining_len_q == 16'h0 || short_read_q) &&
                        issue_phase_q > (dat_entry.device ? 8'h0 : 8'd2)) begin
             if (rx_byte_idx_q != 2'h0) begin
               state_d = FetchRxData;
-            end else if (reg_desc.toc && scl_stop_done_q && bus_tx_idle_i && bus_rx_idle_i) begin
-              state_d = WriteResp;
-            end else if (!reg_desc.toc) begin
-              state_d = WriteResp;
+            end else if (bus_tx_idle_i && bus_rx_idle_i) begin
+              if ((short_read_q || reg_desc.toc) && scl_stop_done_q) begin
+                state_d = WriteResp;
+              end else if (!short_read_q && !reg_desc.toc) begin
+                if (!dat_entry.device && next_cmd_available && next_cmd_supported &&
+                    resp_queue_wready_i) begin
+                  state_d = FetchDAT;
+                end else if ((dat_entry.device || !(next_cmd_available && next_cmd_supported)) &&
+                             scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end
+              end
             end
           end else if (rx_byte_idx_q == 2'd3 && remaining_len_q > 16'h0) begin
             if (!dat_entry.device) begin
@@ -551,57 +660,62 @@ module flow_active
   end
 
   always_comb begin : compute_fsm_outputs
-    transfer_cnt_d = transfer_cnt_q;
-    issue_phase_d = issue_phase_q;
-    i3c_fsm_idle = 1'b0;
-    cmd_queue_rready = 1'b0;
-    dat_read_valid_hw_d = 1'b0;
-    scl_stop_done_d = 1'b0;
-    dat_index_hw = '0;
+    transfer_cnt_d         = transfer_cnt_q;
+    issue_phase_d          = issue_phase_q;
+    i3c_fsm_idle           = 1'b0;
+    cmd_queue_rready       = 1'b0;
+    dat_read_valid_hw_d    = 1'b0;
+    scl_stop_done_d        = 1'b0;
+    dat_index_hw           = '0;
 
-    tx_queue_rready = 1'b0;
-    tx_byte_idx_d = tx_byte_idx_q;
+    tx_queue_rready        = 1'b0;
+    tx_byte_idx_d          = tx_byte_idx_q;
 
-    rx_dword_d = rx_dword_q;
-    rx_byte_idx_d = rx_byte_idx_q;
-    rx_queue_wvalid = 1'b0;
-    rx_queue_wdata = '0;
+    rx_dword_d             = rx_dword_q;
+    rx_byte_idx_d          = rx_byte_idx_q;
+    rx_queue_wvalid        = 1'b0;
+    rx_queue_wdata         = '0;
 
-    daa_pid_d      = daa_pid_q;
-    daa_bcr_d      = daa_bcr_q;
-    daa_dcr_d      = daa_dcr_q;
-    daa_addr_d     = daa_addr_q;
-    daa_wr_phase_d = daa_wr_phase_q;
-    daa_wr_busy_d  = daa_wr_busy_q;
+    daa_pid_d              = daa_pid_q;
+    daa_bcr_d              = daa_bcr_q;
+    daa_dcr_d              = daa_dcr_q;
+    daa_addr_d             = daa_addr_q;
+    daa_wr_phase_d         = daa_wr_phase_q;
+    daa_wr_busy_d          = daa_wr_busy_q;
 
-    remaining_len_d = remaining_len_q;
-    resp_data_len_d = resp_data_len_q;
+    remaining_len_d        = remaining_len_q;
+    resp_data_len_d        = resp_data_len_q;
 
-    addr_nack_d = addr_nack_q;
-    nack_detected_d = nack_detected_q;
-    short_read_d = short_read_q;
-    entdaa_stop_req_d = entdaa_stop_req_q;
+    addr_nack_d            = addr_nack_q;
+    data_nack_d            = data_nack_q;
+    short_read_d           = short_read_q;
+    hc_aborted_d           = hc_aborted_q;
+    not_supported_d        = not_supported_q;
+    entdaa_stop_req_d      = entdaa_stop_req_q;
+    next_start_is_rstart_d = next_start_is_rstart_q;
+    addr_after_rstart_d    = addr_after_rstart_q;
+    cont_pending_d         = cont_pending_q;
 
-    gen_start = 1'b0;
-    gen_rstart = 1'b0;
-    gen_stop = 1'b0;
-    gen_clock = 1'b0;
-    gen_idle = 1'b0;
-    sel_i3c_i2c = 1'b0;
-    sel_od_pp = 1'b0;
+    gen_start              = 1'b0;
+    gen_rstart             = 1'b0;
+    gen_stop               = 1'b0;
+    gen_clock              = 1'b0;
+    gen_idle               = 1'b0;
+    sel_i3c_i2c            = 1'b0;
+    sel_od_pp              = 1'b0;
 
-    bus_tx_req_byte = 1'b0;
-    bus_tx_req_bit = 1'b0;
-    bus_tx_req_value = 8'h00;
-    bus_rx_req_byte = 1'b0;
-    bus_rx_req_bit = 1'b0;
+    bus_tx_req_byte        = 1'b0;
+    bus_tx_req_bit         = 1'b0;
+    bus_tx_req_value       = 8'h00;
+    bus_rx_req_byte        = 1'b0;
+    bus_rx_req_bit         = 1'b0;
 
-    resp_queue_wvalid = 1'b0;
-    resp_queue_wdata = '0;
+    resp_queue_wvalid      = 1'b0;
+    resp_queue_wdata       = '0;
 
-    ccc_valid = 1'b0;
-    daa_dev_idx = 5'h00;
-    ccc_dev_count = 4'h0;
+    ccc_valid              = 1'b0;
+    daa_dev_idx            = 5'h00;
+    ccc_dev_count          = 4'h0;
 
     unique case (state_q)
       Idle: begin
@@ -615,9 +729,14 @@ module flow_active
         remaining_len_d = 16'h0;
         resp_data_len_d = 16'h0;
         addr_nack_d = 1'b0;
-        nack_detected_d = 1'b0;
+        data_nack_d = 1'b0;
         short_read_d = 1'b0;
+        hc_aborted_d = 1'b0;
+        not_supported_d = 1'b0;
         entdaa_stop_req_d = 1'b0;
+        next_start_is_rstart_d = 1'b0;
+        addr_after_rstart_d = 1'b0;
+        cont_pending_d = 1'b0;
       end
 
       WaitForCmd: begin
@@ -637,15 +756,19 @@ module flow_active
       end
 
       WaitDAT: begin
-        // intentionally empty: dat_read_valid_hw_d stays 0 (default) so q drops after
-        // one cycle, allowing the capture FF to re-fire with the correct dat_rdata_o.
+        if (cont_pending_q && dat_entry.device) begin
+          gen_stop = 1'b1;
+          if (scl_gen_done_i) begin
+            not_supported_d = 1'b1;
+            scl_stop_done_d = 1'b1;
+          end
+        end
       end
 
       I2CWriteImmediate: begin
         gen_clock   = 1'b1;
         sel_i3c_i2c = 1'b0;
         sel_od_pp   = 1'b0;
-
         unique case (transfer_cnt_q)
           8'd0: begin
             gen_start = 1'b1;
@@ -671,25 +794,42 @@ module flow_active
           end
 
           default: begin
-            if (transfer_cnt_q >= 8'd3 && data_byte_idx < imm_desc.dtt) begin
-              if (transfer_cnt_q[0] == 1'b1) begin
-                bus_tx_req_byte  = 1'b1;
-                bus_tx_req_value = imm_data_byte;
-                if (bus_tx_done_i) begin
-                  transfer_cnt_d  = transfer_cnt_q + 8'h1;
-                  resp_data_len_d = resp_data_len_q + 16'h1;
-                end
-              end else begin
-                bus_rx_req_bit = 1'b1;
-                if (bus_rx_done_i) begin
-                  nack_detected_d = bus_rx_data_i[0];
-                  transfer_cnt_d  = transfer_cnt_q + 8'h1;
-                end
-              end
-            end else if (imm_desc.toc && transfer_cnt_q == (8'd3 + (imm_desc.dtt << 1))) begin
+            if (data_nack_q || addr_nack_q) begin
               gen_stop = 1'b1;
               if (scl_gen_done_i) begin
-                transfer_cnt_d = transfer_cnt_q + 8'h1;
+                scl_stop_done_d = 1'b1;
+              end
+            end else begin
+              if (transfer_cnt_q >= 8'd3 && data_byte_idx < imm_desc.dtt) begin
+                if (transfer_cnt_q[0] == 1'b1) begin
+                  bus_tx_req_byte  = 1'b1;
+                  bus_tx_req_value = imm_data_byte;
+                  if (bus_tx_done_i) begin
+                    transfer_cnt_d  = transfer_cnt_q + 8'h1;
+                    resp_data_len_d = resp_data_len_q + 16'h1;
+                  end
+                end else begin
+                  bus_rx_req_bit = 1'b1;
+                  if (bus_rx_done_i) begin
+                    data_nack_d = bus_rx_data_i[0];
+                    transfer_cnt_d = transfer_cnt_q + 8'h1;
+                  end
+                end
+              end else if ((transfer_cnt_q == (8'd3 + (imm_desc.dtt << 1)))) begin
+                if (imm_desc.toc) begin
+                  gen_stop = 1'b1;
+                  if (scl_gen_done_i) begin
+                    transfer_cnt_d  = transfer_cnt_q + 8'h1;
+                    scl_stop_done_d = 1'b1;
+                  end
+                end else begin
+                  gen_stop = 1'b1;
+                  if (scl_gen_done_i) begin
+                    scl_stop_done_d = 1'b1;
+                    transfer_cnt_d  = transfer_cnt_q + 8'h1;
+                    not_supported_d = 1'b1;
+                  end
+                end
               end
             end
           end
@@ -699,225 +839,292 @@ module flow_active
       I3CWriteImmediate: begin
         gen_clock   = 1'b1;
         sel_i3c_i2c = 1'b1;
-
         if (!imm_desc.cp) begin
-          unique case (issue_phase_q)
-            8'd0: begin
-              sel_od_pp = 1'b0;
-              gen_start = 1'b1;
-              if (scl_gen_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
+          if (addr_nack_d) begin
+            gen_stop = 1'b1;
+            if (scl_gen_done_i) begin
+              scl_stop_done_d = 1'b1;
             end
-
-            8'd1: begin
-              sel_od_pp = 1'b0;
-              bus_tx_req_byte = 1'b1;
-              bus_tx_req_value = {dat_entry.dynamic_address, Write};
-              if (bus_tx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd2: begin
-              sel_od_pp = 1'b0;
-              bus_rx_req_bit = 1'b1;
-              if (bus_rx_done_i) begin
-                addr_nack_d   = bus_rx_data_i[0];
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            default: begin
-              if (issue_phase_q >= 8'd3 && ((issue_phase_q - 8'd3) >> 1) < imm_desc.dtt) begin
-                sel_od_pp = 1'b1;
-                if (issue_phase_q[0] == 1'b1) begin
-                  bus_tx_req_byte  = 1'b1;
-                  bus_tx_req_value = imm_data_byte;
-                  if (bus_tx_done_i) begin
-                    issue_phase_d   = issue_phase_q + 8'h1;
-                    resp_data_len_d = resp_data_len_q + 16'h1;
-                  end
-                end else begin
-                  bus_tx_req_bit   = 1'b1;
-                  bus_tx_req_value = {7'b0, ~^imm_data_byte};
-                  if (bus_tx_done_i) begin
-                    issue_phase_d = issue_phase_q + 8'h1;
-                  end
-                end
-              end else if (imm_desc.toc && issue_phase_q == (8'd3 + (imm_desc.dtt << 1))) begin
-                gen_stop = 1'b1;
-                if (scl_gen_done_i) begin
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
-              end
-            end
-          endcase
-        end else if (imm_desc.cmd[7]) begin
-          unique case (issue_phase_q)
-            8'd0: begin
-              sel_od_pp = 1'b0;
-              gen_start = 1'b1;
-              if (scl_gen_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd1: begin
-              sel_od_pp = 1'b0;
-              bus_tx_req_byte = 1'b1;
-              bus_tx_req_value = {I3C_RSVD_ADDR, Write};
-              if (bus_tx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd2: begin
-              sel_od_pp = 1'b0;
-              bus_rx_req_bit = 1'b1;
-              if (bus_rx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd3: begin
-              sel_od_pp = 1'b0;
-              bus_tx_req_byte = 1'b1;
-              bus_tx_req_value = imm_desc.cmd;
-              if (bus_tx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd4: begin
-              sel_od_pp = 1'b0;
-              bus_rx_req_bit = 1'b1;
-              if (bus_rx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd5: begin
-              sel_od_pp  = 1'b0;
-              gen_rstart = 1'b1;
-              if (scl_gen_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd6: begin
-              sel_od_pp = 1'b0;
-              bus_tx_req_byte = 1'b1;
-              bus_tx_req_value = {dat_entry.dynamic_address, Write};
-              if (bus_tx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd7: begin
-              sel_od_pp = 1'b0;
-              bus_rx_req_bit = 1'b1;
-              if (bus_rx_done_i) begin
-                addr_nack_d   = bus_rx_data_i[0];
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd8: begin
-              sel_od_pp = 1'b1;
-              bus_tx_req_byte = 1'b1;
-              bus_tx_req_value = imm_desc.def_or_data_byte1;
-              if (bus_tx_done_i) begin
-                issue_phase_d   = issue_phase_q + 8'h1;
-                resp_data_len_d = resp_data_len_q + 16'h1;
-              end
-            end
-
-            8'd9: begin
-              sel_od_pp = 1'b1;
-              bus_tx_req_bit = 1'b1;
-              bus_tx_req_value = {7'b0, ~^imm_desc.def_or_data_byte1};
-              if (bus_tx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            default: begin
-              if (imm_desc.toc && issue_phase_q == 8'd10) begin
-                gen_stop = 1'b1;
-                if (scl_gen_done_i) begin
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
-              end
-            end
-          endcase
-        end else begin
-          unique case (issue_phase_q)
-            8'd0: begin
-              sel_od_pp = 1'b0;
-              gen_start = 1'b1;
-              if (scl_gen_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd1: begin
-              sel_od_pp = 1'b0;
-              bus_tx_req_byte = 1'b1;
-              bus_tx_req_value = {I3C_RSVD_ADDR, Write};
-              if (bus_tx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd2: begin
-              sel_od_pp = 1'b0;
-              bus_rx_req_bit = 1'b1;
-              if (bus_rx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd3: begin
-              sel_od_pp = 1'b0;
-              bus_tx_req_byte = 1'b1;
-              bus_tx_req_value = imm_desc.cmd;
-              if (bus_tx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd4: begin
-              sel_od_pp = 1'b0;
-              bus_rx_req_bit = 1'b1;
-              if (bus_rx_done_i) begin
-                issue_phase_d = issue_phase_q + 8'h1;
-              end
-            end
-
-            8'd5: begin
-              if (imm_desc.dtt >= 3'd5) begin
+          end else begin
+            unique case (issue_phase_q)
+              8'd0: begin
                 sel_od_pp = 1'b0;
+                gen_start = 1'b1;
+                if (scl_gen_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd1: begin
+                sel_od_pp = 1'b0;
+                bus_tx_req_byte = 1'b1;
+                bus_tx_req_value = {dat_entry.dynamic_address, Write};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd2: begin
+                sel_od_pp = 1'b0;
+                bus_rx_req_bit = 1'b1;
+                if (bus_rx_done_i) begin
+                  addr_nack_d   = bus_rx_data_i[0];
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              default: begin
+                if (issue_phase_q >= 8'd3 && ((issue_phase_q - 8'd3) >> 1) < imm_desc.dtt) begin
+                  sel_od_pp = 1'b1;
+                  if (issue_phase_q[0] == 1'b1) begin
+                    bus_tx_req_byte  = 1'b1;
+                    bus_tx_req_value = imm_data_byte;
+                    if (bus_tx_done_i) begin
+                      issue_phase_d   = issue_phase_q + 8'h1;
+                      resp_data_len_d = resp_data_len_q + 16'h1;
+                    end
+                  end else begin
+                    bus_tx_req_bit   = 1'b1;
+                    bus_tx_req_value = {7'b0, ~^imm_data_byte};
+                    if (bus_tx_done_i) begin
+                      issue_phase_d = issue_phase_q + 8'h1;
+                    end
+                  end
+                end else if (issue_phase_q == (8'd3 + (imm_desc.dtt << 1))) begin
+                  if (imm_desc.toc) begin
+                    gen_stop = 1'b1;
+                    if (scl_gen_done_i) begin
+                      scl_stop_done_d = 1'b1;
+                      issue_phase_d   = issue_phase_q + 8'h1;
+                    end
+                  end else begin
+                    gen_stop = 1'b1;
+                    if (scl_gen_done_i) begin
+                      issue_phase_d   = issue_phase_q + 8'h1;
+                      scl_stop_done_d = 1'b1;
+                      not_supported_d = 1'b1;
+                    end
+                  end
+                end
+              end
+            endcase
+          end
+        end else if (imm_desc.cmd[7]) begin
+          if (addr_nack_d) begin
+            gen_stop = 1'b1;
+            if (scl_gen_done_i) begin
+              scl_stop_done_d = 1'b1;
+            end
+          end else begin
+            unique case (issue_phase_q)
+              8'd0: begin
+                sel_od_pp = 1'b0;
+                gen_start = 1'b1;
+                if (scl_gen_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd1: begin
+                sel_od_pp = 1'b0;
+                bus_tx_req_byte = 1'b1;
+                bus_tx_req_value = {I3C_RSVD_ADDR, Write};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd2: begin
+                sel_od_pp = 1'b0;
+                bus_rx_req_bit = 1'b1;
+                if (bus_rx_done_i) begin
+                  addr_nack_d   = bus_rx_data_i[0];
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd3: begin
+                sel_od_pp = 1'b1;
+                bus_tx_req_byte = 1'b1;
+                bus_tx_req_value = imm_desc.cmd;
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd4: begin
+                sel_od_pp = 1'b1;
+                bus_tx_req_bit = 1'b1;
+                bus_tx_req_value = {7'b0, ~^imm_desc.cmd};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd5: begin
+                sel_od_pp  = 1'b0;
+                gen_rstart = 1'b1;
+                if (scl_gen_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd6: begin
+                sel_od_pp = 1'b0;
+                bus_tx_req_byte = 1'b1;
+                bus_tx_req_value = {dat_entry.dynamic_address, Write};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd7: begin
+                sel_od_pp = 1'b0;
+                bus_rx_req_bit = 1'b1;
+                if (bus_rx_done_i) begin
+                  addr_nack_d   = bus_rx_data_i[0];
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd8: begin
+                sel_od_pp = 1'b1;
                 bus_tx_req_byte = 1'b1;
                 bus_tx_req_value = imm_desc.def_or_data_byte1;
                 if (bus_tx_done_i) begin
                   issue_phase_d   = issue_phase_q + 8'h1;
                   resp_data_len_d = resp_data_len_q + 16'h1;
                 end
-              end else begin
-                issue_phase_d = issue_phase_q + 8'h1;
               end
-            end
 
-            default: begin
-              if (imm_desc.toc && issue_phase_q == 8'd6) begin
-                gen_stop = 1'b1;
+              8'd9: begin
+                sel_od_pp = 1'b1;
+                bus_tx_req_bit = 1'b1;
+                bus_tx_req_value = {7'b0, ~^imm_desc.def_or_data_byte1};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              default: begin
+                if (issue_phase_q == 8'd10) begin
+                  if (imm_desc.toc) begin
+                    gen_stop = 1'b1;
+                    if (scl_gen_done_i) begin
+                      issue_phase_d   = issue_phase_q + 8'h1;
+                      scl_stop_done_d = 1'b1;
+                    end
+                  end else begin
+                    gen_stop = 1'b1;
+                    if (scl_gen_done_i) begin
+                      issue_phase_d   = issue_phase_q + 8'h1;
+                      scl_stop_done_d = 1'b1;
+                      not_supported_d = 1'b1;
+                    end
+                  end
+                end
+              end
+            endcase
+          end
+        end else begin
+          if (addr_nack_d) begin
+            gen_stop = 1'b1;
+            if (scl_gen_done_i) begin
+              scl_stop_done_d = 1'b1;
+            end
+          end else begin
+            unique case (issue_phase_q)
+              8'd0: begin
+                sel_od_pp = 1'b0;
+                gen_start = 1'b1;
                 if (scl_gen_done_i) begin
                   issue_phase_d = issue_phase_q + 8'h1;
                 end
               end
-            end
-          endcase
+
+              8'd1: begin
+                sel_od_pp = 1'b0;
+                bus_tx_req_byte = 1'b1;
+                bus_tx_req_value = {I3C_RSVD_ADDR, Write};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd2: begin
+                sel_od_pp = 1'b0;
+                bus_rx_req_bit = 1'b1;
+                if (bus_rx_done_i) begin
+                  addr_nack_d   = bus_rx_data_i[0];
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd3: begin
+                sel_od_pp = 1'b1;
+                bus_tx_req_byte = 1'b1;
+                bus_tx_req_value = imm_desc.cmd;
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd4: begin
+                sel_od_pp = 1'b1;
+                bus_tx_req_bit = 1'b1;
+                bus_tx_req_value = {7'b0, ~^imm_desc.cmd};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd5: begin
+                if (imm_bcast_has_event_byte) begin
+                  sel_od_pp = 1'b1;
+                  bus_tx_req_byte = 1'b1;
+                  bus_tx_req_value = imm_desc.def_or_data_byte1;
+                  if (bus_tx_done_i) begin
+                    issue_phase_d   = issue_phase_q + 8'h1;
+                    resp_data_len_d = resp_data_len_q + 16'h1;
+                  end
+                end else begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              8'd6: begin
+                if (imm_bcast_has_event_byte) begin
+                  sel_od_pp = 1'b1;
+                  bus_tx_req_bit = 1'b1;
+                  bus_tx_req_value = {7'b0, ~^imm_desc.def_or_data_byte1};
+                  if (bus_tx_done_i) begin
+                    issue_phase_d = issue_phase_q + 8'h1;
+                  end
+                end else begin
+                  issue_phase_d = issue_phase_q + 8'h1;
+                end
+              end
+
+              default: begin
+                if (issue_phase_q == 8'd7) begin
+                  if (imm_desc.toc) begin
+                    gen_stop = 1'b1;
+                    if (scl_gen_done_i) begin
+                      issue_phase_d   = issue_phase_q + 8'h1;
+                      scl_stop_done_d = 1'b1;
+                    end
+                  end else begin
+                    gen_stop = 1'b1;
+                    if (scl_gen_done_i) begin
+                      issue_phase_d   = issue_phase_q + 8'h1;
+                      scl_stop_done_d = 1'b1;
+                      not_supported_d = 1'b1;
+                    end
+                  end
+                end
+              end
+            endcase
+          end
         end
       end
 
@@ -941,60 +1148,74 @@ module flow_active
         sel_i3c_i2c = 1'b0;
         sel_od_pp   = 1'b0;
 
-        unique case (transfer_cnt_q)
-          8'd0: begin
-            gen_start = 1'b1;
-            if (scl_gen_done_i) begin
-              transfer_cnt_d = transfer_cnt_q + 8'h1;
-            end
+        if (addr_nack_q) begin
+          gen_stop = 1'b1;
+          if (scl_gen_done_i) begin
+            scl_stop_done_d = 1'b1;
           end
+        end else begin
+          unique case (transfer_cnt_q)
+            8'd0: begin
+              gen_start = 1'b1;
+              if (scl_gen_done_i) begin
+                transfer_cnt_d = transfer_cnt_q + 8'h1;
+              end
+            end
 
-          8'd1: begin
-            bus_tx_req_byte  = 1'b1;
-            bus_tx_req_value = {dat_entry.static_address, Write};
-            if (bus_tx_done_i) begin
-              transfer_cnt_d = transfer_cnt_q + 8'h1;
+            8'd1: begin
+              bus_tx_req_byte  = 1'b1;
+              bus_tx_req_value = {dat_entry.static_address, Write};
+              if (bus_tx_done_i) begin
+                transfer_cnt_d = transfer_cnt_q + 8'h1;
+              end
             end
-          end
 
-          8'd2: begin
-            bus_rx_req_bit = 1'b1;
-            if (bus_rx_done_i) begin
-              addr_nack_d = bus_rx_data_i[0];
-              transfer_cnt_d = transfer_cnt_q + 8'h1;
+            8'd2: begin
+              bus_rx_req_bit = 1'b1;
+              if (bus_rx_done_i) begin
+                addr_nack_d = bus_rx_data_i[0];
+                transfer_cnt_d = transfer_cnt_q + 8'h1;
+              end
             end
-          end
-        endcase
+          endcase
+        end
       end
 
       InitI2CRead: begin
         sel_i3c_i2c = 1'b0;
         sel_od_pp   = 1'b0;
 
-        unique case (transfer_cnt_q)
-          8'd0: begin
-            gen_start = 1'b1;
-            if (scl_gen_done_i) begin
-              transfer_cnt_d = transfer_cnt_q + 8'h1;
-            end
+        if (addr_nack_q) begin
+          gen_stop = 1'b1;
+          if (scl_gen_done_i) begin
+            scl_stop_done_d = 1'b1;
           end
+        end else begin
+          unique case (transfer_cnt_q)
+            8'd0: begin
+              gen_start = 1'b1;
+              if (scl_gen_done_i) begin
+                transfer_cnt_d = transfer_cnt_q + 8'h1;
+              end
+            end
 
-          8'd1: begin
-            bus_tx_req_byte  = 1'b1;
-            bus_tx_req_value = {dat_entry.static_address, Read};
-            if (bus_tx_done_i) begin
-              transfer_cnt_d = transfer_cnt_q + 8'h1;
+            8'd1: begin
+              bus_tx_req_byte  = 1'b1;
+              bus_tx_req_value = {dat_entry.static_address, Read};
+              if (bus_tx_done_i) begin
+                transfer_cnt_d = transfer_cnt_q + 8'h1;
+              end
             end
-          end
 
-          8'd2: begin
-            bus_rx_req_bit = 1'b1;
-            if (bus_rx_done_i) begin
-              addr_nack_d = bus_rx_data_i[0];
-              transfer_cnt_d = transfer_cnt_q + 8'h1;
+            8'd2: begin
+              bus_rx_req_bit = 1'b1;
+              if (bus_rx_done_i) begin
+                addr_nack_d = bus_rx_data_i[0];
+                transfer_cnt_d = transfer_cnt_q + 8'h1;
+              end
             end
-          end
-        endcase
+          endcase
+        end
       end
 
       StallWrite: begin
@@ -1007,13 +1228,11 @@ module flow_active
 
       IssueCmd: begin
         gen_clock = 1'b1;
-
         scl_stop_done_d = scl_stop_done_q;
 
         if (cmd_attr == AddressAssignment) begin
           sel_i3c_i2c = 1'b1;
           sel_od_pp   = 1'b0;
-
           unique case (issue_phase_q)
             8'd0: begin
               gen_start = 1'b1;
@@ -1081,7 +1300,7 @@ module flow_active
                 end
               end
               if (entdaa_stop_req_q && scl_gen_done_i) entdaa_stop_req_d = 1'b0;
-              if (ccc_done_i)                          entdaa_stop_req_d = 1'b1;
+              if (ccc_done_i) entdaa_stop_req_d = 1'b1;
               if (ccc_done_i || entdaa_stop_req_q) begin
                 gen_stop = 1'b1;
               end
@@ -1089,182 +1308,295 @@ module flow_active
           endcase
         end else if (cmd_dir == Write) begin
           sel_i3c_i2c = !dat_entry.device;
-          if (!dat_entry.device) begin
-            unique case (issue_phase_q)
-              8'd0: begin
-                sel_od_pp = 1'b0;
-                gen_start = 1'b1;
-                if (scl_gen_done_i) issue_phase_d = issue_phase_q + 8'h1;
-              end
-              8'd1: begin
-                sel_od_pp        = 1'b0;
-                bus_tx_req_byte  = 1'b1;
-                bus_tx_req_value = {dat_entry.dynamic_address, Write};
-                if (bus_tx_done_i) issue_phase_d = issue_phase_q + 8'h1;
-              end
-              8'd2: begin
-                sel_od_pp      = 1'b0;
-                bus_rx_req_bit = 1'b1;
-                if (bus_rx_done_i) begin
-                  addr_nack_d   = bus_rx_data_i[0];
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
-              end
-              default: begin
-                if (remaining_len_q > 16'h0) begin
-                  sel_od_pp = 1'b1;
-                  if (issue_phase_q[0]) begin
-                    bus_tx_req_byte  = 1'b1;
-                    bus_tx_req_value = current_tx_byte;
-                    if (bus_tx_done_i) issue_phase_d = issue_phase_q + 8'h1;
+          if (addr_nack_q && !dat_entry.device) begin
+            gen_stop = 1'b1;
+            if (scl_gen_done_i) begin
+              scl_stop_done_d = 1'b1;
+            end
+          end else begin
+            if (!dat_entry.device) begin
+              unique case (issue_phase_q)
+                8'd0: begin
+                  if (next_start_is_rstart_q) begin
+                    gen_rstart = 1'b1;
                   end else begin
-                    bus_tx_req_bit   = 1'b1;
-                    bus_tx_req_value = {7'b0, ~^current_tx_byte};
-                    if (bus_tx_done_i) begin
-                      issue_phase_d = issue_phase_q + 8'h1;
-                      if (tx_byte_idx_q == 2'd3) begin
-                        tx_byte_idx_d = 2'h0;
-                      end else begin
-                        tx_byte_idx_d = tx_byte_idx_q + 2'h1;
-                      end
-                      remaining_len_d = remaining_len_q - 16'h1;
-                      resp_data_len_d = resp_data_len_q + 16'h1;
+                    gen_start = 1'b1;
+                  end
+                  sel_od_pp = 1'b0;
+                  if (scl_gen_done_i) begin
+                    if (next_start_is_rstart_q) begin
+                      next_start_is_rstart_d = 1'b0;
+                      addr_after_rstart_d    = 1'b1;
+                      cont_pending_d         = 1'b0;
                     end
+                    issue_phase_d = issue_phase_q + 8'h1;
+                  end
+                end
+                8'd1: begin
+                  sel_od_pp = addr_after_rstart_q ? 1'b1 : 1'b0;
+                  bus_tx_req_byte = 1'b1;
+                  bus_tx_req_value = {dat_entry.dynamic_address, Write};
+                  if (bus_tx_done_i) begin
+                    issue_phase_d = issue_phase_q + 8'h1;
+                    addr_after_rstart_d = 1'b0;
+                  end
+                end
+                8'd2: begin
+                  sel_od_pp      = 1'b0;
+                  bus_rx_req_bit = 1'b1;
+                  if (bus_rx_done_i) begin
+                    addr_nack_d   = bus_rx_data_i[0];
+                    issue_phase_d = issue_phase_q + 8'h1;
+                  end
+                end
+                default: begin
+                  if (remaining_len_q > 16'h0) begin
+                    sel_od_pp = 1'b1;
+                    if (issue_phase_q[0]) begin
+                      bus_tx_req_byte  = 1'b1;
+                      bus_tx_req_value = current_tx_byte;
+                      if (bus_tx_done_i) issue_phase_d = issue_phase_q + 8'h1;
+                    end else begin
+                      bus_tx_req_bit   = 1'b1;
+                      bus_tx_req_value = {7'b0, ~^current_tx_byte};
+                      if (bus_tx_done_i) begin
+                        issue_phase_d = issue_phase_q + 8'h1;
+                        if (tx_byte_idx_q == 2'd3) begin
+                          tx_byte_idx_d = 2'h0;
+                        end else begin
+                          tx_byte_idx_d = tx_byte_idx_q + 2'h1;
+                        end
+                        remaining_len_d = remaining_len_q - 16'h1;
+                        resp_data_len_d = resp_data_len_q + 16'h1;
+                      end
+                    end
+                  end else begin
+                    sel_od_pp = 1'b0;
+                  end
+                end
+              endcase
+            end else begin
+              sel_od_pp = 1'b0;
+              if (!data_nack_q && remaining_len_q > 16'h0) begin
+                if (issue_phase_q[0] == 1'b0) begin
+                  bus_tx_req_byte  = 1'b1;
+                  bus_tx_req_value = current_tx_byte;
+                  if (bus_tx_done_i) begin
+                    issue_phase_d = issue_phase_q + 8'h1;
                   end
                 end else begin
-                  sel_od_pp = 1'b0;
-                end
-              end
-            endcase
-          end else begin
-            sel_od_pp = 1'b0;
-            if (remaining_len_q > 16'h0) begin
-              if (issue_phase_q[0] == 1'b0) begin
-                bus_tx_req_byte  = 1'b1;
-                bus_tx_req_value = current_tx_byte;
-                if (bus_tx_done_i) begin
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
-              end else begin
-                bus_rx_req_bit = 1'b1;
-                if (bus_rx_done_i) begin
-                  nack_detected_d = bus_rx_data_i[0];
-                  issue_phase_d   = issue_phase_q + 8'h1;
-                  if (tx_byte_idx_q == 2'd3) begin
-                    tx_byte_idx_d = 2'h0;
-                  end else begin
-                    tx_byte_idx_d = tx_byte_idx_q + 2'h1;
+                  bus_rx_req_bit = 1'b1;
+                  if (bus_rx_done_i) begin
+                    data_nack_d   = bus_rx_data_i[0];
+                    issue_phase_d = issue_phase_q + 8'h1;
+                    if (tx_byte_idx_q == 2'd3) begin
+                      tx_byte_idx_d = 2'h0;
+                    end else begin
+                      tx_byte_idx_d = tx_byte_idx_q + 2'h1;
+                    end
+                    remaining_len_d = remaining_len_q - 16'h1;
+                    resp_data_len_d = resp_data_len_q + 16'h1;
                   end
-                  remaining_len_d = remaining_len_q - 16'h1;
-                  resp_data_len_d = resp_data_len_q + 16'h1;
                 end
               end
             end
-          end
 
-          if (remaining_len_q == 16'h0 && reg_desc.toc && bus_tx_idle_i && bus_rx_idle_i) begin
-            gen_stop = 1'b1;
-            if (scl_gen_done_i) scl_stop_done_d = 1'b1;
+            if (data_nack_q && dat_entry.device) begin
+              gen_stop = 1'b1;
+              if (scl_gen_done_i) begin
+                scl_stop_done_d = 1'b1;
+              end
+            end
+            if (!data_nack_q &&
+                remaining_len_q == 16'h0 &&
+                issue_phase_q > (dat_entry.device ? 8'h0 : 8'd2) &&
+                bus_tx_idle_i && bus_rx_idle_i) begin
+              if (reg_desc.toc) begin
+                gen_stop = 1'b1;
+                if (scl_gen_done_i) scl_stop_done_d = 1'b1;
+              end else if (!dat_entry.device && next_cmd_available && next_cmd_supported) begin
+                if (resp_queue_wready_i) begin
+                  resp_queue_wvalid      = 1'b1;
+                  resp_queue_wdata       = {resp_err_status_q, cmd_tid, 8'h00, resp_data_len_q};
+                  cmd_queue_rready       = 1'b1;
+                  transfer_cnt_d         = 8'h0;
+                  issue_phase_d          = 8'h0;
+                  tx_byte_idx_d          = 2'h0;
+                  rx_byte_idx_d          = 2'h0;
+                  rx_dword_d             = 32'h0;
+                  remaining_len_d        = 16'h0;
+                  resp_data_len_d        = 16'h0;
+                  addr_nack_d            = 1'b0;
+                  data_nack_d            = 1'b0;
+                  short_read_d           = 1'b0;
+                  hc_aborted_d           = 1'b0;
+                  not_supported_d        = 1'b0;
+                  scl_stop_done_d        = 1'b0;
+                  next_start_is_rstart_d = 1'b1;
+                  addr_after_rstart_d    = 1'b0;
+                  cont_pending_d         = 1'b1;
+                end
+              end else begin
+                gen_stop = 1'b1;
+                if (scl_gen_done_i) begin
+                  scl_stop_done_d = 1'b1;
+                  not_supported_d = 1'b1;
+                end
+              end
+            end
           end
         end else begin
           sel_i3c_i2c = !dat_entry.device;
-          if (!dat_entry.device) begin
-            // I3C regular read: phases 0-2 generate START + address + ACK, then data
-            unique case (issue_phase_q)
-              8'd0: begin
-                sel_od_pp = 1'b0;
-                gen_start = 1'b1;
-                if (scl_gen_done_i) issue_phase_d = issue_phase_q + 8'h1;
-              end
-              8'd1: begin
-                sel_od_pp        = 1'b0;
-                bus_tx_req_byte  = 1'b1;
-                bus_tx_req_value = {dat_entry.dynamic_address, Read};
-                if (bus_tx_done_i) issue_phase_d = issue_phase_q + 8'h1;
-              end
-              8'd2: begin
-                sel_od_pp      = 1'b0;
-                bus_rx_req_bit = 1'b1;
-                if (bus_rx_done_i) begin
-                  addr_nack_d   = bus_rx_data_i[0];
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
-              end
-              default: begin
-                if (!short_read_q && remaining_len_q > 16'h0) begin
-                  sel_od_pp = 1'b1;
-                  if (issue_phase_q[0]) begin
-                    bus_rx_req_byte = 1'b1;
-                    if (bus_rx_done_i) begin
-                      unique case (rx_byte_idx_q)
-                        2'h0: rx_dword_d[7:0]   = bus_rx_data_i;
-                        2'h1: rx_dword_d[15:8]  = bus_rx_data_i;
-                        2'h2: rx_dword_d[23:16] = bus_rx_data_i;
-                        2'h3: rx_dword_d[31:24] = bus_rx_data_i;
-                      endcase
-                      issue_phase_d = issue_phase_q + 8'h1;
-                    end
-                  end else begin
-                    bus_rx_req_bit = 1'b1;
-                    if (bus_rx_done_i) begin
-                      issue_phase_d  = issue_phase_q + 8'h1;
-                      if (rx_byte_idx_q == 2'h3) begin
-                        rx_byte_idx_d = 2'h0;
-                      end else begin
-                        rx_byte_idx_d = rx_byte_idx_q + 2'h1;
-                      end
-                      remaining_len_d = remaining_len_q - 16'h1;
-                      resp_data_len_d = resp_data_len_q + 16'h1;
-                      if (bus_rx_data_i[0] == 1'b0 && remaining_len_q > 16'h1) begin
-                        short_read_d = 1'b1;
-                      end
-                    end
-                  end
-                end else begin
-                  sel_od_pp = 1'b0;
-                end
-              end
-            endcase
+          if (addr_nack_q && !dat_entry.device) begin
+            gen_stop = 1'b1;
+            if (scl_gen_done_i) begin
+              scl_stop_done_d = 1'b1;
+            end
           end else begin
-            sel_od_pp = 1'b0;
-            if (remaining_len_q > 16'h0) begin
-              if (issue_phase_q[0] == 1'b0) begin
-                bus_rx_req_byte = 1'b1;
-                if (bus_rx_done_i) begin
-                  unique case (rx_byte_idx_q)
-                    2'h0: rx_dword_d[7:0]   = bus_rx_data_i;
-                    2'h1: rx_dword_d[15:8]  = bus_rx_data_i;
-                    2'h2: rx_dword_d[23:16] = bus_rx_data_i;
-                    2'h3: rx_dword_d[31:24] = bus_rx_data_i;
-                  endcase
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
-              end else begin
-                if (remaining_len_q > 16'h1) begin
-                  bus_tx_req_bit   = 1'b1;
-                  bus_tx_req_value = 8'h00;
-                end else begin
-                  bus_tx_req_bit   = 1'b1;
-                  bus_tx_req_value = 8'h01;
-                end
-                if (bus_tx_done_i) begin
-                  issue_phase_d = issue_phase_q + 8'h1;
-                  if (rx_byte_idx_q == 2'h3) begin
-                    rx_byte_idx_d = 2'h0;
+            if (!dat_entry.device) begin
+              // I3C regular read: phases 0-2 generate START + address + ACK, then data
+              unique case (issue_phase_q)
+                8'd0: begin
+                  if (next_start_is_rstart_q) begin
+                    gen_rstart = 1'b1;
                   end else begin
-                    rx_byte_idx_d = rx_byte_idx_q + 2'h1;
+                    gen_start = 1'b1;
                   end
-                  remaining_len_d = remaining_len_q - 16'h1;
-                  resp_data_len_d = resp_data_len_q + 16'h1;
+                  sel_od_pp = 1'b0;
+                  if (scl_gen_done_i) begin
+                    if (next_start_is_rstart_q) begin
+                      next_start_is_rstart_d = 1'b0;
+                      addr_after_rstart_d    = 1'b1;
+                      cont_pending_d         = 1'b0;
+                    end
+                    issue_phase_d = issue_phase_q + 8'h1;
+                  end
+                end
+                8'd1: begin
+                  sel_od_pp = addr_after_rstart_q ? 1'b1 : 1'b0;
+                  bus_tx_req_byte = 1'b1;
+                  bus_tx_req_value = {dat_entry.dynamic_address, Read};
+                  if (bus_tx_done_i) begin
+                    issue_phase_d = issue_phase_q + 8'h1;
+                    addr_after_rstart_d = 1'b0;
+                  end
+                end
+                8'd2: begin
+                  sel_od_pp      = 1'b0;
+                  bus_rx_req_bit = 1'b1;
+                  if (bus_rx_done_i) begin
+                    addr_nack_d   = bus_rx_data_i[0];
+                    issue_phase_d = issue_phase_q + 8'h1;
+                  end
+                end
+                default: begin
+                  if (!short_read_q && remaining_len_q > 16'h0) begin
+                    sel_od_pp = 1'b1;
+                    if (issue_phase_q[0]) begin
+                      bus_rx_req_byte = 1'b1;
+                      if (bus_rx_done_i) begin
+                        unique case (rx_byte_idx_q)
+                          2'h0: rx_dword_d[7:0] = bus_rx_data_i;
+                          2'h1: rx_dword_d[15:8] = bus_rx_data_i;
+                          2'h2: rx_dword_d[23:16] = bus_rx_data_i;
+                          2'h3: rx_dword_d[31:24] = bus_rx_data_i;
+                        endcase
+                        issue_phase_d = issue_phase_q + 8'h1;
+                      end
+                    end else begin
+                      bus_rx_req_bit = 1'b1;
+                      if (bus_rx_done_i) begin
+                        issue_phase_d = issue_phase_q + 8'h1;
+                        if (rx_byte_idx_q == 2'h3) begin
+                          rx_byte_idx_d = 2'h0;
+                        end else begin
+                          rx_byte_idx_d = rx_byte_idx_q + 2'h1;
+                        end
+                        remaining_len_d = remaining_len_q - 16'h1;
+                        resp_data_len_d = resp_data_len_q + 16'h1;
+                        if (bus_rx_data_i[0] == 1'b0 && remaining_len_q > 16'h1) begin
+                          short_read_d = 1'b1;
+                        end
+                      end
+                    end
+                  end else begin
+                    sel_od_pp = 1'b0;
+                  end
+                end
+              endcase
+            end else begin
+              sel_od_pp = 1'b0;
+              if (remaining_len_q > 16'h0) begin
+                if (issue_phase_q[0] == 1'b0) begin
+                  bus_rx_req_byte = 1'b1;
+                  if (bus_rx_done_i) begin
+                    unique case (rx_byte_idx_q)
+                      2'h0: rx_dword_d[7:0] = bus_rx_data_i;
+                      2'h1: rx_dword_d[15:8] = bus_rx_data_i;
+                      2'h2: rx_dword_d[23:16] = bus_rx_data_i;
+                      2'h3: rx_dword_d[31:24] = bus_rx_data_i;
+                    endcase
+                    issue_phase_d = issue_phase_q + 8'h1;
+                  end
+                end else begin
+                  if (remaining_len_q > 16'h1) begin
+                    bus_tx_req_bit   = 1'b1;
+                    bus_tx_req_value = 8'h00;
+                  end else begin
+                    bus_tx_req_bit   = 1'b1;
+                    bus_tx_req_value = 8'h01;
+                  end
+                  if (bus_tx_done_i) begin
+                    issue_phase_d = issue_phase_q + 8'h1;
+                    if (rx_byte_idx_q == 2'h3) begin
+                      rx_byte_idx_d = 2'h0;
+                    end else begin
+                      rx_byte_idx_d = rx_byte_idx_q + 2'h1;
+                    end
+                    remaining_len_d = remaining_len_q - 16'h1;
+                    resp_data_len_d = resp_data_len_q + 16'h1;
+                  end
                 end
               end
             end
-          end
 
-          if ((remaining_len_q == 16'h0 || short_read_q) && reg_desc.toc &&
-              bus_tx_idle_i && bus_rx_idle_i) begin
-            gen_stop = 1'b1;
-            if (scl_gen_done_i) scl_stop_done_d = 1'b1;
+            if ((remaining_len_q == 16'h0 || short_read_q) &&
+                rx_byte_idx_q == 2'h0 &&
+                issue_phase_q > (dat_entry.device ? 8'h0 : 8'd2) &&
+                bus_tx_idle_i && bus_rx_idle_i) begin
+              if (short_read_q || reg_desc.toc) begin
+                gen_stop = 1'b1;
+                if (scl_gen_done_i) scl_stop_done_d = 1'b1;
+              end else if (!dat_entry.device && next_cmd_available && next_cmd_supported) begin
+                if (resp_queue_wready_i) begin
+                  resp_queue_wvalid      = 1'b1;
+                  resp_queue_wdata       = {resp_err_status_q, cmd_tid, 8'h00, resp_data_len_q};
+                  cmd_queue_rready       = 1'b1;
+                  transfer_cnt_d         = 8'h0;
+                  issue_phase_d          = 8'h0;
+                  tx_byte_idx_d          = 2'h0;
+                  rx_byte_idx_d          = 2'h0;
+                  rx_dword_d             = 32'h0;
+                  remaining_len_d        = 16'h0;
+                  resp_data_len_d        = 16'h0;
+                  addr_nack_d            = 1'b0;
+                  data_nack_d            = 1'b0;
+                  short_read_d           = 1'b0;
+                  hc_aborted_d           = 1'b0;
+                  not_supported_d        = 1'b0;
+                  scl_stop_done_d        = 1'b0;
+                  next_start_is_rstart_d = 1'b1;
+                  addr_after_rstart_d    = 1'b0;
+                  cont_pending_d         = 1'b1;
+                end
+              end else begin
+                gen_stop = 1'b1;
+                if (scl_gen_done_i) begin
+                  scl_stop_done_d = 1'b1;
+                  not_supported_d = 1'b1;
+                end
+              end
+            end
           end
         end
       end

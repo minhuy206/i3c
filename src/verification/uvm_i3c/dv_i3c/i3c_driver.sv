@@ -65,6 +65,7 @@ class i3c_driver extends uvm_driver #(
             begin
               if (cfg.if_mode == Device) begin
                 wait (req != null);
+                if (!req.dir && !req.is_daa) wait (bus_state == DrvStop);
                 if (req.i3c) cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, rstart, stop);
                 else cfg.vif.wait_for_i2c_host_stop_or_rstart(cfg.tc.i2c_tc, rstart, stop);
               end else wait (0);
@@ -137,7 +138,6 @@ class i3c_driver extends uvm_driver #(
           end
           cfg.vif.sample_target_data(.data(rsp.dir));
           bus_state = DrvAck;
-          break;
         end
 
         DrvAddrPushPull: begin
@@ -148,7 +148,6 @@ class i3c_driver extends uvm_driver #(
           end
           cfg.vif.sample_target_data(.data(rsp.dir));
           bus_state = DrvAck;
-          break;
         end
 
         DrvAck: begin

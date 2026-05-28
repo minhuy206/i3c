@@ -66,7 +66,7 @@ module controller_active
   logic scl_gen_scl_q;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) scl_gen_scl_q <= 1'b1;
-    else         scl_gen_scl_q <= scl_gen_scl;
+    else scl_gen_scl_q <= scl_gen_scl;
   end
 
   logic scl_tx_negedge;
@@ -126,12 +126,12 @@ module controller_active
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_daa_restart_pending
     if (!rst_ni) daa_restart_pending_q <= 1'b0;
-    else         daa_restart_pending_q <= daa_restart_pending_d;
+    else daa_restart_pending_q <= daa_restart_pending_d;
   end
 
   always_comb begin : compute_daa_restart_pending_d
     daa_restart_pending_d = daa_restart_pending_q;
-    if (daa_req_restart)                  daa_restart_pending_d = 1'b1;
+    if (daa_req_restart) daa_restart_pending_d = 1'b1;
     else if (scl_gen_done || !daa_active) daa_restart_pending_d = 1'b0;
   end
 
@@ -174,10 +174,7 @@ module controller_active
     end
   end
 
-  // ---------------------------------------------------------------------------
   // Output assignments
-  // ---------------------------------------------------------------------------
-
   assign ctrl_scl_o = scl_gen_scl;
   assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda  // M-2: priority MUX
       : !tx_flow_idle ? tx_flow_sda : 1'b1;
@@ -185,10 +182,7 @@ module controller_active
       : !tx_flow_idle ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
   assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;  // M-4: force OD
 
-  // ---------------------------------------------------------------------------
   // Sub-module instances
-  // ---------------------------------------------------------------------------
-
   bus_monitor u_bus_mon (
       .clk_i,
       .rst_ni,

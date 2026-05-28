@@ -2,3 +2,6 @@
 `include "i3c_vseqs/i3c_smoke_vseq.sv"
 `include "i3c_vseqs/i3c_write_vseq.sv"
 `include "i3c_vseqs/i3c_read_vseq.sv"
+`include "i3c_vseqs/i3c_write_toc_zero_vseq.sv"
+`include "i3c_vseqs/i3c_read_toc_zero_vseq.sv"
+`include "i3c_vseqs/i3c_ccc_broadcast_enec_vseq.sv"

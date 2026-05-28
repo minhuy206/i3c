@@ -11,6 +11,9 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit       rnw;
     int       data_length;
     bit [3:0] tid;
+    bit       is_ccc;
+    bit [7:0] ccc;
+    bit [7:0] event_byte;
   } exp_txn_t;
 
   exp_txn_t        exp_txn_queue[$];  // pending expected I3C transactions
@@ -74,11 +77,16 @@ class i3c_scoreboard extends uvm_scoreboard;
       exp_txn_t            exp;
       i3c_cmd_attr_e       attr = i3c_cmd_attr_e'(cmd_dw0[2:0]);
       bit            [3:0] tid = cmd_dw0[6:3];
+      bit            [7:0] cmd = cmd_dw0[14:7];
+      bit                  cp = cmd_dw0[15];
       bit            [4:0] dev_idx = cmd_dw0[20:16];
       bit                  rnw = cmd_dw0[29];
 
       exp.tid  = tid;
       exp.addr = get_device_addr(dev_idx);
+      exp.is_ccc = 1'b0;
+      exp.ccc = cmd;
+      exp.event_byte = wdata[7:0];
 
       case (attr)
         RegularTransfer: begin
@@ -86,8 +94,15 @@ class i3c_scoreboard extends uvm_scoreboard;
           exp.data_length = int'(wdata[31:16]);
         end
         ImmediateDataTransfer: begin
-          exp.rnw         = rnw;
-          exp.data_length = int'(cmd_dw0[25:23]);
+          if (cp && is_broadcast_enec_disec(cmd)) begin
+            exp.addr        = 7'h7e;
+            exp.rnw         = 1'b0;
+            exp.data_length = 1;
+            exp.is_ccc      = 1'b1;
+          end else begin
+            exp.rnw         = rnw;
+            exp.data_length = int'(cmd_dw0[25:23]);
+          end
         end
         AddressAssignment: begin
           exp.rnw         = 1'b0;
@@ -100,16 +115,31 @@ class i3c_scoreboard extends uvm_scoreboard;
       endcase
 
       exp_txn_queue.push_back(exp);
-      `uvm_info(`gfn, $sformatf(
-                "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d",
-                attr.name(),
-                dev_idx,
-                exp.addr,
-                exp.rnw,
-                exp.data_length
-                ), UVM_MEDIUM)
+      if (exp.is_ccc) begin
+        `uvm_info(`gfn, $sformatf(
+                  "CMD queued: attr=%s CCC=0x%02h addr=0x%02h event=0x%02h len=%0d",
+                  attr.name(),
+                  exp.ccc,
+                  exp.addr,
+                  exp.event_byte,
+                  exp.data_length
+                  ), UVM_MEDIUM)
+      end else begin
+        `uvm_info(`gfn, $sformatf(
+                  "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d",
+                  attr.name(),
+                  dev_idx,
+                  exp.addr,
+                  exp.rnw,
+                  exp.data_length
+                  ), UVM_MEDIUM)
+      end
       got_dw0 = 1'b0;
     end
+  endfunction
+
+  function bit is_broadcast_enec_disec(bit [7:0] cmd);
+    return (cmd == ENEC) || (cmd == DISEC);
   endfunction
 
   // Resolve dev_idx to dynamic address via cfg.
@@ -153,12 +183,41 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     exp = exp_txn_queue.pop_front();
 
+    if (exp.is_ccc) begin
+      check_ccc_txn(item, exp);
+      pass_cnt++;
+      return;
+    end
+
     `DV_CHECK_EQ(item.addr, exp.addr, "Target address mismatch")
     `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite, "Transfer direction mismatch")
 
     if (!exp.rnw) check_tx_data(item);
 
     pass_cnt++;
+  endfunction
+
+  function void check_ccc_txn(i3c_item item, exp_txn_t exp);
+    `DV_CHECK_EQ(item.addr, exp.addr, "CCC broadcast address mismatch")
+    `DV_CHECK_EQ(item.bus_op, BusOpWrite, "CCC broadcast direction mismatch")
+    `DV_CHECK_EQ(item.addr_ack, 1'b1, "CCC broadcast header was not ACKed")
+    `DV_CHECK_EQ(item.CCC_valid, 1'b1, "CCC opcode was not decoded")
+    `DV_CHECK_EQ(item.CCC, i3c_ccc_e'(exp.ccc), "CCC opcode mismatch")
+    `DV_CHECK_EQ(item.num_data, exp.data_length, "CCC event byte count mismatch")
+    if (item.data_q.size() > 0) begin
+      `DV_CHECK_EQ(item.data_q[0], exp.event_byte, "CCC event byte mismatch")
+    end else begin
+      `uvm_error(`gfn, "CCC event byte missing")
+      fail_cnt++;
+    end
+    if (item.data_ack_q.size() > 0) begin
+      `DV_CHECK_EQ(item.data_ack_q[0], ~^exp.event_byte, "CCC event byte T-bit mismatch")
+    end else begin
+      `uvm_error(`gfn, "CCC event byte T-bit missing")
+      fail_cnt++;
+    end
+    `DV_CHECK_EQ(item.CCC_direct.size(), 0, "Broadcast CCC should not include a direct phase")
+    `DV_CHECK_EQ(item.stop, 1'b1, "Broadcast CCC should end with STOP")
   endfunction
 
   // Verify write data bytes match queued TX FIFO words (little-endian byte order).
