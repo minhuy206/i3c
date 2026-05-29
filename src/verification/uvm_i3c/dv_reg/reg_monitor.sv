@@ -1,9 +1,7 @@
 class reg_monitor extends uvm_monitor;
   `uvm_component_utils(reg_monitor)
 
-  reg_agent_cfg cfg;
   virtual reg_if vif;
-
   uvm_analysis_port #(reg_seq_item) analysis_port;
 
   function new(string name = "", uvm_component parent = null);
