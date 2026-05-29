@@ -10,23 +10,23 @@ class i3c_base_vseq extends uvm_sequence;
   endtask
 
   virtual task reg_write(bit [11:0] addr, bit [31:0] data);
-    reg_seq_item req;
-    req          = reg_seq_item::type_id::create("req");
-    req.addr     = addr;
-    req.wdata    = data;
-    req.is_write = 1'b1;
-    start_item(req, -1, p_sequencer.m_reg_sequencer);
-    finish_item(req);
+    reg_seq_item reg_seq;
+    reg_seq          = reg_seq_item::type_id::create("reg_seq");
+    reg_seq.addr     = addr;
+    reg_seq.wdata    = data;
+    reg_seq.is_write = 1'b1;
+    start_item(reg_seq, -1, p_sequencer.m_reg_sequencer);
+    finish_item(reg_seq);
   endtask
 
   virtual task reg_read(bit [11:0] addr, output bit [31:0] data);
-    reg_seq_item req;
-    req          = reg_seq_item::type_id::create("req");
-    req.addr     = addr;
-    req.is_write = 1'b0;
-    start_item(req, -1, p_sequencer.m_reg_sequencer);
-    finish_item(req);
-    data = req.rdata;
+    reg_seq_item reg_seq;
+    reg_seq          = reg_seq_item::type_id::create("reg_seq");
+    reg_seq.addr     = addr;
+    reg_seq.is_write = 1'b0;
+    start_item(reg_seq, -1, p_sequencer.m_reg_sequencer);
+    finish_item(reg_seq);
+    data = reg_seq.rdata;
   endtask
 
   virtual task configure_dut();

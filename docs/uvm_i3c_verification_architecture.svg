@@ -1,0 +1,273 @@
+<svg width="1800" height="1180" viewBox="0 0 1800 1180" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">UVM Verification Architecture - I3C Controller</title>
+  <desc id="desc">Professional UVM verification architecture diagram for tb_i3c_top, i3c_base_test, i3c_env, reg_agent, i3c_agent, i3c_virtual_sequencer, i3c_scoreboard, and the i3c_controller_top DUT.</desc>
+
+  <defs>
+    <marker id="arrow-seq" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#25824f"/>
+    </marker>
+    <marker id="arrow-analysis" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#b85d12"/>
+    </marker>
+    <marker id="arrow-signal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#1767bd"/>
+    </marker>
+    <marker id="arrow-signal-start" markerWidth="12" markerHeight="12" refX="2" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M10,2 L2,6 L10,10 Z" fill="#1767bd"/>
+    </marker>
+    <marker id="arrow-create" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#647084"/>
+    </marker>
+    <filter id="soft-shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1b2738" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .canvas { fill: #f6f8fc; }
+      .title { font: 700 34px Arial, Helvetica, sans-serif; fill: #172033; letter-spacing: 0; }
+      .subtitle { font: 400 16px Arial, Helvetica, sans-serif; fill: #536072; letter-spacing: 0; }
+      .domain-label { font: 700 12px Arial, Helvetica, sans-serif; fill: #6c7685; letter-spacing: 0.6px; }
+      .section { fill: #ffffff; stroke-width: 2; filter: url(#soft-shadow); }
+      .section-test { stroke: #5f7fb3; }
+      .section-env { stroke: #4d8b75; }
+      .section-hdl { stroke: #8b6bb3; }
+      .section-head-test { fill: #dfe9fb; }
+      .section-head-env { fill: #dff1ea; }
+      .section-head-hdl { fill: #eee5f8; }
+      .section-title { font: 700 17px Arial, Helvetica, sans-serif; fill: #172033; letter-spacing: 0; }
+      .component { fill: #ffffff; stroke: #9ba8ba; stroke-width: 1.7; }
+      .component-strong { fill: #fbfdff; stroke: #5679b2; stroke-width: 1.8; }
+      .agent { fill: #fbfefd; stroke: #68a38c; stroke-width: 1.8; }
+      .agent-head { fill: #d9efe6; stroke: #68a38c; stroke-width: 0; }
+      .dut { fill: #fffdf8; stroke: #b18435; stroke-width: 2.1; }
+      .if-box { fill: #f7fbff; stroke: #4b88c7; stroke-width: 1.9; }
+      .clock-box { fill: #fff9ec; stroke: #c28d2c; stroke-width: 1.9; }
+      .scoreboard { fill: #fffaf4; stroke: #c7772c; stroke-width: 2; }
+      .box-title { font: 700 15px Arial, Helvetica, sans-serif; fill: #172033; letter-spacing: 0; }
+      .box-subtitle { font: 400 12px Arial, Helvetica, sans-serif; fill: #647084; letter-spacing: 0; }
+      .box-text { font: 400 13px Arial, Helvetica, sans-serif; fill: #273244; letter-spacing: 0; }
+      .small-text { font: 400 12px Arial, Helvetica, sans-serif; fill: #425066; letter-spacing: 0; }
+      .mono-text { font: 600 12px "Courier New", Courier, monospace; fill: #273244; letter-spacing: 0; }
+      .seq-line { fill: none; stroke: #25824f; stroke-width: 2.6; marker-end: url(#arrow-seq); }
+      .analysis-line { fill: none; stroke: #b85d12; stroke-width: 2.6; stroke-dasharray: 8 6; marker-end: url(#arrow-analysis); }
+      .signal-line { fill: none; stroke: #1767bd; stroke-width: 3; marker-end: url(#arrow-signal); }
+      .signal-bidir { fill: none; stroke: #1767bd; stroke-width: 3; marker-start: url(#arrow-signal-start); marker-end: url(#arrow-signal); }
+      .create-line { fill: none; stroke: #647084; stroke-width: 2.2; stroke-dasharray: 5 5; marker-end: url(#arrow-create); }
+      .clock-line { fill: none; stroke: #7d8796; stroke-width: 2; stroke-dasharray: 3 5; marker-end: url(#arrow-create); }
+      .label-bg { fill: #ffffff; stroke: #d6dde7; stroke-width: 1; }
+      .seq-label { font: 700 12px Arial, Helvetica, sans-serif; fill: #1d6f43; letter-spacing: 0; }
+      .analysis-label { font: 700 12px Arial, Helvetica, sans-serif; fill: #9e4f0e; letter-spacing: 0; }
+      .signal-label { font: 700 12px Arial, Helvetica, sans-serif; fill: #115ba8; letter-spacing: 0; }
+      .create-label { font: 700 12px Arial, Helvetica, sans-serif; fill: #526072; letter-spacing: 0; }
+      .divider { stroke: #c9d1de; stroke-width: 2; stroke-dasharray: 8 8; }
+    </style>
+  </defs>
+
+  <rect class="canvas" x="0" y="0" width="1800" height="1180"/>
+
+  <text class="title" x="60" y="58">UVM Verification Architecture - I3C Controller</text>
+  <text class="subtitle" x="60" y="86">Test layer, environment, agents, scoreboard, HDL interfaces, and DUT signal connectivity</text>
+
+  <line class="divider" x1="1090" y1="116" x2="1090" y2="1042"/>
+  <text class="domain-label" x="60" y="116">UVM CLASS / TLM DOMAIN</text>
+  <text class="domain-label" x="1120" y="116">HDL TOP / SIGNAL DOMAIN</text>
+
+  <!-- UVM test layer -->
+  <g id="uvm-test-layer">
+    <rect class="section section-test" x="40" y="130" width="1040" height="905" rx="8"/>
+    <rect class="section-head-test" x="40" y="130" width="1040" height="36" rx="8"/>
+    <rect class="section-head-test" x="40" y="154" width="1040" height="12"/>
+    <text class="section-title" x="64" y="154">UVM test layer: i3c_base_test</text>
+
+    <rect class="component-strong" x="92" y="190" width="260" height="82" rx="6"/>
+    <text class="box-title" x="116" y="222">test build/run_phase</text>
+    <text class="box-subtitle" x="116" y="244">creates env and starts selected vseq</text>
+
+    <rect class="component" x="392" y="190" width="448" height="82" rx="6"/>
+    <text class="box-title" x="416" y="216">virtual sequences</text>
+    <text class="mono-text" x="416" y="240">i3c_smoke_vseq</text>
+    <text class="mono-text" x="560" y="240">i3c_write_vseq</text>
+    <text class="mono-text" x="704" y="240">i3c_read_vseq</text>
+  </g>
+
+  <!-- UVM environment -->
+  <g id="uvm-environment">
+    <rect class="section section-env" x="60" y="350" width="1000" height="660" rx="8"/>
+    <rect class="section-head-env" x="60" y="350" width="1000" height="36" rx="8"/>
+    <rect class="section-head-env" x="60" y="374" width="1000" height="12"/>
+    <text class="section-title" x="84" y="374">UVM environment: i3c_env</text>
+
+    <rect class="component-strong" x="385" y="410" width="335" height="76" rx="6"/>
+    <text class="box-title" x="418" y="442">i3c_virtual_sequencer</text>
+    <text class="box-subtitle" x="418" y="464">coordinates reg_agent and i3c_agent</text>
+
+    <!-- Register agent -->
+    <g id="reg-agent">
+      <rect class="agent" x="90" y="525" width="400" height="300" rx="8"/>
+      <rect class="agent-head" x="90" y="525" width="400" height="34" rx="8"/>
+      <rect class="agent-head" x="90" y="547" width="400" height="12"/>
+      <text class="box-title" x="114" y="548">reg_agent</text>
+
+      <rect class="component" x="115" y="580" width="165" height="56" rx="6"/>
+      <text class="box-title" x="133" y="613">reg_sequencer</text>
+
+      <rect class="component" x="115" y="660" width="165" height="56" rx="6"/>
+      <text class="box-title" x="143" y="693">reg_driver</text>
+
+      <rect class="component" x="115" y="740" width="165" height="56" rx="6"/>
+      <text class="box-title" x="139" y="773">reg_monitor</text>
+
+      <rect class="component" x="310" y="660" width="155" height="56" rx="6"/>
+      <text class="box-title" x="338" y="693">reg_seq_item</text>
+    </g>
+
+    <!-- I3C agent -->
+    <g id="i3c-agent">
+      <rect class="agent" x="530" y="525" width="485" height="300" rx="8"/>
+      <rect class="agent-head" x="530" y="525" width="485" height="34" rx="8"/>
+      <rect class="agent-head" x="530" y="547" width="485" height="12"/>
+      <text class="box-title" x="554" y="548">i3c_agent</text>
+      <text class="box-subtitle" x="992" y="548" text-anchor="end">device / target-response mode</text>
+
+      <rect class="component" x="555" y="580" width="175" height="56" rx="6"/>
+      <text class="box-title" x="573" y="613">i3c_sequencer</text>
+
+      <rect class="component" x="555" y="660" width="175" height="56" rx="6"/>
+      <text class="box-title" x="589" y="693">i3c_driver</text>
+
+      <rect class="component" x="555" y="740" width="175" height="56" rx="6"/>
+      <text class="box-title" x="584" y="773">i3c_monitor</text>
+
+      <rect class="component" x="770" y="620" width="185" height="56" rx="6"/>
+      <text class="box-title" x="812" y="653">i3c_seq_item</text>
+
+      <rect class="component" x="770" y="700" width="185" height="56" rx="6"/>
+      <text class="box-title" x="833" y="733">i3c_item</text>
+    </g>
+
+    <!-- Scoreboard -->
+    <rect class="scoreboard" x="650" y="860" width="365" height="135" rx="8"/>
+    <text class="box-title" x="676" y="893">i3c_scoreboard</text>
+    <text class="small-text" x="676" y="921">compares command programming,</text>
+    <text class="small-text" x="676" y="942">observed I3C bus activity,</text>
+    <text class="small-text" x="676" y="963">and response queue reads</text>
+  </g>
+
+  <!-- HDL top module -->
+  <g id="hdl-top">
+    <rect class="section section-hdl" x="1120" y="130" width="620" height="905" rx="8"/>
+    <rect class="section-head-hdl" x="1120" y="130" width="620" height="36" rx="8"/>
+    <rect class="section-head-hdl" x="1120" y="154" width="620" height="12"/>
+    <text class="section-title" x="1144" y="154">Top module: tb_i3c_top</text>
+
+    <rect class="clock-box" x="1152" y="198" width="245" height="84" rx="6"/>
+    <text class="box-title" x="1176" y="230">Clock &amp; reset generator</text>
+    <text class="box-subtitle" x="1176" y="252">clk_i, rst_ni</text>
+
+    <rect class="if-box" x="1152" y="420" width="220" height="112" rx="6"/>
+    <text class="box-title" x="1190" y="454">reg_if</text>
+    <text class="box-subtitle" x="1176" y="478">simple register interface</text>
+    <text class="mono-text" x="1176" y="501">addr, wdata, wen, ren</text>
+
+    <rect class="if-box" x="1152" y="702" width="220" height="120" rx="6"/>
+    <text class="box-title" x="1190" y="736">i3c_if</text>
+    <text class="box-subtitle" x="1176" y="760">I3C bus interface</text>
+    <text class="mono-text" x="1176" y="783">scl_io, sda_io</text>
+    <text class="box-subtitle" x="1176" y="806">single target device view</text>
+
+    <rect class="dut" x="1460" y="384" width="240" height="350" rx="8"/>
+    <text class="box-title" x="1500" y="420">DUT</text>
+    <text class="box-title" x="1490" y="445">i3c_controller_top</text>
+    <line x1="1486" y1="466" x2="1674" y2="466" stroke="#d9bf8d" stroke-width="1"/>
+    <text class="box-subtitle" x="1488" y="494">CSR signals</text>
+    <text class="mono-text" x="1488" y="519">reg_addr</text>
+    <text class="mono-text" x="1488" y="540">reg_wdata</text>
+    <text class="mono-text" x="1488" y="561">wen, ren</text>
+    <text class="mono-text" x="1488" y="582">rdata, ready</text>
+    <text class="box-subtitle" x="1488" y="622">I3C pins</text>
+    <text class="mono-text" x="1488" y="647">scl</text>
+    <text class="mono-text" x="1488" y="668">sda</text>
+  </g>
+
+  <!-- Build/create connections -->
+  <path class="create-line" d="M222 272 V350"/>
+  <rect class="label-bg" x="236" y="302" width="112" height="24" rx="4"/>
+  <text class="create-label" x="246" y="319">creates i3c_env</text>
+
+  <!-- Sequence connections -->
+  <path class="seq-line" d="M616 272 V330 H552 V410"/>
+  <rect class="label-bg" x="632" y="316" width="184" height="24" rx="4"/>
+  <text class="seq-label" x="642" y="333">run on virtual sequencer</text>
+
+  <path class="seq-line" d="M470 486 V508 H198 V580"/>
+  <rect class="label-bg" x="286" y="497" width="190" height="24" rx="4"/>
+  <text class="seq-label" x="296" y="514">sequence_item to reg_agent</text>
+
+  <path class="seq-line" d="M635 486 V580"/>
+  <rect class="label-bg" x="650" y="552" width="190" height="24" rx="4"/>
+  <text class="seq-label" x="660" y="569">sequence_item to i3c_agent</text>
+
+  <path class="seq-line" d="M198 636 V660"/>
+  <rect class="label-bg" x="214" y="641" width="96" height="22" rx="4"/>
+  <text class="seq-label" x="222" y="657">sequence_item</text>
+
+  <path class="seq-line" d="M643 636 V660"/>
+  <rect class="label-bg" x="659" y="641" width="96" height="22" rx="4"/>
+  <text class="seq-label" x="667" y="657">sequence_item</text>
+
+  <!-- Analysis-port TLM connections -->
+  <path class="analysis-line" d="M280 768 H510 V840 H620 V928 H650"/>
+  <rect class="label-bg" x="338" y="790" width="204" height="24" rx="4"/>
+  <text class="analysis-label" x="348" y="807">analysis_port: reg_seq_item</text>
+
+  <path class="analysis-line" d="M642 796 V838 H835 V860"/>
+  <rect class="label-bg" x="726" y="828" width="174" height="24" rx="4"/>
+  <text class="analysis-label" x="736" y="845">analysis_port: i3c_item</text>
+
+  <!-- Signal-level virtual interface connections -->
+  <path class="signal-line" d="M280 688 H296 V724 H510 V504 H1090 V476 H1152"/>
+  <rect class="label-bg" x="886" y="491" width="92" height="24" rx="4"/>
+  <text class="signal-label" x="896" y="508">reg_if</text>
+
+  <path class="signal-bidir" d="M730 688 H1090 V762 H1152"/>
+  <rect class="label-bg" x="836" y="672" width="232" height="24" rx="4"/>
+  <text class="signal-label" x="846" y="689">i3c_if target response / monitor</text>
+
+  <path class="signal-line" d="M1372 476 H1460"/>
+  <rect class="label-bg" x="1360" y="444" width="96" height="24" rx="4"/>
+  <text class="signal-label" x="1370" y="461">CSR access</text>
+
+  <path class="signal-bidir" d="M1372 762 H1418 V646 H1460"/>
+  <rect class="label-bg" x="1388" y="682" width="82" height="24" rx="4"/>
+  <text class="signal-label" x="1398" y="699">scl/sda</text>
+
+  <path class="clock-line" d="M1397 240 H1580 V384"/>
+  <rect class="label-bg" x="1472" y="224" width="90" height="24" rx="4"/>
+  <text class="create-label" x="1482" y="241">clk_i/rst_ni</text>
+
+  <!-- Local signal labels inside the top module -->
+  <rect class="label-bg" x="1400" y="489" width="50" height="22" rx="4"/>
+  <text class="signal-label" x="1409" y="505">reg_if</text>
+
+  <rect class="label-bg" x="1405" y="745" width="50" height="22" rx="4"/>
+  <text class="signal-label" x="1414" y="761">i3c_if</text>
+
+  <!-- Legend -->
+  <g id="legend">
+    <rect class="section" x="60" y="1070" width="1680" height="78" rx="8" stroke="#c6cfdc"/>
+    <text class="section-title" x="84" y="1102">Connection legend</text>
+
+    <path class="seq-line" d="M260 1096 H356"/>
+    <text class="small-text" x="374" y="1101">sequence control / sequence_item flow</text>
+
+    <path class="analysis-line" d="M620 1096 H716"/>
+    <text class="small-text" x="734" y="1101">TLM analysis_port flow</text>
+
+    <path class="signal-bidir" d="M930 1096 H1026"/>
+    <text class="small-text" x="1044" y="1101">signal-level virtual interface or physical bus flow</text>
+
+    <path class="create-line" d="M1328 1096 H1424"/>
+    <text class="small-text" x="1442" y="1101">build/config/create relationship</text>
+
+    <text class="small-text" x="84" y="1128">i3c_env is nested under i3c_base_test; DUT remains outside the UVM environment and is connected through tb_i3c_top interfaces.</text>
+  </g>
+</svg>

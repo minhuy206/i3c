@@ -55,6 +55,7 @@ class i3c_driver extends uvm_driver #(
       stop = 0;
       rstart = 0;
       rsp = null;
+      req = null;
       fork
         begin : iso_fork
           fork
@@ -144,7 +145,7 @@ class i3c_driver extends uvm_driver #(
           for (int i = 6; i >= 0; i--) begin
             // Only I3C addresses
             cfg.vif.sample_target_data(.data(rsp.addr[i]));
-            `uvm_info(`gfn, $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]), UVM_HIGH)
+            `uvm_info(`gfn, $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]), UVM_MEDIUM)
           end
           cfg.vif.sample_target_data(.data(rsp.dir));
           bus_state = DrvAck;

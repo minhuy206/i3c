@@ -38,7 +38,7 @@ module tb_i3c_top;
   );
 
   i3c_if i3c_bus (
-      .clk_i (clk),
+      .clk_i(clk),
       .rst_ni(rst_n),
       .dut_sel_od_pp_i(sel_od_pp),
       .dut_sda_oe_i(sda_oe),
@@ -76,7 +76,7 @@ module tb_i3c_top;
     uvm_config_db#(virtual reg_if)::set(null, "*.env.m_reg_agent*", "vif", reg_bus);
     uvm_config_db#(virtual i3c_if)::set(null, "*.env.m_i3c_agent", "vif", i3c_bus);
     $timeformat(-9, 0, " ns", 12);
-    run_test();  // test selected via +UVM_TESTNAME=
+    run_test();
   end
 
   initial begin
