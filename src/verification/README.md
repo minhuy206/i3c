@@ -36,6 +36,7 @@ Waveforms are written to `waves.shm` and can be opened with SimVision.
 ## Adding Tests
 
 - Add agent-level sequences under `uvm_i3c/dv_i3c/seq_lib/`.
-- Add virtual sequences under `uvm_i3c/i3c_core/i3c_vseqs/`.
+- Add virtual sequences under the matching category directory in
+  `uvm_i3c/i3c_core/i3c_vseqs/`.
 - Include new virtual sequences from `uvm_i3c/i3c_core/i3c_vseqs/i3c_vseq_list.sv`.
 - Run with `make sim SEQ=<sequence_type_name>`.

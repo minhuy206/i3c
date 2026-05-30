@@ -8,9 +8,7 @@
 
 package i3c_csr_addr_pkg;
 
-  // ──────────────────────────────────────────────
   // 1. Address Offsets
-  // ──────────────────────────────────────────────
 
   // Control & Status
   localparam bit [11:0] ADDR_HC_CONTROL = 12'h000;
@@ -39,9 +37,7 @@ package i3c_csr_addr_pkg;
   localparam bit [11:0] ADDR_DAT_END = 12'h240;
   localparam int unsigned DAT_DEPTH = 16;
 
-  // ──────────────────────────────────────────────
   // 2. Field Bit Positions
-  // ──────────────────────────────────────────────
 
   // HC_CONTROL
   localparam int HC_CTRL_ENABLE_BIT = 0;
@@ -62,36 +58,34 @@ package i3c_csr_addr_pkg;
   localparam int QS_RESP_FULL_BIT = 6;
   localparam int QS_RESP_EMPTY_BIT = 7;
 
-  // ──────────────────────────────────────────────
   // 3. Timing Register Reset Values
-  // ──────────────────────────────────────────────
   // All values in system clock cycles @ 100 MHz simulation clock
-  // Match reset values in src/csr/csr_register.sv
+  // Match reset values in src/rtl/csr/csr_registers.sv
 
   localparam bit [19:0] RST_T_R = 20'd4;
   localparam bit [19:0] RST_T_F = 20'd4;
-  localparam bit [19:0] RST_T_LOW = 20'd13;
-  localparam bit [19:0] RST_T_HIGH = 20'd13;
-  localparam bit [19:0] RST_T_SU_STA = 20'd13;
-  localparam bit [19:0] RST_T_HD_STA = 20'd13;
-  localparam bit [19:0] RST_T_SU_STO = 20'd13;
+  localparam bit [19:0] RST_T_LOW = 20'd8;
+  localparam bit [19:0] RST_T_HIGH = 20'd8;
+  localparam bit [19:0] RST_T_SU_STA = 20'd8;
+  localparam bit [19:0] RST_T_HD_STA = 20'd8;
+  localparam bit [19:0] RST_T_SU_STO = 20'd4;
   localparam bit [19:0] RST_T_SU_DAT = 20'd1;
   localparam bit [19:0] RST_T_HD_DAT = 20'd4;
 
-  // ──────────────────────────────────────────────
   // 4. Helper Functions
-  // ──────────────────────────────────────────────
 
   // Compute DAT entry address from 0-based index
   // Usage: csr_wr(dat_addr(0), dat_entry);  // writes index 0
   function automatic bit [11:0] dat_addr(int unsigned index);
+    bit [11:0] offset;
 `ifndef SYNTHESIS
     assert (index < DAT_DEPTH)
     else $fatal(1, "dat_addr: index %0d exceeds DAT_DEPTH %0d", index, DAT_DEPTH);
 `endif
-    return ADDR_DAT_BASE + bit'(index << 2);
+    offset = index << 2;
+    return ADDR_DAT_BASE + offset;
   endfunction
 
 endpackage : i3c_csr_addr_pkg
 
-`endif  // I3C_CSR_ADDR_PKG_SV
+`endif
