@@ -35,8 +35,8 @@ class csr_reset_defaults_vseq extends i3c_base_vseq;
 
     for (int unsigned i = 0; i < DAT_DEPTH; i++) begin
       reg_read(dat_addr(i), data);
-      `DV_CHECK_EQ(data, 32'h0000_0000,
-                   $sformatf("csr_reset_defaults_vseq: DAT[%0d] reset value mismatch", i))
+      `DV_CHECK_EQ(data, 32'h0000_0000, $sformatf(
+                   "csr_reset_defaults_vseq: DAT[%0d] reset value mismatch", i))
     end
 
     `uvm_info(`gfn, "CSR reset default checks passed", UVM_LOW)
@@ -46,16 +46,15 @@ class csr_reset_defaults_vseq extends i3c_base_vseq;
     bit [31:0] data;
 
     reg_read(addr, data);
-    `DV_CHECK_EQ(data, exp,
-                 $sformatf("csr_reset_defaults_vseq: %s reset value mismatch", reg_name))
+    `DV_CHECK_EQ(data, exp, $sformatf("csr_reset_defaults_vseq: %s reset value mismatch", reg_name))
   endtask
 
   task check_timing_reg(bit [11:0] addr, bit [19:0] exp, string reg_name);
     bit [31:0] data;
 
     reg_read(addr, data);
-    `DV_CHECK_EQ(data[19:0], exp,
-                 $sformatf("csr_reset_defaults_vseq: %s reset value mismatch", reg_name))
+    `DV_CHECK_EQ(data[19:0], exp, $sformatf("csr_reset_defaults_vseq: %s reset value mismatch",
+                                            reg_name))
     `DV_CHECK_EQ(data[31:20], 12'h0,
                  $sformatf("csr_reset_defaults_vseq: %s reserved bits should be 0 after reset",
                            reg_name))

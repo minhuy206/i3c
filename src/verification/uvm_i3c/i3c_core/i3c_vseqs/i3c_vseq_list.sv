@@ -8,6 +8,10 @@
 `include "i3c_vseqs/csr_vseqs/csr_cmd_queue_2dw_staging_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_cmd_partial_then_other_write_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_sw_reset_flush_queues_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_sw_reset_clears_cmd_staging_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_queue_status_flags_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_rx_resp_read_pop_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_unmapped_addr_no_side_effect_vseq.sv"
 
 // 4.4 I3C SDR Private Write
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"

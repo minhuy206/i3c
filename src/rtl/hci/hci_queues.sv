@@ -64,7 +64,6 @@ module hci_queues #(
     output logic [   RespDepthW-1:0] resp_depth_o
 );
   // CMD FIFO instance
-  // 64-bit wide; sw writes 2x32 (assembled by csr_registers), hw reads 64-bit
   sync_fifo #(
       .Width(CmdDataWidth),
       .Depth(CmdFifoDepth)

@@ -6,14 +6,14 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
   endfunction
 
   task body();
-    regular_trans_desc_t    wr_cmd;
-    i3c_device_response_seq dev_seq;
-    bit              [31:0] status;
-    bit              [31:0] resp;
-    bit              [31:0] data;
-    bit              [31:0] dword0;
-    bit              [31:0] dword1;
-    bit              [31:0] tx_data;
+    regular_trans_desc_t           wr_cmd;
+    i3c_device_response_seq        dev_seq;
+    bit                     [31:0] status;
+    bit                     [31:0] resp;
+    bit                     [31:0] data;
+    bit                     [31:0] dword0;
+    bit                     [31:0] dword1;
+    bit                     [31:0] tx_data;
 
     wr_cmd             = '0;
     wr_cmd.attr        = RegularTransfer;
@@ -25,9 +25,9 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
     wr_cmd.dev_idx     = 5'd0;
     wr_cmd.data_length = 16'd4;
 
-    dword0 = wr_cmd[31:0];
-    dword1 = wr_cmd[63:32];
-    tx_data = 32'h4433_2211;
+    dword0             = wr_cmd[31:0];
+    dword1             = wr_cmd[63:32];
+    tx_data            = 32'h4433_2211;
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
@@ -55,8 +55,9 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
 
     repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
     reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
-                 "csr_cmd_partial_then_other_write_vseq: interleaved CSR writes must not push CMD FIFO")
+    `DV_CHECK_EQ(
+        status[QS_CMD_EMPTY_BIT], 1'b1,
+        "csr_cmd_partial_then_other_write_vseq: interleaved CSR writes must not push CMD FIFO")
     `DV_CHECK_EQ(status[QS_TX_EMPTY_BIT], 1'b0,
                  "csr_cmd_partial_then_other_write_vseq: interleaved TX write should queue data")
 
@@ -66,8 +67,9 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b0,
                  "csr_cmd_partial_then_other_write_vseq: final DWORD1 should complete one CMD")
-    `DV_CHECK_EQ(status[QS_CMD_FULL_BIT], 1'b0,
-                 "csr_cmd_partial_then_other_write_vseq: one completed CMD should not fill CMD FIFO")
+    `DV_CHECK_EQ(
+        status[QS_CMD_FULL_BIT], 1'b0,
+        "csr_cmd_partial_then_other_write_vseq: one completed CMD should not fill CMD FIFO")
 
     dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr   = 7'h08;
@@ -86,10 +88,12 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
     read_response(resp);
     `DV_CHECK_EQ(resp[31:28], 4'h0,
                  "csr_cmd_partial_then_other_write_vseq: expected Success response")
-    `DV_CHECK_EQ(resp[27:24], wr_cmd.tid,
-                 "csr_cmd_partial_then_other_write_vseq: response TID should come from staged DWORD0")
-    `DV_CHECK_EQ(resp[15:0], wr_cmd.data_length,
-                 "csr_cmd_partial_then_other_write_vseq: response length should come from final DWORD1")
+    `DV_CHECK_EQ(
+        resp[27:24], wr_cmd.tid,
+        "csr_cmd_partial_then_other_write_vseq: response TID should come from staged DWORD0")
+    `DV_CHECK_EQ(
+        resp[15:0], wr_cmd.data_length,
+        "csr_cmd_partial_then_other_write_vseq: response length should come from final DWORD1")
 
     `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08,
                  "csr_cmd_partial_then_other_write_vseq: target address mismatch")
@@ -109,10 +113,12 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
     end
 
     reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
-                 "csr_cmd_partial_then_other_write_vseq: CMD FIFO should be empty after command consumes")
-    `DV_CHECK_EQ(status[QS_TX_EMPTY_BIT], 1'b1,
-                 "csr_cmd_partial_then_other_write_vseq: TX FIFO should be empty after write consumes data")
+    `DV_CHECK_EQ(
+        status[QS_CMD_EMPTY_BIT], 1'b1,
+        "csr_cmd_partial_then_other_write_vseq: CMD FIFO should be empty after command consumes")
+    `DV_CHECK_EQ(
+        status[QS_TX_EMPTY_BIT], 1'b1,
+        "csr_cmd_partial_then_other_write_vseq: TX FIFO should be empty after write consumes data")
 
     `uvm_info(`gfn, "CSR partial CMD with interleaved CSR write checks passed", UVM_LOW)
   endtask

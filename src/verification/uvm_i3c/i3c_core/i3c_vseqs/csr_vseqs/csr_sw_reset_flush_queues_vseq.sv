@@ -6,11 +6,11 @@ class csr_sw_reset_flush_queues_vseq extends i3c_base_vseq;
   endfunction
 
   task body();
-    regular_trans_desc_t    wr_cmd;
-    regular_trans_desc_t    rd_cmd;
-    i3c_device_response_seq dev_seq;
-    bit              [31:0] status;
-    bit              [31:0] data;
+    regular_trans_desc_t           wr_cmd;
+    regular_trans_desc_t           rd_cmd;
+    i3c_device_response_seq        dev_seq;
+    bit                     [31:0] status;
+    bit                     [31:0] data;
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
@@ -38,15 +38,15 @@ class csr_sw_reset_flush_queues_vseq extends i3c_base_vseq;
     request_sw_reset(1'b0);
     check_all_queues_empty("after CMD/TX flush");
 
-    rd_cmd             = '0;
-    rd_cmd.attr        = RegularTransfer;
-    rd_cmd.tid         = 4'd8;
-    rd_cmd.rnw         = 1'b1;
-    rd_cmd.mode        = sdr0;
-    rd_cmd.toc         = 1'b1;
-    rd_cmd.wroc        = 1'b1;
-    rd_cmd.dev_idx     = 5'd0;
-    rd_cmd.data_length = 16'd4;
+    rd_cmd              = '0;
+    rd_cmd.attr         = RegularTransfer;
+    rd_cmd.tid          = 4'd8;
+    rd_cmd.rnw          = 1'b1;
+    rd_cmd.mode         = sdr0;
+    rd_cmd.toc          = 1'b1;
+    rd_cmd.wroc         = 1'b1;
+    rd_cmd.dev_idx      = 5'd0;
+    rd_cmd.data_length  = 16'd4;
 
     dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr = 7'h08;

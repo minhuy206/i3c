@@ -6,12 +6,12 @@ class csr_cmd_queue_2dw_staging_vseq extends i3c_base_vseq;
   endfunction
 
   task body();
-    immediate_data_trans_desc_t imm_cmd;
-    i3c_device_response_seq     dev_seq;
-    bit                  [31:0] status;
-    bit                  [31:0] resp;
-    bit                  [31:0] dword0;
-    bit                  [31:0] dword1;
+    immediate_data_trans_desc_t        imm_cmd;
+    i3c_device_response_seq            dev_seq;
+    bit                         [31:0] status;
+    bit                         [31:0] resp;
+    bit                         [31:0] dword0;
+    bit                         [31:0] dword1;
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
@@ -27,8 +27,8 @@ class csr_cmd_queue_2dw_staging_vseq extends i3c_base_vseq;
     imm_cmd.def_or_data_byte1 = 8'hA5;
     imm_cmd.data_byte2        = 8'h3C;
 
-    dword0 = imm_cmd[31:0];
-    dword1 = imm_cmd[63:32];
+    dword0                    = imm_cmd[31:0];
+    dword1                    = imm_cmd[63:32];
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
@@ -68,8 +68,9 @@ class csr_cmd_queue_2dw_staging_vseq extends i3c_base_vseq;
                  "csr_cmd_queue_2dw_staging_vseq: staged command should complete successfully")
     `DV_CHECK_EQ(resp[27:24], imm_cmd.tid,
                  "csr_cmd_queue_2dw_staging_vseq: response TID should come from staged DWORD0")
-    `DV_CHECK_EQ(resp[15:0], 16'd2,
-                 "csr_cmd_queue_2dw_staging_vseq: response length should match staged immediate data")
+    `DV_CHECK_EQ(
+        resp[15:0], 16'd2,
+        "csr_cmd_queue_2dw_staging_vseq: response length should match staged immediate data")
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
