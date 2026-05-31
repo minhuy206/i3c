@@ -94,9 +94,12 @@ Follows the reference pattern exactly — virtual sequence name is passed via `+
 Include file for all virtual sequences:
 ```systemverilog
 `include "i3c_vseqs/i3c_base_vseq.sv"
-`include "i3c_vseqs/i3c_smoke_vseq.sv"
-`include "i3c_vseqs/i3c_write_vseq.sv"
-`include "i3c_vseqs/i3c_read_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_reset_defaults_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_enable_disable_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_timing_rw_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_smoke_vseq.sv"
 ```
 
 ---
@@ -219,7 +222,7 @@ endtask
 
 ---
 
-## 7. File: i3c_vseqs/i3c_smoke_vseq.sv
+## 7. File: i3c_vseqs/imm_vseqs/i3c_smoke_vseq.sv
 
 ### 7.1. Purpose
 
@@ -250,7 +253,7 @@ First test to bring up. Performs a minimal Immediate Data Transfer (1-2 byte wri
 
 ---
 
-## 8. File: i3c_vseqs/i3c_write_vseq.sv
+## 8. File: i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv
 
 ### 8.1. Purpose
 
@@ -281,7 +284,7 @@ Test Regular Transfer write with data from TX queue.
 
 ---
 
-## 9. File: i3c_vseqs/i3c_read_vseq.sv
+## 9. File: i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv
 
 ### 9.1. Purpose
 

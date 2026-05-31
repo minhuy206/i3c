@@ -49,6 +49,7 @@ class i3c_scoreboard extends uvm_scoreboard;
       reg_fifo.get(item);
       if (item.is_write) begin
         case (item.addr)
+          ADDR_HC_CONTROL: if (item.wdata[HC_CTRL_SW_RESET_BIT]) handle_sw_reset();
           ADDR_CMD_QUEUE: handle_cmd_dword(item.wdata);
           ADDR_TX_DATA: tx_data_queue.push_back(item.wdata);
           default: ;
@@ -58,6 +59,14 @@ class i3c_scoreboard extends uvm_scoreboard;
       end
     end
   endtask
+
+  function void handle_sw_reset();
+    exp_txn_queue.delete();
+    tx_data_queue.delete();
+    got_dw0 = 1'b0;
+    cmd_dw0 = '0;
+    `uvm_info(`gfn, "SW_RESET observed: scoreboard queues flushed", UVM_MEDIUM)
+  endfunction
 
   // Accumulate two DWORDs then decode the full 64-bit command descriptor.
   // DWORD 0 bit layout (common fields):

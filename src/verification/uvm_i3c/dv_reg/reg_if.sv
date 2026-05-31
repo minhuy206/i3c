@@ -16,22 +16,22 @@ interface reg_if (
 
   modport drv(clocking cb, input clk_i, input rst_ni);
 
-  task automatic read(input bit [11:0] a, output bit [31:0] d);
+  task automatic read(input bit [11:0] addr, output bit [31:0] data);
     @(cb);
-    cb.addr <= a;
+    cb.addr <= addr;
     cb.wen  <= 1'b0;
     cb.ren  <= 1'b1;
-    @(cb);                    // T+1: RTL latches rdata_comb into rdata_o
-    cb.ren <= 1'b0;           // 1-cycle ren pulse — preserves FIFO pop semantics
-    @(cb);                    // T+2: rdata_o is now the registered value
+    @(cb);  // T+1: RTL latches rdata_comb into rdata_o
+    cb.ren <= 1'b0;  // 1-cycle ren pulse — preserves FIFO pop semantics
+    @(cb);  // T+2: rdata_o is now the registered value
     while (!cb.ready) @(cb);  // stall handling
-    d = cb.rdata;
+    data = cb.rdata;
   endtask
 
-  task automatic write(input bit [11:0] a, input bit [31:0] d);
+  task automatic write(input bit [11:0] addr, input bit [31:0] data);
     @(cb);
-    cb.addr  <= a;
-    cb.wdata <= d;
+    cb.addr  <= addr;
+    cb.wdata <= data;
     cb.wen   <= 1'b1;
     cb.ren   <= 1'b0;
     @(cb);

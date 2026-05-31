@@ -1,6 +1,8 @@
 class i3c_sequencer extends uvm_sequencer #(i3c_seq_item);
   `uvm_component_utils(i3c_sequencer)
 
+  i3c_agent_cfg cfg;
+
   function new(string name = "", uvm_component parent = null);
     super.new(name, parent);
   endfunction : new

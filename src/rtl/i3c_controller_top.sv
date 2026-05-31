@@ -26,9 +26,7 @@ module i3c_controller_top #(
     output logic sel_od_pp_o
 );
 
-  // ---------------------------------------------------------------------------
   // Internal signals
-  // ---------------------------------------------------------------------------
 
   // CSR configuration outputs
   logic ctrl_enable, i3c_fsm_en, sw_reset;
@@ -86,10 +84,7 @@ module i3c_controller_top #(
   // Status
   logic i3c_fsm_idle;
 
-  // ---------------------------------------------------------------------------
   // CSR Registers
-  // ---------------------------------------------------------------------------
-
   csr_registers #(
       .DatDepth (DatDepth),
       .AddrWidth(AddrWidth),
@@ -141,10 +136,7 @@ module i3c_controller_top #(
       .i3c_fsm_idle_i  (i3c_fsm_idle)
   );
 
-  // ---------------------------------------------------------------------------
   // HCI Queues
-  // ---------------------------------------------------------------------------
-
   hci_queues #(
       .CmdFifoDepth (CmdFifoDepth),
       .TxFifoDepth  (TxFifoDepth),
@@ -192,10 +184,7 @@ module i3c_controller_top #(
       .resp_depth_o ()
   );
 
-  // ---------------------------------------------------------------------------
   // Controller Active (protocol engine)
-  // ---------------------------------------------------------------------------
-
   controller_active #(
       .DatDepth(DatDepth)
   ) u_ctrl (
@@ -240,10 +229,7 @@ module i3c_controller_top #(
       .i3c_fsm_idle_o     (i3c_fsm_idle)
   );
 
-  // ---------------------------------------------------------------------------
   // PHY (2FF synchronizer + output drivers)
-  // ---------------------------------------------------------------------------
-
   i3c_phy u_phy (
       .clk_i,
       .rst_ni,
@@ -251,12 +237,12 @@ module i3c_controller_top #(
       .scl_o,
       .sda_i,
       .sda_o,
-      .ctrl_scl_i    (ctrl_scl_to_phy),
-      .ctrl_scl_o    (ctrl_scl_from_phy),
-      .ctrl_sda_i    (ctrl_sda_to_phy),
+      .ctrl_scl_i   (ctrl_scl_to_phy),
+      .ctrl_scl_o   (ctrl_scl_from_phy),
+      .ctrl_sda_i   (ctrl_sda_to_phy),
       .ctrl_sda_oe_i(ctrl_sda_oe_to_phy),
-      .ctrl_sda_o    (ctrl_sda_from_phy),
-      .sel_od_pp_i   (ctrl_sel_od_pp),
+      .ctrl_sda_o   (ctrl_sda_from_phy),
+      .sel_od_pp_i  (ctrl_sel_od_pp),
       .sda_oe_o,
       .sel_od_pp_o
   );
