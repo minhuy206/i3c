@@ -1,4 +1,4 @@
-class csr_dat_rw_all_entries_vseq extends i3c_base_vseq;
+class csr_dat_rw_all_entries_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_dat_rw_all_entries_vseq)
 
   function new(string name = "csr_dat_rw_all_entries_vseq");

@@ -1,4 +1,5 @@
 `include "i3c_vseqs/i3c_base_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_base_vseq.sv"
 
 // 4.1 CSR, DAT, and Register Bus
 `include "i3c_vseqs/csr_vseqs/csr_reset_defaults_vseq.sv"

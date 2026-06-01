@@ -1,4 +1,4 @@
-class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
+class csr_cmd_partial_then_other_write_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_cmd_partial_then_other_write_vseq)
 
   function new(string name = "csr_cmd_partial_then_other_write_vseq");
@@ -53,7 +53,7 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
 
     write_tx_data(tx_data);
 
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(
         status[QS_CMD_EMPTY_BIT], 1'b1,
@@ -62,7 +62,7 @@ class csr_cmd_partial_then_other_write_vseq extends i3c_base_vseq;
                  "csr_cmd_partial_then_other_write_vseq: interleaved TX write should queue data")
 
     reg_write(ADDR_CMD_QUEUE, dword1);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b0,

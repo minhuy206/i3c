@@ -1,4 +1,4 @@
-class csr_rx_resp_read_pop_vseq extends i3c_base_vseq;
+class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_rx_resp_read_pop_vseq)
 
   function new(string name = "csr_rx_resp_read_pop_vseq");
@@ -82,16 +82,6 @@ class csr_rx_resp_read_pop_vseq extends i3c_base_vseq;
     hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.wptr_q", 2);
     settle_cycles();
     check_empty_flag("RESP", QS_RESP_EMPTY_BIT, 1'b0, "after backdoor load");
-  endtask
-
-  function void hdl_deposit_checked(string path, uvm_hdl_data_t value);
-    if (!uvm_hdl_deposit(path, value)) begin
-      `uvm_fatal(`gfn, $sformatf("csr_rx_resp_read_pop_vseq: uvm_hdl_deposit failed for %s", path))
-    end
-  endfunction
-
-  task settle_cycles(int unsigned cycles = 4);
-    repeat (cycles) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
   endtask
 
 endclass

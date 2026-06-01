@@ -1,4 +1,4 @@
-class csr_unmapped_addr_no_side_effect_vseq extends i3c_base_vseq;
+class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_unmapped_addr_no_side_effect_vseq)
 
   bit [11:0] unmapped_addr[8] = '{
@@ -38,8 +38,8 @@ class csr_unmapped_addr_no_side_effect_vseq extends i3c_base_vseq;
     reg_read(dat_addr(0), dat0);
     reg_read(dat_addr(15), dat15);
     reg_read(ADDR_QUEUE_STATUS, queue_status);
-    cmd_staging_valid = hdl_read_bit("tb_i3c_top.dut.u_csr.cmd_staging_valid_q");
-    cmd_dword0        = hdl_read_word("tb_i3c_top.dut.u_csr.cmd_dword0_q");
+    cmd_staging_valid = hdl_read_bit("tb_i3c_top.dut.u_csr.cmd_staging_valid");
+    cmd_dword0        = hdl_read_word("tb_i3c_top.dut.u_csr.cmd_dword0");
 
     foreach (unmapped_addr[i]) begin
       check_unmapped_read_zero(unmapped_addr[i], "before write");
@@ -54,8 +54,8 @@ class csr_unmapped_addr_no_side_effect_vseq extends i3c_base_vseq;
     check_csr_unchanged(dat_addr(0), dat0, "DAT[0]");
     check_csr_unchanged(dat_addr(15), dat15, "DAT[15]");
     check_csr_unchanged(ADDR_QUEUE_STATUS, queue_status, "QUEUE_STATUS");
-    cmd_staging_valid_after = hdl_read_bit("tb_i3c_top.dut.u_csr.cmd_staging_valid_q");
-    cmd_dword0_after        = hdl_read_word("tb_i3c_top.dut.u_csr.cmd_dword0_q");
+    cmd_staging_valid_after = hdl_read_bit("tb_i3c_top.dut.u_csr.cmd_staging_valid");
+    cmd_dword0_after        = hdl_read_word("tb_i3c_top.dut.u_csr.cmd_dword0");
     `DV_CHECK_EQ(cmd_staging_valid_after, cmd_staging_valid,
                  "csr_unmapped_addr_no_side_effect_vseq: CMD staging valid changed")
     `DV_CHECK_EQ(cmd_dword0_after, cmd_dword0,
@@ -102,12 +102,7 @@ class csr_unmapped_addr_no_side_effect_vseq extends i3c_base_vseq;
   endtask
 
   task check_csr_unchanged(bit [11:0] addr, bit [31:0] exp, string reg_name);
-    bit [31:0] data;
-
-    reg_read(addr, data);
-    `DV_CHECK_EQ(data, exp, $sformatf(
-                 "csr_unmapped_addr_no_side_effect_vseq: %s changed after unmapped accesses",
-                 reg_name))
+    check_reg_eq(addr, exp, reg_name, "after unmapped accesses");
   endtask
 
   task backdoor_load_rx_queue(bit [31:0] data);
@@ -122,47 +117,6 @@ class csr_unmapped_addr_no_side_effect_vseq extends i3c_base_vseq;
     hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.rptr_q", '0);
     hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.wptr_q", 1);
     settle_cycles();
-  endtask
-
-  task request_sw_reset();
-    bit [31:0] data;
-
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0002);
-    settle_cycles();
-    reg_read(ADDR_HC_CONTROL, data);
-    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0,
-                 "csr_unmapped_addr_no_side_effect_vseq: SW_RESET should self-clear")
-  endtask
-
-  function bit hdl_read_bit(string path);
-    uvm_hdl_data_t value;
-
-    if (!uvm_hdl_read(path, value)) begin
-      `uvm_fatal(`gfn, $sformatf("csr_unmapped_addr_no_side_effect_vseq: uvm_hdl_read failed for %s",
-                                 path))
-    end
-    return value[0];
-  endfunction
-
-  function bit [31:0] hdl_read_word(string path);
-    uvm_hdl_data_t value;
-
-    if (!uvm_hdl_read(path, value)) begin
-      `uvm_fatal(`gfn, $sformatf("csr_unmapped_addr_no_side_effect_vseq: uvm_hdl_read failed for %s",
-                                 path))
-    end
-    return value[31:0];
-  endfunction
-
-  function void hdl_deposit_checked(string path, uvm_hdl_data_t value);
-    if (!uvm_hdl_deposit(path, value)) begin
-      `uvm_fatal(`gfn, $sformatf(
-                 "csr_unmapped_addr_no_side_effect_vseq: uvm_hdl_deposit failed for %s", path))
-    end
-  endfunction
-
-  task settle_cycles(int unsigned cycles = 4);
-    repeat (cycles) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
   endtask
 
 endclass

@@ -1,4 +1,4 @@
-class csr_cmd_queue_2dw_staging_vseq extends i3c_base_vseq;
+class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_cmd_queue_2dw_staging_vseq)
 
   function new(string name = "csr_cmd_queue_2dw_staging_vseq");
@@ -35,7 +35,7 @@ class csr_cmd_queue_2dw_staging_vseq extends i3c_base_vseq;
                  "csr_cmd_queue_2dw_staging_vseq: CMD FIFO should start empty")
 
     reg_write(ADDR_CMD_QUEUE, dword0);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
@@ -44,7 +44,7 @@ class csr_cmd_queue_2dw_staging_vseq extends i3c_base_vseq;
                  "csr_cmd_queue_2dw_staging_vseq: CMD FIFO should not be full after DWORD0")
 
     reg_write(ADDR_CMD_QUEUE, dword1);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b0,

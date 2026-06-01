@@ -1,4 +1,4 @@
-class csr_enable_disable_vseq extends i3c_base_vseq;
+class csr_enable_disable_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_enable_disable_vseq)
 
   function new(string name = "csr_enable_disable_vseq");
