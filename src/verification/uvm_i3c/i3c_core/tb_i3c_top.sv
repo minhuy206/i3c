@@ -81,7 +81,12 @@ module tb_i3c_top;
 
   initial begin
     if ($test$plusargs("DUMP_WAVES")) begin
-      $shm_open("waves.shm");
+      reg [1023:0] wave_file;
+
+      if (!$value$plusargs("WAVE_FILE=%s", wave_file)) begin
+        wave_file = "waves.shm";
+      end
+      $shm_open(wave_file);
       $shm_probe(tb_i3c_top, "AS");
     end
   end

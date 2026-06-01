@@ -1,4 +1,4 @@
-class csr_queue_status_flags_vseq extends i3c_base_vseq;
+class csr_queue_status_flags_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_queue_status_flags_vseq)
 
   localparam int unsigned QueueDepth = 8;
@@ -42,8 +42,8 @@ class csr_queue_status_flags_vseq extends i3c_base_vseq;
       cmd.tid = i[3:0];
       write_cmd(cmd[31:0], cmd[63:32]);
       settle_cycles();
-      check_queue_flags("CMD", QS_CMD_FULL_BIT, QS_CMD_EMPTY_BIT, (i == QueueDepth - 1), 1'b0,
-                        $sformatf("after CMD entry %0d", i));
+      check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit,
+                        (i == QueueDepth - 1), 1'b0, $sformatf("after CMD entry %0d", i));
     end
   endtask
 
@@ -51,8 +51,8 @@ class csr_queue_status_flags_vseq extends i3c_base_vseq;
     for (int unsigned i = 0; i < QueueDepth; i++) begin
       write_tx_data(32'hA500_0000 | i);
       settle_cycles();
-      check_queue_flags("TX", QS_TX_FULL_BIT, QS_TX_EMPTY_BIT, (i == QueueDepth - 1), 1'b0,
-                        $sformatf("after TX entry %0d", i));
+      check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit,
+                        (i == QueueDepth - 1), 1'b0, $sformatf("after TX entry %0d", i));
     end
   endtask
 
@@ -67,8 +67,8 @@ class csr_queue_status_flags_vseq extends i3c_base_vseq;
       `DV_CHECK_EQ(data, exp,
                    $sformatf("csr_queue_status_flags_vseq: RX data mismatch at entry %0d", i))
       settle_cycles();
-      check_queue_flags("RX", QS_RX_FULL_BIT, QS_RX_EMPTY_BIT, 1'b0, (i == QueueDepth - 1),
-                        $sformatf("after RX drain %0d", i));
+      check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b0,
+                        (i == QueueDepth - 1), $sformatf("after RX drain %0d", i));
     end
   endtask
 
@@ -84,8 +84,8 @@ class csr_queue_status_flags_vseq extends i3c_base_vseq;
       `DV_CHECK_EQ(resp[15:0], 16'd4,
                    $sformatf("csr_queue_status_flags_vseq: RESP length mismatch at entry %0d", i))
       settle_cycles();
-      check_queue_flags("RESP", QS_RESP_FULL_BIT, QS_RESP_EMPTY_BIT, 1'b0, (i == QueueDepth - 1),
-                        $sformatf("after RESP drain %0d", i));
+      check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b0,
+                        (i == QueueDepth - 1), $sformatf("after RESP drain %0d", i));
     end
   endtask
 
@@ -95,12 +95,11 @@ class csr_queue_status_flags_vseq extends i3c_base_vseq;
 
       data = {8'(8'h13 + (i << 2)), 8'(8'h12 + (i << 2)), 8'(8'h11 + (i << 2)),
               8'(8'h10 + (i << 2))};
-      hdl_deposit_checked($sformatf("tb_i3c_top.dut.u_queues.rx_fifo.mem[%0d]", i), data);
+      backdoor_write_fifo_entry(rx_paths, i, data);
     end
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.rptr_q", '0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.wptr_q", QueueDepth);
+    backdoor_set_fifo_level(rx_paths, QueueDepth);
     settle_cycles();
-    check_queue_flags("RX", QS_RX_FULL_BIT, QS_RX_EMPTY_BIT, 1'b1, 1'b0,
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
                       "after RX backdoor fill");
   endtask
 
@@ -109,57 +108,17 @@ class csr_queue_status_flags_vseq extends i3c_base_vseq;
       bit [31:0] resp;
 
       resp = {4'h0, i[3:0], 8'h00, 16'd4};
-      hdl_deposit_checked($sformatf("tb_i3c_top.dut.u_queues.resp_fifo.mem[%0d]", i), resp);
+      backdoor_write_fifo_entry(resp_paths, i, resp);
     end
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.rptr_q", '0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.wptr_q", QueueDepth);
+    backdoor_set_fifo_level(resp_paths, QueueDepth);
     settle_cycles();
-    check_queue_flags("RESP", QS_RESP_FULL_BIT, QS_RESP_EMPTY_BIT, 1'b1, 1'b0,
+    check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b1, 1'b0,
                       "after RESP backdoor fill");
   endtask
 
   task sw_reset_and_check(bit keep_enabled, string ctxt);
-    bit [31:0] control;
-
-    poll_idle();
-    reg_write(ADDR_HC_CONTROL, {30'h0, 1'b1, keep_enabled});
-    settle_cycles();
-
-    reg_read(ADDR_HC_CONTROL, control);
-    `DV_CHECK_EQ(control[HC_CTRL_SW_RESET_BIT], 1'b0,
-                 "csr_queue_status_flags_vseq: SW_RESET should self-clear")
-    `DV_CHECK_EQ(control[HC_CTRL_ENABLE_BIT], keep_enabled,
-                 "csr_queue_status_flags_vseq: SW_RESET should preserve enable bit")
+    request_sw_reset(keep_enabled);
     check_all_queues_empty(ctxt);
-  endtask
-
-  task check_all_queues_empty(string ctxt);
-    check_queue_flags("CMD", QS_CMD_FULL_BIT, QS_CMD_EMPTY_BIT, 1'b0, 1'b1, ctxt);
-    check_queue_flags("TX", QS_TX_FULL_BIT, QS_TX_EMPTY_BIT, 1'b0, 1'b1, ctxt);
-    check_queue_flags("RX", QS_RX_FULL_BIT, QS_RX_EMPTY_BIT, 1'b0, 1'b1, ctxt);
-    check_queue_flags("RESP", QS_RESP_FULL_BIT, QS_RESP_EMPTY_BIT, 1'b0, 1'b1, ctxt);
-  endtask
-
-  task check_queue_flags(string queue_name, int full_bit, int empty_bit, bit exp_full,
-                         bit exp_empty, string ctxt);
-    bit [31:0] status;
-
-    reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[full_bit], exp_full, $sformatf(
-                 "csr_queue_status_flags_vseq: %s full flag mismatch %s", queue_name, ctxt))
-    `DV_CHECK_EQ(status[empty_bit], exp_empty, $sformatf(
-                 "csr_queue_status_flags_vseq: %s empty flag mismatch %s", queue_name, ctxt))
-  endtask
-
-  function void hdl_deposit_checked(string path, uvm_hdl_data_t value);
-    if (!uvm_hdl_deposit(path, value)) begin
-      `uvm_fatal(`gfn, $sformatf("csr_queue_status_flags_vseq: uvm_hdl_deposit failed for %s",
-                                 path))
-    end
-  endfunction
-
-  task settle_cycles(int unsigned cycles = 4);
-    repeat (cycles) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
   endtask
 
 endclass

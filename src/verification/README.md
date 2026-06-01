@@ -15,6 +15,7 @@ Run commands from this directory:
 make compile
 make smoke
 make regression
+make fifo_regression
 make waves
 ```
 
@@ -23,9 +24,12 @@ Useful overrides:
 ```sh
 make sim TEST=i3c_base_test SEQ=i3c_write_vseq VERBOSITY=UVM_HIGH SEED=1
 make sim DUMP_WAVES=1
+make sim WAVE_DIR=waves/custom_debug
+make sim WAVE_FILE=waves/custom_debug/waves.shm
 ```
 
-Waveforms are written to `waves.shm` and can be opened with SimVision.
+Wave dumping is disabled by default. When `DUMP_WAVES=1`, waveforms are
+written to `waves/<TEST>_<SEQ>/waves.shm` and can be opened with SimVision.
 
 ## Files
 

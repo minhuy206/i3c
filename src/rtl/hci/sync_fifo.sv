@@ -28,17 +28,12 @@ module sync_fifo #(
   logic [PtrW:0] wptr_q, wptr_d;
   logic [PtrW:0] rptr_q, rptr_d;
 
-  // Extra-MSB pointer comparison for full/empty (below) requires
-  // Depth to be a power of 2; otherwise the counter wrap point and
-  // memory wrap point diverge and full/empty fire incorrectly.
+  logic do_write, do_read;
+
   initial begin
     assert (Depth == (1 << PtrW))
     else $fatal(1, "sync_fifo: Depth (%0d) must be a power of 2", Depth);
   end
-
-  logic do_write, do_read;
-  assign do_write = wvalid_i && wready_o;
-  assign do_read  = rready_i && rvalid_o;
 
   always_comb begin : update_wptr_d
     wptr_d = wptr_q;
@@ -92,4 +87,8 @@ module sync_fifo #(
   assign rvalid_o = ~empty_o;
 
   assign rdata_o  = mem[rptr_q[PtrW-1:0]];
+
+  assign do_write = wvalid_i && wready_o;
+  assign do_read  = rready_i && rvalid_o;
+
 endmodule

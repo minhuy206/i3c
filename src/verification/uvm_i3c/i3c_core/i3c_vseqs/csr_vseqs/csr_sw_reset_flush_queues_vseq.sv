@@ -1,4 +1,4 @@
-class csr_sw_reset_flush_queues_vseq extends i3c_base_vseq;
+class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_sw_reset_flush_queues_vseq)
 
   function new(string name = "csr_sw_reset_flush_queues_vseq");
@@ -27,7 +27,7 @@ class csr_sw_reset_flush_queues_vseq extends i3c_base_vseq;
     poll_idle();
     write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
     write_tx_data(32'hCAFE_0077);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b0,
@@ -85,42 +85,6 @@ class csr_sw_reset_flush_queues_vseq extends i3c_base_vseq;
                  "csr_sw_reset_flush_queues_vseq: RESP should read zero after reset flush")
 
     `uvm_info(`gfn, "CSR software reset queue flush checks passed", UVM_LOW)
-  endtask
-
-  task request_sw_reset(bit keep_enabled);
-    bit [31:0] data;
-
-    poll_idle();
-    reg_write(ADDR_HC_CONTROL, {30'h0, 1'b1, keep_enabled});
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-
-    reg_read(ADDR_HC_CONTROL, data);
-    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0,
-                 "csr_sw_reset_flush_queues_vseq: SW_RESET should self-clear")
-    `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
-                 "csr_sw_reset_flush_queues_vseq: SW_RESET should preserve requested enable state")
-  endtask
-
-  task check_all_queues_empty(string ctxt);
-    bit [31:0] status;
-
-    reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[QS_CMD_FULL_BIT], 1'b0,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: CMD full should clear %s", ctxt))
-    `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: CMD empty should set %s", ctxt))
-    `DV_CHECK_EQ(status[QS_TX_FULL_BIT], 1'b0,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: TX full should clear %s", ctxt))
-    `DV_CHECK_EQ(status[QS_TX_EMPTY_BIT], 1'b1,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: TX empty should set %s", ctxt))
-    `DV_CHECK_EQ(status[QS_RX_FULL_BIT], 1'b0,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: RX full should clear %s", ctxt))
-    `DV_CHECK_EQ(status[QS_RX_EMPTY_BIT], 1'b1,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: RX empty should set %s", ctxt))
-    `DV_CHECK_EQ(status[QS_RESP_FULL_BIT], 1'b0,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: RESP full should clear %s", ctxt))
-    `DV_CHECK_EQ(status[QS_RESP_EMPTY_BIT], 1'b1,
-                 $sformatf("csr_sw_reset_flush_queues_vseq: RESP empty should set %s", ctxt))
   endtask
 
 endclass

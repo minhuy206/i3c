@@ -1,4 +1,4 @@
-class csr_sw_reset_clears_cmd_staging_vseq extends i3c_base_vseq;
+class csr_sw_reset_clears_cmd_staging_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_sw_reset_clears_cmd_staging_vseq)
 
   function new(string name = "csr_sw_reset_clears_cmd_staging_vseq");
@@ -10,7 +10,6 @@ class csr_sw_reset_clears_cmd_staging_vseq extends i3c_base_vseq;
     regular_trans_desc_t           fresh_cmd;
     i3c_device_response_seq        dev_seq;
     bit                     [31:0] status;
-    bit                     [31:0] control;
     bit                     [31:0] resp;
     bit                     [31:0] fresh_dword0;
     bit                     [31:0] fresh_dword1;
@@ -29,20 +28,13 @@ class csr_sw_reset_clears_cmd_staging_vseq extends i3c_base_vseq;
     stale_cmd.data_length = 16'd12;
 
     reg_write(ADDR_CMD_QUEUE, stale_cmd[31:0]);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
                  "csr_sw_reset_clears_cmd_staging_vseq: stale DWORD0 alone must not push CMD FIFO")
 
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0002);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-
-    reg_read(ADDR_HC_CONTROL, control);
-    `DV_CHECK_EQ(control[HC_CTRL_SW_RESET_BIT], 1'b0,
-                 "csr_sw_reset_clears_cmd_staging_vseq: SW_RESET should self-clear")
-    `DV_CHECK_EQ(control[HC_CTRL_ENABLE_BIT], 1'b0,
-                 "csr_sw_reset_clears_cmd_staging_vseq: controller should remain disabled")
+    request_sw_reset(1'b0);
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
@@ -65,7 +57,7 @@ class csr_sw_reset_clears_cmd_staging_vseq extends i3c_base_vseq;
     tx_data               = 32'h7856_3412;
 
     reg_write(ADDR_CMD_QUEUE, fresh_dword0);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(
@@ -74,7 +66,7 @@ class csr_sw_reset_clears_cmd_staging_vseq extends i3c_base_vseq;
 
     reg_write(ADDR_CMD_QUEUE, fresh_dword1);
     write_tx_data(tx_data);
-    repeat (4) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    settle_cycles();
 
     reg_read(ADDR_QUEUE_STATUS, status);
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b0,

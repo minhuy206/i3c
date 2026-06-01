@@ -1,4 +1,4 @@
-class csr_timing_rw_vseq extends i3c_base_vseq;
+class csr_timing_rw_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_timing_rw_vseq)
 
   function new(string name = "csr_timing_rw_vseq");
@@ -67,17 +67,6 @@ class csr_timing_rw_vseq extends i3c_base_vseq;
                                   string phase_name);
     reg_write(addr, value);
     check_timing_reg(addr, value[19:0], reg_name, phase_name);
-  endtask
-
-  task check_timing_reg(bit [11:0] addr, bit [19:0] exp, string reg_name, string phase_name);
-    bit [31:0] data;
-
-    reg_read(addr, data);
-    `DV_CHECK_EQ(data[19:0], exp, $sformatf("csr_timing_rw_vseq: %s %s value mismatch", reg_name,
-                                            phase_name))
-    `DV_CHECK_EQ(data[31:20], 12'h0, $sformatf(
-                                         "csr_timing_rw_vseq: %s %s reserved bits should read 0",
-                                         reg_name, phase_name))
   endtask
 
 endclass
