@@ -38,8 +38,8 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
     reg_read(dat_addr(0), dat0);
     reg_read(dat_addr(15), dat15);
     reg_read(ADDR_QUEUE_STATUS, queue_status);
-    cmd_staging_valid = hdl_read_bit("tb_i3c_top.dut.u_csr.cmd_staging_valid");
-    cmd_dword0        = hdl_read_word("tb_i3c_top.dut.u_csr.cmd_dword0");
+    cmd_staging_valid = hdl_read_bit(csr_paths.cmd_staging_valid_path);
+    cmd_dword0        = hdl_read_word(csr_paths.cmd_dword0_path);
 
     foreach (unmapped_addr[i]) begin
       check_unmapped_read_zero(unmapped_addr[i], "before write");
@@ -54,8 +54,8 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
     check_csr_unchanged(dat_addr(0), dat0, "DAT[0]");
     check_csr_unchanged(dat_addr(15), dat15, "DAT[15]");
     check_csr_unchanged(ADDR_QUEUE_STATUS, queue_status, "QUEUE_STATUS");
-    cmd_staging_valid_after = hdl_read_bit("tb_i3c_top.dut.u_csr.cmd_staging_valid");
-    cmd_dword0_after        = hdl_read_word("tb_i3c_top.dut.u_csr.cmd_dword0");
+    cmd_staging_valid_after = hdl_read_bit(csr_paths.cmd_staging_valid_path);
+    cmd_dword0_after        = hdl_read_word(csr_paths.cmd_dword0_path);
     `DV_CHECK_EQ(cmd_staging_valid_after, cmd_staging_valid,
                  "csr_unmapped_addr_no_side_effect_vseq: CMD staging valid changed")
     `DV_CHECK_EQ(cmd_dword0_after, cmd_dword0,
@@ -106,16 +106,14 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
   endtask
 
   task backdoor_load_rx_queue(bit [31:0] data);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.mem[0]", data);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.rptr_q", '0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.wptr_q", 1);
+    backdoor_write_fifo_entry(rx_paths, 0, data);
+    backdoor_set_fifo_level(rx_paths, 1);
     settle_cycles();
   endtask
 
   task backdoor_load_resp_queue(bit [31:0] resp);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.mem[0]", resp);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.rptr_q", '0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.wptr_q", 1);
+    backdoor_write_fifo_entry(resp_paths, 0, resp);
+    backdoor_set_fifo_level(resp_paths, 1);
     settle_cycles();
   endtask
 

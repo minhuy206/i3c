@@ -6,16 +6,16 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
   endfunction
 
   task body();
-    check_port_empty("RX", ADDR_RX_DATA, QS_RX_EMPTY_BIT, "at reset");
-    check_port_empty("RESP", ADDR_RESP, QS_RESP_EMPTY_BIT, "at reset");
+    check_port_empty(rx_paths.name, ADDR_RX_DATA, rx_paths.empty_bit, "at reset");
+    check_port_empty(resp_paths.name, ADDR_RESP, resp_paths.empty_bit, "at reset");
 
     backdoor_load_rx_queue(32'hAAAA_BBBB, 32'hCCCC_DDDD);
-    drain_two_entries("RX", ADDR_RX_DATA, QS_RX_EMPTY_BIT, 32'hAAAA_BBBB, 32'hCCCC_DDDD);
-    check_port_empty("RX", ADDR_RX_DATA, QS_RX_EMPTY_BIT, "after RX drain");
+    drain_two_entries(rx_paths.name, ADDR_RX_DATA, rx_paths.empty_bit, 32'hAAAA_BBBB, 32'hCCCC_DDDD);
+    check_port_empty(rx_paths.name, ADDR_RX_DATA, rx_paths.empty_bit, "after RX drain");
 
     backdoor_load_resp_queue(32'h0123_0004, 32'h0456_0008);
-    drain_two_entries("RESP", ADDR_RESP, QS_RESP_EMPTY_BIT, 32'h0123_0004, 32'h0456_0008);
-    check_port_empty("RESP", ADDR_RESP, QS_RESP_EMPTY_BIT, "after RESP drain");
+    drain_two_entries(resp_paths.name, ADDR_RESP, resp_paths.empty_bit, 32'h0123_0004, 32'h0456_0008);
+    check_port_empty(resp_paths.name, ADDR_RESP, resp_paths.empty_bit, "after RESP drain");
 
     `uvm_info(`gfn, "CSR RX/RESP read pop checks passed", UVM_LOW)
   endtask
@@ -67,21 +67,19 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
   endtask
 
   task backdoor_load_rx_queue(bit [31:0] data0, bit [31:0] data1);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.mem[0]", data0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.mem[1]", data1);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.rptr_q", '0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.rx_fifo.wptr_q", 2);
+    backdoor_write_fifo_entry(rx_paths, 0, data0);
+    backdoor_write_fifo_entry(rx_paths, 1, data1);
+    backdoor_set_fifo_level(rx_paths, 2);
     settle_cycles();
-    check_empty_flag("RX", QS_RX_EMPTY_BIT, 1'b0, "after backdoor load");
+    check_empty_flag(rx_paths.name, rx_paths.empty_bit, 1'b0, "after backdoor load");
   endtask
 
   task backdoor_load_resp_queue(bit [31:0] resp0, bit [31:0] resp1);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.mem[0]", resp0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.mem[1]", resp1);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.rptr_q", '0);
-    hdl_deposit_checked("tb_i3c_top.dut.u_queues.resp_fifo.wptr_q", 2);
+    backdoor_write_fifo_entry(resp_paths, 0, resp0);
+    backdoor_write_fifo_entry(resp_paths, 1, resp1);
+    backdoor_set_fifo_level(resp_paths, 2);
     settle_cycles();
-    check_empty_flag("RESP", QS_RESP_EMPTY_BIT, 1'b0, "after backdoor load");
+    check_empty_flag(resp_paths.name, resp_paths.empty_bit, 1'b0, "after backdoor load");
   endtask
 
 endclass

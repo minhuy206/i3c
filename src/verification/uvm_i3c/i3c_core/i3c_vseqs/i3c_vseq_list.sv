@@ -14,6 +14,13 @@
 `include "i3c_vseqs/csr_vseqs/csr_rx_resp_read_pop_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_unmapped_addr_no_side_effect_vseq.sv"
 
+// 4.2 FIFO and Queue Behavior
+`include "i3c_vseqs/fifo_vseqs/fifo_base_vseq.sv"
+`include "i3c_vseqs/fifo_vseqs/fifo_basic_push_pop_order_vseq.sv"
+`include "i3c_vseqs/fifo_vseqs/fifo_full_empty_boundaries_vseq.sv"
+`include "i3c_vseqs/fifo_vseqs/fifo_simultaneous_read_write_vseq.sv"
+`include "i3c_vseqs/fifo_vseqs/fifo_flush_during_activity_vseq.sv"
+
 // 4.4 I3C SDR Private Write
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_toc_zero_vseq.sv"
