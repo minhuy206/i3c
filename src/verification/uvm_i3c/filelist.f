@@ -31,6 +31,9 @@
 ../rtl/csr/csr_registers.sv
 ../rtl/i3c_controller_top.sv
 
+// ─── Verification: SVA bind checkers ─────────────────────────────────────────
+uvm_i3c/i3c_core/i3c_sva.sv
+
 // ─── Verification: CSR address package ───────────────────────────────────────
 uvm_i3c/dv_inc/i3c_csr_addr_pkg.sv
 

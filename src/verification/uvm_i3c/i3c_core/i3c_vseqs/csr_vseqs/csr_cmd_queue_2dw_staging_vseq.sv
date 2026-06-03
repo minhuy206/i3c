@@ -30,27 +30,11 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     dword0                    = imm_cmd[31:0];
     dword1                    = imm_cmd[63:32];
 
-    reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
-                 "csr_cmd_queue_2dw_staging_vseq: CMD FIFO should start empty")
-
     reg_write(ADDR_CMD_QUEUE, dword0);
     settle_cycles();
 
-    reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
-                 "csr_cmd_queue_2dw_staging_vseq: DWORD0 alone must not push CMD FIFO")
-    `DV_CHECK_EQ(status[QS_CMD_FULL_BIT], 1'b0,
-                 "csr_cmd_queue_2dw_staging_vseq: CMD FIFO should not be full after DWORD0")
-
     reg_write(ADDR_CMD_QUEUE, dword1);
     settle_cycles();
-
-    reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b0,
-                 "csr_cmd_queue_2dw_staging_vseq: DWORD1 should complete one staged CMD")
-    `DV_CHECK_EQ(status[QS_CMD_FULL_BIT], 1'b0,
-                 "csr_cmd_queue_2dw_staging_vseq: one staged CMD should not fill CMD FIFO")
 
     dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr = 7'h08;
