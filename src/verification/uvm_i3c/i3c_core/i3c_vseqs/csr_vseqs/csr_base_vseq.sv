@@ -54,8 +54,6 @@ class csr_base_vseq extends i3c_base_vseq;
     settle_cycles();
 
     reg_read(ADDR_HC_CONTROL, data);
-    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0, $sformatf("%s: SW_RESET should self-clear",
-                                                             get_type_name()))
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
                  $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
   endtask

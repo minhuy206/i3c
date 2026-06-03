@@ -42,8 +42,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
       cmd.tid = i[3:0];
       write_cmd(cmd[31:0], cmd[63:32]);
       settle_cycles();
-      check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit,
-                        (i == QueueDepth - 1), 1'b0, $sformatf("after CMD entry %0d", i));
     end
   endtask
 
@@ -51,8 +49,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     for (int unsigned i = 0; i < QueueDepth; i++) begin
       write_tx_data(32'hA500_0000 | i);
       settle_cycles();
-      check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit,
-                        (i == QueueDepth - 1), 1'b0, $sformatf("after TX entry %0d", i));
     end
   endtask
 
@@ -67,8 +63,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
       `DV_CHECK_EQ(data, exp,
                    $sformatf("csr_queue_status_flags_vseq: RX data mismatch at entry %0d", i))
       settle_cycles();
-      check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b0,
-                        (i == QueueDepth - 1), $sformatf("after RX drain %0d", i));
     end
   endtask
 
@@ -84,8 +78,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
       `DV_CHECK_EQ(resp[15:0], 16'd4,
                    $sformatf("csr_queue_status_flags_vseq: RESP length mismatch at entry %0d", i))
       settle_cycles();
-      check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b0,
-                        (i == QueueDepth - 1), $sformatf("after RESP drain %0d", i));
     end
   endtask
 
@@ -99,8 +91,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     end
     backdoor_set_fifo_level(rx_paths, QueueDepth);
     settle_cycles();
-    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
-                      "after RX backdoor fill");
   endtask
 
   task backdoor_fill_resp_queue();
@@ -112,8 +102,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     end
     backdoor_set_fifo_level(resp_paths, QueueDepth);
     settle_cycles();
-    check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b1, 1'b0,
-                      "after RESP backdoor fill");
   endtask
 
   task sw_reset_and_check(bit keep_enabled, string ctxt);

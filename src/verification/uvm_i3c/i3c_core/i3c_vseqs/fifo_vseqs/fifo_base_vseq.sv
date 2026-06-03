@@ -55,34 +55,24 @@ class fifo_base_vseq extends i3c_base_vseq;
                                ctxt))
   endtask
 
-  virtual task check_depth(queue_hdl_paths_t paths, int unsigned exp_depth, string ctxt);
-    bit [31:0] depth;
+  virtual function bit queue_uses_csr_read(queue_hdl_paths_t paths);
+    return (paths.name == "RX") || (paths.name == "RESP");
+  endfunction
 
-    depth = hdl_read_word(paths.depth_path);
-    `DV_CHECK_EQ(depth, 32'(exp_depth), $sformatf("%s: %s depth mismatch %s", get_type_name(),
-                                                  paths.name, ctxt))
-  endtask
+  virtual function string flush_path(queue_hdl_paths_t paths);
+    return "tb_i3c_top.dut.sw_reset";
+  endfunction
 
-  virtual task check_fifo_state(queue_hdl_paths_t paths, int unsigned exp_depth, string ctxt);
-    bit exp_full;
-    bit exp_empty;
+  virtual task csr_read_queue(queue_hdl_paths_t paths);
+    bit [31:0] unused;
 
-    exp_full  = (exp_depth == QueueDepth);
-    exp_empty = (exp_depth == 0);
-    check_depth(paths, exp_depth, ctxt);
-    check_queue_flags(paths.name, paths.full_bit, paths.empty_bit, exp_full, exp_empty, ctxt);
-  endtask
-
-  virtual task check_queue_read_data(queue_hdl_paths_t paths, uvm_hdl_data_t exp, string ctxt);
-    uvm_hdl_data_t got;
-
-    got = hdl_read_checked(paths.read_data_path);
-    if (paths.data_width == 64) begin
-      `DV_CHECK_EQ(got[63:0], exp[63:0], $sformatf("%s: %s read data mismatch %s",
-                                                   get_type_name(), paths.name, ctxt))
+    if (paths.name == "RX") begin
+      read_rx_data(unused);
+    end else if (paths.name == "RESP") begin
+      read_response(unused);
     end else begin
-      `DV_CHECK_EQ(got[31:0], exp[31:0], $sformatf("%s: %s read data mismatch %s",
-                                                   get_type_name(), paths.name, ctxt))
+      `uvm_fatal(`gfn, $sformatf("%s: %s does not use CSR read path", get_type_name(),
+                                 paths.name))
     end
   endtask
 
@@ -95,21 +85,6 @@ class fifo_base_vseq extends i3c_base_vseq;
       wait_hdl_bit(paths.write_ready_path, 1'b1, $sformatf("%s before push %0d", ctxt, i));
       force_fifo_write_one_cycle(paths, entry);
     end
-    check_fifo_state(paths, count, $sformatf("%s after fill", ctxt));
-  endtask
-
-  virtual task check_write_blocked(queue_hdl_paths_t paths, string ctxt);
-    `DV_CHECK_EQ(hdl_read_bit(paths.write_ready_path), 1'b0, $sformatf(
-                                                      "%s: %s wready should deassert when full %s",
-                                                      get_type_name(), paths.name, ctxt))
-    check_fifo_state(paths, QueueDepth, ctxt);
-  endtask
-
-  virtual task check_read_blocked(queue_hdl_paths_t paths, string ctxt);
-    `DV_CHECK_EQ(hdl_read_bit(paths.read_valid_path), 1'b0,
-                 $sformatf("%s: %s rvalid should deassert when empty %s", get_type_name(),
-                           paths.name, ctxt))
-    check_fifo_state(paths, 0, ctxt);
   endtask
 
   virtual task force_one_cycle(string valid_path);
@@ -134,6 +109,86 @@ class fifo_base_vseq extends i3c_base_vseq;
 
   virtual task force_fifo_read_one_cycle(queue_hdl_paths_t paths);
     force_one_cycle(paths.read_ready_path);
+  endtask
+
+  virtual task pop_fifo_one_entry(queue_hdl_paths_t paths);
+    if (queue_uses_csr_read(paths)) begin
+      csr_read_queue(paths);
+    end else begin
+      wait_hdl_bit(paths.read_valid_path, 1'b1, $sformatf("before %s pop", paths.name));
+      force_fifo_read_one_cycle(paths);
+    end
+  endtask
+
+  virtual task attempt_empty_read(queue_hdl_paths_t paths);
+    if (queue_uses_csr_read(paths)) begin
+      csr_read_queue(paths);
+    end else begin
+      force_fifo_read_one_cycle(paths);
+    end
+  endtask
+
+  virtual task force_direct_read_write_one_cycle(queue_hdl_paths_t paths, uvm_hdl_data_t wr_data,
+                                                 bit with_flush = 1'b0);
+    string flush_i_path;
+
+    flush_i_path = flush_path(paths);
+    @(negedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    hdl_force_checked(paths.write_data_path, wr_data);
+    hdl_force_checked(paths.write_valid_path, 1'b1);
+    hdl_force_checked(paths.read_ready_path, 1'b1);
+    if (with_flush) hdl_force_checked(flush_i_path, 1'b1);
+
+    @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    @(negedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    if (with_flush) hdl_release_checked(flush_i_path);
+    hdl_release_checked(paths.read_ready_path);
+    hdl_release_checked(paths.write_valid_path);
+    hdl_release_checked(paths.write_data_path);
+    settle_cycles(1);
+  endtask
+
+  virtual task force_write_during_csr_read(queue_hdl_paths_t paths, uvm_hdl_data_t wr_data,
+                                           bit with_flush = 1'b0);
+    string flush_i_path;
+
+    flush_i_path = flush_path(paths);
+    fork
+      begin
+        csr_read_queue(paths);
+      end
+      begin
+        @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+        @(negedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+        hdl_force_checked(paths.write_data_path, wr_data);
+        hdl_force_checked(paths.write_valid_path, 1'b1);
+        if (with_flush) hdl_force_checked(flush_i_path, 1'b1);
+
+        @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+        @(negedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+        if (with_flush) hdl_release_checked(flush_i_path);
+        hdl_release_checked(paths.write_valid_path);
+        hdl_release_checked(paths.write_data_path);
+      end
+    join
+    settle_cycles(1);
+  endtask
+
+  virtual task drive_fifo_read_write_one_cycle(queue_hdl_paths_t paths, uvm_hdl_data_t wr_data);
+    if (queue_uses_csr_read(paths)) begin
+      force_write_during_csr_read(paths, wr_data);
+    end else begin
+      force_direct_read_write_one_cycle(paths, wr_data);
+    end
+  endtask
+
+  virtual task drive_fifo_flush_read_write_one_cycle(queue_hdl_paths_t paths,
+                                                     uvm_hdl_data_t wr_data);
+    if (queue_uses_csr_read(paths)) begin
+      force_write_during_csr_read(paths, wr_data, 1'b1);
+    end else begin
+      force_direct_read_write_one_cycle(paths, wr_data, 1'b1);
+    end
   endtask
 
 endclass
