@@ -7,7 +7,7 @@ class csr_timing_rw_vseq extends csr_base_vseq;
 
   task body();
     bit [19:0] rand_value;
-    bit [11:0] timing_addr[9] = '{
+    bit [11:0] timing_addr[18] = '{
         ADDR_T_R,
         ADDR_T_F,
         ADDR_T_LOW,
@@ -16,9 +16,18 @@ class csr_timing_rw_vseq extends csr_base_vseq;
         ADDR_T_HD_STA,
         ADDR_T_SU_STO,
         ADDR_T_SU_DAT,
-        ADDR_T_HD_DAT
+        ADDR_T_HD_DAT,
+        ADDR_I2C_T_R,
+        ADDR_I2C_T_F,
+        ADDR_I2C_T_LOW,
+        ADDR_I2C_T_HIGH,
+        ADDR_I2C_T_SU_STA,
+        ADDR_I2C_T_HD_STA,
+        ADDR_I2C_T_SU_STO,
+        ADDR_I2C_T_SU_DAT,
+        ADDR_I2C_T_HD_DAT
     };
-    string timing_reg[9] = '{
+    string timing_reg[18] = '{
         "T_R",
         "T_F",
         "T_LOW",
@@ -27,19 +36,37 @@ class csr_timing_rw_vseq extends csr_base_vseq;
         "T_HD_STA",
         "T_SU_STO",
         "T_SU_DAT",
-        "T_HD_DAT"
+        "T_HD_DAT",
+        "I2C_T_R",
+        "I2C_T_F",
+        "I2C_T_LOW",
+        "I2C_T_HIGH",
+        "I2C_T_SU_STA",
+        "I2C_T_HD_STA",
+        "I2C_T_SU_STO",
+        "I2C_T_SU_DAT",
+        "I2C_T_HD_DAT"
     };
 
-    bit [19:0] timing_reg_value[9] = '{
-        20'd4,  // T_R       0x010
-        20'd4,  // T_F       0x014
-        20'd8,  // T_LOW     0x018
-        20'd8,  // T_HIGH    0x01C
-        20'd8,  // T_SU_STA  0x020
-        20'd8,  // T_HD_STA  0x024
-        20'd4,  // T_SU_STO  0x028
-        20'd1,  // T_SU_DAT  0x02C
-        20'd4  // T_HD_DAT  0x030
+    bit [19:0] timing_reg_value[18] = '{
+        RST_T_R,
+        RST_T_F,
+        RST_T_LOW,
+        RST_T_HIGH,
+        RST_T_SU_STA,
+        RST_T_HD_STA,
+        RST_T_SU_STO,
+        RST_T_SU_DAT,
+        RST_T_HD_DAT,
+        RST_I2C_T_R,
+        RST_I2C_T_F,
+        RST_I2C_T_LOW,
+        RST_I2C_T_HIGH,
+        RST_I2C_T_SU_STA,
+        RST_I2C_T_HD_STA,
+        RST_I2C_T_SU_STO,
+        RST_I2C_T_SU_DAT,
+        RST_I2C_T_HD_DAT
     };
 
     foreach (timing_addr[i]) begin

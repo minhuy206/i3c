@@ -20,7 +20,8 @@ module bus_tx #(
     input  logic sel_od_pp_i,
     output logic sel_od_pp_o,
 
-    output logic sda_o
+    output logic sda_o,
+    output logic sda_drive_o
 );
   logic [19:0] tcount_q, tcount_d;
   logic load_tcount;
@@ -104,6 +105,7 @@ module bus_tx #(
 
   always_comb begin : tx_fsm_outputs
     sda_o = '1;
+    sda_drive_o = 1'b0;
     tx_done_o = '0;  // Assign to 1 only after transmitting a bit
     load_tcount = '0;
     tcount_sel = tNoDelay;
@@ -115,6 +117,7 @@ module bus_tx #(
           load_tcount = '1;
           if (t_sd_z & (scl_stable_low_i | scl_negedge_i)) begin
             sda_o = drive_value_i;
+            sda_drive_o = 1'b1;
           end
         end
       end
@@ -123,15 +126,18 @@ module bus_tx #(
         load_tcount = '1;
         if (t_sd_z & scl_negedge_i) begin
           sda_o = drive_value_i;
+          sda_drive_o = 1'b1;
         end
       end
       SetupData: begin
         if (tcount_q == 20'd1) begin
           sda_o = drive_value_i;
+          sda_drive_o = 1'b1;
         end
       end
       TransmitData: begin
         sda_o = drive_value_i;
+        sda_drive_o = 1'b1;
         if (scl_negedge_i) begin
           tcount_sel  = tHoldData;
           load_tcount = '1;
@@ -141,12 +147,14 @@ module bus_tx #(
       HoldData: begin
         if (tcount_q != 20'd0) begin
           sda_o = drive_value_i;
+          sda_drive_o = 1'b1;
         end else begin
           tx_done_o = '1;
         end
       end
       default: begin
         sda_o = '1;
+        sda_drive_o = 1'b0;
         tx_done_o = '0;  // Assign to 1 only after transmitting a bit
         load_tcount = '0;
         tcount_sel = tNoDelay;

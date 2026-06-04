@@ -30,6 +30,15 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
     check_timing_reg(ADDR_T_SU_STO, RST_T_SU_STO, "T_SU_STO", "after reset");
     check_timing_reg(ADDR_T_SU_DAT, RST_T_SU_DAT, "T_SU_DAT", "after reset");
     check_timing_reg(ADDR_T_HD_DAT, RST_T_HD_DAT, "T_HD_DAT", "after reset");
+    check_timing_reg(ADDR_I2C_T_R, RST_I2C_T_R, "I2C_T_R", "after reset");
+    check_timing_reg(ADDR_I2C_T_F, RST_I2C_T_F, "I2C_T_F", "after reset");
+    check_timing_reg(ADDR_I2C_T_LOW, RST_I2C_T_LOW, "I2C_T_LOW", "after reset");
+    check_timing_reg(ADDR_I2C_T_HIGH, RST_I2C_T_HIGH, "I2C_T_HIGH", "after reset");
+    check_timing_reg(ADDR_I2C_T_SU_STA, RST_I2C_T_SU_STA, "I2C_T_SU_STA", "after reset");
+    check_timing_reg(ADDR_I2C_T_HD_STA, RST_I2C_T_HD_STA, "I2C_T_HD_STA", "after reset");
+    check_timing_reg(ADDR_I2C_T_SU_STO, RST_I2C_T_SU_STO, "I2C_T_SU_STO", "after reset");
+    check_timing_reg(ADDR_I2C_T_SU_DAT, RST_I2C_T_SU_DAT, "I2C_T_SU_DAT", "after reset");
+    check_timing_reg(ADDR_I2C_T_HD_DAT, RST_I2C_T_HD_DAT, "I2C_T_HD_DAT", "after reset");
 
     check_reg_eq(ADDR_QUEUE_STATUS, 32'h0000_00AA, "QUEUE_STATUS", "after reset");
 

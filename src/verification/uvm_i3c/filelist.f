@@ -18,7 +18,7 @@
 ../rtl/ctrl/edge_detector.sv
 ../rtl/ctrl/stable_high_detector.sv
 ../rtl/ctrl/bus_monitor.sv
-../rtl/scl_generator.sv
+../rtl/ctrl/scl_generator.sv
 ../rtl/ctrl/bus_tx.sv
 ../rtl/ctrl/bus_tx_flow.sv
 ../rtl/ctrl/bus_rx_flow.sv
@@ -31,8 +31,19 @@
 ../rtl/csr/csr_registers.sv
 ../rtl/i3c_controller_top.sv
 
-// ─── Verification: SVA bind checkers ─────────────────────────────────────────
-uvm_i3c/i3c_core/i3c_sva.sv
+// ─── Verification: SVA checkers and binds ───────────────────────────────────
+uvm_i3c/i3c_core/sva/csr_registers_sva.sv
+uvm_i3c/i3c_core/sva/i3c_controller_top_sva.sv
+uvm_i3c/i3c_core/sva/i3c_phy_sva.sv
+uvm_i3c/i3c_core/sva/bus_monitor_sva.sv
+uvm_i3c/i3c_core/sva/scl_generator_sva.sv
+uvm_i3c/i3c_core/sva/bus_tx_flow_sva.sv
+uvm_i3c/i3c_core/sva/bus_rx_flow_sva.sv
+uvm_i3c/i3c_core/sva/flow_active_sva.sv
+uvm_i3c/i3c_core/sva/controller_active_sva.sv
+uvm_i3c/i3c_core/sva/sync_fifo_sva.sv
+uvm_i3c/i3c_core/sva/tb_pad_model_sva.sv
+uvm_i3c/i3c_core/sva/i3c_sva_bind.sv
 
 // ─── Verification: CSR address package ───────────────────────────────────────
 uvm_i3c/dv_inc/i3c_csr_addr_pkg.sv

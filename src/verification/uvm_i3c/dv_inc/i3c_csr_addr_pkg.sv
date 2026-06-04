@@ -24,6 +24,15 @@ package i3c_csr_addr_pkg;
   localparam bit [11:0] ADDR_T_SU_STO = 12'h028;
   localparam bit [11:0] ADDR_T_SU_DAT = 12'h02C;
   localparam bit [11:0] ADDR_T_HD_DAT = 12'h030;
+  localparam bit [11:0] ADDR_I2C_T_R = 12'h040;
+  localparam bit [11:0] ADDR_I2C_T_F = 12'h044;
+  localparam bit [11:0] ADDR_I2C_T_LOW = 12'h048;
+  localparam bit [11:0] ADDR_I2C_T_HIGH = 12'h04C;
+  localparam bit [11:0] ADDR_I2C_T_SU_STA = 12'h050;
+  localparam bit [11:0] ADDR_I2C_T_HD_STA = 12'h054;
+  localparam bit [11:0] ADDR_I2C_T_SU_STO = 12'h058;
+  localparam bit [11:0] ADDR_I2C_T_SU_DAT = 12'h05C;
+  localparam bit [11:0] ADDR_I2C_T_HD_DAT = 12'h060;
 
   // Queue Ports
   localparam bit [11:0] ADDR_CMD_QUEUE = 12'h100;
@@ -71,6 +80,15 @@ package i3c_csr_addr_pkg;
   localparam bit [19:0] RST_T_SU_STO = 20'd4;
   localparam bit [19:0] RST_T_SU_DAT = 20'd1;
   localparam bit [19:0] RST_T_HD_DAT = 20'd4;
+  localparam bit [19:0] RST_I2C_T_R = 20'd4;
+  localparam bit [19:0] RST_I2C_T_F = 20'd4;
+  localparam bit [19:0] RST_I2C_T_LOW = 20'd160;
+  localparam bit [19:0] RST_I2C_T_HIGH = 20'd90;
+  localparam bit [19:0] RST_I2C_T_SU_STA = 20'd60;
+  localparam bit [19:0] RST_I2C_T_HD_STA = 20'd60;
+  localparam bit [19:0] RST_I2C_T_SU_STO = 20'd130;
+  localparam bit [19:0] RST_I2C_T_SU_DAT = 20'd10;
+  localparam bit [19:0] RST_I2C_T_HD_DAT = 20'd0;
 
   // 4. Helper Functions
 

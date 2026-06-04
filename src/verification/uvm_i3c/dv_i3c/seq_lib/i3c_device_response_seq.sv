@@ -52,8 +52,13 @@ class i3c_device_response_seq extends uvm_sequence #(
 
     req.T_bit.delete();
     for (int i = 0; i < req.data_cnt; i++) begin
-      if (i < req.data_cnt - 1) req.T_bit.push_back(ack_data);
-      else req.T_bit.push_back(1'b0);
+      if (!is_i3c && !dir) begin
+        req.T_bit.push_back(ack_data);
+      end else if (i < req.data_cnt - 1) begin
+        req.T_bit.push_back(ack_data);
+      end else begin
+        req.T_bit.push_back(1'b0);
+      end
     end
 
     start_item(req);

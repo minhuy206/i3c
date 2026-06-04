@@ -29,6 +29,8 @@ interface i3c_if (
   assign dut_sda_oe = dut_sda_oe_i;
   assign dut_sda_o = dut_sda_o_i;
 
+  // Target-mode sequences must keep scl_pp_en=0 and scl_o=1.
+  // Driving SCL is only for host-mode or directed raw bus/PHY stimulus.
   assign scl_io = scl_pp_en ? scl_o : (scl_o ? 1'bz : scl_o);
   assign (highz0, weak1) scl_io = 1'b1;
 
@@ -128,8 +130,22 @@ interface i3c_if (
 
   task automatic wait_for_host_stop(input int wait_delay, output bit stop);
     stop = 1'b0;
+    if (scl_i === 1'b1 && sda_i === 1'b1) begin
+      #(wait_delay * 1ns);
+      if (scl_i === 1'b1 && sda_i === 1'b1) begin
+        stop = 1'b1;
+        return;
+      end
+    end
     forever begin
       if (scl_i == 0) @(posedge scl_i);
+      if (sda_i === 1'b1) begin
+        #(wait_delay * 1ns);
+        if (scl_i === 1'b1 && sda_i === 1'b1) begin
+          stop = 1'b1;
+          break;
+        end
+      end
       @(posedge sda_i);
       if (scl_i) begin
         stop = 1'b1;
@@ -248,6 +264,9 @@ interface i3c_if (
   endtask : device_i3c_start
 
   task automatic device_i2c_send_bit(input i2c_timing_t tc, input bit bit_i);
+    bit min_high_done;
+    bit scl_fell_early;
+
     device_sda_pp_en = 0;
     device_sda_o = 1'b1;
     wait (!scl_i);
@@ -256,7 +275,32 @@ interface i3c_if (
     time_check(tc.tSetupBit, 1'b1, scl_i, "I2C device bit setup");
     `uvm_info(msg_id, "device_send_bit::Value sampled", UVM_DEBUG)
 
-    time_check(tc.tClockPulse, 1'b0, scl_i, "I2C device bit clock high pulse width");
+    min_high_done = 1'b0;
+    scl_fell_early = 1'b0;
+    fork
+      begin
+        #(tc.tClockPulse * 1ns);
+        min_high_done = 1'b1;
+      end
+      begin
+        @(negedge scl_i);
+        if (!min_high_done) scl_fell_early = 1'b1;
+      end
+    join_any
+    disable fork;
+    if (scl_fell_early) begin
+      `uvm_info(msg_id, "I2C device bit clock high pulse width time check failed", UVM_HIGH)
+    end else if (scl_i) begin
+      fork
+        begin
+          wait (!scl_i);
+        end
+        begin
+          #(tc.tSetupStop * 1ns);
+        end
+      join_any
+      disable fork;
+    end
 
     #(tc.tHoldBit * 1ns);
     device_sda_o = 1'b1;

@@ -25,7 +25,8 @@ module bus_tx_flow (
     input  logic sel_od_pp_i,
     output logic sel_od_pp_o,
 
-    output logic sda_o  // Output I3C SDA bus line
+    output logic sda_o,       // Output I3C SDA bus line
+    output logic sda_drive_o
 );
   logic drive_bit_en;
   logic drive_bit_value;
@@ -181,6 +182,7 @@ module bus_tx_flow (
       .scl_stable_low_i,
       .sel_od_pp_i,
       .sel_od_pp_o,
+      .sda_drive_o,
       .tx_idle_o(tx_idle),
       .tx_done_o(tx_done),
       .sda_o

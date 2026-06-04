@@ -32,6 +32,8 @@ module i3c_controller_top #(
   logic ctrl_enable, i3c_fsm_en, sw_reset;
   logic [19:0] t_r, t_f, t_low, t_high;
   logic [19:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat;
+  logic [19:0] i2c_t_r, i2c_t_f, i2c_t_low, i2c_t_high;
+  logic [19:0] i2c_t_su_sta, i2c_t_hd_sta, i2c_t_su_sto, i2c_t_su_dat, i2c_t_hd_dat;
 
   // CSR ↔ HCI Queues: CMD (SW write → HW read)
   logic cmd_csr_wvalid, cmd_csr_wready;
@@ -110,6 +112,15 @@ module i3c_controller_top #(
       .t_su_sto_o      (t_su_sto),
       .t_su_dat_o      (t_su_dat),
       .t_hd_dat_o      (t_hd_dat),
+      .i2c_t_r_o       (i2c_t_r),
+      .i2c_t_f_o       (i2c_t_f),
+      .i2c_t_low_o     (i2c_t_low),
+      .i2c_t_high_o    (i2c_t_high),
+      .i2c_t_su_sta_o  (i2c_t_su_sta),
+      .i2c_t_hd_sta_o  (i2c_t_hd_sta),
+      .i2c_t_su_sto_o  (i2c_t_su_sto),
+      .i2c_t_su_dat_o  (i2c_t_su_dat),
+      .i2c_t_hd_dat_o  (i2c_t_hd_dat),
       .dat_read_valid_i(dat_read_valid),
       .dat_index_i     (dat_index),
       .dat_rdata_o     (dat_rdata),
@@ -224,6 +235,15 @@ module i3c_controller_top #(
       .t_su_sto_i         (t_su_sto),
       .t_su_dat_i         (t_su_dat),
       .t_hd_dat_i         (t_hd_dat),
+      .i2c_t_r_i          (i2c_t_r),
+      .i2c_t_f_i          (i2c_t_f),
+      .i2c_t_low_i        (i2c_t_low),
+      .i2c_t_high_i       (i2c_t_high),
+      .i2c_t_su_sta_i     (i2c_t_su_sta),
+      .i2c_t_hd_sta_i     (i2c_t_hd_sta),
+      .i2c_t_su_sto_i     (i2c_t_su_sto),
+      .i2c_t_su_dat_i     (i2c_t_su_dat),
+      .i2c_t_hd_dat_i     (i2c_t_hd_dat),
       .ctrl_enable_i      (ctrl_enable),
       .i3c_fsm_en_i       (i3c_fsm_en),
       .i3c_fsm_idle_o     (i3c_fsm_idle)
