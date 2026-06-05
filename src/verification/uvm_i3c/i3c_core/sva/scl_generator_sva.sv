@@ -69,8 +69,10 @@ module scl_generator_timing_sva #(
     endcase
   endfunction
 
-  function automatic logic expected_scl(input logic [3:0] state);
-    expected_scl = !((state == DriveLow) || (state == WaitCmd));
+  function automatic logic expected_scl(input logic [3:0]              state,
+                                        input logic [CounterWidth-1:0] count);
+    expected_scl = !((state == DriveLow) || (state == WaitCmd) ||
+                     ((state == GenerateStop) && (count != '0)));
   endfunction
 
   function automatic logic expected_sda(input logic [3:0] state);
@@ -94,7 +96,8 @@ module scl_generator_timing_sva #(
   assert property (@(posedge clk_i) disable iff (!rst_ni) state_is_valid(state_q))
   else $error("scl_generator_timing_sva: state_q has invalid encoding in %m");
 
-  assert property (@(posedge clk_i) disable iff (!rst_ni) scl_o === expected_scl(state_q))
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   scl_o === expected_scl(state_q, tcount))
   else $error("scl_generator_timing_sva: scl_o decode mismatch in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni) sda_o === expected_sda(state_q))
@@ -140,10 +143,22 @@ module scl_generator_timing_sva #(
   else $error("scl_generator_timing_sva: WaitCmd resume must load t_low_i+t_f_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (state_q == WaitCmd && gen_stop_i)
+                   |-> (load_tcount &&
+                        (tcount_load_val == counter_sum(t_low_i, t_f_i))))
+  else $error("scl_generator_timing_sva: WaitCmd STOP must load t_low_i+t_f_i in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == DriveHigh && (tcount == '0) && gen_clock_i)
                    |-> (load_tcount &&
                         (tcount_load_val == counter_sum(t_low_i, t_f_i))))
   else $error("scl_generator_timing_sva: DriveHigh expiry must load t_low_i+t_f_i in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (state_q == DriveHigh && (tcount == '0) && gen_stop_i)
+                   |-> (load_tcount &&
+                        (tcount_load_val == counter_sum(t_low_i, t_f_i))))
+  else $error("scl_generator_timing_sva: DriveHigh STOP must load t_low_i+t_f_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == DriveLow && (tcount == '0) && gen_clock_i)
@@ -152,7 +167,7 @@ module scl_generator_timing_sva #(
   else $error("scl_generator_timing_sva: DriveLow expiry must load t_high_i+t_r_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   (state_q == GenerateStop && scl_i)
+                   (state_q == GenerateStop && (tcount == '0) && scl_i)
                    |-> (load_tcount && (tcount_load_val == t_su_sto_i)))
   else $error("scl_generator_timing_sva: STOP high phase must load t_su_sto_i in %m");
 
@@ -295,12 +310,17 @@ module scl_generator_timing_sva #(
   else $error("scl_generator_timing_sva: RstartSdaFall must enter HoldStart in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   (!gen_idle_i && (state_q == GenerateStop) && !scl_i)
+                   (!gen_idle_i && (state_q == GenerateStop) && (tcount != '0))
+                   |=> (gen_idle_i || (state_q == GenerateStop)))
+  else $error("scl_generator_timing_sva: GenerateStop must hold SCL low for STOP prep in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (!gen_idle_i && (state_q == GenerateStop) && (tcount == '0) && !scl_i)
                    |=> (gen_idle_i || (state_q == GenerateStop)))
   else $error("scl_generator_timing_sva: GenerateStop must wait for SCL high feedback in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   (!gen_idle_i && (state_q == GenerateStop) && scl_i)
+                   (!gen_idle_i && (state_q == GenerateStop) && (tcount == '0) && scl_i)
                    |=> (gen_idle_i || (state_q == SclHighForStop)))
   else $error("scl_generator_timing_sva: STOP must enter SclHighForStop after SCL feedback in %m");
 

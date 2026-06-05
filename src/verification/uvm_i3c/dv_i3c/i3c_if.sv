@@ -109,51 +109,26 @@ interface i3c_if (
   endtask : get_bit_data
 
   task automatic wait_for_host_start();
-    forever begin
-      @(negedge sda_i);
-      if (!scl_i) continue;
-      break;
-    end
-  endtask : wait_for_host_start
+    @(negedge sda_i iff scl_i);
+  endtask
 
   task automatic wait_for_host_rstart(output bit rstart);
     rstart = 1'b0;
-    forever begin
-      @(posedge scl_i && sda_i);
-      @(negedge sda_i);
-      if (scl_i) begin
-        rstart = 1'b1;
-        break;
-      end
-    end
-  endtask : wait_for_host_rstart
+    @(negedge sda_i iff scl_i);
+    rstart = 1'b1;
+  endtask
 
   task automatic wait_for_host_stop(input int wait_delay, output bit stop);
     stop = 1'b0;
-    if (scl_i === 1'b1 && sda_i === 1'b1) begin
+    forever begin
+      @(posedge sda_i iff scl_i);
       #(wait_delay * 1ns);
       if (scl_i === 1'b1 && sda_i === 1'b1) begin
-        stop = 1'b1;
-        return;
-      end
-    end
-    forever begin
-      if (scl_i == 0) @(posedge scl_i);
-      if (sda_i === 1'b1) begin
-        #(wait_delay * 1ns);
-        if (scl_i === 1'b1 && sda_i === 1'b1) begin
-          stop = 1'b1;
-          break;
-        end
-      end
-      @(posedge sda_i);
-      if (scl_i) begin
         stop = 1'b1;
         break;
       end
     end
-    #(wait_delay * 1ns);
-  endtask : wait_for_host_stop
+  endtask
 
   task automatic wait_for_i2c_host_stop_or_rstart(input i2c_timing_t tc, output bit rstart,
                                                   output bit stop);
@@ -233,7 +208,8 @@ interface i3c_if (
     ack_r = !data;
   endtask : wait_for_device_ack_or_nack
 
-  task automatic time_check(input int delay, input bit exp_value, ref logic check_wire, input string msg);
+  task automatic time_check(input int delay, input bit exp_value, ref logic check_wire,
+                            input string msg);
     time valid_time;
     time exp_value_time;
     fork
@@ -275,7 +251,7 @@ interface i3c_if (
     time_check(tc.tSetupBit, 1'b1, scl_i, "I2C device bit setup");
     `uvm_info(msg_id, "device_send_bit::Value sampled", UVM_DEBUG)
 
-    min_high_done = 1'b0;
+    min_high_done  = 1'b0;
     scl_fell_early = 1'b0;
     fork
       begin

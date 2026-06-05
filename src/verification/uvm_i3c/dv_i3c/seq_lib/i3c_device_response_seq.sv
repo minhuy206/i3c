@@ -11,6 +11,7 @@ class i3c_device_response_seq extends uvm_sequence #(
   int read_data_cnt = 4;
   bit observed_rstart;
   bit done;
+  bit request_issued;
   bit [6:0] sampled_addr;
   bit sampled_dir;
   bit [7:0] sampled_data[$];
@@ -28,6 +29,7 @@ class i3c_device_response_seq extends uvm_sequence #(
     req = i3c_seq_item::type_id::create("req");
     observed_rstart = 1'b0;
     done = 1'b0;
+    request_issued = 1'b0;
     sampled_addr = '0;
     sampled_dir = 1'b0;
     sampled_data.delete();
@@ -62,6 +64,7 @@ class i3c_device_response_seq extends uvm_sequence #(
     end
 
     start_item(req);
+    request_issued = 1'b1;
     finish_item(req);
 
     get_response(rsp_item);

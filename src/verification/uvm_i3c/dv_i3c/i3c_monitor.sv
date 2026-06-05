@@ -50,21 +50,35 @@ class i3c_monitor extends uvm_monitor;
   virtual protected task collect_thread(uvm_phase phase);
     i3c_item full_item;
     i3c_item temp_val;
+    bit use_next_item;
 
     if (next_item != null) begin
       full_item = next_item;
       next_item = null;
+      use_next_item = 1'b1;
     end else begin
       full_item = new();
+      use_next_item = 1'b0;
     end
 
     wait (cfg.en_monitor);
-    if (bus_stop || (!bus_stop && !start && rstart)) begin
-      cfg.vif.wait_for_host_start();
-      `uvm_info(`gfn, "\n monitor, detect HOST START", UVM_HIGH)
-    end else begin
+    if (use_next_item) begin
       rstart = 1'b1;
       full_item.rstart = 1'b1;
+    end else if (!start || bus_stop) begin
+      rstart = 1'b0;
+      full_item.rstart = 1'b0;
+      cfg.vif.wait_for_host_start();
+      `uvm_info(`gfn, "\n monitor, detect HOST START", UVM_HIGH)
+    end else if (rstart) begin
+      full_item.rstart = 1'b1;
+    end else begin
+      `uvm_info(`gfn,
+                "monitor reached active bus state without STOP/RSTART; waiting for HOST START to resync",
+                UVM_DEBUG)
+      rstart = 1'b0;
+      cfg.vif.wait_for_host_start();
+      full_item.rstart = 1'b0;
     end
     num_dut_tran++;
     full_item.tran_id = num_dut_tran;

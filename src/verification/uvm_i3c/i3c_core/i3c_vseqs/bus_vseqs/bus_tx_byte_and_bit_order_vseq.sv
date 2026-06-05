@@ -8,7 +8,8 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
   endfunction
 
   task body();
-    regular_trans_desc_t           wr_cmd;
+    transfer_stimulus_cfg_t        cfg;
+    word_queue_t                   tx_words;
     i3c_device_response_seq        dev_seq;
     bit                     [ 7:0] exp_data[NUM_TEST_BYTES];
     bit                     [31:0] resp;
@@ -21,32 +22,11 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
     configure_dut();
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    wr_cmd                = '0;
-    wr_cmd.attr           = RegularTransfer;
-    wr_cmd.tid            = 4'd8;
-    wr_cmd.rnw            = 1'b0;
-    wr_cmd.mode           = sdr0;
-    wr_cmd.toc            = 1'b1;
-    wr_cmd.wroc           = 1'b1;
-    wr_cmd.dev_idx        = 5'd0;
-    wr_cmd.data_length    = NUM_TEST_BYTES[15:0];
+    cfg = make_transfer_cfg("BUS_008", "dev_seq", 4'd8, 5'd0, 7'h08, 1'b1, NUM_TEST_BYTES);
+    cfg.wait_device_done = 1'b1;
+    tx_words.push_back({exp_data[3], exp_data[2], exp_data[1], exp_data[0]});
 
-    dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
-    dev_seq.target_addr   = 7'h08;
-    dev_seq.ack_address   = 1'b1;
-    dev_seq.is_i3c        = 1'b1;
-    dev_seq.dir           = 1'b0;
-    dev_seq.read_data_cnt = NUM_TEST_BYTES;
-
-    fork : device_response
-      dev_seq.start(p_sequencer.m_i3c_sequencer);
-    join_none
-
-    write_tx_data({exp_data[3], exp_data[2], exp_data[1], exp_data[0]});
-    write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
-
-    poll_idle();
-    wait_for_device_done(dev_seq, "BUS_008");
+    run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
     `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08, "BUS_008: target address mismatch")
     `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0, "BUS_008: transfer direction should be write")
@@ -68,12 +48,10 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
       end
     end
 
-    read_response(resp);
     `DV_CHECK_EQ(resp[31:28], 4'h0, "BUS_008: expected Success response")
-    `DV_CHECK_EQ(resp[27:24], wr_cmd.tid, "BUS_008: response TID mismatch")
+    `DV_CHECK_EQ(resp[27:24], cfg.tid, "BUS_008: response TID mismatch")
     `DV_CHECK_EQ(resp[15:0], NUM_TEST_BYTES[15:0], "BUS_008: response length mismatch")
 
-    disable device_response;
     `uvm_info(`gfn, "BUS_008 full SDR write byte and bit-order checks passed", UVM_LOW)
   endtask
 

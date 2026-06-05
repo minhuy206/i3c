@@ -29,7 +29,7 @@ class reg_driver extends uvm_driver #(reg_seq_item);
       end else begin
         this.vif.read(this.req.addr, this.req.rdata);
       end
-      `uvm_info(`gfn, this.req.convert2string(), UVM_HIGH)
+      `uvm_info(`gfn, this.req.convert2string(), UVM_DEBUG)
       this.seq_item_port.item_done();
     end
   endtask

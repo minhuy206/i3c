@@ -117,23 +117,6 @@ class bus_base_vseq extends i3c_base_vseq;
     #1;
   endtask
 
-  virtual function int unsigned ns_to_cycles(int ns);
-    if (ns <= 0) return 0;
-    return (ns + CLK_PERIOD_NS - 1) / CLK_PERIOD_NS;
-  endfunction
-
-  virtual function int unsigned i2c_device_done_timeout_cycles(int unsigned data_bytes);
-    int unsigned bit_count;
-    int unsigned bit_period_cycles;
-    int unsigned framing_cycles;
-
-    bit_count         = 9 + (9 * data_bytes);
-    bit_period_cycles = ns_to_cycles(i2c_400.tClockLow + i2c_400.tClockPulse);
-    framing_cycles    = ns_to_cycles(i2c_400.tSetupStart + i2c_400.tHoldStart +
-                                      i2c_400.tSetupStop + i2c_400.tHoldStop);
-    return framing_cycles + (bit_count * bit_period_cycles) + 512;
-  endfunction
-
   virtual task program_timing_registers(int unsigned t_r, int unsigned t_f, int unsigned t_low,
                                         int unsigned t_high, int unsigned t_su_sta,
                                         int unsigned t_hd_sta, int unsigned t_su_sto,
@@ -175,16 +158,6 @@ class bus_base_vseq extends i3c_base_vseq;
     @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
     #1;
     set_scl_generator_controls_now(1'b0, 1'b0, 1'b0, clock_en, 1'b0);
-  endtask
-
-  virtual task wait_for_device_done(i3c_device_response_seq dev_seq, string ctxt,
-                                    int unsigned timeout_cycles = 1000);
-    for (int i = 0; i < timeout_cycles; i++) begin
-      if (dev_seq.done) return;
-      @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-    end
-
-    `uvm_error(`gfn, $sformatf("%s: device response did not finish", ctxt))
   endtask
 
 endclass

@@ -8,7 +8,8 @@ class bus_rx_byte_and_bit_order_vseq extends bus_base_vseq;
   endfunction
 
   task body();
-    regular_trans_desc_t    rd_cmd;
+    transfer_stimulus_cfg_t cfg;
+    byte_queue_t            read_data;
     i3c_device_response_seq dev_seq;
     bit [7:0]               exp_data[NUM_TEST_BYTES];
     bit [31:0]              exp_rx;
@@ -24,42 +25,18 @@ class bus_rx_byte_and_bit_order_vseq extends bus_base_vseq;
     configure_dut();
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    rd_cmd             = '0;
-    rd_cmd.attr        = RegularTransfer;
-    rd_cmd.tid         = 4'd9;
-    rd_cmd.rnw         = 1'b1;
-    rd_cmd.mode        = sdr0;
-    rd_cmd.toc         = 1'b1;
-    rd_cmd.wroc        = 1'b1;
-    rd_cmd.dev_idx     = 5'd0;
-    rd_cmd.data_length = NUM_TEST_BYTES[15:0];
-
-    dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
-    dev_seq.target_addr = 7'h08;
-    dev_seq.ack_address = 1'b1;
-    dev_seq.is_i3c      = 1'b1;
-    dev_seq.dir         = 1'b1;
     for (int i = 0; i < NUM_TEST_BYTES; i++) begin
-      dev_seq.read_data.push_back(exp_data[i]);
+      read_data.push_back(exp_data[i]);
     end
 
-    fork : device_response
-      dev_seq.start(p_sequencer.m_i3c_sequencer);
-    join_none
-
-    write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
-
-    poll_idle();
-
-    read_rx_data(rx);
-    read_response(resp);
+    cfg = make_transfer_cfg("BUS_009", "dev_seq", 4'd9, 5'd0, 7'h08, 1'b1, NUM_TEST_BYTES);
+    run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
     `DV_CHECK_EQ(rx, exp_rx, "BUS_009: RX FIFO data mismatch; byte or bit order is wrong")
     `DV_CHECK_EQ(resp[31:28], 4'h0, "BUS_009: expected Success response")
-    `DV_CHECK_EQ(resp[27:24], rd_cmd.tid, "BUS_009: response TID mismatch")
+    `DV_CHECK_EQ(resp[27:24], cfg.tid, "BUS_009: response TID mismatch")
     `DV_CHECK_EQ(resp[15:0], NUM_TEST_BYTES[15:0], "BUS_009: response length mismatch")
 
-    disable device_response;
     `uvm_info(`gfn, "BUS_009 full SDR read byte and bit-order checks passed", UVM_LOW)
   endtask
 

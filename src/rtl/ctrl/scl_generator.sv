@@ -76,7 +76,6 @@ module scl_generator #(
         end
       end
 
-      // Release SDA+SCL HIGH; wait for SCL to be confirmed HIGH on bus
       GenerateRstart: begin
         if (scl_i) begin
           load_tcount     = 1'b1;
@@ -84,13 +83,11 @@ module scl_generator #(
         end
       end
 
-      // 1-cycle state: SDA is now LOW — immediately load t_hd_sta
       SdaFall, RstartSdaFall: begin
         load_tcount = 1'b1;
         tcount_load_val = t_hd_sta_i;
       end
 
-      // Hold SDA LOW for t_hd_sta, then begin clocking
       HoldStart: begin
         if (tcount_expired) begin
           load_tcount = 1'b1;
@@ -98,23 +95,20 @@ module scl_generator #(
         end
       end
 
-      // SCL held LOW; wait for the next command
       WaitCmd: begin
-        if (gen_clock_i) begin
+        if (gen_stop_i || gen_clock_i) begin
           load_tcount     = 1'b1;
           tcount_load_val = t_low_i + t_f_i;
         end
       end
 
-      // SCL HIGH for t_high + t_r; gen_stop/gen_rstart checked at expiry
       DriveHigh: begin
-        if (tcount_expired && gen_clock_i) begin
+        if (tcount_expired && (gen_stop_i || gen_clock_i)) begin
           load_tcount     = 1'b1;
           tcount_load_val = t_low_i + t_f_i;
         end
       end
 
-      // SCL LOW for t_low + t_f
       DriveLow: begin
         if (tcount_expired && gen_clock_i) begin
           load_tcount     = 1'b1;
@@ -122,9 +116,8 @@ module scl_generator #(
         end
       end
 
-      // SDA LOW, release SCL; wait for SCL confirmed HIGH on bus
       GenerateStop: begin
-        if (scl_i) begin
+        if (tcount_expired && scl_i) begin
           load_tcount = 1'b1;
           tcount_load_val = t_su_sto_i;
         end
@@ -137,7 +130,6 @@ module scl_generator #(
   always_comb begin : scl_fsm_state
     state_d = state_q;
 
-    // gen_idle_i is a priority override from any state_q
     if (gen_idle_i) begin
       state_d = Idle;
     end else begin
@@ -146,12 +138,10 @@ module scl_generator #(
           if (gen_start_i) begin
             state_d = GenerateStart;
           end else if (gen_rstart_i) begin
-            // Rstart directly from idle (abnormal but handled)
             state_d = GenerateRstart;
           end
         end
 
-        // Wait t_su_sta with SCL/SDA HIGH, then fall SDA
         GenerateStart: begin
           if (tcount_expired) state_d = SdaFall;
         end
@@ -185,7 +175,6 @@ module scl_generator #(
             end else if (gen_clock_i) begin
               state_d = DriveLow;
             end else begin
-              // No command ready — hold SCL LOW until flow_active responds
               state_d = WaitCmd;
             end
           end
@@ -207,28 +196,24 @@ module scl_generator #(
           end
         end
 
-        // Wait t_su_sta with SCL/SDA HIGH before pulling SDA LOW for Sr
         SclHigh: begin
           if (tcount_expired) state_d = RstartSdaFall;
         end
 
-        // 1-cycle state: SDA falls for Sr — load t_hd_sta
         RstartSdaFall: begin
           state_d = HoldStart;
         end
 
         GenerateStop: begin
-          if (scl_i) begin
+          if (tcount_expired && scl_i) begin
             state_d = SclHighForStop;
           end
         end
 
-        // SCL HIGH, SDA LOW; hold for t_su_sto then rise SDA
         SclHighForStop: begin
           if (tcount_expired) state_d = SdaRise;
         end
 
-        // 1-cycle state: SDA released HIGH (STOP complete) → back to Idle
         SdaRise: begin
           state_d = Idle;
         end
@@ -240,13 +225,20 @@ module scl_generator #(
   end
 
   always_comb begin
-    scl_o = 1'b1;  // default: release HIGH (open-drain)
-    sda_o = 1'b1;  // default: release HIGH
+    scl_o = 1'b1;
+    sda_o = 1'b1;
 
     case (state_q)
       DriveLow, WaitCmd: scl_o = 1'b0;
 
-      SdaFall, HoldStart, RstartSdaFall, GenerateStop, SclHighForStop: sda_o = 1'b0;
+      GenerateStop: begin
+        sda_o = 1'b0;
+        if (!tcount_expired) begin
+          scl_o = 1'b0;
+        end
+      end
+
+      SdaFall, HoldStart, RstartSdaFall, SclHighForStop: sda_o = 1'b0;
 
       default: ;
     endcase
@@ -257,7 +249,6 @@ module scl_generator #(
 
   assign busy_o = (state_q != Idle);
 
-  // HIGH during START/Sr/STOP generation — scl_gen owns SDA in these states
   assign sda_ctrl_active_o = (state_q == GenerateStart)  |
                               (state_q == SdaFall)         |
                               (state_q == HoldStart)       |

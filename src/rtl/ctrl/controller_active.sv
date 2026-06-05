@@ -62,7 +62,6 @@ module controller_active
     output logic i3c_fsm_idle_o
 );
 
-  // Internal signals
   bus_state_t bus_state;
 
   logic scl_gen_scl, scl_gen_sda;
@@ -176,7 +175,6 @@ module controller_active
   assign active_t_su_dat = flow_use_i2c_timing ? i2c_t_su_dat_i : t_su_dat_i;
   assign active_t_hd_dat = flow_use_i2c_timing ? i2c_t_hd_dat_i : t_hd_dat_i;
 
-  // DAT read MUX: both ports are never active simultaneously
   always_comb begin : mux_dat_read
     if (daa_active) begin
       dat_read_valid_hw_o = daa_dat_read_valid;
@@ -187,15 +185,12 @@ module controller_active
     end
   end
 
-  // Output assignments
   assign ctrl_scl_o = scl_gen_scl;
-  assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda  // M-2: priority MUX
-      : tx_flow_sda_drive ? tx_flow_sda : 1'b1;
+  assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda : tx_flow_sda_drive ? tx_flow_sda : 1'b1;
   assign ctrl_sda_oe_o = scl_gen_driving_sda ? ~scl_gen_sda
       : tx_flow_sda_drive ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
-  assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;  // M-4: force OD
+  assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;
 
-  // Sub-module instances
   bus_monitor u_bus_mon (
       .clk_i,
       .rst_ni,
@@ -234,9 +229,9 @@ module controller_active
   bus_tx_flow u_tx_flow (
       .clk_i,
       .rst_ni,
-      .t_r_i          (active_t_r),
-      .t_su_dat_i     (active_t_su_dat),
-      .t_hd_dat_i     (active_t_hd_dat),
+      .t_r_i           (active_t_r),
+      .t_su_dat_i      (active_t_su_dat),
+      .t_hd_dat_i      (active_t_hd_dat),
       .scl_negedge_i   (scl_tx_negedge),
       .scl_posedge_i   (scl_tx_posedge),
       .scl_stable_low_i(scl_tx_stable_low),

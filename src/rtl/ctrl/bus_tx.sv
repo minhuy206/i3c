@@ -106,7 +106,7 @@ module bus_tx #(
   always_comb begin : tx_fsm_outputs
     sda_o = '1;
     sda_drive_o = 1'b0;
-    tx_done_o = '0;  // Assign to 1 only after transmitting a bit
+    tx_done_o = '0;
     load_tcount = '0;
     tcount_sel = tNoDelay;
 
