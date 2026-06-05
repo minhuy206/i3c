@@ -31,6 +31,19 @@ FIFO_REGRESSION_SEQS ?= \
 	fifo_simultaneous_read_write_vseq \
 	fifo_flush_during_activity_vseq
 
+BUS_REGRESSION_SEQS ?= \
+	bus_phy_reset_and_sync_vseq \
+	bus_start_stop_detect_vseq \
+	bus_repeated_start_detect_vseq \
+	bus_scl_start_stop_timing_vseq \
+	bus_scl_clock_low_high_timing_vseq \
+	bus_scl_waitcmd_stall_resume_vseq \
+	bus_scl_repeated_start_from_waitcmd_vseq \
+	bus_tx_byte_and_bit_order_vseq \
+	bus_rx_byte_and_bit_order_vseq \
+	bus_od_pp_phase_switch_vseq \
+	bus_tb_pad_model_odpp_wiring_vseq
+
 compile:
 	$(SIMULATOR) -compile -elaborate \
 	  -uvmhome $(UVM_HOME) \
@@ -72,6 +85,12 @@ fifo_regression:
 	done
 	$(MAKE) fifo_non_power_of_two_elaboration
 
+bus_regression:
+	@set -e; \
+	for seq in $(BUS_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
 fifo_non_power_of_two_elaboration:
 	@set +e; \
 	$(SIMULATOR) \
@@ -103,5 +122,5 @@ clean:
 	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs waves.shm xrun.history .simvision \
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
-.PHONY: compile sim smoke regression csr_regression fifo_regression \
+.PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
         fifo_non_power_of_two_elaboration waves clean
