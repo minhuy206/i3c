@@ -6,8 +6,9 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
   endfunction
 
   virtual task body();
-    regular_trans_desc_t    wr_cmd0;
-    regular_trans_desc_t    wr_cmd1;
+    transfer_stimulus_cfg_t cfg0;
+    transfer_stimulus_cfg_t cfg1;
+    word_queue_t            tx_words;
     bit [31:0]              resp0;
     bit [31:0]              resp1;
     int                     rstart_count;
@@ -17,62 +18,20 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     configure_dut();
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    wr_cmd0             = '0;
-    wr_cmd0.attr        = RegularTransfer;
-    wr_cmd0.tid         = 4'd3;
-    wr_cmd0.rnw         = 1'b0;
-    wr_cmd0.mode        = sdr0;
-    wr_cmd0.toc         = 1'b0;
-    wr_cmd0.wroc        = 1'b1;
-    wr_cmd0.data_length = 16'd2;
+    cfg0                   = make_transfer_cfg("toc0_vseq first", "dev_seq0", 4'd3, 5'd0, 7'h08,
+                                               1'b1, 2);
+    cfg1                   = make_transfer_cfg("toc0_vseq second", "dev_seq1", 4'd4, 5'd0, 7'h08,
+                                               1'b1, 2);
+    cfg0.settle_before_cmd = 5;
+    tx_words.push_back(32'h0000_BBAA);
+    tx_words.push_back(32'h0000_DDCC);
 
-    wr_cmd1             = '0;
-    wr_cmd1.attr        = RegularTransfer;
-    wr_cmd1.tid         = 4'd4;
-    wr_cmd1.rnw         = 1'b0;
-    wr_cmd1.mode        = sdr0;
-    wr_cmd1.toc         = 1'b1;
-    wr_cmd1.wroc        = 1'b1;
-    wr_cmd1.data_length = 16'd2;
-
-    dev_seq0               = i3c_device_response_seq::type_id::create("dev_seq0");
-    dev_seq0.target_addr   = 7'h08;
-    dev_seq0.is_i3c        = 1'b1;
-    dev_seq0.dir           = 1'b0;
-    dev_seq0.read_data_cnt = 2;
-
-    dev_seq1               = i3c_device_response_seq::type_id::create("dev_seq1");
-    dev_seq1.target_addr   = 7'h08;
-    dev_seq1.is_i3c        = 1'b1;
-    dev_seq1.dir           = 1'b0;
-    dev_seq1.read_data_cnt = 2;
-
-    fork : device_responses
-      dev_seq0.start(p_sequencer.m_i3c_sequencer);
-      dev_seq1.start(p_sequencer.m_i3c_sequencer);
-    join_none
-
-    repeat (5) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-
-    write_cmd(wr_cmd0[31:0], wr_cmd0[63:32]);
-    write_cmd(wr_cmd1[31:0], wr_cmd1[63:32]);
-    write_tx_data(32'h0000_BBAA);
-    write_tx_data(32'h0000_DDCC);
-
-    poll_idle();
-
-    for (int i = 0; i < 1000; i++) begin
-      if (dev_seq0.done && dev_seq1.done) break;
-      @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-    end
+    run_toc_zero_write_stimulus(cfg0, cfg1, tx_words, resp0, resp1, rstart_count, dev_seq0,
+                                dev_seq1);
 
     `DV_CHECK_EQ(dev_seq0.done, 1'b1, "toc0_vseq: first device response did not finish")
     `DV_CHECK_EQ(dev_seq1.done, 1'b1, "toc0_vseq: second device response did not finish")
-    rstart_count = int'(dev_seq0.observed_rstart) + int'(dev_seq1.observed_rstart);
     `DV_CHECK_EQ((rstart_count > 0), 1'b1, "toc0_vseq: expected at least one observed RSTART")
-
-    read_response(resp0);
-    read_response(resp1);
 
     `DV_CHECK_EQ(resp0[31:28], 4'h0,  "toc0_vseq: first response expected Success")
     `DV_CHECK_EQ(resp0[27:24], 4'd3,  "toc0_vseq: first response TID mismatch")
@@ -80,7 +39,5 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(resp1[31:28], 4'h0,  "toc0_vseq: second response expected Success")
     `DV_CHECK_EQ(resp1[27:24], 4'd4,  "toc0_vseq: second response TID mismatch")
     `DV_CHECK_EQ(resp1[15:0],  16'd2, "toc0_vseq: second response length mismatch")
-
-    disable device_responses;
   endtask
 endclass

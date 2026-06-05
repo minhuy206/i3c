@@ -25,6 +25,27 @@ class i3c_base_vseq extends uvm_sequence;
   queue_hdl_paths_t rx_paths;
   queue_hdl_paths_t resp_paths;
 
+  localparam int unsigned BASE_CLK_PERIOD_NS = 10;
+
+  typedef bit [7:0] byte_queue_t[$];
+  typedef bit [31:0] word_queue_t[$];
+
+  typedef struct {
+    string       ctxt;
+    string       seq_name;
+    bit [ 3:0]  tid;
+    bit [ 4:0]  dev_idx;
+    bit [ 6:0]  target_addr;
+    bit         is_i3c;
+    bit         ack_address;
+    bit         ack_data;
+    bit         tx_before_cmd;
+    bit         wait_device_done;
+    int unsigned data_length;
+    int unsigned settle_before_cmd;
+    int unsigned timeout_cycles;
+  } transfer_stimulus_cfg_t;
+
   function new(string name = "i3c_base_vseq");
     super.new(name);
     init_queue_hdl_paths();
@@ -101,6 +122,241 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual task settle_cycles(int unsigned cycles = 4);
     repeat (cycles) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+  endtask
+
+  virtual function transfer_stimulus_cfg_t make_transfer_cfg(string ctxt, string seq_name,
+                                                             bit [3:0] tid, bit [4:0] dev_idx,
+                                                             bit [6:0] target_addr,
+                                                             bit is_i3c,
+                                                             int unsigned data_length);
+    transfer_stimulus_cfg_t cfg;
+
+    cfg.ctxt              = ctxt;
+    cfg.seq_name          = seq_name;
+    cfg.tid               = tid;
+    cfg.dev_idx           = dev_idx;
+    cfg.target_addr       = target_addr;
+    cfg.is_i3c            = is_i3c;
+    cfg.ack_address       = 1'b1;
+    cfg.ack_data          = 1'b1;
+    cfg.tx_before_cmd     = 1'b1;
+    cfg.wait_device_done  = 1'b0;
+    cfg.data_length       = data_length;
+    cfg.settle_before_cmd = 0;
+    cfg.timeout_cycles    = 0;
+    return cfg;
+  endfunction
+
+  virtual function int unsigned ns_to_cycles(int ns);
+    if (ns <= 0) return 0;
+    return (ns + BASE_CLK_PERIOD_NS - 1) / BASE_CLK_PERIOD_NS;
+  endfunction
+
+  virtual function int unsigned i2c_device_done_timeout_cycles(int unsigned data_bytes);
+    int unsigned bit_count;
+    int unsigned bit_period_cycles;
+    int unsigned framing_cycles;
+
+    bit_count         = 9 + (9 * data_bytes);
+    bit_period_cycles = ns_to_cycles(i2c_400.tClockLow + i2c_400.tClockPulse);
+    framing_cycles    = ns_to_cycles(i2c_400.tSetupStart + i2c_400.tHoldStart +
+                                      i2c_400.tSetupStop + i2c_400.tHoldStop);
+    return framing_cycles + (bit_count * bit_period_cycles) + 512;
+  endfunction
+
+  virtual function int unsigned device_done_timeout_cycles(transfer_stimulus_cfg_t cfg);
+    if (cfg.timeout_cycles != 0) return cfg.timeout_cycles;
+    if (!cfg.is_i3c) return i2c_device_done_timeout_cycles(cfg.data_length);
+    return 1000;
+  endfunction
+
+  virtual function regular_trans_desc_t build_regular_transfer_cmd(
+      transfer_stimulus_cfg_t cfg, bit rnw, bit toc = 1'b1);
+    regular_trans_desc_t cmd;
+
+    cmd             = '0;
+    cmd.attr        = RegularTransfer;
+    cmd.tid         = cfg.tid;
+    cmd.rnw         = rnw;
+    cmd.mode        = sdr0;
+    cmd.toc         = toc;
+    cmd.wroc        = 1'b1;
+    cmd.dev_idx     = cfg.dev_idx;
+    cmd.data_length = 16'(cfg.data_length);
+    return cmd;
+  endfunction
+
+  virtual function bit [31:0] pack_bytes_to_word(byte_queue_t data);
+    bit [31:0] word;
+
+    word = '0;
+    for (int i = 0; (i < data.size()) && (i < 4); i++) begin
+      word[(i*8)+:8] = data[i];
+    end
+    return word;
+  endfunction
+
+  virtual task wait_for_device_done(i3c_device_response_seq dev_seq, string ctxt,
+                                    int unsigned timeout_cycles = 1000);
+    for (int i = 0; i < timeout_cycles; i++) begin
+      if (dev_seq.done) return;
+      @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    end
+
+    `uvm_error(`gfn, $sformatf("%s: device response did not finish", ctxt))
+  endtask
+
+  virtual task wait_for_device_request_issued(i3c_device_response_seq dev_seq, string ctxt,
+                                              int unsigned timeout_cycles = 100);
+    for (int i = 0; i < timeout_cycles; i++) begin
+      if (dev_seq.request_issued) return;
+      @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    end
+
+    `uvm_error(`gfn, $sformatf("%s: device response request was not issued", ctxt))
+  endtask
+
+  virtual task start_device_response(transfer_stimulus_cfg_t cfg, bit dir,
+                                     byte_queue_t read_data,
+                                     output i3c_device_response_seq dev_seq);
+    dev_seq               = i3c_device_response_seq::type_id::create(cfg.seq_name);
+    dev_seq.target_addr   = cfg.target_addr;
+    dev_seq.ack_address   = cfg.ack_address;
+    dev_seq.ack_data      = cfg.ack_data;
+    dev_seq.is_i3c        = cfg.is_i3c;
+    dev_seq.dir           = dir;
+    dev_seq.read_data_cnt = cfg.data_length;
+    dev_seq.read_data     = read_data;
+
+    fork
+      dev_seq.start(p_sequencer.m_i3c_sequencer);
+    join_none
+  endtask
+
+  virtual task start_ordered_device_responses(input transfer_stimulus_cfg_t cfg0,
+                                              input bit dir0,
+                                              input byte_queue_t read_data0,
+                                              output i3c_device_response_seq dev_seq0,
+                                              input transfer_stimulus_cfg_t cfg1,
+                                              input bit dir1,
+                                              input byte_queue_t read_data1,
+                                              output i3c_device_response_seq dev_seq1);
+    start_device_response(cfg0, dir0, read_data0, dev_seq0);
+    wait_for_device_request_issued(dev_seq0, cfg0.ctxt);
+    start_device_response(cfg1, dir1, read_data1, dev_seq1);
+    settle_cycles(1);
+  endtask
+
+  virtual task write_tx_words(word_queue_t tx_words);
+    foreach (tx_words[i]) begin
+      write_tx_data(tx_words[i]);
+    end
+  endtask
+
+  virtual task run_write_stimulus(transfer_stimulus_cfg_t cfg, word_queue_t tx_words,
+                                  output bit [31:0] resp,
+                                  output i3c_device_response_seq dev_seq);
+    regular_trans_desc_t wr_cmd;
+    byte_queue_t         no_read_data;
+
+    wr_cmd = build_regular_transfer_cmd(cfg, 1'b0, 1'b1);
+    start_device_response(cfg, 1'b0, no_read_data, dev_seq);
+    if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
+
+    if (cfg.tx_before_cmd) begin
+      write_tx_words(tx_words);
+      write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
+    end else begin
+      write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
+      write_tx_words(tx_words);
+    end
+
+    poll_idle();
+    if (cfg.wait_device_done) begin
+      wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+    end
+    read_response(resp);
+  endtask
+
+  virtual task run_read_stimulus(transfer_stimulus_cfg_t cfg, byte_queue_t read_data,
+                                 output bit [31:0] rx, output bit [31:0] resp,
+                                 output i3c_device_response_seq dev_seq);
+    regular_trans_desc_t rd_cmd;
+
+    rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
+    start_device_response(cfg, 1'b1, read_data, dev_seq);
+    if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
+
+    write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
+    poll_idle();
+    if (cfg.wait_device_done) begin
+      wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+    end
+    read_rx_data(rx);
+    read_response(resp);
+  endtask
+
+  virtual task run_toc_zero_write_stimulus(transfer_stimulus_cfg_t cfg0,
+                                           transfer_stimulus_cfg_t cfg1,
+                                           word_queue_t tx_words, output bit [31:0] resp0,
+                                           output bit [31:0] resp1, output int rstart_count,
+                                           output i3c_device_response_seq dev_seq0,
+                                           output i3c_device_response_seq dev_seq1);
+    regular_trans_desc_t wr_cmd0;
+    regular_trans_desc_t wr_cmd1;
+    byte_queue_t         no_read_data;
+
+    wr_cmd0 = build_regular_transfer_cmd(cfg0, 1'b0, 1'b0);
+    wr_cmd1 = build_regular_transfer_cmd(cfg1, 1'b0, 1'b1);
+
+    start_ordered_device_responses(cfg0, 1'b0, no_read_data, dev_seq0,
+                                   cfg1, 1'b0, no_read_data, dev_seq1);
+    if (cfg0.settle_before_cmd != 0) settle_cycles(cfg0.settle_before_cmd);
+
+    write_cmd(wr_cmd0[31:0], wr_cmd0[63:32]);
+    write_cmd(wr_cmd1[31:0], wr_cmd1[63:32]);
+    write_tx_words(tx_words);
+
+    poll_idle();
+    wait_for_device_done(dev_seq0, cfg0.ctxt, device_done_timeout_cycles(cfg0));
+    wait_for_device_done(dev_seq1, cfg1.ctxt, device_done_timeout_cycles(cfg1));
+    rstart_count = int'(dev_seq0.observed_rstart) + int'(dev_seq1.observed_rstart);
+
+    read_response(resp0);
+    read_response(resp1);
+  endtask
+
+  virtual task run_toc_zero_read_write_stimulus(transfer_stimulus_cfg_t rd_cfg,
+                                                transfer_stimulus_cfg_t wr_cfg,
+                                                byte_queue_t read_data, word_queue_t tx_words,
+                                                output bit [31:0] rx, output bit [31:0] resp0,
+                                                output bit [31:0] resp1,
+                                                output int rstart_count,
+                                                output i3c_device_response_seq dev_seq0,
+                                                output i3c_device_response_seq dev_seq1);
+    regular_trans_desc_t rd_cmd0;
+    regular_trans_desc_t wr_cmd1;
+    byte_queue_t         no_read_data;
+
+    rd_cmd0 = build_regular_transfer_cmd(rd_cfg, 1'b1, 1'b0);
+    wr_cmd1 = build_regular_transfer_cmd(wr_cfg, 1'b0, 1'b1);
+
+    start_ordered_device_responses(rd_cfg, 1'b1, read_data, dev_seq0,
+                                   wr_cfg, 1'b0, no_read_data, dev_seq1);
+    if (rd_cfg.settle_before_cmd != 0) settle_cycles(rd_cfg.settle_before_cmd);
+
+    write_cmd(rd_cmd0[31:0], rd_cmd0[63:32]);
+    write_cmd(wr_cmd1[31:0], wr_cmd1[63:32]);
+    write_tx_words(tx_words);
+
+    poll_idle();
+    wait_for_device_done(dev_seq0, rd_cfg.ctxt, device_done_timeout_cycles(rd_cfg));
+    wait_for_device_done(dev_seq1, wr_cfg.ctxt, device_done_timeout_cycles(wr_cfg));
+    rstart_count = int'(dev_seq0.observed_rstart) + int'(dev_seq1.observed_rstart);
+
+    read_rx_data(rx);
+    read_response(resp0);
+    read_response(resp1);
   endtask
 
   virtual task check_queue_flags(string queue_name, int full_bit, int empty_bit, bit exp_full,

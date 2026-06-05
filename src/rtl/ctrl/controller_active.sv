@@ -47,13 +47,21 @@ module controller_active
     input logic [19:0] t_su_sto_i,
     input logic [19:0] t_su_dat_i,
     input logic [19:0] t_hd_dat_i,
+    input logic [19:0] i2c_t_r_i,
+    input logic [19:0] i2c_t_f_i,
+    input logic [19:0] i2c_t_low_i,
+    input logic [19:0] i2c_t_high_i,
+    input logic [19:0] i2c_t_su_sta_i,
+    input logic [19:0] i2c_t_hd_sta_i,
+    input logic [19:0] i2c_t_su_sto_i,
+    input logic [19:0] i2c_t_su_dat_i,
+    input logic [19:0] i2c_t_hd_dat_i,
 
     input  logic ctrl_enable_i,
     input  logic i3c_fsm_en_i,
     output logic i3c_fsm_idle_o
 );
 
-  // Internal signals
   bus_state_t bus_state;
 
   logic scl_gen_scl, scl_gen_sda;
@@ -79,6 +87,7 @@ module controller_active
   logic flow_gen_start, flow_gen_rstart, flow_gen_stop;
   logic flow_gen_clock, flow_gen_idle;
   logic flow_sel_i3c_i2c;
+  logic flow_use_i2c_timing;
   logic flow_sel_od_pp;
   logic flow_tx_req_byte, flow_tx_req_bit;
   logic [7:0] flow_tx_req_value;
@@ -103,7 +112,7 @@ module controller_active
   logic [7:0] daa_bcr, daa_dcr;
 
   logic tx_flow_done, tx_flow_idle;
-  logic tx_flow_sda, tx_flow_sel_od_pp;
+  logic tx_flow_sda, tx_flow_sda_drive, tx_flow_sel_od_pp;
 
   logic [7:0] rx_flow_data;
   logic rx_flow_done, rx_flow_idle;
@@ -112,17 +121,16 @@ module controller_active
   logic [7:0] mux_tx_req_value;
   logic mux_tx_sel_od_pp;
   logic mux_rx_req_byte, mux_rx_req_bit;
+  logic [19:0] active_t_r, active_t_f, active_t_low, active_t_high;
+  logic [19:0] active_t_su_sta, active_t_hd_sta, active_t_su_sto;
+  logic [19:0] active_t_su_dat, active_t_hd_dat;
 
   logic daa_active;
   assign daa_active = flow_ccc_valid;
 
-  // ---------------------------------------------------------------------------
   // Restart latch: entdaa_controller pulses req_restart for 1 cycle, but
   // scl_generator needs gen_rstart held high until it completes the Sr.
-  // ---------------------------------------------------------------------------
-
-  logic daa_restart_pending_q;
-  logic daa_restart_pending_d;
+  logic daa_restart_pending_d, daa_restart_pending_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_daa_restart_pending
     if (!rst_ni) daa_restart_pending_q <= 1'b0;
@@ -138,10 +146,7 @@ module controller_active
   logic gen_rstart_combined;
   assign gen_rstart_combined = flow_gen_rstart | daa_req_restart | daa_restart_pending_q;
 
-  // ---------------------------------------------------------------------------
   // Bus TX/RX MUX: ENTDAA controller vs flow_active
-  // ---------------------------------------------------------------------------
-
   always_comb begin : mux_bus_tx_rx
     if (daa_active) begin
       mux_tx_req_byte  = daa_tx_req_byte;
@@ -160,9 +165,15 @@ module controller_active
     end
   end
 
-  // ---------------------------------------------------------------------------
-  // DAT read MUX: both ports are never active simultaneously
-  // ---------------------------------------------------------------------------
+  assign active_t_r = flow_use_i2c_timing ? i2c_t_r_i : t_r_i;
+  assign active_t_f = flow_use_i2c_timing ? i2c_t_f_i : t_f_i;
+  assign active_t_low = flow_use_i2c_timing ? i2c_t_low_i : t_low_i;
+  assign active_t_high = flow_use_i2c_timing ? i2c_t_high_i : t_high_i;
+  assign active_t_su_sta = flow_use_i2c_timing ? i2c_t_su_sta_i : t_su_sta_i;
+  assign active_t_hd_sta = flow_use_i2c_timing ? i2c_t_hd_sta_i : t_hd_sta_i;
+  assign active_t_su_sto = flow_use_i2c_timing ? i2c_t_su_sto_i : t_su_sto_i;
+  assign active_t_su_dat = flow_use_i2c_timing ? i2c_t_su_dat_i : t_su_dat_i;
+  assign active_t_hd_dat = flow_use_i2c_timing ? i2c_t_hd_dat_i : t_hd_dat_i;
 
   always_comb begin : mux_dat_read
     if (daa_active) begin
@@ -174,23 +185,20 @@ module controller_active
     end
   end
 
-  // Output assignments
   assign ctrl_scl_o = scl_gen_scl;
-  assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda  // M-2: priority MUX
-      : !tx_flow_idle ? tx_flow_sda : 1'b1;
+  assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda : tx_flow_sda_drive ? tx_flow_sda : 1'b1;
   assign ctrl_sda_oe_o = scl_gen_driving_sda ? ~scl_gen_sda
-      : !tx_flow_idle ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
-  assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;  // M-4: force OD
+      : tx_flow_sda_drive ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
+  assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;
 
-  // Sub-module instances
   bus_monitor u_bus_mon (
       .clk_i,
       .rst_ni,
       .enable_i(ctrl_enable_i),
       .scl_i   (ctrl_scl_i),
       .sda_i   (ctrl_sda_i),
-      .t_r_i,
-      .t_f_i,
+      .t_r_i   (active_t_r),
+      .t_f_i   (active_t_f),
       .state_o (bus_state)
   );
 
@@ -206,13 +214,13 @@ module controller_active
       .done_o           (scl_gen_done),
       .busy_o           (scl_gen_busy),
       .sda_ctrl_active_o(scl_gen_driving_sda),
-      .t_low_i,
-      .t_high_i,
-      .t_su_sta_i,
-      .t_hd_sta_i,
-      .t_su_sto_i,
-      .t_r_i,
-      .t_f_i,
+      .t_low_i          (active_t_low),
+      .t_high_i         (active_t_high),
+      .t_su_sta_i       (active_t_su_sta),
+      .t_hd_sta_i       (active_t_hd_sta),
+      .t_su_sto_i       (active_t_su_sto),
+      .t_r_i            (active_t_r),
+      .t_f_i            (active_t_f),
       .scl_i            (bus_state.scl.value),
       .scl_o            (scl_gen_scl),
       .sda_o            (scl_gen_sda)
@@ -221,9 +229,9 @@ module controller_active
   bus_tx_flow u_tx_flow (
       .clk_i,
       .rst_ni,
-      .t_r_i,
-      .t_su_dat_i,
-      .t_hd_dat_i,
+      .t_r_i           (active_t_r),
+      .t_su_dat_i      (active_t_su_dat),
+      .t_hd_dat_i      (active_t_hd_dat),
       .scl_negedge_i   (scl_tx_negedge),
       .scl_posedge_i   (scl_tx_posedge),
       .scl_stable_low_i(scl_tx_stable_low),
@@ -236,6 +244,7 @@ module controller_active
       .bus_error_o     (),
       .sel_od_pp_i     (mux_tx_sel_od_pp),
       .sel_od_pp_o     (tx_flow_sel_od_pp),
+      .sda_drive_o     (tx_flow_sda_drive),
       .sda_o           (tx_flow_sda)
   );
 
@@ -292,6 +301,7 @@ module controller_active
       .gen_clock_o        (flow_gen_clock),
       .gen_idle_o         (flow_gen_idle),
       .sel_i3c_i2c_o      (flow_sel_i3c_i2c),
+      .use_i2c_timing_o   (flow_use_i2c_timing),
       .scl_gen_done_i     (scl_gen_done),
       .scl_gen_busy_i     (scl_gen_busy),
       .ccc_valid_o        (flow_ccc_valid),

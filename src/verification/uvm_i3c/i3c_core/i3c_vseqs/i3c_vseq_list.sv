@@ -21,6 +21,20 @@
 `include "i3c_vseqs/fifo_vseqs/fifo_simultaneous_read_write_vseq.sv"
 `include "i3c_vseqs/fifo_vseqs/fifo_flush_during_activity_vseq.sv"
 
+// 4.3 PHY, Bus Conditions, and Timing
+`include "i3c_vseqs/bus_vseqs/bus_base_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_phy_reset_and_sync_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_start_stop_detect_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_repeated_start_detect_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_scl_start_stop_timing_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_scl_clock_low_high_timing_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_scl_waitcmd_stall_resume_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_scl_repeated_start_from_waitcmd_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_tx_byte_and_bit_order_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_rx_byte_and_bit_order_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_od_pp_phase_switch_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_tb_pad_model_odpp_wiring_vseq.sv"
+
 // 4.4 I3C SDR Private Write
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_toc_zero_vseq.sv"

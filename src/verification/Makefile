@@ -100,7 +100,7 @@ waves:
 	$(MAKE) sim DUMP_WAVES=1
 
 clean:
-	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs waves waves.shm xrun.history .simvision \
+	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs waves.shm xrun.history .simvision \
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression \

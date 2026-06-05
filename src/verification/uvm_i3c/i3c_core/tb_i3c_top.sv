@@ -18,19 +18,19 @@ module tb_i3c_top;
   end
 
   wire scl_bus, sda_bus;
-  logic scl_out, sda_out;
+  logic scl_o, sda_o;
   logic sda_oe;
   logic sel_od_pp;
-  logic scl_in, sda_in;
+  logic scl_i, sda_i;
 
-  assign scl_bus = (scl_out === 1'b0) ? 1'b0 : 1'bz;
-  assign sda_bus = sda_oe ? sda_out : 1'bz;
+  assign scl_bus = (scl_o === 1'b0) ? 1'b0 : 1'bz;
+  assign sda_bus = sda_oe ? sda_o : 1'bz;
 
   pullup (weak1) pu_scl (scl_bus);
   pullup (weak1) pu_sda (sda_bus);
 
-  assign scl_in = scl_bus;
-  assign sda_in = sda_bus;
+  assign scl_i = scl_bus;
+  assign sda_i = sda_bus;
 
   reg_if reg_bus (
       .clk_i (clk),
@@ -42,7 +42,7 @@ module tb_i3c_top;
       .rst_ni(rst_n),
       .dut_sel_od_pp_i(sel_od_pp),
       .dut_sda_oe_i(sda_oe),
-      .dut_sda_o_i(sda_out),
+      .dut_sda_o_i(sda_o),
       .scl_io(scl_bus),
       .sda_io(sda_bus)
   );
@@ -64,12 +64,26 @@ module tb_i3c_top;
       .reg_rdata_o(reg_bus.rdata),
       .reg_ready_o(reg_bus.ready),
 
-      .scl_i      (scl_in),
-      .scl_o      (scl_out),
-      .sda_i      (sda_in),
-      .sda_o      (sda_out),
+      .scl_i      (scl_i),
+      .scl_o      (scl_o),
+      .sda_i      (sda_i),
+      .sda_o      (sda_o),
       .sda_oe_o   (sda_oe),
       .sel_od_pp_o(sel_od_pp)
+  );
+
+  tb_pad_model_sva u_tb_pad_model_sva (
+      .clk_i                 (clk),
+      .rst_ni               (rst_n),
+      .dut_sda_oe_i         (sda_oe),
+      .dut_sda_o_i          (sda_o),
+      .dut_sel_od_pp_i      (sel_od_pp),
+      .if_dut_sda_oe_i      (i3c_bus.dut_sda_oe),
+      .if_dut_sda_o_i       (i3c_bus.dut_sda_o),
+      .if_dut_sel_od_pp_i   (i3c_bus.dut_sel_od_pp),
+      .device_sda_o_i       (i3c_bus.device_sda_o),
+      .device_sda_pp_en_i   (i3c_bus.device_sda_pp_en),
+      .sda_bus_i            (sda_bus)
   );
 
   initial begin

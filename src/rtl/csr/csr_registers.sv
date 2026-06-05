@@ -31,6 +31,15 @@ module csr_registers
     output logic [CounterWidth-1:0] t_su_sto_o,
     output logic [CounterWidth-1:0] t_su_dat_o,
     output logic [CounterWidth-1:0] t_hd_dat_o,
+    output logic [CounterWidth-1:0] i2c_t_r_o,
+    output logic [CounterWidth-1:0] i2c_t_f_o,
+    output logic [CounterWidth-1:0] i2c_t_low_o,
+    output logic [CounterWidth-1:0] i2c_t_high_o,
+    output logic [CounterWidth-1:0] i2c_t_su_sta_o,
+    output logic [CounterWidth-1:0] i2c_t_hd_sta_o,
+    output logic [CounterWidth-1:0] i2c_t_su_sto_o,
+    output logic [CounterWidth-1:0] i2c_t_su_dat_o,
+    output logic [CounterWidth-1:0] i2c_t_hd_dat_o,
 
     input  logic                 dat_read_valid_i,
     input  logic [    DatAw-1:0] dat_index_i,
@@ -75,6 +84,15 @@ module csr_registers
   localparam logic [AddrWidth-1:0] ADDR_T_SU_STO = 12'h028;
   localparam logic [AddrWidth-1:0] ADDR_T_SU_DAT = 12'h02C;
   localparam logic [AddrWidth-1:0] ADDR_T_HD_DAT = 12'h030;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_R = 12'h040;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_F = 12'h044;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_LOW = 12'h048;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HIGH = 12'h04C;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_STA = 12'h050;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HD_STA = 12'h054;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_STO = 12'h058;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_DAT = 12'h05C;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HD_DAT = 12'h060;
   localparam logic [AddrWidth-1:0] ADDR_CMD_QUEUE = 12'h100;
   localparam logic [AddrWidth-1:0] ADDR_TX_DATA = 12'h104;
   localparam logic [AddrWidth-1:0] ADDR_RX_DATA = 12'h108;
@@ -92,10 +110,22 @@ module csr_registers
   localparam logic [CounterWidth-1:0] RST_T_SU_STO = 20'd4;
   localparam logic [CounterWidth-1:0] RST_T_SU_DAT = 20'd1;
   localparam logic [CounterWidth-1:0] RST_T_HD_DAT = 20'd4;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_R = 20'd4;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_F = 20'd4;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_LOW = 20'd160;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_HIGH = 20'd90;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_SU_STA = 20'd60;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_HD_STA = 20'd60;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_SU_STO = 20'd130;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_SU_DAT = 20'd10;
+  localparam logic [CounterWidth-1:0] RST_I2C_T_HD_DAT = 20'd0;
 
   logic [DataWidth-1:0] hc_control, hc_status, queue_status;
   logic [CounterWidth-1:0] t_r, t_f, t_low, t_high;
   logic [CounterWidth-1:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat;
+  logic [CounterWidth-1:0] i2c_t_r, i2c_t_f, i2c_t_low, i2c_t_high;
+  logic [CounterWidth-1:0] i2c_t_su_sta, i2c_t_hd_sta, i2c_t_su_sto, i2c_t_su_dat;
+  logic [CounterWidth-1:0] i2c_t_hd_dat;
 
   dat_entry_t dat_mem[DatDepth];
   dat_entry_t dat_rdata;
@@ -128,6 +158,15 @@ module csr_registers
       t_su_sto <= RST_T_SU_STO;
       t_su_dat <= RST_T_SU_DAT;
       t_hd_dat <= RST_T_HD_DAT;
+      i2c_t_r <= RST_I2C_T_R;
+      i2c_t_f <= RST_I2C_T_F;
+      i2c_t_low <= RST_I2C_T_LOW;
+      i2c_t_high <= RST_I2C_T_HIGH;
+      i2c_t_su_sta <= RST_I2C_T_SU_STA;
+      i2c_t_hd_sta <= RST_I2C_T_HD_STA;
+      i2c_t_su_sto <= RST_I2C_T_SU_STO;
+      i2c_t_su_dat <= RST_I2C_T_SU_DAT;
+      i2c_t_hd_dat <= RST_I2C_T_HD_DAT;
       for (int i = 0; i < DatDepth; i++) begin
         dat_mem[i] <= '0;
       end
@@ -149,6 +188,15 @@ module csr_registers
           ADDR_T_SU_STO: t_su_sto <= wdata_i[19:0];
           ADDR_T_SU_DAT: t_su_dat <= wdata_i[19:0];
           ADDR_T_HD_DAT: t_hd_dat <= wdata_i[19:0];
+          ADDR_I2C_T_R: i2c_t_r <= wdata_i[19:0];
+          ADDR_I2C_T_F: i2c_t_f <= wdata_i[19:0];
+          ADDR_I2C_T_LOW: i2c_t_low <= wdata_i[19:0];
+          ADDR_I2C_T_HIGH: i2c_t_high <= wdata_i[19:0];
+          ADDR_I2C_T_SU_STA: i2c_t_su_sta <= wdata_i[19:0];
+          ADDR_I2C_T_HD_STA: i2c_t_hd_sta <= wdata_i[19:0];
+          ADDR_I2C_T_SU_STO: i2c_t_su_sto <= wdata_i[19:0];
+          ADDR_I2C_T_SU_DAT: i2c_t_su_dat <= wdata_i[19:0];
+          ADDR_I2C_T_HD_DAT: i2c_t_hd_dat <= wdata_i[19:0];
           default: begin
             if (addr_i >= ADDR_DAT_BASE && addr_i <= (ADDR_DAT_END - 4)) begin
               dat_mem[(addr_i-ADDR_DAT_BASE)>>2] <= dat_entry_t'(wdata_i);
@@ -219,6 +267,15 @@ module csr_registers
         ADDR_T_SU_STO:     rdata_d = {12'b0, t_su_sto};
         ADDR_T_SU_DAT:     rdata_d = {12'b0, t_su_dat};
         ADDR_T_HD_DAT:     rdata_d = {12'b0, t_hd_dat};
+        ADDR_I2C_T_R:      rdata_d = {12'b0, i2c_t_r};
+        ADDR_I2C_T_F:      rdata_d = {12'b0, i2c_t_f};
+        ADDR_I2C_T_LOW:    rdata_d = {12'b0, i2c_t_low};
+        ADDR_I2C_T_HIGH:   rdata_d = {12'b0, i2c_t_high};
+        ADDR_I2C_T_SU_STA: rdata_d = {12'b0, i2c_t_su_sta};
+        ADDR_I2C_T_HD_STA: rdata_d = {12'b0, i2c_t_hd_sta};
+        ADDR_I2C_T_SU_STO: rdata_d = {12'b0, i2c_t_su_sto};
+        ADDR_I2C_T_SU_DAT: rdata_d = {12'b0, i2c_t_su_dat};
+        ADDR_I2C_T_HD_DAT: rdata_d = {12'b0, i2c_t_hd_dat};
         ADDR_RX_DATA: begin
           rx_rready = ren_i;
           if (rx_rvalid_i) rdata_d = rx_rdata_i;
@@ -253,6 +310,15 @@ module csr_registers
   assign t_su_sto_o = t_su_sto;
   assign t_su_dat_o = t_su_dat;
   assign t_hd_dat_o = t_hd_dat;
+  assign i2c_t_r_o = i2c_t_r;
+  assign i2c_t_f_o = i2c_t_f;
+  assign i2c_t_low_o = i2c_t_low;
+  assign i2c_t_high_o = i2c_t_high;
+  assign i2c_t_su_sta_o = i2c_t_su_sta;
+  assign i2c_t_hd_sta_o = i2c_t_hd_sta;
+  assign i2c_t_su_sto_o = i2c_t_su_sto;
+  assign i2c_t_su_dat_o = i2c_t_su_dat;
+  assign i2c_t_hd_dat_o = i2c_t_hd_dat;
 
   assign ready_o = 1'b1;
 

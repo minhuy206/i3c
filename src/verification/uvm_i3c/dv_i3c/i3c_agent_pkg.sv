@@ -87,6 +87,7 @@ package i3c_agent_pkg;
   typedef i3c_timing_pkg::bus_timing_t bus_timing_t;
 
   i2c_timing_t i2c_400 = i3c_timing_pkg::I2C_400;
+  i3c_timing_t i3c_sdr = i3c_timing_pkg::I3C_SDR;
 
   typedef struct {
     bit [6:0] static_addr;

@@ -66,7 +66,12 @@ class i3c_driver extends uvm_driver #(
             begin
               if (cfg.if_mode == Device) begin
                 wait (req != null);
-                if (!req.dir && !req.is_daa) wait (bus_state == DrvStop);
+                if (req.dir || req.is_daa) begin
+                  wait (bus_state == DrvRd || bus_state == DrvRdPushPull || bus_state == DrvDAA || bus_state == DrvStop);
+                end else begin
+                  wait (bus_state == DrvStop);
+                end
+
                 if (req.i3c) cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, rstart, stop);
                 else cfg.vif.wait_for_i2c_host_stop_or_rstart(cfg.tc.i2c_tc, rstart, stop);
               end else wait (0);

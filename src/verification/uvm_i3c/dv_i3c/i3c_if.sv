@@ -29,6 +29,8 @@ interface i3c_if (
   assign dut_sda_oe = dut_sda_oe_i;
   assign dut_sda_o = dut_sda_o_i;
 
+  // Target-mode sequences must keep scl_pp_en=0 and scl_o=1.
+  // Driving SCL is only for host-mode or directed raw bus/PHY stimulus.
   assign scl_io = scl_pp_en ? scl_o : (scl_o ? 1'bz : scl_o);
   assign (highz0, weak1) scl_io = 1'b1;
 
@@ -107,37 +109,26 @@ interface i3c_if (
   endtask : get_bit_data
 
   task automatic wait_for_host_start();
-    forever begin
-      @(negedge sda_i);
-      if (!scl_i) continue;
-      break;
-    end
-  endtask : wait_for_host_start
+    @(negedge sda_i iff scl_i);
+  endtask
 
   task automatic wait_for_host_rstart(output bit rstart);
     rstart = 1'b0;
-    forever begin
-      @(posedge scl_i && sda_i);
-      @(negedge sda_i);
-      if (scl_i) begin
-        rstart = 1'b1;
-        break;
-      end
-    end
-  endtask : wait_for_host_rstart
+    @(negedge sda_i iff scl_i);
+    rstart = 1'b1;
+  endtask
 
   task automatic wait_for_host_stop(input int wait_delay, output bit stop);
     stop = 1'b0;
     forever begin
-      if (scl_i == 0) @(posedge scl_i);
-      @(posedge sda_i);
-      if (scl_i) begin
+      @(posedge sda_i iff scl_i);
+      #(wait_delay * 1ns);
+      if (scl_i === 1'b1 && sda_i === 1'b1) begin
         stop = 1'b1;
         break;
       end
     end
-    #(wait_delay * 1ns);
-  endtask : wait_for_host_stop
+  endtask
 
   task automatic wait_for_i2c_host_stop_or_rstart(input i2c_timing_t tc, output bit rstart,
                                                   output bit stop);
@@ -217,7 +208,8 @@ interface i3c_if (
     ack_r = !data;
   endtask : wait_for_device_ack_or_nack
 
-  task automatic time_check(input int delay, input bit exp_value, ref logic check_wire, input string msg);
+  task automatic time_check(input int delay, input bit exp_value, ref logic check_wire,
+                            input string msg);
     time valid_time;
     time exp_value_time;
     fork
@@ -248,6 +240,9 @@ interface i3c_if (
   endtask : device_i3c_start
 
   task automatic device_i2c_send_bit(input i2c_timing_t tc, input bit bit_i);
+    bit min_high_done;
+    bit scl_fell_early;
+
     device_sda_pp_en = 0;
     device_sda_o = 1'b1;
     wait (!scl_i);
@@ -256,7 +251,32 @@ interface i3c_if (
     time_check(tc.tSetupBit, 1'b1, scl_i, "I2C device bit setup");
     `uvm_info(msg_id, "device_send_bit::Value sampled", UVM_DEBUG)
 
-    time_check(tc.tClockPulse, 1'b0, scl_i, "I2C device bit clock high pulse width");
+    min_high_done  = 1'b0;
+    scl_fell_early = 1'b0;
+    fork
+      begin
+        #(tc.tClockPulse * 1ns);
+        min_high_done = 1'b1;
+      end
+      begin
+        @(negedge scl_i);
+        if (!min_high_done) scl_fell_early = 1'b1;
+      end
+    join_any
+    disable fork;
+    if (scl_fell_early) begin
+      `uvm_info(msg_id, "I2C device bit clock high pulse width time check failed", UVM_HIGH)
+    end else if (scl_i) begin
+      fork
+        begin
+          wait (!scl_i);
+        end
+        begin
+          #(tc.tSetupStop * 1ns);
+        end
+      join_any
+      disable fork;
+    end
 
     #(tc.tHoldBit * 1ns);
     device_sda_o = 1'b1;

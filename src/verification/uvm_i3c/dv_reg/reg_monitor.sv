@@ -25,7 +25,7 @@ class reg_monitor extends uvm_monitor;
         item.is_write = 1'b1;
         item.addr = vif.addr;
         item.wdata = vif.wdata;
-        `uvm_info(`gfn, item.convert2string(), UVM_HIGH)
+        `uvm_info(`gfn, item.convert2string(), UVM_DEBUG)
         analysis_port.write(item);
       end
 
@@ -35,7 +35,7 @@ class reg_monitor extends uvm_monitor;
         item.addr = vif.addr;
         @(posedge vif.clk_i);
         item.rdata = vif.rdata;
-        `uvm_info(`gfn, item.convert2string(), UVM_HIGH)
+        `uvm_info(`gfn, item.convert2string(), UVM_DEBUG)
         analysis_port.write(item);
       end
     end
