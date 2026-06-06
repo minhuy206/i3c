@@ -57,6 +57,7 @@ module flow_active
     output logic gen_idle_o,
     output logic sel_i3c_i2c_o,
     output logic use_i2c_timing_o,
+    output logic scl_use_od_low_o,
     input  logic scl_gen_done_i,
     input  logic scl_gen_busy_i,
 
@@ -162,6 +163,7 @@ module flow_active
   logic gen_idle;
   logic sel_i3c_i2c;
   logic use_i2c_timing;
+  logic scl_use_od_low;
   logic sel_od_pp;
 
   logic bus_tx_req_byte;
@@ -754,7 +756,11 @@ module flow_active
               end
             end
           end else if (tx_byte_idx_q == 2'd3 && remaining_len_q > 16'h1) begin
-            state_d = FetchTxData;
+            if (target_is_i3c) begin
+              if (!issue_phase_q[0] && bus_tx_done_i) state_d = FetchTxData;
+            end else begin
+              if (issue_phase_q[0] && bus_rx_done_i) state_d = FetchTxData;
+            end
           end
         end else begin
           if (addr_nack_q) begin
@@ -844,6 +850,7 @@ module flow_active
     gen_idle               = 1'b0;
     sel_i3c_i2c            = 1'b0;
     use_i2c_timing         = 1'b0;
+    scl_use_od_low         = 1'b0;
     sel_od_pp              = 1'b0;
 
     bus_tx_req_byte        = 1'b0;
@@ -909,10 +916,10 @@ module flow_active
       end
 
       I2CWriteImmediate: begin
-        gen_clock   = 1'b1;
+        gen_clock = 1'b1;
         sel_i3c_i2c = 1'b0;
         use_i2c_timing = 1'b1;
-        sel_od_pp   = 1'b0;
+        sel_od_pp = 1'b0;
         unique case (transfer_cnt_q)
           8'd0: begin
             gen_start = 1'b1;
@@ -1236,7 +1243,7 @@ module flow_active
       end
 
       FetchTxData: begin
-        use_i2c_timing = target_is_i2c;
+        use_i2c_timing  = target_is_i2c;
         tx_queue_rready = 1'b1;
         if (tx_queue_rvalid_i) begin
           tx_byte_idx_d = 2'h0;
@@ -1244,7 +1251,7 @@ module flow_active
       end
 
       FetchRxData: begin
-        use_i2c_timing = target_is_i2c;
+        use_i2c_timing  = target_is_i2c;
         rx_queue_wvalid = 1'b1;
         rx_queue_wdata  = rx_dword_q;
         if (rx_queue_wready_i) begin
@@ -1256,8 +1263,8 @@ module flow_active
       InitI2CWrite: begin
         sel_i3c_i2c = 1'b0;
         use_i2c_timing = 1'b1;
-        sel_od_pp   = 1'b0;
-        gen_clock   = 1'b1;
+        sel_od_pp = 1'b0;
+        gen_clock = 1'b1;
         if (addr_nack_q) begin
           request_stop(1'b0);
         end else begin
@@ -1268,8 +1275,8 @@ module flow_active
       InitI2CRead: begin
         sel_i3c_i2c = 1'b0;
         use_i2c_timing = 1'b1;
-        sel_od_pp   = 1'b0;
-        gen_clock   = 1'b1;
+        sel_od_pp = 1'b0;
+        gen_clock = 1'b1;
         if (addr_nack_q) begin
           request_stop(1'b0);
         end else begin
@@ -1527,6 +1534,14 @@ module flow_active
       default: begin
       end
     endcase
+
+    if ((gen_start || gen_rstart || gen_stop) && !use_i2c_timing) begin
+      scl_use_od_low = 1'b1;
+    end else if (state_q == I3CWriteImmediate) begin
+      scl_use_od_low = !sel_od_pp;
+    end else if (state_q == IssueCmd && (cmd_attr == AddressAssignment || target_is_i3c)) begin
+      scl_use_od_low = !sel_od_pp;
+    end
   end
 
   assign i3c_fsm_idle_o = i3c_fsm_idle;
@@ -1549,6 +1564,7 @@ module flow_active
   assign gen_idle_o = gen_idle;
   assign sel_i3c_i2c_o = sel_i3c_i2c;
   assign use_i2c_timing_o = use_i2c_timing;
+  assign scl_use_od_low_o = scl_use_od_low;
 
   assign bus_tx_req_byte_o = bus_tx_req_byte;
   assign bus_tx_req_bit_o = bus_tx_req_bit;

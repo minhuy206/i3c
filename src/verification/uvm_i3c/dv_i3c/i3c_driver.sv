@@ -14,6 +14,30 @@ class i3c_driver extends uvm_driver #(
   i3c_drv_phase_e bus_state;
   bit stop, rstart;
 
+  function string drv_phase_name(i3c_drv_phase_e state);
+    case (state)
+      DrvIdle:         return "DrvIdle";
+      DrvAddr:         return "DrvAddr";
+      DrvAddrArbit:    return "DrvAddrArbit";
+      DrvAddrPushPull: return "DrvAddrPushPull";
+      DrvAck:          return "DrvAck";
+      DrvSelectNext:   return "DrvSelectNext";
+      DrvWr:           return "DrvWr";
+      DrvWrPushPull:   return "DrvWrPushPull";
+      DrvRd:           return "DrvRd";
+      DrvRdPushPull:   return "DrvRdPushPull";
+      DrvStop:         return "DrvStop";
+      DrvStopPushPull: return "DrvStopPushPull";
+      DrvDAA:          return "DrvDAA";
+      default:         return "Unknown";
+    endcase
+  endfunction : drv_phase_name
+
+  function void set_drive_device_state(i3c_drv_phase_e next_state);
+    `uvm_info(`gfn, $sformatf("transition to state: %s", drv_phase_name(next_state)), UVM_HIGH)
+    bus_state = next_state;
+  endfunction : set_drive_device_state
+
   virtual task reset_signal();
     forever begin
       @(negedge cfg.vif.rst_ni);
@@ -116,14 +140,14 @@ class i3c_driver extends uvm_driver #(
   virtual task drive_device_item(i3c_seq_item req, ref i3c_seq_item rsp);
     rsp = new();
     if (bus_state == DrvAddr || bus_state == DrvAddrPushPull) begin
-      bus_state = req.i3c ? DrvAddrPushPull : DrvAddr;
+      set_drive_device_state(req.i3c ? DrvAddrPushPull : DrvAddr);
     end
 
     forever begin
       case (bus_state)
         DrvIdle: begin
           cfg.vif.wait_for_host_start();
-          bus_state = DrvAddrArbit;
+          set_drive_device_state(DrvAddrArbit);
         end
 
         DrvAddrArbit: begin
@@ -133,53 +157,53 @@ class i3c_driver extends uvm_driver #(
           end
           cfg.vif.sample_target_data(.data(rsp.dir));
           `uvm_info(`gfn, $sformatf("Sampled device dir=%b", rsp.dir), UVM_MEDIUM)
-          bus_state = DrvAck;
+          set_drive_device_state(DrvAck);
         end
 
         DrvAddr: begin
           for (int i = 6; i >= 0; i--) begin
-            // Only I2C addresses
             cfg.vif.sample_target_data(.data(rsp.addr[i]));
             `uvm_info(`gfn, $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]), UVM_MEDIUM)
           end
           cfg.vif.sample_target_data(.data(rsp.dir));
-          bus_state = DrvAck;
+          `uvm_info(`gfn, $sformatf("Sampled device dir=%b", rsp.dir), UVM_MEDIUM)
+          set_drive_device_state(DrvAck);
         end
 
         DrvAddrPushPull: begin
           for (int i = 6; i >= 0; i--) begin
-            // Only I3C addresses
             cfg.vif.sample_target_data(.data(rsp.addr[i]));
             `uvm_info(`gfn, $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]), UVM_MEDIUM)
           end
           cfg.vif.sample_target_data(.data(rsp.dir));
-          bus_state = DrvAck;
+          `uvm_info(`gfn, $sformatf("Sampled device dir=%b", rsp.dir), UVM_MEDIUM)
+          set_drive_device_state(DrvAck);
         end
 
         DrvAck: begin
           if (req.i3c) begin
-            cfg.vif.device_i3c_od_send_bit(cfg.tc.i3c_tc, !req.dev_ack);
+            cfg.vif.device_i3c_send_addr_ack(cfg.tc.i3c_tc, req.dev_ack);
           end else begin
             cfg.vif.device_i2c_send_bit(cfg.tc.i2c_tc, !req.dev_ack);
           end
           `uvm_info(`gfn, $sformatf("Device sent %d[%s]", !req.dev_ack, req.dev_ack ? "ACK" : "NACK"
                     ), UVM_MEDIUM)
-          bus_state = DrvSelectNext;
+          set_drive_device_state(DrvSelectNext);
         end
 
         DrvSelectNext: begin
           if (req.dev_ack) begin
             if (req.is_daa) begin
-              bus_state = DrvDAA;
+              set_drive_device_state(DrvDAA);
             end else if (req.dir) begin
-              if (req.i3c) bus_state = DrvRdPushPull;
-              else bus_state = DrvRd;
+              if (req.i3c) set_drive_device_state(DrvRdPushPull);
+              else set_drive_device_state(DrvRd);
             end else begin
-              if (req.i3c) bus_state = DrvWrPushPull;
-              else bus_state = DrvWr;
+              if (req.i3c) set_drive_device_state(DrvWrPushPull);
+              else set_drive_device_state(DrvWr);
             end
           end else begin
-            bus_state = DrvStop;
+            set_drive_device_state(DrvStop);
           end
         end
 
@@ -193,15 +217,15 @@ class i3c_driver extends uvm_driver #(
           bit ack;
           for (int i = 0; i < 8; i++) begin
             for (int j = 7; j >= 0; j--) begin
-              cfg.vif.device_i3c_od_send_bit(cfg.tc.i3c_tc, req.data[i][j]);
+              cfg.vif.device_i3c_send_daa_bit(cfg.tc.i3c_tc, req.data[i][j]);
             end
           end
           for (int j = 7; j >= 0; j--) begin
             cfg.vif.sample_target_data(data[j]);
           end
           rsp.data.push_back(data);
-          cfg.vif.device_i3c_od_send_bit(cfg.tc.i3c_tc, !req.T_bit[0]);
-          bus_state = DrvStop;
+          cfg.vif.device_i3c_send_daa_bit(cfg.tc.i3c_tc, !req.T_bit[0]);
+          set_drive_device_state(DrvStop);
         end
 
         DrvRd: begin
@@ -213,7 +237,7 @@ class i3c_driver extends uvm_driver #(
             cfg.vif.wait_for_host_ack_or_nack(.ack_r(ack));
             rsp.T_bit.push_back(ack);
             if (!ack) begin
-              bus_state = DrvStop;
+              set_drive_device_state(DrvStop);
               break;
             end
           end
@@ -222,11 +246,11 @@ class i3c_driver extends uvm_driver #(
         DrvRdPushPull: begin
           for (int i = 0; i < req.data_cnt; i++) begin
             for (int j = 7; j >= 0; j--) begin
-              cfg.vif.device_i3c_send_bit(cfg.tc.i3c_tc, req.data[i][j]);
+              cfg.vif.device_i3c_send_read_bit(cfg.tc.i3c_tc, req.data[i][j]);
             end
-            cfg.vif.device_send_T_bit(cfg.tc.i3c_tc, req.T_bit[i]);
+            cfg.vif.device_i3c_send_read_t_bit(cfg.tc.i3c_tc, req.T_bit[i]);
           end
-          bus_state = DrvStop;
+          set_drive_device_state(DrvStop);
         end
 
         DrvWr: begin
@@ -242,7 +266,7 @@ class i3c_driver extends uvm_driver #(
               break;
             end
           end
-          bus_state = DrvStop;
+          set_drive_device_state(DrvStop);
         end
 
         DrvWrPushPull: begin
@@ -264,7 +288,7 @@ class i3c_driver extends uvm_driver #(
               break;
             end
           end
-          bus_state = DrvStop;
+          set_drive_device_state(DrvStop);
         end
         default: begin
           `uvm_fatal(`gfn, $sformatf("\n device_driver, received invalid request"))

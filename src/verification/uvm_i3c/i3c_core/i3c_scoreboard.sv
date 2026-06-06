@@ -206,13 +206,21 @@ class i3c_scoreboard extends uvm_scoreboard;
   endfunction
 
   function void check_resp(bit [31:0] rdata);
-    if (rdata[31:28] != 4'b0000) begin
-      `uvm_error(`gfn, $sformatf("RESP error: err_status=0x%0h rdata=0x%08h", rdata[31:28], rdata))
-      fail_cnt++;
-    end else begin
+    if (rdata[31:28] == 4'b0000) begin
       `uvm_info(`gfn, $sformatf("RESP OK: tid=0x%0h data_length=%0d", rdata[27:24], rdata[15:0]),
                 UVM_MEDIUM)
       pass_cnt++;
+    end else if (rdata[31:28] == 4'h4) begin
+      `uvm_info(`gfn, $sformatf(
+                "RESP AddrHeader: tid=0x%0h data_length=%0d rdata=0x%08h",
+                rdata[27:24],
+                rdata[15:0],
+                rdata
+                ), UVM_MEDIUM)
+      pass_cnt++;
+    end else begin
+      `uvm_error(`gfn, $sformatf("RESP error: err_status=0x%0h rdata=0x%08h", rdata[31:28], rdata))
+      fail_cnt++;
     end
   endfunction
 
@@ -265,6 +273,12 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     `DV_CHECK_EQ(item.addr, exp.addr, "Target address mismatch")
     `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite, "Transfer direction mismatch")
+
+    if (!item.addr_ack) begin
+      if (!exp.rnw && exp.uses_tx_queue && exp.data_length > 0) consume_tx_data_words(1);
+      pass_cnt++;
+      return;
+    end
 
     if (!exp.rnw && exp.uses_tx_queue) check_tx_data(item);
 

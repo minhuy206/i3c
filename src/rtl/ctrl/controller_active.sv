@@ -41,12 +41,14 @@ module controller_active
     input logic [19:0] t_r_i,
     input logic [19:0] t_f_i,
     input logic [19:0] t_low_i,
+    input logic [19:0] t_low_od_i,
     input logic [19:0] t_high_i,
     input logic [19:0] t_su_sta_i,
     input logic [19:0] t_hd_sta_i,
     input logic [19:0] t_su_sto_i,
     input logic [19:0] t_su_dat_i,
     input logic [19:0] t_hd_dat_i,
+    input logic [19:0] t_bus_free_i,
     input logic [19:0] i2c_t_r_i,
     input logic [19:0] i2c_t_f_i,
     input logic [19:0] i2c_t_low_i,
@@ -56,6 +58,7 @@ module controller_active
     input logic [19:0] i2c_t_su_sto_i,
     input logic [19:0] i2c_t_su_dat_i,
     input logic [19:0] i2c_t_hd_dat_i,
+    input logic [19:0] i2c_t_buf_i,
 
     input  logic ctrl_enable_i,
     input  logic i3c_fsm_en_i,
@@ -88,6 +91,7 @@ module controller_active
   logic flow_gen_clock, flow_gen_idle;
   logic flow_sel_i3c_i2c;
   logic flow_use_i2c_timing;
+  logic flow_scl_use_od_low;
   logic flow_sel_od_pp;
   logic flow_tx_req_byte, flow_tx_req_bit;
   logic [7:0] flow_tx_req_value;
@@ -123,7 +127,8 @@ module controller_active
   logic mux_rx_req_byte, mux_rx_req_bit;
   logic [19:0] active_t_r, active_t_f, active_t_low, active_t_high;
   logic [19:0] active_t_su_sta, active_t_hd_sta, active_t_su_sto;
-  logic [19:0] active_t_su_dat, active_t_hd_dat;
+  logic [19:0] active_t_su_dat, active_t_hd_dat, active_t_bus_free;
+  logic active_scl_use_od_low;
 
   logic daa_active;
   assign daa_active = flow_ccc_valid;
@@ -174,6 +179,9 @@ module controller_active
   assign active_t_su_sto = flow_use_i2c_timing ? i2c_t_su_sto_i : t_su_sto_i;
   assign active_t_su_dat = flow_use_i2c_timing ? i2c_t_su_dat_i : t_su_dat_i;
   assign active_t_hd_dat = flow_use_i2c_timing ? i2c_t_hd_dat_i : t_hd_dat_i;
+  assign active_t_bus_free = flow_use_i2c_timing ? i2c_t_buf_i : t_bus_free_i;
+  assign active_scl_use_od_low = flow_use_i2c_timing ? 1'b0 :
+                                 daa_active ? 1'b1 : flow_scl_use_od_low;
 
   always_comb begin : mux_dat_read
     if (daa_active) begin
@@ -215,12 +223,15 @@ module controller_active
       .busy_o           (scl_gen_busy),
       .sda_ctrl_active_o(scl_gen_driving_sda),
       .t_low_i          (active_t_low),
+      .t_low_od_i       (t_low_od_i),
       .t_high_i         (active_t_high),
       .t_su_sta_i       (active_t_su_sta),
       .t_hd_sta_i       (active_t_hd_sta),
       .t_su_sto_i       (active_t_su_sto),
+      .t_bus_free_i     (active_t_bus_free),
       .t_r_i            (active_t_r),
       .t_f_i            (active_t_f),
+      .scl_use_od_low_i (active_scl_use_od_low),
       .scl_i            (bus_state.scl.value),
       .scl_o            (scl_gen_scl),
       .sda_o            (scl_gen_sda)
@@ -302,6 +313,7 @@ module controller_active
       .gen_idle_o         (flow_gen_idle),
       .sel_i3c_i2c_o      (flow_sel_i3c_i2c),
       .use_i2c_timing_o   (flow_use_i2c_timing),
+      .scl_use_od_low_o   (flow_scl_use_od_low),
       .scl_gen_done_i     (scl_gen_done),
       .scl_gen_busy_i     (scl_gen_busy),
       .ccc_valid_o        (flow_ccc_valid),

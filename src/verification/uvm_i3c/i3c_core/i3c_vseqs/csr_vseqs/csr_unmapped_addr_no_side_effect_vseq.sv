@@ -4,7 +4,7 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
   bit [11:0] unmapped_addr[8] = '{
       12'h008,
       12'h00C,
-      12'h034,
+      12'h03C,
       12'h0FC,
       12'h114,
       12'h1FC,

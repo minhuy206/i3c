@@ -22,7 +22,7 @@ package i3c_timing_pkg;
   };
 
   typedef struct {
-    int tHoldStop   = 1_300;  // 1.3 us
+    int tHoldStop   = 39;  // pure-I3C Bus Free tCAS, rounded up from 38.4 ns
     int tHoldStart  = 39;
     int tSetupStart = 20;
     int tHoldRStart = 20;
@@ -35,7 +35,7 @@ package i3c_timing_pkg;
   } i3c_timing_t;
 
   parameter i3c_timing_t I3C_SDR = '{
-      tHoldStop   : 1_300,  // 1.3 us
+      tHoldStop   : 39,  // pure-I3C Bus Free tCAS, rounded up from 38.4 ns
       tHoldStart  : 39,
       tSetupStart : 20,
       tHoldRStart : 20,

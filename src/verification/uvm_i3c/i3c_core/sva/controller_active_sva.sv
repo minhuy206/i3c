@@ -13,7 +13,12 @@ module controller_active_mux_sva (
 
     input logic tx_flow_sda_drive,
     input logic tx_flow_sda,
-    input logic tx_flow_sel_od_pp
+    input logic tx_flow_sel_od_pp,
+
+    input logic flow_use_i2c_timing,
+    input logic daa_active,
+    input logic flow_scl_use_od_low,
+    input logic active_scl_use_od_low
 );
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -49,5 +54,18 @@ module controller_active_mux_sva (
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    !scl_gen_driving_sda |-> (sel_od_pp_o === tx_flow_sel_od_pp))
   else $error("controller_active_mux_sva: final OD/PP must follow tx-flow outside bus events in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   flow_use_i2c_timing |-> !active_scl_use_od_low)
+  else $error("controller_active_mux_sva: I2C timing must not select I3C OD low timing in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (!flow_use_i2c_timing && daa_active) |-> active_scl_use_od_low)
+  else $error("controller_active_mux_sva: ENTDAA must select I3C OD low timing in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (!flow_use_i2c_timing && !daa_active)
+                   |-> (active_scl_use_od_low === flow_scl_use_od_low))
+  else $error("controller_active_mux_sva: SCL OD-low mode must follow flow_active outside ENTDAA in %m");
 
 endmodule

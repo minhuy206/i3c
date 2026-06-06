@@ -3,9 +3,13 @@ module flow_active_sva
   import controller_pkg::dat_entry_t;
   import controller_pkg::Write;
   import i3c_pkg::AddressAssignment;
+  import i3c_pkg::AddrHeader;
+  import i3c_pkg::Success;
   import i3c_pkg::i3c_cmd_attr_e;
   import i3c_pkg::ImmediateDataTransfer;
   import i3c_pkg::immediate_data_trans_desc_t;
+  import i3c_pkg::regular_trans_desc_t;
+  import i3c_pkg::RegularTransfer;
 #(
     parameter int HciCmdDataWidth = 64,
     parameter int HciTxDataWidth = 32,
@@ -13,21 +17,45 @@ module flow_active_sva
     parameter int HciRespDataWidth = 32,
     parameter int DatDepth = 16
 ) (
-    input logic                       clk_i,
-    input logic                       rst_ni,
-    input logic                 [3:0] state_q,
-    input logic                       sel_od_pp_o,
-    input logic                 [7:0] issue_phase_q,
-    input i3c_cmd_attr_e              cmd_attr,
-    input cmd_transfer_dir_e          cmd_dir,
-    input immediate_data_trans_desc_t imm_desc,
-    input dat_entry_t                 dat_entry,
-    input logic                [15:0] remaining_len_q,
-    input logic                       short_read_q,
-    input logic                       addr_after_rstart_q,
-    input logic                       gen_start_o,
-    input logic                       gen_rstart_o,
-    input logic                       gen_stop_o
+    input logic                                              clk_i,
+    input logic                                              rst_ni,
+    input logic                       [                 3:0] state_q,
+    input logic                                              sel_od_pp_o,
+    input logic                                              use_i2c_timing_o,
+    input logic                                              scl_use_od_low_o,
+    input logic                       [                 7:0] issue_phase_q,
+    input i3c_cmd_attr_e                                     cmd_attr,
+    input cmd_transfer_dir_e                                 cmd_dir,
+    input immediate_data_trans_desc_t                        imm_desc,
+    input regular_trans_desc_t                               reg_desc,
+    input dat_entry_t                                        dat_entry,
+    input logic                       [                15:0] remaining_len_q,
+    input logic                       [                15:0] resp_data_len_q,
+    input logic                                              short_read_q,
+    input logic                                              addr_nack_q,
+    input logic                                              addr_after_rstart_q,
+    input logic                                              next_start_is_rstart_q,
+    input logic                       [                 3:0] cmd_tid,
+    input logic                                              gen_start_o,
+    input logic                                              gen_rstart_o,
+    input logic                                              gen_stop_o,
+    input logic                                              gen_clock_o,
+    input logic                                              tx_queue_empty_i,
+    input logic                                              tx_queue_rready_o,
+    input logic                                              resp_queue_wready_i,
+    input logic                                              cmd_queue_rready_o,
+    input logic                                              bus_tx_idle_i,
+    input logic                                              bus_rx_idle_i,
+    input logic                                              next_cmd_available,
+    input logic                                              next_cmd_supported,
+    input logic                                              bus_tx_req_byte,
+    input logic                                              bus_tx_req_bit,
+    input logic                       [                 7:0] bus_tx_req_value,
+    input logic                       [                 7:0] current_tx_byte,
+    input logic                                              bus_rx_done_i,
+    input logic                       [                 7:0] bus_rx_data_i,
+    input logic                                              resp_queue_wvalid,
+    input logic                       [HciRespDataWidth-1:0] resp_queue_wdata
 );
 
   localparam logic [3:0] Idle = 4'd0;
@@ -49,10 +77,10 @@ module flow_active_sva
   localparam logic [7:0] PhaseAddr = 8'd1;
   localparam logic [7:0] PhaseAddrAck = 8'd2;
   localparam logic [7:0] PhaseDataStart = 8'd3;
+  localparam int unsigned AddrNackRespTimeoutCycles = 256;
 
-  function automatic logic phase_in_data_pairs(input logic [7:0] phase,
-                                               input logic [7:0] first_phase,
-                                               input logic [2:0] byte_count);
+  function automatic logic phase_in_data_pairs(
+      input logic [7:0] phase, input logic [7:0] first_phase, input logic [2:0] byte_count);
     logic [7:0] phase_offset;
 
     phase_in_data_pairs = 1'b0;
@@ -81,18 +109,14 @@ module flow_active_sva
                                (phase == 8'd9);
     end else begin
       expected_imm_sel_od_pp = (phase == 8'd3) || (phase == 8'd4) ||
-                               (bcast_has_event_byte(desc) &&
-                                ((phase == 8'd5) || (phase == 8'd6)));
+          (bcast_has_event_byte(desc) && ((phase == 8'd5) || (phase == 8'd6)));
     end
   endfunction
 
-  function automatic logic expected_regular_sel_od_pp(input i3c_cmd_attr_e attr,
-                                                      input cmd_transfer_dir_e dir,
-                                                      input dat_entry_t dat,
-                                                      input logic [7:0] phase,
-                                                      input logic [15:0] remaining_len,
-                                                      input logic short_read,
-                                                      input logic addr_after_rstart);
+  function automatic logic expected_regular_sel_od_pp(
+      input i3c_cmd_attr_e attr, input cmd_transfer_dir_e dir, input dat_entry_t dat,
+      input logic [7:0] phase, input logic [15:0] remaining_len, input logic short_read,
+      input logic addr_after_rstart);
     expected_regular_sel_od_pp = 1'b0;
 
     if (attr == AddressAssignment || dat.device) begin
@@ -108,18 +132,11 @@ module flow_active_sva
     end
   endfunction
 
-  function automatic logic expected_sel_od_pp(input logic [3:0] state,
-                                              input i3c_cmd_attr_e attr,
-                                              input cmd_transfer_dir_e dir,
-                                              input immediate_data_trans_desc_t desc,
-                                              input dat_entry_t dat,
-                                              input logic [7:0] phase,
-                                              input logic [15:0] remaining_len,
-                                              input logic short_read,
-                                              input logic addr_after_rstart,
-                                              input logic gen_start,
-                                              input logic gen_rstart,
-                                              input logic gen_stop);
+  function automatic logic expected_sel_od_pp(
+      input logic [3:0] state, input i3c_cmd_attr_e attr, input cmd_transfer_dir_e dir,
+      input immediate_data_trans_desc_t desc, input dat_entry_t dat, input logic [7:0] phase,
+      input logic [15:0] remaining_len, input logic short_read, input logic addr_after_rstart,
+      input logic gen_start, input logic gen_rstart, input logic gen_stop);
     expected_sel_od_pp = 1'b0;
 
     if (gen_start || gen_rstart || gen_stop) begin
@@ -131,8 +148,8 @@ module flow_active_sva
         end
 
         IssueCmd: begin
-          expected_sel_od_pp = expected_regular_sel_od_pp(
-              attr, dir, dat, phase, remaining_len, short_read, addr_after_rstart);
+          expected_sel_od_pp = expected_regular_sel_od_pp(attr, dir, dat, phase, remaining_len,
+                                                          short_read, addr_after_rstart);
         end
 
         default: begin
@@ -142,8 +159,78 @@ module flow_active_sva
     end
   endfunction
 
+  function automatic logic expected_scl_use_od_low(
+      input logic [3:0] state, input i3c_cmd_attr_e attr, input cmd_transfer_dir_e dir,
+      input immediate_data_trans_desc_t desc, input dat_entry_t dat, input logic [7:0] phase,
+      input logic [15:0] remaining_len, input logic short_read, input logic addr_after_rstart,
+      input logic gen_start, input logic gen_rstart, input logic gen_stop,
+      input logic use_i2c_timing);
+    logic expected_sel;
+
+    expected_sel = expected_sel_od_pp(state, attr, dir, desc, dat, phase, remaining_len,
+                                      short_read, addr_after_rstart, gen_start, gen_rstart,
+                                      gen_stop);
+    expected_scl_use_od_low = 1'b0;
+
+    if (!use_i2c_timing) begin
+      if (gen_start || gen_rstart || gen_stop) begin
+        expected_scl_use_od_low = 1'b1;
+      end else if (state == I3CWriteImmediate) begin
+        expected_scl_use_od_low = !expected_sel;
+      end else if (state == IssueCmd && ((attr == AddressAssignment) || !dat.device)) begin
+        expected_scl_use_od_low = !expected_sel;
+      end
+    end
+  endfunction
+
+  function automatic logic sdr_regular_i3c_write();
+    return (cmd_attr == RegularTransfer) && (cmd_dir == Write) && !dat_entry.device;
+  endfunction
+
+  function automatic logic addr_nack_resp_matches();
+    return resp_queue_wvalid &&
+           (resp_queue_wdata[31:28] == AddrHeader) &&
+           (resp_queue_wdata[27:24] == cmd_tid) &&
+           (resp_queue_wdata[23:16] == 8'h00) &&
+           (resp_queue_wdata[15:0] == 16'h0000);
+  endfunction
+
+  function automatic logic success_resp_matches_current_len();
+    return resp_queue_wvalid &&
+           (resp_queue_wdata[31:28] == Success) &&
+           (resp_queue_wdata[27:24] == cmd_tid) &&
+           (resp_queue_wdata[23:16] == 8'h00) &&
+           (resp_queue_wdata[15:0] == resp_data_len_q);
+  endfunction
+
+  function automatic logic sdr_write_done_ready();
+    return state_q == IssueCmd &&
+           sdr_regular_i3c_write() &&
+           !addr_nack_q &&
+           (remaining_len_q == 16'h0) &&
+           (issue_phase_q > PhaseAddrAck) &&
+           bus_tx_idle_i &&
+           bus_rx_idle_i;
+  endfunction
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni) sel_od_pp_o === expected_sel_od_pp(
+      state_q,
+      cmd_attr,
+      cmd_dir,
+      imm_desc,
+      dat_entry,
+      issue_phase_q,
+      remaining_len_q,
+      short_read_q,
+      addr_after_rstart_q,
+      gen_start_o,
+      gen_rstart_o,
+      gen_stop_o
+  ))
+  else $error("flow_active_sva: sel_od_pp_o mismatch in %m");
+
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   sel_od_pp_o === expected_sel_od_pp(
+                   scl_use_od_low_o === expected_scl_use_od_low(
                        state_q,
                        cmd_attr,
                        cmd_dir,
@@ -155,7 +242,239 @@ module flow_active_sva
                        addr_after_rstart_q,
                        gen_start_o,
                        gen_rstart_o,
-                       gen_stop_o))
-  else $error("flow_active_sva: sel_od_pp_o mismatch in %m");
+                       gen_stop_o,
+                       use_i2c_timing_o
+                   ))
+  else $error("flow_active_sva: scl_use_od_low_o mismatch in %m");
+
+  ap_sdr_write_tbit_parity :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                             state_q == IssueCmd &&
+                                             sdr_regular_i3c_write() &&
+                                             remaining_len_q > 16'h0 &&
+                                             issue_phase_q > PhaseAddrAck &&
+                                             !issue_phase_q[0]
+                                             |->
+                                             bus_tx_req_bit &&
+                                             !bus_tx_req_byte &&
+                                             bus_tx_req_value === {7'b0, ~^current_tx_byte})
+  else $error("flow_active_sva: SDR write T-bit parity mismatch in %m");
+
+  cp_sdr_write_tbit_parity :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_write() &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^current_tx_byte});
+
+  cp_sdr_write_tbit_parity_one :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == IssueCmd &&
+                                                sdr_regular_i3c_write() &&
+                                                remaining_len_q > 16'h0 &&
+                                                issue_phase_q > PhaseAddrAck &&
+                                                !issue_phase_q[0] &&
+                                                bus_tx_req_bit &&
+                                                !bus_tx_req_byte &&
+                                                bus_tx_req_value === 8'h01);
+
+  cp_sdr_write_tbit_parity_zero :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                                 state_q == IssueCmd &&
+                                                 sdr_regular_i3c_write() &&
+                                                 remaining_len_q > 16'h0 &&
+                                                 issue_phase_q > PhaseAddrAck &&
+                                                 !issue_phase_q[0] &&
+                                                 bus_tx_req_bit &&
+                                                 !bus_tx_req_byte &&
+                                                 bus_tx_req_value === 8'h00);
+
+  ap_stallwrite_no_tx_pop :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == StallWrite
+                                            |->
+                                            !tx_queue_rready_o)
+  else $error("flow_active_sva: StallWrite must not pop TX FIFO in %m");
+
+  ap_stallwrite_no_bus_activity :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == StallWrite
+                                            |->
+                                            !gen_start_o &&
+                                            !gen_rstart_o &&
+                                            !gen_stop_o &&
+                                            !gen_clock_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: StallWrite must not request bus activity in %m");
+
+  ap_stallwrite_holds_while_tx_empty :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == StallWrite &&
+                                            tx_queue_empty_i
+                                            |=>
+                                            state_q == StallWrite)
+  else $error("flow_active_sva: StallWrite must hold while TX FIFO is empty in %m");
+
+  ap_stallwrite_exits_when_tx_available :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == StallWrite &&
+                                            !tx_queue_empty_i
+                                            |=>
+                                            state_q == FetchTxData)
+  else $error("flow_active_sva: StallWrite must exit to FetchTxData when TX data arrives in %m");
+
+  cp_sdr_write_stallwrite_tx_empty :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == StallWrite &&
+                                            sdr_regular_i3c_write() &&
+                                            tx_queue_empty_i);
+
+  cp_sdr_write_stallwrite_resume :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == StallWrite &&
+                                            sdr_regular_i3c_write() &&
+                                            !tx_queue_empty_i
+                                            ##1
+                                            state_q == FetchTxData);
+
+  ap_sdr_write_addr_nack_no_data_phase :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                                         state_q == IssueCmd &&
+                                                         sdr_regular_i3c_write() &&
+                                                         addr_nack_q
+                                                         |->
+                                                         gen_stop_o &&
+                                                         !bus_tx_req_byte &&
+                                                         !bus_tx_req_bit)
+  else $error("flow_active_sva: SDR write address NACK must stop without data phase in %m");
+
+  cp_sdr_write_addr_nack_no_data_phase :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                                         state_q == IssueCmd &&
+                                                         sdr_regular_i3c_write() &&
+                                                         addr_nack_q &&
+                                                         gen_stop_o &&
+                                                         !bus_tx_req_byte &&
+                                                         !bus_tx_req_bit);
+
+  ap_sdr_write_addr_nack_sample_no_data_phase :
+  assert property (
+      @(posedge clk_i) disable iff (!rst_ni)
+      state_q == IssueCmd &&
+      sdr_regular_i3c_write() &&
+      issue_phase_q == PhaseAddrAck &&
+      bus_rx_done_i &&
+      bus_rx_data_i[0]
+      |->
+      !bus_tx_req_byte &&
+      !bus_tx_req_bit)
+  else $error("flow_active_sva: SDR write address NACK sample must not overlap data phase in %m");
+
+  cp_sdr_write_addr_nack_sample_no_data_phase :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+      state_q == IssueCmd &&
+      sdr_regular_i3c_write() &&
+      issue_phase_q == PhaseAddrAck &&
+      bus_rx_done_i &&
+      bus_rx_data_i[0] &&
+      !bus_tx_req_byte &&
+      !bus_tx_req_bit);
+
+  ap_sdr_write_addr_nack_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == WriteResp &&
+                                                sdr_regular_i3c_write() &&
+                                                addr_nack_q
+                                                |->
+                                                addr_nack_resp_matches())
+  else $error("flow_active_sva: SDR write address NACK response descriptor mismatch in %m");
+
+  ap_sdr_write_addr_nack_eventually_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      addr_nack_q
+  ) && state_q == IssueCmd && sdr_regular_i3c_write() |->
+      ##[1:AddrNackRespTimeoutCycles] (state_q == WriteResp && addr_nack_resp_matches()))
+  else
+    $error(
+        "flow_active_sva: SDR write address NACK did not produce bounded AddrHeader response in %m"
+    );
+
+  cp_sdr_write_addr_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                          state_q == WriteResp &&
+                                          sdr_regular_i3c_write() &&
+                                          addr_nack_q &&
+                                          addr_nack_resp_matches());
+
+  ap_sdrw007_toc0_accept_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            resp_queue_wready_i
+                                            |->
+                                            success_resp_matches_current_len() &&
+                                            cmd_queue_rready_o &&
+                                            !gen_stop_o)
+  else
+    $error(
+        "flow_active_sva: SDRW_007 toc=0 must accept continuation without STOP in %m"
+    );
+
+  ap_sdrw007_rstart_instead_of_start :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_write() &&
+                                            issue_phase_q == PhaseStart &&
+                                            next_start_is_rstart_q
+                                            |->
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o)
+  else
+    $error(
+        "flow_active_sva: SDRW_007 continuation must request repeated START only in %m"
+    );
+
+  ap_sdrw007_toc1_requests_stop :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            reg_desc.toc
+                                            |->
+                                            gen_stop_o)
+  else $error("flow_active_sva: SDR write toc=1 completion must request STOP in %m");
+
+  cp_sdrw007_toc0_accept_then_rstart_then_toc1_stop :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            resp_queue_wready_i &&
+                                            success_resp_matches_current_len() &&
+                                            cmd_queue_rready_o &&
+                                            !gen_stop_o
+                                            ##[1:64]
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_write() &&
+                                            issue_phase_q == PhaseStart &&
+                                            next_start_is_rstart_q &&
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o
+                                            ##[1:1024]
+                                            sdr_write_done_ready() &&
+                                            reg_desc.toc &&
+                                            gen_stop_o
+                                            ##[1:256]
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_write() &&
+                                            success_resp_matches_current_len());
 
 endmodule

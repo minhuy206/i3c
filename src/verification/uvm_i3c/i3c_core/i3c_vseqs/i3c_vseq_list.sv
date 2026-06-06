@@ -37,7 +37,13 @@
 
 // 4.4 I3C SDR Private Write
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_len_sweep_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_data_patterns_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_tbit_parity_generation_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_addr_nack_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_tx_fifo_empty_stall_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_toc_zero_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_back_to_back_vseq.sv"
 
 // 4.5 I3C SDR Private Read
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"

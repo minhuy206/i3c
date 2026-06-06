@@ -14,12 +14,15 @@ module scl_generator_timing_sva #(
     input logic sda_ctrl_active_o,
 
     input logic [CounterWidth-1:0] t_low_i,
+    input logic [CounterWidth-1:0] t_low_od_i,
     input logic [CounterWidth-1:0] t_high_i,
     input logic [CounterWidth-1:0] t_su_sta_i,
     input logic [CounterWidth-1:0] t_hd_sta_i,
     input logic [CounterWidth-1:0] t_su_sto_i,
+    input logic [CounterWidth-1:0] t_bus_free_i,
     input logic [CounterWidth-1:0] t_r_i,
     input logic [CounterWidth-1:0] t_f_i,
+    input logic                    scl_use_od_low_i,
 
     input logic scl_i,
     input logic scl_o,
@@ -45,6 +48,7 @@ module scl_generator_timing_sva #(
   localparam logic [3:0] GenerateStop   = 4'd10;
   localparam logic [3:0] SclHighForStop = 4'd11;
   localparam logic [3:0] SdaRise        = 4'd12;
+  localparam logic [3:0] BusFree        = 4'd13;
 
   logic past_valid_q;
 
@@ -60,11 +64,15 @@ module scl_generator_timing_sva #(
     counter_sum = lhs + rhs;
   endfunction
 
+  function automatic logic [CounterWidth-1:0] selected_t_low();
+    selected_t_low = scl_use_od_low_i ? t_low_od_i : t_low_i;
+  endfunction
+
   function automatic logic state_is_valid(input logic [3:0] state);
     unique case (state)
       Idle, GenerateStart, SdaFall, HoldStart, DriveLow, DriveHigh, WaitCmd,
       GenerateRstart, SclHigh, RstartSdaFall, GenerateStop, SclHighForStop,
-      SdaRise: state_is_valid = 1'b1;
+      SdaRise, BusFree: state_is_valid = 1'b1;
       default: state_is_valid = 1'b0;
     endcase
   endfunction
@@ -112,7 +120,7 @@ module scl_generator_timing_sva #(
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    done_o === (((state_d == DriveLow) && (state_q != DriveLow)) ||
-                               ((state_q == SdaRise) && (state_d == Idle))))
+                               ((state_q == BusFree) && (state_d == Idle))))
   else $error("scl_generator_timing_sva: done_o decode mismatch in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -133,32 +141,32 @@ module scl_generator_timing_sva #(
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == HoldStart && (tcount == '0))
                    |-> (load_tcount &&
-                        (tcount_load_val == counter_sum(t_low_i, t_f_i))))
-  else $error("scl_generator_timing_sva: HoldStart expiry must load t_low_i+t_f_i in %m");
+                        (tcount_load_val == counter_sum(selected_t_low(), t_f_i))))
+  else $error("scl_generator_timing_sva: HoldStart expiry must load selected low+t_f_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == WaitCmd && gen_clock_i)
                    |-> (load_tcount &&
-                        (tcount_load_val == counter_sum(t_low_i, t_f_i))))
-  else $error("scl_generator_timing_sva: WaitCmd resume must load t_low_i+t_f_i in %m");
+                        (tcount_load_val == counter_sum(selected_t_low(), t_f_i))))
+  else $error("scl_generator_timing_sva: WaitCmd resume must load selected low+t_f_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == WaitCmd && gen_stop_i)
                    |-> (load_tcount &&
-                        (tcount_load_val == counter_sum(t_low_i, t_f_i))))
-  else $error("scl_generator_timing_sva: WaitCmd STOP must load t_low_i+t_f_i in %m");
+                        (tcount_load_val == counter_sum(selected_t_low(), t_f_i))))
+  else $error("scl_generator_timing_sva: WaitCmd STOP must load selected low+t_f_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == DriveHigh && (tcount == '0) && gen_clock_i)
                    |-> (load_tcount &&
-                        (tcount_load_val == counter_sum(t_low_i, t_f_i))))
-  else $error("scl_generator_timing_sva: DriveHigh expiry must load t_low_i+t_f_i in %m");
+                        (tcount_load_val == counter_sum(selected_t_low(), t_f_i))))
+  else $error("scl_generator_timing_sva: DriveHigh expiry must load selected low+t_f_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == DriveHigh && (tcount == '0) && gen_stop_i)
                    |-> (load_tcount &&
-                        (tcount_load_val == counter_sum(t_low_i, t_f_i))))
-  else $error("scl_generator_timing_sva: DriveHigh STOP must load t_low_i+t_f_i in %m");
+                        (tcount_load_val == counter_sum(selected_t_low(), t_f_i))))
+  else $error("scl_generator_timing_sva: DriveHigh STOP must load selected low+t_f_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == DriveLow && (tcount == '0) && gen_clock_i)
@@ -170,6 +178,11 @@ module scl_generator_timing_sva #(
                    (state_q == GenerateStop && (tcount == '0) && scl_i)
                    |-> (load_tcount && (tcount_load_val == t_su_sto_i)))
   else $error("scl_generator_timing_sva: STOP high phase must load t_su_sto_i in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (state_q == SdaRise)
+                   |-> (load_tcount && (tcount_load_val == t_bus_free_i)))
+  else $error("scl_generator_timing_sva: STOP release must load t_bus_free_i in %m");
 
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q)
                    $past(load_tcount) |-> (tcount == $past(tcount_load_val)))
@@ -336,7 +349,17 @@ module scl_generator_timing_sva #(
 
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (!gen_idle_i && (state_q == SdaRise))
+                   |=> (gen_idle_i || (state_q == BusFree)))
+  else $error("scl_generator_timing_sva: SdaRise must enter BusFree in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (!gen_idle_i && (state_q == BusFree) && (tcount != '0))
+                   |=> (gen_idle_i || (state_q == BusFree)))
+  else $error("scl_generator_timing_sva: BusFree must wait for t_bus_free_i expiry in %m");
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (!gen_idle_i && (state_q == BusFree) && (tcount == '0))
                    |=> (gen_idle_i || (state_q == Idle)))
-  else $error("scl_generator_timing_sva: SdaRise must return to Idle in %m");
+  else $error("scl_generator_timing_sva: BusFree expiry must return to Idle in %m");
 
 endmodule
