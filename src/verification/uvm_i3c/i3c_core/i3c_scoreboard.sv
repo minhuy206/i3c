@@ -26,8 +26,26 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [6:0] dynamic_address;
   } dat_model_entry_t;
 
+  typedef struct {
+    bit [ 3:0] err_status;
+    bit [ 3:0] tid;
+    bit [15:0] data_length;
+  } exp_resp_err_t;
+
+  typedef struct {
+    bit [ 6:0] addr;
+    bit [ 3:0] tid;
+    int        requested_length;
+    int        data_length;
+    bit        continue_t_bit;
+    bit        final_t_bit;
+    bit [ 7:0] data[$];
+  } exp_read_data_t;
+
   exp_txn_t         exp_txn_queue[$];  // pending expected I3C transactions
   bit        [31:0] tx_data_queue[$];  // TX data words written to ADDR_TX_DATA
+  exp_resp_err_t    exp_resp_err_queue[$];
+  exp_read_data_t   exp_read_data_queue[$];
   dat_model_entry_t dat_model[DAT_DEPTH];
 
   bit              got_dw0;
@@ -78,9 +96,39 @@ class i3c_scoreboard extends uvm_scoreboard;
   function void handle_sw_reset();
     exp_txn_queue.delete();
     tx_data_queue.delete();
+    exp_resp_err_queue.delete();
+    exp_read_data_queue.delete();
     got_dw0 = 1'b0;
     cmd_dw0 = '0;
     `uvm_info(`gfn, "SW_RESET observed: scoreboard queues flushed", UVM_MEDIUM)
+  endfunction
+
+  function void expect_resp_error(bit [3:0] err_status, bit [3:0] tid,
+                                  bit [15:0] data_length);
+    exp_resp_err_t exp;
+
+    exp.err_status  = err_status;
+    exp.tid         = tid;
+    exp.data_length = data_length;
+    exp_resp_err_queue.push_back(exp);
+  endfunction
+
+  function void expect_read_data(input bit [6:0] addr, input bit [3:0] tid,
+                                 input int unsigned requested_length,
+                                 input int unsigned data_length,
+                                 input bit [7:0] data[$],
+                                 input bit continue_t_bit,
+                                 input bit final_t_bit = 1'b0);
+    exp_read_data_t exp;
+
+    exp.addr             = addr;
+    exp.tid              = tid;
+    exp.requested_length = int'(requested_length);
+    exp.data_length      = int'(data_length);
+    exp.continue_t_bit   = continue_t_bit;
+    exp.final_t_bit      = final_t_bit;
+    exp.data             = data;
+    exp_read_data_queue.push_back(exp);
   endfunction
 
   function void handle_dat_write(bit [11:0] addr, bit [31:0] wdata);
@@ -218,10 +266,35 @@ class i3c_scoreboard extends uvm_scoreboard;
                 rdata
                 ), UVM_MEDIUM)
       pass_cnt++;
+    end else if (resp_error_expected(rdata)) begin
+      `uvm_info(`gfn, $sformatf(
+                "RESP expected error: err_status=0x%0h tid=0x%0h data_length=%0d rdata=0x%08h",
+                rdata[31:28],
+                rdata[27:24],
+                rdata[15:0],
+                rdata
+                ), UVM_MEDIUM)
+      pass_cnt++;
     end else begin
       `uvm_error(`gfn, $sformatf("RESP error: err_status=0x%0h rdata=0x%08h", rdata[31:28], rdata))
       fail_cnt++;
     end
+  endfunction
+
+  function bit resp_error_expected(bit [31:0] rdata);
+    exp_resp_err_t exp;
+
+    if (exp_resp_err_queue.size() == 0) return 1'b0;
+
+    exp = exp_resp_err_queue[0];
+    if ((rdata[31:28] == exp.err_status) &&
+        (rdata[27:24] == exp.tid) &&
+        (rdata[15:0] == exp.data_length)) begin
+      void'(exp_resp_err_queue.pop_front());
+      return 1'b1;
+    end
+
+    return 1'b0;
   endfunction
 
   // I3C bus side: compare observed transaction vs expected
@@ -280,7 +353,11 @@ class i3c_scoreboard extends uvm_scoreboard;
       return;
     end
 
-    if (!exp.rnw && exp.uses_tx_queue) check_tx_data(item);
+    if (exp.rnw) begin
+      check_read_data(item, exp);
+    end else if (exp.uses_tx_queue) begin
+      check_tx_data(item);
+    end
 
     pass_cnt++;
   endfunction
@@ -306,6 +383,43 @@ class i3c_scoreboard extends uvm_scoreboard;
     end
     `DV_CHECK_EQ(item.CCC_direct.size(), 0, "Broadcast CCC should not include a direct phase")
     `DV_CHECK_EQ(item.stop, 1'b1, "Broadcast CCC should end with STOP")
+  endfunction
+
+  // Verify read data bytes and target T-bit sequence when a vseq provides expected read data.
+  function void check_read_data(i3c_item item, exp_txn_t exp);
+    exp_read_data_t read_exp;
+
+    if (exp_read_data_queue.size() == 0) return;
+
+    read_exp = exp_read_data_queue.pop_front();
+
+    `DV_CHECK_EQ(read_exp.addr, exp.addr, "Read expectation target address mismatch")
+    `DV_CHECK_EQ(read_exp.tid, exp.tid, "Read expectation TID mismatch")
+    `DV_CHECK_EQ(read_exp.requested_length, exp.data_length,
+                 "Read expectation requested length mismatch")
+    `DV_CHECK_LE(read_exp.data_length, read_exp.requested_length,
+                 "Read expectation actual length exceeds requested length")
+    `DV_CHECK_EQ(read_exp.data.size(), read_exp.data_length,
+                 "Read expectation data byte count mismatch")
+
+    `DV_CHECK_EQ(item.num_data, read_exp.data_length, "Read bus data byte count mismatch")
+    `DV_CHECK_EQ(item.data_q.size(), read_exp.data_length, "Read monitor data queue size mismatch")
+    `DV_CHECK_EQ(item.data_ack_q.size(), read_exp.data_length, "Read monitor T-bit count mismatch")
+
+    for (int i = 0; i < read_exp.data_length; i++) begin
+      if ((i < item.data_q.size()) && (i < read_exp.data.size())) begin
+        `DV_CHECK_EQ(item.data_q[i], read_exp.data[i],
+                     $sformatf("Read bus data byte[%0d] mismatch", i))
+      end
+      if (i < item.data_ack_q.size()) begin
+        bit exp_t_bit;
+
+        exp_t_bit = (i == (read_exp.data_length - 1)) ? read_exp.final_t_bit :
+                                                        read_exp.continue_t_bit;
+        `DV_CHECK_EQ(item.data_ack_q[i], exp_t_bit,
+                     $sformatf("Read bus T-bit[%0d] mismatch", i))
+      end
+    end
   endfunction
 
   // Verify write data bytes match queued TX FIFO words (little-endian byte order).
@@ -375,6 +489,12 @@ class i3c_scoreboard extends uvm_scoreboard;
                  "%0d expected command(s) never observed on I3C bus", unobserved_count))
     if (tx_data_queue.size() > 0)
       `uvm_error(`gfn, $sformatf("%0d TX data word(s) unconsumed", tx_data_queue.size()))
+    if (exp_resp_err_queue.size() > 0)
+      `uvm_error(`gfn, $sformatf("%0d expected response error(s) were not observed",
+                                 exp_resp_err_queue.size()))
+    if (exp_read_data_queue.size() > 0)
+      `uvm_error(`gfn, $sformatf("%0d expected read data item(s) were not observed",
+                                 exp_read_data_queue.size()))
     `uvm_info(`gfn, $sformatf("Scoreboard: pass=%0d fail=%0d", pass_cnt, fail_cnt), UVM_LOW)
     `DV_EOT_PRINT_TLM_FIFO_CONTENTS(reg_seq_item, reg_fifo)
     `DV_EOT_PRINT_TLM_FIFO_CONTENTS(i3c_item, i3c_fifo)

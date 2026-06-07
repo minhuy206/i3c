@@ -179,6 +179,7 @@ module scl_generator_timing_sva #(
                    |-> (load_tcount && (tcount_load_val == t_su_sto_i)))
   else $error("scl_generator_timing_sva: STOP high phase must load t_su_sto_i in %m");
 
+  ap_stop_release_loads_bus_free :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == SdaRise)
                    |-> (load_tcount && (tcount_load_val == t_bus_free_i)))
@@ -352,14 +353,41 @@ module scl_generator_timing_sva #(
                    |=> (gen_idle_i || (state_q == BusFree)))
   else $error("scl_generator_timing_sva: SdaRise must enter BusFree in %m");
 
+  ap_bus_free_holds_until_expiry :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (!gen_idle_i && (state_q == BusFree) && (tcount != '0))
                    |=> (gen_idle_i || (state_q == BusFree)))
   else $error("scl_generator_timing_sva: BusFree must wait for t_bus_free_i expiry in %m");
 
+  ap_bus_free_expires_to_idle :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (!gen_idle_i && (state_q == BusFree) && (tcount == '0))
                    |=> (gen_idle_i || (state_q == Idle)))
   else $error("scl_generator_timing_sva: BusFree expiry must return to Idle in %m");
+
+  ap_no_start_rstart_during_bus_free :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   (!gen_idle_i && (state_q == BusFree) && (tcount != '0) &&
+                    (gen_start_i || gen_rstart_i))
+                   |-> (state_d == BusFree))
+  else $error("scl_generator_timing_sva: START/RSTART must not be accepted during BusFree in %m");
+
+  cp_stop_release_loads_nonzero_bus_free :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  (state_q == SdaRise) &&
+                  load_tcount &&
+                  (tcount_load_val == t_bus_free_i) &&
+                  (t_bus_free_i != '0));
+
+  cp_stop_bus_free_wait_to_idle :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  (state_q == SdaRise) ##1
+                  (state_q == BusFree) ##[1:$]
+                  (state_q == Idle));
+
+  cp_start_request_seen_during_bus_free_blocked :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  (!gen_idle_i && (state_q == BusFree) && (tcount != '0) &&
+                   (gen_start_i || gen_rstart_i) && (state_d == BusFree)));
 
 endmodule

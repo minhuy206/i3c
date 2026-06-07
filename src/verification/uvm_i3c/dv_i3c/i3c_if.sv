@@ -8,8 +8,6 @@ interface i3c_if (
     inout sda_io
 );
   import uvm_pkg::*;
-  import i3c_timing_pkg::I2C_400;
-  import i3c_timing_pkg::I3C_SDR;
   import i3c_timing_pkg::i2c_timing_t;
   import i3c_timing_pkg::i3c_timing_t;
   `include "uvm_macros.svh"
@@ -43,8 +41,6 @@ interface i3c_if (
   string msg_id = "i3c_if";
 
   int scl_spinwait_timeout_ns = 10_000_000;
-  bit  last_host_stop_seen = 1'b0;
-  time last_host_stop_time;
 
   clocking cb @(posedge clk_i);
     input scl_i;
@@ -76,38 +72,6 @@ interface i3c_if (
   assign #(delay) scl_delayed = cb.scl_i;
   assign scl_filtered = cb.scl_i & scl_delayed;
 
-  bit i2c_devices_present = 0;
-  task automatic mixed_bus();
-    i2c_devices_present = 1;
-  endtask
-
-  task automatic i3c_only_bus();
-    i2c_devices_present = 0;
-  endtask
-
-  function automatic int host_stop_to_start_min_ns();
-    return i2c_devices_present ? I2C_400.tHoldStop : I3C_SDR.tHoldStop;
-  endfunction
-
-  task automatic check_bus_free_before_host_start(input string start_kind);
-    time bus_free_time;
-    time min_bus_free_time;
-
-    if (!last_host_stop_seen) return;
-
-    bus_free_time     = $time - last_host_stop_time;
-    min_bus_free_time = host_stop_to_start_min_ns() * 1ns;
-    if (bus_free_time < min_bus_free_time) begin
-      `uvm_error(msg_id, $sformatf(
-                 "%s issued %0t after STOP, below required Bus Free time %0t (%s bus)",
-                 start_kind,
-                 bus_free_time,
-                 min_bus_free_time,
-                 i2c_devices_present ? "mixed/I2C Fm" : "pure I3C"))
-    end
-    last_host_stop_seen = 1'b0;
-  endtask
-
   task automatic p_edge_scl();
     // Poll SCL on every system clock edge. NOTE: an empty `while(...) @(posedge clk_i);`
     // body gets optimized out by Xcelium in some configurations, returning in zero
@@ -137,27 +101,20 @@ interface i3c_if (
 
   task automatic wait_for_host_start();
     @(negedge sda_i iff scl_i);
-    check_bus_free_before_host_start("START");
   endtask
 
   task automatic wait_for_host_rstart(output bit rstart);
     rstart = 1'b0;
     @(negedge sda_i iff scl_i);
-    check_bus_free_before_host_start("START/RSTART");
     rstart = 1'b1;
   endtask
 
   task automatic wait_for_host_stop(input int wait_delay, output bit stop);
-    time stop_edge_time;
-
     stop = 1'b0;
     forever begin
       @(posedge sda_i iff scl_i);
-      stop_edge_time = $time;
       #(wait_delay * 1ns);
       if (scl_i === 1'b1 && sda_i === 1'b1) begin
-        last_host_stop_seen = 1'b1;
-        last_host_stop_time = stop_edge_time;
         stop = 1'b1;
         break;
       end

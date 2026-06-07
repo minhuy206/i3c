@@ -47,6 +47,9 @@
 
 // 4.5 I3C SDR Private Read
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_len_sweep_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_short_target_end_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_target_more_than_requested_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_toc_zero_vseq.sv"
 
 // 4.6 Immediate Data Transfer

@@ -71,7 +71,15 @@ bind bus_rx_flow bus_rx_flow_msb_sva u_bus_rx_flow_msb_sva (
     .rx_req_byte_i,
     .rx_data_o,
     .rx_done_o,
-    .rx_bit_en
+    .rx_idle_o,
+    .rx_bit_en,
+    .rx_done,
+    .rx_bit,
+    .rx_data,
+    .bit_counter,
+    .bit_counter_en,
+    .state_q,
+    .state_d
 );
 
 bind flow_active flow_active_sva #(
@@ -106,6 +114,10 @@ bind flow_active flow_active_sva #(
     .gen_clock_o,
     .tx_queue_empty_i,
     .tx_queue_rready_o,
+    .rx_queue_full_i,
+    .rx_queue_wvalid,
+    .rx_queue_wready_i,
+    .rx_queue_wdata,
     .resp_queue_wready_i,
     .cmd_queue_rready_o,
     .bus_tx_idle_i,
@@ -116,6 +128,8 @@ bind flow_active flow_active_sva #(
     .bus_tx_req_bit,
     .bus_tx_req_value,
     .current_tx_byte,
+    .rx_dword_q,
+    .rx_byte_idx_q,
     .bus_rx_done_i,
     .bus_rx_data_i,
     .resp_queue_wvalid,

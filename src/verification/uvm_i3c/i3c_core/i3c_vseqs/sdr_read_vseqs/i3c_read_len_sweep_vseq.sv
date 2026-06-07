@@ -1,0 +1,97 @@
+class i3c_read_len_sweep_vseq extends i3c_base_vseq;
+  `uvm_object_utils(i3c_read_len_sweep_vseq)
+
+  localparam int unsigned NUM_LENGTHS = 8;
+
+  function new(string name = "i3c_read_len_sweep_vseq");
+    super.new(name);
+  endfunction
+
+  task body();
+    int unsigned lengths[NUM_LENGTHS] = '{1, 2, 3, 4, 5, 7, 8, 16};
+
+    configure_dut();
+    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+
+    foreach (lengths[sweep_idx]) begin
+      run_len_case(sweep_idx, lengths[sweep_idx]);
+    end
+
+    `uvm_info(`gfn, "SDRR_002 I3C regular read length sweep checks passed", UVM_LOW)
+  endtask
+
+  virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length);
+    transfer_stimulus_cfg_t cfg;
+    byte_queue_t            read_data;
+    word_queue_t            exp_words;
+    word_queue_t            rx_words;
+    bit [31:0]              resp;
+    i3c_device_response_seq dev_seq;
+
+    build_payload(sweep_idx, data_length, read_data, exp_words);
+
+    cfg                  = make_transfer_cfg(
+        $sformatf("SDRR_002 len %0d", data_length),
+        $sformatf("sdrr002_dev_seq_%0d", data_length),
+        4'(sweep_idx + 1),
+        5'd0,
+        7'h08,
+        1'b1,
+        data_length
+    );
+    cfg.wait_device_done = 1'b1;
+
+    run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
+
+    `DV_CHECK_EQ(dev_seq.done, 1'b1,
+                 $sformatf("SDRR_002 len %0d: device response did not finish", data_length))
+    `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08,
+                 $sformatf("SDRR_002 len %0d: target address mismatch", data_length))
+    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b1,
+                 $sformatf("SDRR_002 len %0d: transfer direction should be read", data_length))
+
+    `DV_CHECK_EQ(rx_words.size(), exp_words.size(),
+                 $sformatf("SDRR_002 len %0d: RX word count mismatch", data_length))
+    for (int unsigned i = 0; i < exp_words.size(); i++) begin
+      if (i < rx_words.size()) begin
+        `DV_CHECK_EQ(rx_words[i], exp_words[i],
+                     $sformatf("SDRR_002 len %0d: RX word[%0d] mismatch", data_length, i))
+      end
+    end
+
+    `DV_CHECK_EQ(resp[31:28], 4'h0,
+                 $sformatf("SDRR_002 len %0d: expected Success response", data_length))
+    `DV_CHECK_EQ(resp[27:24], cfg.tid,
+                 $sformatf("SDRR_002 len %0d: response TID mismatch", data_length))
+    `DV_CHECK_EQ(resp[15:0], 16'(data_length),
+                 $sformatf("SDRR_002 len %0d: response length mismatch", data_length))
+
+    check_all_queues_empty($sformatf("after SDRR_002 len %0d", data_length));
+  endtask
+
+  virtual function void build_payload(int unsigned sweep_idx, int unsigned data_length,
+                                      ref byte_queue_t read_data, ref word_queue_t exp_words);
+    bit [31:0] rx_word;
+
+    read_data.delete();
+    exp_words.delete();
+
+    for (int unsigned i = 0; i < data_length; i++) begin
+      read_data.push_back(8'(8'h40 + (sweep_idx * 8) + i));
+    end
+
+    for (int unsigned word_idx = 0; word_idx < ((data_length + 3) / 4); word_idx++) begin
+      rx_word = '0;
+      for (int unsigned byte_idx = 0; byte_idx < 4; byte_idx++) begin
+        int unsigned data_idx;
+
+        data_idx = (word_idx * 4) + byte_idx;
+        if (data_idx < data_length) begin
+          rx_word[(byte_idx*8)+:8] = read_data[data_idx];
+        end
+      end
+      exp_words.push_back(rx_word);
+    end
+  endfunction
+
+endclass
