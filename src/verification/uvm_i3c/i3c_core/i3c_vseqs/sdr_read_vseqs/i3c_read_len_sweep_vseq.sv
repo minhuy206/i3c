@@ -23,12 +23,11 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
   virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length);
     transfer_stimulus_cfg_t cfg;
     byte_queue_t            read_data;
-    word_queue_t            exp_words;
     word_queue_t            rx_words;
     bit [31:0]              resp;
     i3c_device_response_seq dev_seq;
 
-    build_payload(sweep_idx, data_length, read_data, exp_words);
+    build_payload(sweep_idx, data_length, read_data);
 
     cfg                  = make_transfer_cfg(
         $sformatf("SDRR_002 len %0d", data_length),
@@ -50,15 +49,6 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b1,
                  $sformatf("SDRR_002 len %0d: transfer direction should be read", data_length))
 
-    `DV_CHECK_EQ(rx_words.size(), exp_words.size(),
-                 $sformatf("SDRR_002 len %0d: RX word count mismatch", data_length))
-    for (int unsigned i = 0; i < exp_words.size(); i++) begin
-      if (i < rx_words.size()) begin
-        `DV_CHECK_EQ(rx_words[i], exp_words[i],
-                     $sformatf("SDRR_002 len %0d: RX word[%0d] mismatch", data_length, i))
-      end
-    end
-
     `DV_CHECK_EQ(resp[31:28], 4'h0,
                  $sformatf("SDRR_002 len %0d: expected Success response", data_length))
     `DV_CHECK_EQ(resp[27:24], cfg.tid,
@@ -70,27 +60,11 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
   endtask
 
   virtual function void build_payload(int unsigned sweep_idx, int unsigned data_length,
-                                      ref byte_queue_t read_data, ref word_queue_t exp_words);
-    bit [31:0] rx_word;
-
+                                      ref byte_queue_t read_data);
     read_data.delete();
-    exp_words.delete();
 
     for (int unsigned i = 0; i < data_length; i++) begin
       read_data.push_back(8'(8'h40 + (sweep_idx * 8) + i));
-    end
-
-    for (int unsigned word_idx = 0; word_idx < ((data_length + 3) / 4); word_idx++) begin
-      rx_word = '0;
-      for (int unsigned byte_idx = 0; byte_idx < 4; byte_idx++) begin
-        int unsigned data_idx;
-
-        data_idx = (word_idx * 4) + byte_idx;
-        if (data_idx < data_length) begin
-          rx_word[(byte_idx*8)+:8] = read_data[data_idx];
-        end
-      end
-      exp_words.push_back(rx_word);
     end
   endfunction
 

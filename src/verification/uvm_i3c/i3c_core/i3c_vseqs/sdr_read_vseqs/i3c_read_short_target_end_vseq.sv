@@ -25,7 +25,6 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
                               int unsigned actual_length);
     transfer_stimulus_cfg_t cfg;
     byte_queue_t            read_data;
-    word_queue_t            exp_words;
     word_queue_t            rx_words;
     bit [31:0]              resp;
     i3c_device_response_seq dev_seq;
@@ -33,7 +32,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
     `DV_CHECK_LT(actual_length, requested_length,
                  $sformatf("SDRR_003 case %0d must end before requested length", case_idx))
 
-    build_payload(case_idx, actual_length, read_data, exp_words);
+    build_payload(case_idx, actual_length, read_data);
 
     cfg                  = make_transfer_cfg(
         $sformatf("SDRR_003 req %0d actual %0d", requested_length, actual_length),
@@ -60,17 +59,6 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
                  $sformatf("SDRR_003 req %0d actual %0d: transfer direction should be read",
                            requested_length, actual_length))
 
-    `DV_CHECK_EQ(rx_words.size(), exp_words.size(),
-                 $sformatf("SDRR_003 req %0d actual %0d: RX word count mismatch",
-                           requested_length, actual_length))
-    for (int unsigned i = 0; i < exp_words.size(); i++) begin
-      if (i < rx_words.size()) begin
-        `DV_CHECK_EQ(rx_words[i], exp_words[i],
-                     $sformatf("SDRR_003 req %0d actual %0d: RX word[%0d] mismatch",
-                               requested_length, actual_length, i))
-      end
-    end
-
     `DV_CHECK_EQ(resp[31:28], 4'h7,
                  $sformatf("SDRR_003 req %0d actual %0d: expected I3cShortReadErr response",
                            requested_length, actual_length))
@@ -86,27 +74,11 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
   endtask
 
   virtual function void build_payload(int unsigned case_idx, int unsigned actual_length,
-                                      ref byte_queue_t read_data, ref word_queue_t exp_words);
-    bit [31:0] rx_word;
-
+                                      ref byte_queue_t read_data);
     read_data.delete();
-    exp_words.delete();
 
     for (int unsigned i = 0; i < actual_length; i++) begin
       read_data.push_back(8'(8'h90 + (case_idx * 8) + i));
-    end
-
-    for (int unsigned word_idx = 0; word_idx < ((actual_length + 3) / 4); word_idx++) begin
-      rx_word = '0;
-      for (int unsigned byte_idx = 0; byte_idx < 4; byte_idx++) begin
-        int unsigned data_idx;
-
-        data_idx = (word_idx * 4) + byte_idx;
-        if (data_idx < actual_length) begin
-          rx_word[(byte_idx*8)+:8] = read_data[data_idx];
-        end
-      end
-      exp_words.push_back(rx_word);
     end
   endfunction
 

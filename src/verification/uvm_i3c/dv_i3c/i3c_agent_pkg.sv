@@ -27,6 +27,7 @@ package i3c_agent_pkg;
     DrvRdPushPull,
     DrvStop,
     DrvStopPushPull,
+    DrvWaitStopOrAddr,
     DrvDAA
   } i3c_drv_phase_e;
 

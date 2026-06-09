@@ -24,6 +24,7 @@ class i3c_write_addr_nack_vseq extends i3c_base_vseq;
 
     tx_words.push_back(TX_WORD);
 
+    expect_scoreboard_resp_error(4'h4, cfg.tid, 16'd0, cfg.ctxt);
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
     `DV_CHECK_EQ(dev_seq.done, 1'b1, "SDRW_005: device response did not finish")
@@ -36,7 +37,14 @@ class i3c_write_addr_nack_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(resp[27:24], cfg.tid, "SDRW_005: response TID mismatch")
     `DV_CHECK_EQ(resp[15:0], 16'd0, "SDRW_005: response length should be zero")
 
-    check_all_queues_empty("after SDRW_005 address NACK");
+    check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit, 1'b0, 1'b1,
+                      "after SDRW_005 address NACK");
+    check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit, 1'b0, 1'b0,
+                      "after SDRW_005 address NACK");
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b0, 1'b1,
+                      "after SDRW_005 address NACK");
+    check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b0, 1'b1,
+                      "after SDRW_005 address NACK");
 
     `uvm_info(`gfn, "SDRW_005 I3C write address NACK checks passed", UVM_LOW)
   endtask

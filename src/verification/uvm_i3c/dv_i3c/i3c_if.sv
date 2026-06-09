@@ -352,23 +352,23 @@ interface i3c_if (
     device_sda_o = 1;
   endtask : device_i3c_raw_pp_send_t_bit
 
-  task automatic device_i3c_send_read_bit(input i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_send_bit(input i3c_timing_t tc, input bit bit_i);
     bit handoff_ok;
 
     wait_for_i3c_target_sda_handoff("I3C read data bit", handoff_ok);
     if (!handoff_ok) return;
 
     device_i3c_raw_pp_send_bit(tc, bit_i);
-  endtask : device_i3c_send_read_bit
+  endtask : device_i3c_send_bit
 
-  task automatic device_i3c_send_read_t_bit(input i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_send_t_bit(input i3c_timing_t tc, input bit bit_i);
     bit handoff_ok;
 
     wait_for_i3c_target_sda_handoff("I3C read T-bit", handoff_ok);
     if (!handoff_ok) return;
 
     device_i3c_raw_pp_send_t_bit(tc, bit_i);
-  endtask : device_i3c_send_read_t_bit
+  endtask : device_i3c_send_t_bit
 
   task automatic device_i3c_send_daa_bit(input i3c_timing_t tc, input bit bit_i);
     bit handoff_ok;

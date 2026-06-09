@@ -49,7 +49,11 @@
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_len_sweep_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_short_target_end_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_no_parity_error_on_end_tbit_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_target_more_than_requested_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_addr_nack_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_rx_fifo_full_overflow_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_data_patterns_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_toc_zero_vseq.sv"
 
 // 4.6 Immediate Data Transfer

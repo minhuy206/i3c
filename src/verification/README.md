@@ -15,6 +15,9 @@ Run commands from this directory:
 make compile
 make smoke
 make regression
+make sdr_regression
+make sdrw_regression
+make sdrr_regression
 make fifo_regression
 make waves
 ```

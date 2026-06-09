@@ -374,6 +374,7 @@ class i3c_base_vseq extends uvm_sequence;
 
     start_ordered_device_responses(rd_cfg, 1'b1, read_data, dev_seq0,
                                    wr_cfg, 1'b0, no_read_data, dev_seq1);
+    expect_scoreboard_read_data(rd_cfg, read_data, rd_cfg.data_length);
     if (rd_cfg.settle_before_cmd != 0) settle_cycles(rd_cfg.settle_before_cmd);
 
     write_cmd(rd_cmd0[31:0], rd_cmd0[63:32]);
@@ -423,7 +424,8 @@ class i3c_base_vseq extends uvm_sequence;
   virtual function void expect_scoreboard_read_data(transfer_stimulus_cfg_t cfg,
                                                     byte_queue_t read_data,
                                                     int unsigned actual_data_length,
-                                                    bit final_t_bit = 1'b0);
+                                                    bit final_t_bit = 1'b0,
+                                                    bit expect_rx_fifo = 1'b1);
     uvm_component comp;
     i3c_scoreboard scb;
     byte_queue_t exp_read_data;
@@ -439,7 +441,7 @@ class i3c_base_vseq extends uvm_sequence;
     end
 
     scb.expect_read_data(cfg.target_addr, cfg.tid, cfg.data_length, actual_data_length,
-                         exp_read_data, cfg.ack_data, final_t_bit);
+                         exp_read_data, cfg.ack_data, final_t_bit, expect_rx_fifo);
   endfunction
 
   virtual function string fifo_mem_path(queue_hdl_paths_t paths, int unsigned index);
