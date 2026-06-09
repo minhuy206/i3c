@@ -31,6 +31,40 @@ FIFO_REGRESSION_SEQS ?= \
 	fifo_simultaneous_read_write_vseq \
 	fifo_flush_during_activity_vseq
 
+BUS_REGRESSION_SEQS ?= \
+	bus_phy_reset_and_sync_vseq \
+	bus_start_stop_detect_vseq \
+	bus_repeated_start_detect_vseq \
+	bus_scl_start_stop_timing_vseq \
+	bus_scl_clock_low_high_timing_vseq \
+	bus_scl_waitcmd_stall_resume_vseq \
+	bus_scl_repeated_start_from_waitcmd_vseq \
+	bus_tx_byte_and_bit_order_vseq \
+	bus_rx_byte_and_bit_order_vseq \
+	bus_od_pp_phase_switch_vseq \
+	bus_tb_pad_model_odpp_wiring_vseq
+
+SDRW_REGRESSION_SEQS ?= \
+	i3c_write_vseq \
+	i3c_write_len_sweep_vseq \
+	i3c_write_data_patterns_vseq \
+	i3c_write_tbit_parity_generation_vseq \
+	i3c_write_addr_nack_vseq \
+	i3c_write_tx_fifo_empty_stall_vseq \
+	i3c_write_toc_zero_vseq \
+	i3c_write_back_to_back_vseq
+
+SDRR_REGRESSION_SEQS ?= \
+	i3c_read_vseq \
+	i3c_read_len_sweep_vseq \
+	i3c_read_short_target_end_vseq \
+	i3c_read_no_parity_error_on_end_tbit_vseq \
+	i3c_read_target_more_than_requested_vseq \
+	i3c_read_addr_nack_vseq \
+	i3c_read_rx_fifo_full_overflow_vseq \
+	i3c_read_data_patterns_vseq \
+	i3c_read_toc_zero_vseq
+
 compile:
 	$(SIMULATOR) -compile -elaborate \
 	  -uvmhome $(UVM_HOME) \
@@ -72,6 +106,26 @@ fifo_regression:
 	done
 	$(MAKE) fifo_non_power_of_two_elaboration
 
+bus_regression:
+	@set -e; \
+	for seq in $(BUS_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+sdrw_regression:
+	@set -e; \
+	for seq in $(SDRW_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+sdrr_regression:
+	@set -e; \
+	for seq in $(SDRR_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+sdr_regression: sdrw_regression sdrr_regression
+
 fifo_non_power_of_two_elaboration:
 	@set +e; \
 	$(SIMULATOR) \
@@ -103,5 +157,6 @@ clean:
 	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs waves.shm xrun.history .simvision \
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
-.PHONY: compile sim smoke regression csr_regression fifo_regression \
+.PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
+        sdrw_regression sdrr_regression sdr_regression \
         fifo_non_power_of_two_elaboration waves clean

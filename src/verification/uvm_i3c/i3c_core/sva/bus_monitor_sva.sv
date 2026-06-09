@@ -110,4 +110,12 @@ module bus_monitor_event_sva #(
                    stop_det_o |=> !rstart_detection_en)
   else $error("bus_monitor_event_sva: STOP event must clear repeated START tracking in %m");
 
+  cp_stop_followed_by_new_start :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  stop_det_o ##[1:$] start_det_o);
+
+  cp_stop_clears_rstart_before_next_start :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  stop_det_o ##1 !rstart_detection_en ##[0:$] start_det_o);
+
 endmodule

@@ -34,13 +34,16 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
 
     `DV_CHECK_EQ(dev_seq0.done, 1'b1, "read_toc0_vseq: first device response did not finish")
     `DV_CHECK_EQ(dev_seq1.done, 1'b1, "read_toc0_vseq: second device response did not finish")
-    `DV_CHECK_EQ((rstart_count > 0), 1'b1, "read_toc0_vseq: expected at least one observed RSTART")
+    `DV_CHECK_EQ(rstart_count, 1, "read_toc0_vseq: expected exactly one observed RSTART")
+    `DV_CHECK_EQ(dev_seq0.observed_rstart, 1'b1,
+                 "read_toc0_vseq: first read should end with RSTART")
+    `DV_CHECK_EQ(dev_seq1.observed_rstart, 1'b0,
+                 "read_toc0_vseq: second write should end with STOP")
     `DV_CHECK_EQ(dev_seq0.sampled_dir, 1'b1,
                  "read_toc0_vseq: first device response sampled wrong direction")
     `DV_CHECK_EQ(dev_seq1.sampled_dir, 1'b0,
                  "read_toc0_vseq: second device response sampled wrong direction")
 
-    `DV_CHECK_EQ(rx,          32'h0000_2211, "read_toc0_vseq: RX data mismatch")
     `DV_CHECK_EQ(resp0[31:28], 4'h0,         "read_toc0_vseq: first response expected Success")
     `DV_CHECK_EQ(resp0[27:24], 4'd5,         "read_toc0_vseq: first response TID mismatch")
     `DV_CHECK_EQ(resp0[15:0],  16'd2,        "read_toc0_vseq: first response length mismatch")

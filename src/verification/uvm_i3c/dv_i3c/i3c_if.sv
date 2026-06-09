@@ -72,15 +72,6 @@ interface i3c_if (
   assign #(delay) scl_delayed = cb.scl_i;
   assign scl_filtered = cb.scl_i & scl_delayed;
 
-  bit i2c_devices_present = 0;
-  task automatic mixed_bus();
-    i2c_devices_present = 1;
-  endtask
-
-  task automatic i3c_only_bus();
-    i2c_devices_present = 0;
-  endtask
-
   task automatic p_edge_scl();
     // Poll SCL on every system clock edge. NOTE: an empty `while(...) @(posedge clk_i);`
     // body gets optimized out by Xcelium in some configurations, returning in zero
@@ -231,14 +222,6 @@ interface i3c_if (
                 ), UVM_HIGH)
   endtask
 
-  task automatic device_i3c_start(input i3c_timing_t tc);
-    `DV_WAIT(scl_i === 1'b1,, scl_spinwait_timeout_ns, "host_start");
-    #(tc.tSetupStart * 1ns);
-    device_sda_o = 1'b0;
-    #(tc.tHoldStart * 1ns);
-    scl_o = 1'b0;
-  endtask : device_i3c_start
-
   task automatic device_i2c_send_bit(input i2c_timing_t tc, input bit bit_i);
     bit min_high_done;
     bit scl_fell_early;
@@ -246,10 +229,10 @@ interface i3c_if (
     device_sda_pp_en = 0;
     device_sda_o = 1'b1;
     wait (!scl_i);
-    `uvm_info(msg_id, "device_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i2c_send_bit::Drive bit", UVM_DEBUG)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I2C device bit setup");
-    `uvm_info(msg_id, "device_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i2c_send_bit::Value sampled", UVM_DEBUG)
 
     min_high_done  = 1'b0;
     scl_fell_early = 1'b0;
@@ -290,41 +273,109 @@ interface i3c_if (
     device_i2c_send_bit(tc, 1'b1);
   endtask : device_i2c_send_nack
 
-  task automatic device_i3c_od_send_bit(input i3c_timing_t tc, input bit bit_i);
+  task automatic wait_for_i3c_target_sda_handoff(input string phase, output bit ok);
+    bit handoff_seen;
+
+    ok = 1'b0;
+    wait (!scl_i);
+    device_sda_pp_en = 1'b0;
+    device_sda_o = 1'b1;
+
+    handoff_seen = 1'b0;
+    fork
+      begin
+        wait (dut_sda_oe === 1'b0);
+        handoff_seen = 1'b1;
+      end
+      begin
+        @(posedge scl_i);
+      end
+    join_any
+    disable fork;
+
+    if (!handoff_seen) begin
+      `uvm_error(msg_id, $sformatf("Controller did not release SDA before %s", phase))
+      wait (!scl_i);
+      device_sda_o = 1'b1;
+      return;
+    end
+
+    ok = 1'b1;
+  endtask : wait_for_i3c_target_sda_handoff
+
+  task automatic device_i3c_raw_od_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 0;
-    `uvm_info(msg_id, "device_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Drive bit", UVM_DEBUG)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Value sampled", UVM_DEBUG)
     time_check(tc.tClockPulse, 1'b0, scl_i, "I3C device bit clock high pulse width");
     #(tc.tHoldBit * 1ns);
     device_sda_o = 1;
-  endtask : device_i3c_od_send_bit
+  endtask : device_i3c_raw_od_send_bit
 
-  task automatic device_i3c_send_bit(input i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_send_addr_ack(input i3c_timing_t tc, input bit ack);
+    bit handoff_ok;
+
+    wait_for_i3c_target_sda_handoff("I3C address ACK/NACK slot", handoff_ok);
+    if (!handoff_ok) return;
+
+    `uvm_info(msg_id, $sformatf("device_i3c_send_addr_ack::Drive %s", ack ? "ACK" : "NACK"),
+              UVM_DEBUG)
+    device_i3c_raw_od_send_bit(tc, ack ? 1'b0 : 1'b1);
+  endtask : device_i3c_send_addr_ack
+
+  task automatic device_i3c_raw_pp_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
-    `uvm_info(msg_id, "device_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Drive bit", UVM_DEBUG)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Value sampled", UVM_DEBUG)
     time_check(tc.tClockPulse, 1'b0, scl_i, "I3C device bit clock high pulse width");
     #(tc.tHoldBit * 1ns);
     device_sda_pp_en = 0;
     device_sda_o = 1;
-  endtask : device_i3c_send_bit
+  endtask : device_i3c_raw_pp_send_bit
 
-  task automatic device_send_T_bit(input i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_raw_pp_send_t_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
-    `uvm_info(msg_id, "device_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Drive bit", UVM_DEBUG)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Value sampled", UVM_DEBUG)
     #(12 * 1ns);
     device_sda_pp_en = 0;
     time_check(tc.tClockPulse - 12, 1'b0, scl_i, "I3C device bit clock high pulse width");
     device_sda_o = 1;
-  endtask : device_send_T_bit
+  endtask : device_i3c_raw_pp_send_t_bit
+
+  task automatic device_i3c_send_bit(input i3c_timing_t tc, input bit bit_i);
+    bit handoff_ok;
+
+    wait_for_i3c_target_sda_handoff("I3C read data bit", handoff_ok);
+    if (!handoff_ok) return;
+
+    device_i3c_raw_pp_send_bit(tc, bit_i);
+  endtask : device_i3c_send_bit
+
+  task automatic device_i3c_send_t_bit(input i3c_timing_t tc, input bit bit_i);
+    bit handoff_ok;
+
+    wait_for_i3c_target_sda_handoff("I3C read T-bit", handoff_ok);
+    if (!handoff_ok) return;
+
+    device_i3c_raw_pp_send_t_bit(tc, bit_i);
+  endtask : device_i3c_send_t_bit
+
+  task automatic device_i3c_send_daa_bit(input i3c_timing_t tc, input bit bit_i);
+    bit handoff_ok;
+
+    wait_for_i3c_target_sda_handoff("I3C DAA bit", handoff_ok);
+    if (!handoff_ok) return;
+
+    device_i3c_raw_od_send_bit(tc, bit_i);
+  endtask : device_i3c_send_daa_bit
 endinterface

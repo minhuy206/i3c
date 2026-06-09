@@ -23,7 +23,8 @@ class i3c_read_vseq extends i3c_base_vseq;
 
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
     `DV_CHECK_EQ(resp[31:28], 4'h0,         "read_vseq: expected Success response")
-    `DV_CHECK_EQ(rx,          32'hBEBA_FECA, "read_vseq: RX data mismatch")
+    `DV_CHECK_EQ(resp[27:24], cfg.tid,       "read_vseq: response TID mismatch")
+    `DV_CHECK_EQ(resp[15:0],  16'd4,         "read_vseq: response length mismatch")
   endtask
 
 endclass

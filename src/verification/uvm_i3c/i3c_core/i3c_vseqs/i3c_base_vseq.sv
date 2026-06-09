@@ -285,6 +285,7 @@ class i3c_base_vseq extends uvm_sequence;
 
     rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
     start_device_response(cfg, 1'b1, read_data, dev_seq);
+    expect_scoreboard_read_data(cfg, read_data, cfg.data_length);
     if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
 
     write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
@@ -293,6 +294,36 @@ class i3c_base_vseq extends uvm_sequence;
       wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     end
     read_rx_data(rx);
+    read_response(resp);
+  endtask
+
+  virtual task run_read_stimulus_words(transfer_stimulus_cfg_t cfg, byte_queue_t read_data,
+                                       output word_queue_t rx_words, output bit [31:0] resp,
+                                       output i3c_device_response_seq dev_seq);
+    run_read_stimulus_words_with_actual_len(cfg, read_data, cfg.data_length, rx_words, resp,
+                                            dev_seq);
+  endtask
+
+  virtual task run_read_stimulus_words_with_actual_len(transfer_stimulus_cfg_t cfg,
+                                                       byte_queue_t read_data,
+                                                       int unsigned actual_data_length,
+                                                       output word_queue_t rx_words,
+                                                       output bit [31:0] resp,
+                                                       output i3c_device_response_seq dev_seq,
+                                                       input bit final_t_bit = 1'b0);
+    regular_trans_desc_t rd_cmd;
+
+    rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
+    start_device_response(cfg, 1'b1, read_data, dev_seq);
+    expect_scoreboard_read_data(cfg, read_data, actual_data_length, final_t_bit);
+    if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
+
+    write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
+    poll_idle();
+    if (cfg.wait_device_done) begin
+      wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+    end
+    read_rx_words(actual_data_length, rx_words);
     read_response(resp);
   endtask
 
@@ -343,6 +374,7 @@ class i3c_base_vseq extends uvm_sequence;
 
     start_ordered_device_responses(rd_cfg, 1'b1, read_data, dev_seq0,
                                    wr_cfg, 1'b0, no_read_data, dev_seq1);
+    expect_scoreboard_read_data(rd_cfg, read_data, rd_cfg.data_length);
     if (rd_cfg.settle_before_cmd != 0) settle_cycles(rd_cfg.settle_before_cmd);
 
     write_cmd(rd_cmd0[31:0], rd_cmd0[63:32]);
@@ -376,6 +408,41 @@ class i3c_base_vseq extends uvm_sequence;
     check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b0, 1'b1, ctxt);
     check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b0, 1'b1, ctxt);
   endtask
+
+  virtual function void expect_scoreboard_resp_error(bit [3:0] err_status, bit [3:0] tid,
+                                                     bit [15:0] data_length, string ctxt);
+    uvm_component comp;
+    i3c_scoreboard scb;
+
+    comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
+    if (!$cast(scb, comp)) begin
+      `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", ctxt))
+    end
+    scb.expect_resp_error(err_status, tid, data_length);
+  endfunction
+
+  virtual function void expect_scoreboard_read_data(transfer_stimulus_cfg_t cfg,
+                                                    byte_queue_t read_data,
+                                                    int unsigned actual_data_length,
+                                                    bit final_t_bit = 1'b0,
+                                                    bit expect_rx_fifo = 1'b1);
+    uvm_component comp;
+    i3c_scoreboard scb;
+    byte_queue_t exp_read_data;
+
+    comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
+    if (!$cast(scb, comp)) begin
+      `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", cfg.ctxt))
+    end
+
+    exp_read_data.delete();
+    for (int unsigned i = 0; (i < actual_data_length) && (i < read_data.size()); i++) begin
+      exp_read_data.push_back(read_data[i]);
+    end
+
+    scb.expect_read_data(cfg.target_addr, cfg.tid, cfg.data_length, actual_data_length,
+                         exp_read_data, cfg.ack_data, final_t_bit, expect_rx_fifo);
+  endfunction
 
   virtual function string fifo_mem_path(queue_hdl_paths_t paths, int unsigned index);
     return $sformatf(paths.mem_path_fmt, index);
@@ -484,6 +551,16 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual task read_rx_data(output bit [31:0] data);
     reg_read(ADDR_RX_DATA, data);
+  endtask
+
+  virtual task read_rx_words(int unsigned data_length, output word_queue_t rx_words);
+    bit [31:0] data;
+
+    rx_words.delete();
+    for (int unsigned i = 0; i < ((data_length + 3) / 4); i++) begin
+      read_rx_data(data);
+      rx_words.push_back(data);
+    end
   endtask
 
   virtual task read_response(output bit [31:0] data);

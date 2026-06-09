@@ -30,10 +30,11 @@ module i3c_controller_top #(
 
   // CSR configuration outputs
   logic ctrl_enable, i3c_fsm_en, sw_reset;
-  logic [19:0] t_r, t_f, t_low, t_high;
-  logic [19:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat;
+  logic [19:0] t_r, t_f, t_low, t_low_od, t_high;
+  logic [19:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat, t_bus_free;
   logic [19:0] i2c_t_r, i2c_t_f, i2c_t_low, i2c_t_high;
   logic [19:0] i2c_t_su_sta, i2c_t_hd_sta, i2c_t_su_sto, i2c_t_su_dat, i2c_t_hd_dat;
+  logic [19:0] i2c_t_buf;
 
   // CSR ↔ HCI Queues: CMD (SW write → HW read)
   logic cmd_csr_wvalid, cmd_csr_wready;
@@ -106,12 +107,14 @@ module i3c_controller_top #(
       .t_r_o           (t_r),
       .t_f_o           (t_f),
       .t_low_o         (t_low),
+      .t_low_od_o      (t_low_od),
       .t_high_o        (t_high),
       .t_su_sta_o      (t_su_sta),
       .t_hd_sta_o      (t_hd_sta),
       .t_su_sto_o      (t_su_sto),
       .t_su_dat_o      (t_su_dat),
       .t_hd_dat_o      (t_hd_dat),
+      .t_bus_free_o    (t_bus_free),
       .i2c_t_r_o       (i2c_t_r),
       .i2c_t_f_o       (i2c_t_f),
       .i2c_t_low_o     (i2c_t_low),
@@ -121,6 +124,7 @@ module i3c_controller_top #(
       .i2c_t_su_sto_o  (i2c_t_su_sto),
       .i2c_t_su_dat_o  (i2c_t_su_dat),
       .i2c_t_hd_dat_o  (i2c_t_hd_dat),
+      .i2c_t_buf_o     (i2c_t_buf),
       .dat_read_valid_i(dat_read_valid),
       .dat_index_i     (dat_index),
       .dat_rdata_o     (dat_rdata),
@@ -229,12 +233,14 @@ module i3c_controller_top #(
       .t_r_i              (t_r),
       .t_f_i              (t_f),
       .t_low_i            (t_low),
+      .t_low_od_i         (t_low_od),
       .t_high_i           (t_high),
       .t_su_sta_i         (t_su_sta),
       .t_hd_sta_i         (t_hd_sta),
       .t_su_sto_i         (t_su_sto),
       .t_su_dat_i         (t_su_dat),
       .t_hd_dat_i         (t_hd_dat),
+      .t_bus_free_i       (t_bus_free),
       .i2c_t_r_i          (i2c_t_r),
       .i2c_t_f_i          (i2c_t_f),
       .i2c_t_low_i        (i2c_t_low),
@@ -244,6 +250,7 @@ module i3c_controller_top #(
       .i2c_t_su_sto_i     (i2c_t_su_sto),
       .i2c_t_su_dat_i     (i2c_t_su_dat),
       .i2c_t_hd_dat_i     (i2c_t_hd_dat),
+      .i2c_t_buf_i        (i2c_t_buf),
       .ctrl_enable_i      (ctrl_enable),
       .i3c_fsm_en_i       (i3c_fsm_en),
       .i3c_fsm_idle_o     (i3c_fsm_idle)

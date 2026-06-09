@@ -36,8 +36,6 @@ module bus_tx #(
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
-      // Invariant: t_sd_z == (t_sd == 0). Keep them consistent at reset so a
-      // hypothetical drive_i on cycle 0 cannot enter SetupData with tcount=0.
       t_sd   <= '0;
       t_sd_z <= 1'b1;
       t_hd_z <= 1'b0;
@@ -48,7 +46,6 @@ module bus_tx #(
     end
   end
 
-  // Clock counter implementation
   typedef enum logic [1:0] {
     tSetupData,
     tHoldData,
@@ -100,7 +97,6 @@ module bus_tx #(
     end
   end
 
-  // State outputs
   assign tx_idle_o = (state_q == Idle);
 
   always_comb begin : tx_fsm_outputs
@@ -155,14 +151,13 @@ module bus_tx #(
       default: begin
         sda_o = '1;
         sda_drive_o = 1'b0;
-        tx_done_o = '0;  // Assign to 1 only after transmitting a bit
+        tx_done_o = '0;
         load_tcount = '0;
         tcount_sel = tNoDelay;
       end
     endcase
   end
 
-  // State transitions
   always_comb begin : tx_fsm_state
     state_d = state_q;
 
@@ -190,11 +185,10 @@ module bus_tx #(
       end
     endcase
 
-    // Go to Idle unconditionally
     if (~drive_i) begin
       state_d = Idle;
     end
   end
 
-  assign sel_od_pp_o = sel_od_pp_i;  // Pass through the OD/PP selection
+  assign sel_od_pp_o = sel_od_pp_i;
 endmodule

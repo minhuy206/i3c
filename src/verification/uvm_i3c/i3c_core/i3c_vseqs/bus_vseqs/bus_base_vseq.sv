@@ -18,6 +18,7 @@ class bus_base_vseq extends i3c_base_vseq;
     string scl_gen_clock_path;
     string scl_gen_idle_path;
     string scl_gen_scl_i_path;
+    string scl_gen_use_od_low_path;
   } bus_hdl_paths_t;
 
   bus_hdl_paths_t bus_paths;
@@ -42,6 +43,7 @@ class bus_base_vseq extends i3c_base_vseq;
     bus_paths.scl_gen_clock_path  = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_clock_i";
     bus_paths.scl_gen_idle_path   = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_idle_i";
     bus_paths.scl_gen_scl_i_path  = "tb_i3c_top.dut.u_ctrl.u_scl_gen.scl_i";
+    bus_paths.scl_gen_use_od_low_path = "tb_i3c_top.dut.u_ctrl.u_scl_gen.scl_use_od_low_i";
   endfunction
 
   virtual task wait_sync_cycles(int unsigned cycles);
@@ -117,19 +119,35 @@ class bus_base_vseq extends i3c_base_vseq;
     #1;
   endtask
 
+  virtual task force_scl_generator_timing_mode(bit use_od_low);
+    @(negedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    hdl_force_checked(bus_paths.scl_gen_use_od_low_path, use_od_low);
+    #1;
+  endtask
+
+  virtual task release_scl_generator_timing_mode();
+    @(negedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+    hdl_release_checked(bus_paths.scl_gen_use_od_low_path);
+    #1;
+  endtask
+
   virtual task program_timing_registers(int unsigned t_r, int unsigned t_f, int unsigned t_low,
                                         int unsigned t_high, int unsigned t_su_sta,
                                         int unsigned t_hd_sta, int unsigned t_su_sto,
-                                        int unsigned t_su_dat, int unsigned t_hd_dat);
+                                        int unsigned t_su_dat, int unsigned t_hd_dat,
+                                        int unsigned t_bus_free = RST_T_BUS_FREE,
+                                        int unsigned t_low_od = RST_T_LOW_OD);
     reg_write(ADDR_T_R, t_r);
     reg_write(ADDR_T_F, t_f);
     reg_write(ADDR_T_LOW, t_low);
+    reg_write(ADDR_T_LOW_OD, t_low_od);
     reg_write(ADDR_T_HIGH, t_high);
     reg_write(ADDR_T_SU_STA, t_su_sta);
     reg_write(ADDR_T_HD_STA, t_hd_sta);
     reg_write(ADDR_T_SU_STO, t_su_sto);
     reg_write(ADDR_T_SU_DAT, t_su_dat);
     reg_write(ADDR_T_HD_DAT, t_hd_dat);
+    reg_write(ADDR_T_BUS_FREE, t_bus_free);
   endtask
 
   virtual task reset_scl_generator_to_idle();
@@ -142,13 +160,15 @@ class bus_base_vseq extends i3c_base_vseq;
   virtual task reset_and_program_timing(int unsigned t_r, int unsigned t_f, int unsigned t_low,
                                         int unsigned t_high, int unsigned t_su_sta,
                                         int unsigned t_hd_sta, int unsigned t_su_sto,
-                                        int unsigned t_su_dat, int unsigned t_hd_dat);
+                                        int unsigned t_su_dat, int unsigned t_hd_dat,
+                                        int unsigned t_bus_free = RST_T_BUS_FREE,
+                                        int unsigned t_low_od = RST_T_LOW_OD);
     force_scl_generator_controls(1'b0, 1'b0, 1'b0, 1'b0, 1'b1);
     force_hard_reset();
     wait_sync_cycles(2);
     release_hard_reset();
     program_timing_registers(t_r, t_f, t_low, t_high, t_su_sta, t_hd_sta, t_su_sto, t_su_dat,
-                             t_hd_dat);
+                             t_hd_dat, t_bus_free, t_low_od);
     reg_write(ADDR_HC_CONTROL, 32'h0000_0001);
     reset_scl_generator_to_idle();
   endtask

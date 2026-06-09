@@ -1,6 +1,6 @@
 package i3c_timing_pkg;
   typedef struct {
-    int tHoldStop   = 1_300;  // 1.3 us
+    int tHoldStop   = 1_300;
     int tHoldStart  = 600;
     int tSetupStart = 600;
     int tSetupBit   = 100;
@@ -11,7 +11,7 @@ package i3c_timing_pkg;
   } i2c_timing_t;
 
   parameter i2c_timing_t I2C_400 = '{
-      tHoldStop   : 1_300,  // 1.3 us
+      tHoldStop   : 1_300,
       tHoldStart  : 600,
       tSetupStart : 600,
       tSetupBit   : 100,
@@ -22,7 +22,7 @@ package i3c_timing_pkg;
   };
 
   typedef struct {
-    int tHoldStop   = 1_300;  // 1.3 us
+    int tHoldStop   = 39;
     int tHoldStart  = 39;
     int tSetupStart = 20;
     int tHoldRStart = 20;
@@ -35,7 +35,7 @@ package i3c_timing_pkg;
   } i3c_timing_t;
 
   parameter i3c_timing_t I3C_SDR = '{
-      tHoldStop   : 1_300,  // 1.3 us
+      tHoldStop   : 39,
       tHoldStart  : 39,
       tSetupStart : 20,
       tHoldRStart : 20,

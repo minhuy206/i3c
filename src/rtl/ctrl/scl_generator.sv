@@ -15,12 +15,15 @@ module scl_generator #(
     output logic sda_ctrl_active_o,
 
     input logic [CounterWidth-1:0] t_low_i,
+    input logic [CounterWidth-1:0] t_low_od_i,
     input logic [CounterWidth-1:0] t_high_i,
     input logic [CounterWidth-1:0] t_su_sta_i,
     input logic [CounterWidth-1:0] t_hd_sta_i,
     input logic [CounterWidth-1:0] t_su_sto_i,
+    input logic [CounterWidth-1:0] t_bus_free_i,
     input logic [CounterWidth-1:0] t_r_i,
     input logic [CounterWidth-1:0] t_f_i,
+    input logic                    scl_use_od_low_i,
 
     input logic scl_i,
 
@@ -41,7 +44,8 @@ module scl_generator #(
     RstartSdaFall  = 4'd9,
     GenerateStop   = 4'd10,
     SclHighForStop = 4'd11,
-    SdaRise        = 4'd12
+    SdaRise        = 4'd12,
+    BusFree        = 4'd13
   } state_e;
 
   state_e state_q, state_d;
@@ -49,9 +53,11 @@ module scl_generator #(
   logic [CounterWidth-1:0] tcount;
   logic                    load_tcount;
   logic [CounterWidth-1:0] tcount_load_val;
+  logic [CounterWidth-1:0] active_t_low;
 
   logic                    tcount_expired;
   assign tcount_expired = (tcount == '0);
+  assign active_t_low = scl_use_od_low_i ? t_low_od_i : t_low_i;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_tcount
     if (!rst_ni) tcount <= '0;
@@ -91,21 +97,21 @@ module scl_generator #(
       HoldStart: begin
         if (tcount_expired) begin
           load_tcount = 1'b1;
-          tcount_load_val = t_low_i + t_f_i;
+          tcount_load_val = active_t_low + t_f_i;
         end
       end
 
       WaitCmd: begin
         if (gen_stop_i || gen_clock_i) begin
           load_tcount     = 1'b1;
-          tcount_load_val = t_low_i + t_f_i;
+          tcount_load_val = active_t_low + t_f_i;
         end
       end
 
       DriveHigh: begin
         if (tcount_expired && (gen_stop_i || gen_clock_i)) begin
           load_tcount     = 1'b1;
-          tcount_load_val = t_low_i + t_f_i;
+          tcount_load_val = active_t_low + t_f_i;
         end
       end
 
@@ -121,6 +127,11 @@ module scl_generator #(
           load_tcount = 1'b1;
           tcount_load_val = t_su_sto_i;
         end
+      end
+
+      SdaRise: begin
+        load_tcount     = 1'b1;
+        tcount_load_val = t_bus_free_i;
       end
 
       default: ;
@@ -215,7 +226,11 @@ module scl_generator #(
         end
 
         SdaRise: begin
-          state_d = Idle;
+          state_d = BusFree;
+        end
+
+        BusFree: begin
+          if (tcount_expired) state_d = Idle;
         end
 
         default: state_d = Idle;
@@ -245,7 +260,7 @@ module scl_generator #(
   end
 
   assign done_o = ((state_d == DriveLow) && (state_q != DriveLow)) ||
-                  ((state_q == SdaRise) && (state_d == Idle));
+                  ((state_q == BusFree) && (state_d == Idle));
 
   assign busy_o = (state_q != Idle);
 

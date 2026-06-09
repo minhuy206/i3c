@@ -18,12 +18,14 @@ package i3c_csr_addr_pkg;
   localparam bit [11:0] ADDR_T_R = 12'h010;
   localparam bit [11:0] ADDR_T_F = 12'h014;
   localparam bit [11:0] ADDR_T_LOW = 12'h018;
-  localparam bit [11:0] ADDR_T_HIGH = 12'h01C;
-  localparam bit [11:0] ADDR_T_SU_STA = 12'h020;
-  localparam bit [11:0] ADDR_T_HD_STA = 12'h024;
-  localparam bit [11:0] ADDR_T_SU_STO = 12'h028;
-  localparam bit [11:0] ADDR_T_SU_DAT = 12'h02C;
-  localparam bit [11:0] ADDR_T_HD_DAT = 12'h030;
+  localparam bit [11:0] ADDR_T_LOW_OD = 12'h01C;
+  localparam bit [11:0] ADDR_T_HIGH = 12'h020;
+  localparam bit [11:0] ADDR_T_SU_STA = 12'h024;
+  localparam bit [11:0] ADDR_T_HD_STA = 12'h028;
+  localparam bit [11:0] ADDR_T_SU_STO = 12'h02C;
+  localparam bit [11:0] ADDR_T_SU_DAT = 12'h030;
+  localparam bit [11:0] ADDR_T_HD_DAT = 12'h034;
+  localparam bit [11:0] ADDR_T_BUS_FREE = 12'h038;
   localparam bit [11:0] ADDR_I2C_T_R = 12'h040;
   localparam bit [11:0] ADDR_I2C_T_F = 12'h044;
   localparam bit [11:0] ADDR_I2C_T_LOW = 12'h048;
@@ -33,6 +35,7 @@ package i3c_csr_addr_pkg;
   localparam bit [11:0] ADDR_I2C_T_SU_STO = 12'h058;
   localparam bit [11:0] ADDR_I2C_T_SU_DAT = 12'h05C;
   localparam bit [11:0] ADDR_I2C_T_HD_DAT = 12'h060;
+  localparam bit [11:0] ADDR_I2C_T_BUF = 12'h064;
 
   // Queue Ports
   localparam bit [11:0] ADDR_CMD_QUEUE = 12'h100;
@@ -80,6 +83,8 @@ package i3c_csr_addr_pkg;
   localparam bit [19:0] RST_T_SU_STO = 20'd4;
   localparam bit [19:0] RST_T_SU_DAT = 20'd1;
   localparam bit [19:0] RST_T_HD_DAT = 20'd4;
+  localparam bit [19:0] RST_T_BUS_FREE = 20'd4;
+  localparam bit [19:0] RST_T_LOW_OD = 20'd20;
   localparam bit [19:0] RST_I2C_T_R = 20'd4;
   localparam bit [19:0] RST_I2C_T_F = 20'd4;
   localparam bit [19:0] RST_I2C_T_LOW = 20'd160;
@@ -89,6 +94,7 @@ package i3c_csr_addr_pkg;
   localparam bit [19:0] RST_I2C_T_SU_STO = 20'd130;
   localparam bit [19:0] RST_I2C_T_SU_DAT = 20'd10;
   localparam bit [19:0] RST_I2C_T_HD_DAT = 20'd0;
+  localparam bit [19:0] RST_I2C_T_BUF = 20'd130;
 
   // 4. Helper Functions
 
