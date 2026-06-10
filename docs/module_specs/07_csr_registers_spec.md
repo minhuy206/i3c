@@ -78,6 +78,7 @@ typedef struct packed {
 | `ctrl_enable_o` | Output    | 1     | Controller enable (HC_CONTROL[0])    |
 | `i3c_fsm_en_o`  | Output    | 1     | I3C FSM enable                       |
 | `sw_reset_o`    | Output    | 1     | Software reset pulse (HC_CONTROL[1]) |
+| `broadcast_addr_enable_o` | Output | 1 | Enable `0x7E` broadcast header before private I3C transfers (HC_CONTROL[2]) |
 
 ### Hardware Interface — Timing Outputs (system clock cycles)
 
@@ -169,7 +170,8 @@ typedef struct packed {
 | ------ | ---------- | ------ | ----- | ------------------------------- |
 | [0]    | `ENABLE`   | RW     | 0     | 1 = Enable controller           |
 | [1]    | `SW_RESET` | RW/SC  | 0     | 1 = Reset FIFOs (self-clearing) |
-| [31:2] | Reserved   | -      | 0     | -                               |
+| [2]    | `BROADCAST_ADDR_ENABLE` | RW | 0 | 1 = Start fresh private I3C read/write with `START + 7E/W + Sr` |
+| [31:3] | Reserved   | -      | 0     | -                               |
 
 **SW_RESET usage constraint:** SW_RESET flushes the CMD, TX, RX, and RESP FIFOs. It does **not** reset the protocol FSM. Asserting SW_RESET while a transaction is in progress is undefined behavior.
 

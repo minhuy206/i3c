@@ -1,4 +1,5 @@
 package i3c_agent_pkg;
+  import i3c_pkg::I3C_RSVD_ADDR;
   import uvm_pkg::*;
 
   `include "uvm_macros.svh"
@@ -26,8 +27,7 @@ package i3c_agent_pkg;
     DrvRd,
     DrvRdPushPull,
     DrvStop,
-    DrvStopPushPull,
-    DrvWaitStopOrAddr,
+    DrvWaitStopOrRStart,
     DrvDAA
   } i3c_drv_phase_e;
 

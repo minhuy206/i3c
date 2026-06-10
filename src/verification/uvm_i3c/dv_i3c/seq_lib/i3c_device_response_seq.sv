@@ -8,6 +8,7 @@ class i3c_device_response_seq extends uvm_sequence #(
   bit [7:0] read_data[$];
   bit ack_address = 1;
   bit ack_data = 1;
+  bit start_with_broadcast_header;
   int read_data_cnt = 4;
   bit observed_rstart;
   bit done;
@@ -41,6 +42,7 @@ class i3c_device_response_seq extends uvm_sequence #(
     req.dev_ack = ack_address;
     req.is_daa = 0;
     req.end_with_rstart = 0;
+    req.start_with_broadcast_header = start_with_broadcast_header;
 
     if (read_data.size() > 0) begin
       req.data = read_data;

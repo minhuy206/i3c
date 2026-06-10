@@ -48,14 +48,20 @@ class csr_base_vseq extends i3c_base_vseq;
 
   virtual task request_sw_reset(bit keep_enabled = 1'b0);
     bit [31:0] data;
+    bit        keep_broadcast_addr_enable;
 
     poll_idle();
-    reg_write(ADDR_HC_CONTROL, {30'h0, 1'b1, keep_enabled});
+    reg_read(ADDR_HC_CONTROL, data);
+    keep_broadcast_addr_enable = data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT];
+    reg_write(ADDR_HC_CONTROL, {29'h0, keep_broadcast_addr_enable, 1'b1, keep_enabled});
     settle_cycles();
 
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
                  $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
+    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], keep_broadcast_addr_enable,
+                 $sformatf("%s: SW_RESET should preserve BROADCAST_ADDR_ENABLE config",
+                           get_type_name()))
   endtask
 
 endclass

@@ -14,6 +14,20 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], 1'b0,
                  "csr_enable_disable_vseq: controller should start disabled")
+    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], 1'b0,
+                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE should start disabled")
+
+    reg_write(ADDR_HC_CONTROL, 32'h0000_0004);
+    reg_read(ADDR_HC_CONTROL, data);
+    `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], 1'b0,
+                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE must not enable controller")
+    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], 1'b1,
+                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE should be writable")
+
+    reg_write(ADDR_HC_CONTROL, 32'h0000_0000);
+    reg_read(ADDR_HC_CONTROL, data);
+    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], 1'b0,
+                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE should clear")
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 

@@ -17,6 +17,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit       is_ccc;
     bit [7:0] ccc;
     bit [7:0] event_byte;
+    bit       start_with_broadcast_header;
   } exp_txn_t;
 
   typedef struct {
@@ -42,18 +43,20 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [7:0] data[$];
   } exp_read_data_t;
 
-  exp_txn_t                exp_txn_queue      [        $];  // pending expected I3C transactions
-  bit               [31:0] tx_data_queue      [        $];  // TX data words written to ADDR_TX_DATA
-  exp_resp_err_t           exp_resp_err_queue [        $];
-  exp_read_data_t          exp_read_data_queue[        $];
-  bit               [31:0] exp_rx_data_queue  [        $];
-  dat_model_entry_t        dat_model          [DAT_DEPTH];
+  exp_txn_t exp_txn_queue[$];  // pending expected I3C transactions
+  bit [31:0] tx_data_queue[$];  // TX data words written to ADDR_TX_DATA
+  exp_resp_err_t exp_resp_err_queue[$];
+  exp_read_data_t exp_read_data_queue[$];
+  bit [31:0] exp_rx_data_queue[$];
+  dat_model_entry_t dat_model[DAT_DEPTH];
 
-  bit                      got_dw0;
-  bit               [31:0] cmd_dw0;
+  bit got_dw0;
+  bit [31:0] cmd_dw0;
+  bit broadcast_addr_enable;
+  bit pending_private_continuation;
 
-  int                      pass_cnt;
-  int                      fail_cnt;
+  int pass_cnt;
+  int fail_cnt;
 
   function new(string name = "", uvm_component parent = null);
     super.new(name, parent);
@@ -82,7 +85,7 @@ class i3c_scoreboard extends uvm_scoreboard;
           handle_dat_write(item.addr, item.wdata);
         end else begin
           case (item.addr)
-            ADDR_HC_CONTROL: if (item.wdata[HC_CTRL_SW_RESET_BIT]) handle_sw_reset();
+            ADDR_HC_CONTROL: handle_hc_control_write(item.wdata);
             ADDR_CMD_QUEUE: handle_cmd_dword(item.wdata);
             ADDR_TX_DATA: tx_data_queue.push_back(item.wdata);
             default: ;
@@ -106,7 +109,13 @@ class i3c_scoreboard extends uvm_scoreboard;
     exp_rx_data_queue.delete();
     got_dw0 = 1'b0;
     cmd_dw0 = '0;
+    pending_private_continuation = 1'b0;
     `uvm_info(`gfn, "SW_RESET observed: scoreboard queues flushed", UVM_MEDIUM)
+  endfunction
+
+  function void handle_hc_control_write(bit [31:0] wdata);
+    broadcast_addr_enable = wdata[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT];
+    if (wdata[HC_CTRL_SW_RESET_BIT]) handle_sw_reset();
   endfunction
 
   function void handle_dat_write(bit [11:0] addr, bit [31:0] wdata);
@@ -153,6 +162,7 @@ class i3c_scoreboard extends uvm_scoreboard;
       bit                  cp = cmd_dw0[15];
       bit            [4:0] dev_idx = cmd_dw0[20:16];
       bit                  rnw = cmd_dw0[29];
+      bit                  target_is_i3c = is_i3c_device(dev_idx);
 
       exp.tid = tid;
       exp.toc = cmd_dw0[31];
@@ -162,12 +172,15 @@ class i3c_scoreboard extends uvm_scoreboard;
       exp.is_immediate = 1'b0;
       exp.ccc = cmd;
       exp.event_byte = wdata[7:0];
+      exp.start_with_broadcast_header = 1'b0;
 
       case (attr)
         RegularTransfer: begin
-          exp.rnw           = rnw;
-          exp.data_length   = int'(wdata[31:16]);
+          exp.rnw = rnw;
+          exp.data_length = int'(wdata[31:16]);
           exp.uses_tx_queue = !rnw;
+          exp.start_with_broadcast_header =
+              target_is_i3c && broadcast_addr_enable && !pending_private_continuation;
         end
         ImmediateDataTransfer: begin
           exp.is_immediate = 1'b1;
@@ -177,8 +190,11 @@ class i3c_scoreboard extends uvm_scoreboard;
             exp.data_length = 1;
             exp.is_ccc      = 1'b1;
           end else begin
-            exp.rnw         = rnw;
+            exp.rnw = rnw;
             exp.data_length = int'(cmd_dw0[25:23]);
+            exp.start_with_broadcast_header =
+                !cp && target_is_i3c && broadcast_addr_enable &&
+                !pending_private_continuation;
           end
         end
         AddressAssignment: begin
@@ -192,6 +208,7 @@ class i3c_scoreboard extends uvm_scoreboard;
       endcase
 
       exp_txn_queue.push_back(exp);
+      update_private_continuation(attr, exp, target_is_i3c);
       if (exp.is_ccc) begin
         `uvm_info(`gfn,
                   $sformatf(
@@ -200,13 +217,14 @@ class i3c_scoreboard extends uvm_scoreboard;
                   UVM_MEDIUM)
       end else begin
         `uvm_info(`gfn, $sformatf(
-                  "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d toc=%0b",
+                  "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d toc=%0b bcast_hdr=%0b",
                   attr.name(),
                   dev_idx,
                   exp.addr,
                   exp.rnw,
                   exp.data_length,
-                  exp.toc
+                  exp.toc,
+                  exp.start_with_broadcast_header
                   ), UVM_MEDIUM)
       end
       got_dw0 = 1'b0;
@@ -268,6 +286,20 @@ class i3c_scoreboard extends uvm_scoreboard;
     return 7'h00;
   endfunction
 
+  function bit is_i3c_device(bit [4:0] dev_idx);
+    if ((dev_idx < DAT_DEPTH) && dat_model[dev_idx].valid) return !dat_model[dev_idx].device;
+    if (dev_idx == 0 && cfg != null) return cfg.m_i3c_agent_cfg.i3c_target0.dynamic_addr_valid;
+    return 1'b0;
+  endfunction
+
+  function void update_private_continuation(i3c_cmd_attr_e attr, exp_txn_t exp, bit target_is_i3c);
+    if ((attr == RegularTransfer) && target_is_i3c && !exp.is_ccc) begin
+      pending_private_continuation = !exp.toc;
+    end else begin
+      pending_private_continuation = 1'b0;
+    end
+  endfunction
+
   function void check_resp(bit [31:0] rdata);
     if (rdata[31:28] == 4'b0000) begin
       `uvm_info(`gfn, $sformatf("RESP OK: tid=0x%0h data_length=%0d", rdata[27:24], rdata[15:0]),
@@ -306,7 +338,11 @@ class i3c_scoreboard extends uvm_scoreboard;
     i3c_item item;
     forever begin
       i3c_fifo.get(item);
-      if (item.i3c_empty_broadcast) continue;
+      if (item.i3c_empty_broadcast) begin
+        `uvm_error(`gfn, "Monitor emitted an empty broadcast header instead of a full transaction")
+        fail_cnt++;
+        continue;
+      end
       check_i3c_txn(item);
     end
   endtask
@@ -350,6 +386,11 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     `DV_CHECK_EQ(item.addr, exp.addr, "Target address mismatch")
     `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite, "Transfer direction mismatch")
+    `DV_CHECK_EQ(item.start_with_broadcast_header, exp.start_with_broadcast_header,
+                 "Broadcast header preamble mismatch")
+    if (item.start_with_broadcast_header || exp.start_with_broadcast_header) begin
+      `DV_CHECK_EQ(item.broadcast_header_ack, 1'b1, "Broadcast header preamble was not ACKed")
+    end
 
     if (!item.addr_ack) begin
       if (!exp.rnw && exp.uses_tx_queue && exp.data_length > 0) consume_tx_data_words(1);
