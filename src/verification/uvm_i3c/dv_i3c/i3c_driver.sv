@@ -42,8 +42,8 @@ class i3c_driver extends uvm_driver #(
     is_broadcast_header = addr == I3C_RSVD_ADDR ? 1'b1 : 1'b0;
   endfunction : is_broadcast_header
 
-  function bit get_addr_ack(bit dev_ack, bit [6:0] addr);
-    get_addr_ack = dev_ack;
+  function bit get_addr_ack(i3c_seq_item item, bit [6:0] addr);
+    get_addr_ack = item.dev_ack;
     if (item.start_with_broadcast_header && is_broadcast_header(addr)) begin
       get_addr_ack = 1'b1;
     end
@@ -207,7 +207,7 @@ class i3c_driver extends uvm_driver #(
         end
 
         DrvSelectNext: begin
-          if (get_addr_ack(req.dev_ack, rsp.addr)) begin
+          if (get_addr_ack(req, rsp.addr)) begin
             if (is_broadcast_header(rsp.addr)) begin
               if (req.is_daa) begin
                 set_drive_device_state(DrvDAA);

@@ -46,6 +46,32 @@ class csr_base_vseq extends i3c_base_vseq;
                                                          get_type_name(), queue_name, ctxt))
   endtask
 
+  virtual task check_no_host_start_for_cycles(int unsigned cycles, string ctxt);
+    fork : no_host_start_window
+      begin
+        p_sequencer.cfg.m_i3c_agent_cfg.vif.wait_for_host_start();
+        `uvm_error(`gfn, $sformatf("%s: bus START observed during disabled window", ctxt))
+      end
+      begin
+        repeat (cycles) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+      end
+    join_any
+    disable fork;
+  endtask
+
+  virtual task clear_scoreboard_cmd_tx_model(string ctxt);
+    uvm_component comp;
+    i3c_scoreboard scb;
+
+    comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
+    if (!$cast(scb, comp)) begin
+      `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", ctxt))
+    end
+
+    scb.exp_txn_queue.delete();
+    scb.tx_data_queue.delete();
+  endtask
+
   virtual task request_sw_reset(bit keep_enabled = 1'b0);
     bit [31:0] data;
     bit        keep_broadcast_addr_enable;
@@ -59,6 +85,8 @@ class csr_base_vseq extends i3c_base_vseq;
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
                  $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
+    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0,
+                 $sformatf("%s: SW_RESET should self-clear", get_type_name()))
     `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], keep_broadcast_addr_enable,
                  $sformatf("%s: SW_RESET should preserve BROADCAST_ADDR_ENABLE config",
                            get_type_name()))

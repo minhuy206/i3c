@@ -48,7 +48,7 @@ module tb_i3c_top;
   );
 
   i3c_controller_top #(
-      .DatDepth     (16),
+      .DatDepth     (i3c_csr_addr_pkg::DAT_DEPTH),
       .CmdFifoDepth (8),
       .TxFifoDepth  (8),
       .RxFifoDepth  (8),

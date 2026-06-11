@@ -4,8 +4,10 @@
 // 4.1 CSR, DAT, and Register Bus
 `include "i3c_vseqs/csr_vseqs/csr_reset_defaults_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_enable_disable_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_broadcast_addr_enable_control_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_timing_rw_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_dat_rw_all_entries_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_dat_hw_read_selection_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_cmd_queue_2dw_staging_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_cmd_partial_then_other_write_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_sw_reset_flush_queues_vseq.sv"

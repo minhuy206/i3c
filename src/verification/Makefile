@@ -17,6 +17,7 @@ CSR_REGRESSION_SEQS ?= \
 	csr_enable_disable_vseq \
 	csr_timing_rw_vseq \
 	csr_dat_rw_all_entries_vseq \
+	csr_dat_hw_read_selection_vseq \
 	csr_cmd_queue_2dw_staging_vseq \
 	csr_cmd_partial_then_other_write_vseq \
 	csr_rx_resp_read_pop_vseq \

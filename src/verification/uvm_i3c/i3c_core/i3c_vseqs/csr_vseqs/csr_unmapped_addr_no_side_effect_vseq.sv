@@ -8,7 +8,7 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
       12'h0FC,
       12'h114,
       12'h1FC,
-      12'h240,
+      ADDR_DAT_END,
       12'h3FC
   };
 
@@ -21,7 +21,7 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
     bit [31:0] t_low;
     bit [31:0] t_high;
     bit [31:0] dat0;
-    bit [31:0] dat15;
+    bit [31:0] dat_last;
     bit [31:0] queue_status;
     bit [31:0] cmd_dword0;
     bit [31:0] cmd_dword0_after;
@@ -36,7 +36,7 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
     reg_read(ADDR_T_LOW, t_low);
     reg_read(ADDR_T_HIGH, t_high);
     reg_read(dat_addr(0), dat0);
-    reg_read(dat_addr(15), dat15);
+    reg_read(dat_addr(DAT_DEPTH - 1), dat_last);
     reg_read(ADDR_QUEUE_STATUS, queue_status);
     cmd_staging_valid = hdl_read_bit(csr_paths.cmd_staging_valid_path);
     cmd_dword0        = hdl_read_word(csr_paths.cmd_dword0_path);
@@ -52,7 +52,8 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
     check_csr_unchanged(ADDR_T_LOW, t_low, "T_LOW");
     check_csr_unchanged(ADDR_T_HIGH, t_high, "T_HIGH");
     check_csr_unchanged(dat_addr(0), dat0, "DAT[0]");
-    check_csr_unchanged(dat_addr(15), dat15, "DAT[15]");
+    check_csr_unchanged(dat_addr(DAT_DEPTH - 1), dat_last,
+                        $sformatf("DAT[%0d]", DAT_DEPTH - 1));
     check_csr_unchanged(ADDR_QUEUE_STATUS, queue_status, "QUEUE_STATUS");
     cmd_staging_valid_after = hdl_read_bit(csr_paths.cmd_staging_valid_path);
     cmd_dword0_after        = hdl_read_word(csr_paths.cmd_dword0_path);
@@ -79,7 +80,7 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
     reg_write(ADDR_T_LOW, 32'h0000_0011);
     reg_write(ADDR_T_HIGH, 32'h0000_0013);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
-    write_dat_entry(15, 7'h67, 7'h1F, 1'b1);
+    write_dat_entry(DAT_DEPTH - 1, 7'h67, 7'h1F, 1'b1);
     backdoor_load_rx_queue(32'hCAFE_0110);
     backdoor_load_resp_queue(32'h0211_0004);
 

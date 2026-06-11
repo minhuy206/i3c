@@ -9,7 +9,8 @@ module flow_active
     parameter int HciTxDataWidth = 32,
     parameter int HciRxDataWidth = 32,
     parameter int HciRespDataWidth = 32,
-    parameter int DatDepth = 16
+    parameter int unsigned DatDepth = 32,
+    localparam int unsigned DatAw = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,

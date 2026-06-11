@@ -1,7 +1,7 @@
 module controller_active
   import i3c_pkg::bus_state_t;
 #(
-    parameter  int unsigned DatDepth = 16,
+    parameter  int unsigned DatDepth = 32,
     localparam int unsigned DatAw    = $clog2(DatDepth)
 ) (
     input logic clk_i,

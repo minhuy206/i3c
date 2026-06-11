@@ -46,8 +46,8 @@ package i3c_csr_addr_pkg;
 
   // Device Address Table
   localparam bit [11:0] ADDR_DAT_BASE = 12'h200;
-  localparam bit [11:0] ADDR_DAT_END = 12'h240;
-  localparam int unsigned DAT_DEPTH = 16;
+  localparam int unsigned DAT_DEPTH = 32;
+  localparam bit [11:0] ADDR_DAT_END = ADDR_DAT_BASE + 12'(DAT_DEPTH * 4);
 
   // 2. Field Bit Positions
 

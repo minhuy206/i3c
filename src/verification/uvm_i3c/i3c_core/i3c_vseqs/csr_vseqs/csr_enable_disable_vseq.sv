@@ -14,20 +14,6 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], 1'b0,
                  "csr_enable_disable_vseq: controller should start disabled")
-    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], 1'b0,
-                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE should start disabled")
-
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0004);
-    reg_read(ADDR_HC_CONTROL, data);
-    `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], 1'b0,
-                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE must not enable controller")
-    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], 1'b1,
-                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE should be writable")
-
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0000);
-    reg_read(ADDR_HC_CONTROL, data);
-    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], 1'b0,
-                 "csr_enable_disable_vseq: BROADCAST_ADDR_ENABLE should clear")
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
@@ -43,20 +29,9 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     imm_cmd.def_or_data_byte1 = 8'hAA;
     imm_cmd.data_byte2        = 8'hBB;
 
-    fork : iso_fork
-      begin
-        fork : disabled_start_watch
-          begin
-            p_sequencer.cfg.m_i3c_agent_cfg.vif.wait_for_host_start();
-            `uvm_error(`gfn, "csr_enable_disable_vseq: bus START observed while disabled")
-          end
-          begin
-            write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
-            repeat (100) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-          end
-        join_any
-        disable fork;
-      end
+    fork
+      check_no_host_start_for_cycles(100, "csr_enable_disable_vseq");
+      write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
     join
 
     reg_read(ADDR_QUEUE_STATUS, data);
@@ -65,10 +40,12 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(data[QS_RESP_EMPTY_BIT], 1'b1,
                  "csr_enable_disable_vseq: no response should exist before enable")
 
-    dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
-    dev_seq.target_addr = 7'h08;
-    dev_seq.ack_address = 1'b1;
-    dev_seq.is_i3c      = 1'b1;
+    dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
+    dev_seq.target_addr   = 7'h08;
+    dev_seq.ack_address   = 1'b1;
+    dev_seq.is_i3c        = 1'b1;
+    dev_seq.dir           = 1'b0;
+    dev_seq.read_data_cnt = 2;
     fork
       dev_seq.start(p_sequencer.m_i3c_sequencer);
     join_none
@@ -77,8 +54,23 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     configure_dut();
 
     poll_idle();
+    wait_for_device_done(dev_seq, "csr_enable_disable_vseq");
     read_response(resp);
     `DV_CHECK_EQ(resp[31:28], 4'h0, "csr_enable_disable_vseq: expected Success response")
+    `DV_CHECK_EQ(dev_seq.done, 1'b1,
+                 "csr_enable_disable_vseq: device response should finish after enable")
+    `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08,
+                 "csr_enable_disable_vseq: target address mismatch after enable")
+    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0,
+                 "csr_enable_disable_vseq: transfer direction should be write")
+    `DV_CHECK_EQ(dev_seq.sampled_data.size(), 2,
+                 "csr_enable_disable_vseq: expected two immediate data bytes")
+    if (dev_seq.sampled_data.size() == 2) begin
+      `DV_CHECK_EQ(dev_seq.sampled_data[0], 8'hAA,
+                   "csr_enable_disable_vseq: first immediate data byte mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_data[1], 8'hBB,
+                   "csr_enable_disable_vseq: second immediate data byte mismatch")
+    end
 
     reg_read(ADDR_HC_STATUS, data);
     `DV_CHECK_EQ(data[HC_STS_FSM_IDLE_BIT], 1'b1,

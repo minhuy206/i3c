@@ -31,6 +31,8 @@ class csr_sw_reset_clears_cmd_staging_vseq extends csr_base_vseq;
     settle_cycles();
 
     request_sw_reset(1'b0);
+    `DV_CHECK_EQ(hdl_read_bit(csr_paths.cmd_staging_valid_path), 1'b0,
+                 "csr_sw_reset_clears_cmd_staging_vseq: CMD staging valid should clear after SW reset")
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
@@ -59,6 +61,7 @@ class csr_sw_reset_clears_cmd_staging_vseq extends csr_base_vseq;
     dev_seq.target_addr   = 7'h08;
     dev_seq.ack_address   = 1'b1;
     dev_seq.is_i3c        = 1'b1;
+    dev_seq.dir           = 1'b0;
     dev_seq.read_data_cnt = fresh_cmd.data_length;
     fork
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -66,11 +69,7 @@ class csr_sw_reset_clears_cmd_staging_vseq extends csr_base_vseq;
 
     configure_dut();
     poll_idle();
-
-    for (int i = 0; i < 1000; i++) begin
-      if (dev_seq.done) break;
-      @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-    end
+    wait_for_device_done(dev_seq, "csr_sw_reset_clears_cmd_staging_vseq");
     `DV_CHECK_EQ(dev_seq.done, 1'b1,
                  "csr_sw_reset_clears_cmd_staging_vseq: fresh command should reach target")
 

@@ -20,7 +20,7 @@ class reg_monitor extends uvm_monitor;
       @(posedge vif.clk_i);
       if (!vif.rst_ni) continue;
 
-      if (vif.wen) begin
+      if (vif.wen && vif.ready) begin
         reg_seq_item item = reg_seq_item::type_id::create("item");
         item.is_write = 1'b1;
         item.addr = vif.addr;

@@ -1,5 +1,5 @@
 module i3c_controller_top #(
-    parameter  int unsigned DatDepth      = 16,
+    parameter  int unsigned DatDepth      = 32,
     parameter  int unsigned CmdFifoDepth  = 64,
     parameter  int unsigned TxFifoDepth   = 64,
     parameter  int unsigned RxFifoDepth   = 64,
