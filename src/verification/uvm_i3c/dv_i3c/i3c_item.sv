@@ -4,6 +4,8 @@ class i3c_item extends uvm_sequence_item;
   bit [7:0] data_q[$];
   bit [6:0] addr;
   bit i3c_empty_broadcast;
+  bit start_with_broadcast_header;
+  bit broadcast_header_ack;
   bit i3c_broadcast;
   bit i3c_direct;
   i3c_ccc_e CCC;
@@ -33,6 +35,8 @@ class i3c_item extends uvm_sequence_item;
     `uvm_field_enum(bus_op_e, bus_op, UVM_DEFAULT)
     `uvm_field_int(addr, UVM_DEFAULT)
     `uvm_field_int(i3c_empty_broadcast, UVM_DEFAULT)
+    `uvm_field_int(start_with_broadcast_header, UVM_DEFAULT)
+    `uvm_field_int(broadcast_header_ack, UVM_DEFAULT)
     `uvm_field_int(i3c_broadcast, UVM_DEFAULT)
     `uvm_field_int(i3c_direct, UVM_DEFAULT)
     `uvm_field_enum(i3c_ccc_e, CCC, UVM_DEFAULT)
@@ -60,6 +64,9 @@ class i3c_item extends uvm_sequence_item;
     addr     = 0;
     data_q.delete();
     addr_ack = 0;
+    i3c_empty_broadcast = 0;
+    start_with_broadcast_header = 0;
+    broadcast_header_ack = 0;
     data_ack_q.delete();
     CCC_def.delete();
     CCC_direct.delete();
@@ -84,6 +91,8 @@ class i3c_item extends uvm_sequence_item;
     str = {str, $sformatf("%s:tran_id   = %0d\n", pname, tran_id)};
     str = {str, $sformatf("%s:bus_op    = %s\n", pname, bus_op.name)};
     str = {str, $sformatf("%s:addr      = 0x%2x\n", pname, addr)};
+    str = {str, $sformatf("%s:bcast_hdr = %1b\n", pname, start_with_broadcast_header)};
+    str = {str, $sformatf("%s:bcast_ack = %1b\n", pname, broadcast_header_ack)};
     str = {str, $sformatf("%s:direct    = 0x%2x\n", pname, i3c_direct)};
     if (i3c_broadcast || i3c_direct) begin
       str = {str, $sformatf("%s:CCC       = %s\n", pname, CCC.name())};
@@ -101,4 +110,3 @@ class i3c_item extends uvm_sequence_item;
     return str;
   endfunction
 endclass : i3c_item
-

@@ -13,27 +13,23 @@ class i3c_driver extends uvm_driver #(
 
   i3c_drv_phase_e bus_state;
   bit stop, rstart;
-  bit post_rstart_addr_valid;
-  bit [6:0] post_rstart_addr;
-  bit post_rstart_dir;
 
   function string drv_phase_name(i3c_drv_phase_e state);
     case (state)
-      DrvIdle:         return "DrvIdle";
-      DrvAddr:         return "DrvAddr";
-      DrvAddrArbit:    return "DrvAddrArbit";
-      DrvAddrPushPull: return "DrvAddrPushPull";
-      DrvAck:          return "DrvAck";
-      DrvSelectNext:   return "DrvSelectNext";
-      DrvWr:           return "DrvWr";
-      DrvWrPushPull:   return "DrvWrPushPull";
-      DrvRd:           return "DrvRd";
-      DrvRdPushPull:   return "DrvRdPushPull";
-      DrvStop:         return "DrvStop";
-      DrvStopPushPull: return "DrvStopPushPull";
-      DrvWaitStopOrAddr: return "DrvWaitStopOrAddr";
-      DrvDAA:          return "DrvDAA";
-      default:         return "Unknown";
+      DrvIdle:             return "DrvIdle";
+      DrvAddr:             return "DrvAddr";
+      DrvAddrArbit:        return "DrvAddrArbit";
+      DrvAddrPushPull:     return "DrvAddrPushPull";
+      DrvAck:              return "DrvAck";
+      DrvSelectNext:       return "DrvSelectNext";
+      DrvWr:               return "DrvWr";
+      DrvWrPushPull:       return "DrvWrPushPull";
+      DrvRd:               return "DrvRd";
+      DrvRdPushPull:       return "DrvRdPushPull";
+      DrvStop:             return "DrvStop";
+      DrvWaitStopOrRStart: return "DrvWaitStopOrRStart";
+      DrvDAA:              return "DrvDAA";
+      default:             return "Unknown";
     endcase
   endfunction : drv_phase_name
 
@@ -41,6 +37,17 @@ class i3c_driver extends uvm_driver #(
     `uvm_info(`gfn, $sformatf("transition to state: %s", drv_phase_name(next_state)), UVM_HIGH)
     bus_state = next_state;
   endfunction : set_drive_device_state
+
+  function bit is_broadcast_header(bit [6:0] addr);
+    is_broadcast_header = addr == I3C_RSVD_ADDR ? 1'b1 : 1'b0;
+  endfunction : is_broadcast_header
+
+  function bit get_addr_ack(bit dev_ack, bit [6:0] addr);
+    get_addr_ack = dev_ack;
+    if (item.start_with_broadcast_header && is_broadcast_header(addr)) begin
+      get_addr_ack = 1'b1;
+    end
+  endfunction : get_addr_ack
 
   virtual task reset_signal();
     forever begin
@@ -50,7 +57,6 @@ class i3c_driver extends uvm_driver #(
       @(posedge cfg.vif.rst_ni);
       `uvm_info(`gfn, "\ndriver out of reset", UVM_DEBUG)
       bus_state = DrvIdle;
-      post_rstart_addr_valid = 1'b0;
     end
   endtask : reset_signal
 
@@ -69,54 +75,6 @@ class i3c_driver extends uvm_driver #(
     end
   endtask : release_bus
 
-  virtual task wait_for_stop_or_addr_after_rstart(output bit saw_stop, output bit saw_addr);
-    bit first_addr_bit;
-
-    saw_stop = 1'b0;
-    saw_addr = 1'b0;
-    post_rstart_addr_valid = 1'b0;
-    release_bus();
-    set_drive_device_state(DrvWaitStopOrAddr);
-
-    fork
-      begin : iso_fork
-        fork
-          begin : stop_before_addr_clock
-            @(posedge cfg.vif.sda_i iff cfg.vif.scl_i);
-            saw_stop = 1'b1;
-          end
-          begin : addr_or_stop_after_clock
-            wait (cfg.vif.scl_i === 1'b0);
-            wait (cfg.vif.scl_i === 1'b1);
-            first_addr_bit = cfg.vif.sda_i;
-            @(negedge cfg.vif.scl_i);
-
-            post_rstart_addr = '0;
-            post_rstart_addr[6] = first_addr_bit;
-            for (int i = 5; i >= 0; i--) begin
-              cfg.vif.sample_target_data(.data(post_rstart_addr[i]));
-            end
-            cfg.vif.sample_target_data(.data(post_rstart_dir));
-            post_rstart_addr_valid = 1'b1;
-            saw_addr = 1'b1;
-            `uvm_info(`gfn, $sformatf("Sampled post-RSTART addr=0x%02x dir=%b",
-                                      post_rstart_addr, post_rstart_dir), UVM_MEDIUM)
-          end
-        join_any
-        disable fork;
-      end : iso_fork
-    join
-
-    if (saw_stop) begin
-      `uvm_info(`gfn, "Device got STOP after RSTART", UVM_HIGH)
-      set_drive_device_state(DrvIdle);
-      post_rstart_addr_valid = 1'b0;
-      saw_addr = 1'b0;
-    end else if (saw_addr) begin
-      set_drive_device_state(DrvAck);
-    end
-  endtask : wait_for_stop_or_addr_after_rstart
-
   virtual task run_phase(uvm_phase phase);
     fork
       reset_signal();
@@ -128,47 +86,12 @@ class i3c_driver extends uvm_driver #(
     i3c_seq_item req, rsp;
     @(posedge cfg.vif.rst_ni);
     forever begin
-      bit post_rstart_stop;
-      bit post_rstart_addr_seen;
 
       if (cfg.if_mode == Device) release_bus();
       stop = 0;
       rstart = 0;
       rsp = null;
       req = null;
-
-      if (cfg.if_mode == Device && bus_state == DrvWaitStopOrAddr) begin
-        fork
-          begin : post_rstart_iso_fork
-            fork
-              begin
-                wait_for_stop_or_addr_after_rstart(post_rstart_stop, post_rstart_addr_seen);
-              end
-              begin
-                process_reset();
-              end
-              begin
-                wait (cfg.driver_rst);
-                `uvm_info(`gfn, "drvdbg agent reset while waiting after RSTART", UVM_HIGH)
-              end
-            join_any
-            disable fork;
-          end : post_rstart_iso_fork
-        join
-
-        if (cfg.driver_rst) begin
-          i3c_seq_item dummy;
-          post_rstart_addr_valid = 1'b0;
-          do begin
-            seq_item_port.try_next_item(dummy);
-            if (dummy != null) seq_item_port.item_done();
-          end while (dummy != null);
-        end
-
-        if (!post_rstart_addr_seen) begin
-          continue;
-        end
-      end
 
       fork
         begin : iso_fork
@@ -205,11 +128,10 @@ class i3c_driver extends uvm_driver #(
       if (cfg.if_mode == Device && stop) begin
         `uvm_info(`gfn, "Device got Stop", UVM_HIGH)
         bus_state = DrvIdle;
-        post_rstart_addr_valid = 1'b0;
         if (rsp != null) rsp.end_with_rstart = 0;
       end else if (cfg.if_mode == Device && rstart) begin
         `uvm_info(`gfn, "Device got RStart", UVM_HIGH)
-        bus_state = DrvWaitStopOrAddr;
+        bus_state = DrvAddrPushPull;
         if (rsp != null) rsp.end_with_rstart = 1;
       end
 
@@ -220,7 +142,6 @@ class i3c_driver extends uvm_driver #(
 
       if (cfg.driver_rst) begin
         i3c_seq_item dummy;
-        post_rstart_addr_valid = 1'b0;
         do begin
           seq_item_port.try_next_item(dummy);
           if (dummy != null) seq_item_port.item_done();
@@ -231,14 +152,6 @@ class i3c_driver extends uvm_driver #(
 
   virtual task drive_device_item(i3c_seq_item req, ref i3c_seq_item rsp);
     rsp = new();
-    if (post_rstart_addr_valid) begin
-      rsp.addr = post_rstart_addr;
-      rsp.dir = post_rstart_dir;
-      post_rstart_addr_valid = 1'b0;
-      set_drive_device_state(DrvAck);
-    end else if (bus_state == DrvAddr || bus_state == DrvAddrPushPull) begin
-      set_drive_device_state(req.i3c ? DrvAddrPushPull : DrvAddr);
-    end
 
     forever begin
       case (bus_state)
@@ -250,10 +163,13 @@ class i3c_driver extends uvm_driver #(
         DrvAddrArbit: begin
           for (int i = 6; i >= 0; i--) begin
             cfg.vif.sample_target_data(.data(rsp.addr[i]));
-            `uvm_info(`gfn, $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]), UVM_MEDIUM)
+            `uvm_info(`gfn, $sformatf("Sampled started addr[%0d]=%b", i, rsp.addr[i]), UVM_MEDIUM)
           end
+          rsp.start_with_broadcast_header = req.start_with_broadcast_header &&
+              is_broadcast_header(rsp.addr);
+          `uvm_info(`gfn, $sformatf("Sampled started addr=0x%h", rsp.addr), UVM_MEDIUM)
           cfg.vif.sample_target_data(.data(rsp.dir));
-          `uvm_info(`gfn, $sformatf("Sampled device dir=%b", rsp.dir), UVM_MEDIUM)
+          `uvm_info(`gfn, $sformatf("Sampled started dir=%b", rsp.dir), UVM_MEDIUM)
           set_drive_device_state(DrvAck);
         end
 
@@ -278,29 +194,62 @@ class i3c_driver extends uvm_driver #(
         end
 
         DrvAck: begin
+          bit ack;
+          ack = get_addr_ack(req, rsp.addr);
+
           if (req.i3c) begin
-            cfg.vif.device_i3c_send_addr_ack(cfg.tc.i3c_tc, req.dev_ack);
+            cfg.vif.device_i3c_send_addr_ack(cfg.tc.i3c_tc, ack);
           end else begin
-            cfg.vif.device_i2c_send_bit(cfg.tc.i2c_tc, !req.dev_ack);
+            cfg.vif.device_i2c_send_bit(cfg.tc.i2c_tc, !ack);
           end
-          `uvm_info(`gfn, $sformatf("Device sent %d[%s]", !req.dev_ack, req.dev_ack ? "ACK" : "NACK"
-                    ), UVM_MEDIUM)
+          `uvm_info(`gfn, $sformatf("Device sent %d[%s]", !ack, ack ? "ACK" : "NACK"), UVM_MEDIUM)
           set_drive_device_state(DrvSelectNext);
         end
 
         DrvSelectNext: begin
-          if (req.dev_ack) begin
-            if (req.is_daa) begin
-              set_drive_device_state(DrvDAA);
+          if (get_addr_ack(req.dev_ack, rsp.addr)) begin
+            if (is_broadcast_header(rsp.addr)) begin
+              if (req.is_daa) begin
+                set_drive_device_state(DrvDAA);
+              end else if (req.start_with_broadcast_header) begin
+                set_drive_device_state(DrvWaitStopOrRStart);
+              end else begin
+                set_drive_device_state(DrvWrPushPull);
+              end
             end else if (req.dir) begin
-              if (req.i3c) set_drive_device_state(DrvRdPushPull);
-              else set_drive_device_state(DrvRd);
+              if (req.i3c) begin
+                set_drive_device_state(DrvRdPushPull);
+              end else begin
+                set_drive_device_state(DrvRd);
+              end
             end else begin
-              if (req.i3c) set_drive_device_state(DrvWrPushPull);
-              else set_drive_device_state(DrvWr);
+              if (req.i3c) begin
+                set_drive_device_state(DrvWrPushPull);
+              end else begin
+                set_drive_device_state(DrvWr);
+              end
             end
           end else begin
             set_drive_device_state(DrvStop);
+          end
+        end
+
+        DrvWaitStopOrRStart: begin
+          release_bus();
+          stop   = 1'b0;
+          rstart = 1'b0;
+          cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, rstart, stop);
+
+          if (rstart) begin
+            `uvm_info(`gfn, "Device got RStart after broadcast header", UVM_HIGH)
+            rsp.start_with_broadcast_header = 1'b1;
+            rsp.end_with_rstart = 1'b1;
+            set_drive_device_state(DrvAddrPushPull);
+          end else begin
+            `uvm_info(`gfn, "Device got Stop after broadcast header", UVM_HIGH)
+            rsp.end_with_rstart = 1'b0;
+            set_drive_device_state(DrvIdle);
+            return;
           end
         end
 

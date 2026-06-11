@@ -5,12 +5,13 @@ class i3c_seq_item extends uvm_sequence_item;
   rand bit        dir;
   rand bit        dev_ack;
   // Common for both I2C and I3C
-  rand bit [ 7:0] data            [$];
+  rand bit [ 7:0] data                        [$];
   rand bit [15:0] data_cnt;
   // Contains I2C ACK/NACK if i3c is false,
   // or I3C T bits if i3c = true
-  rand bit        T_bit           [$];
+  rand bit        T_bit                       [$];
   rand bit        end_with_rstart;
+  rand bit        start_with_broadcast_header;
   rand bit        is_daa;
 
   function new(string name = "");
@@ -27,6 +28,7 @@ class i3c_seq_item extends uvm_sequence_item;
     `uvm_field_int(data_cnt, UVM_DEFAULT)
     `uvm_field_queue_int(T_bit, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(end_with_rstart, UVM_DEFAULT | UVM_NOCOMPARE)
+    `uvm_field_int(start_with_broadcast_header, UVM_DEFAULT | UVM_NOCOMPARE)
   `uvm_object_utils_end
 
 endclass : i3c_seq_item

@@ -30,6 +30,7 @@ module i3c_controller_top #(
 
   // CSR configuration outputs
   logic ctrl_enable, i3c_fsm_en, sw_reset;
+  logic broadcast_addr_enable;
   logic [19:0] t_r, t_f, t_low, t_low_od, t_high;
   logic [19:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat, t_bus_free;
   logic [19:0] i2c_t_r, i2c_t_f, i2c_t_low, i2c_t_high;
@@ -104,6 +105,7 @@ module i3c_controller_top #(
       .ctrl_enable_o   (ctrl_enable),
       .i3c_fsm_en_o    (i3c_fsm_en),
       .sw_reset_o      (sw_reset),
+      .broadcast_addr_enable_o(broadcast_addr_enable),
       .t_r_o           (t_r),
       .t_f_o           (t_f),
       .t_low_o         (t_low),
@@ -252,6 +254,7 @@ module i3c_controller_top #(
       .i2c_t_hd_dat_i     (i2c_t_hd_dat),
       .i2c_t_buf_i        (i2c_t_buf),
       .ctrl_enable_i      (ctrl_enable),
+      .broadcast_addr_enable_i(broadcast_addr_enable),
       .i3c_fsm_en_i       (i3c_fsm_en),
       .i3c_fsm_idle_o     (i3c_fsm_idle)
   );

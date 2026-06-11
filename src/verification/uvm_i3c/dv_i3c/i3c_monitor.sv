@@ -69,7 +69,7 @@ class i3c_monitor extends uvm_monitor;
       rstart = 1'b0;
       full_item.rstart = 1'b0;
       cfg.vif.wait_for_host_start();
-      `uvm_info(`gfn, "\n monitor, detect HOST START", UVM_HIGH)
+      `uvm_info(`gfn, "\nmonitor, detect HOST START", UVM_HIGH)
     end else if (rstart) begin
       full_item.rstart = 1'b1;
     end else begin
@@ -100,10 +100,7 @@ class i3c_monitor extends uvm_monitor;
         end
       end else if (is_i3c_broadcast(full_item.addr)) begin
         i3c_thread(full_item);
-      end else if (is_i3c_target_addr(full_item.addr)) begin
-        i3c_data(.transaction(full_item), .updated_transaction(temp_val),
-                 .device_to_host(full_item.bus_op == BusOpRead), .msg("I3C Direct data type"));
-        full_item = temp_val;
+        if (full_item.i3c_empty_broadcast) collect_private_after_broadcast_header(full_item);
       end else if (full_item.bus_op == BusOpRead) begin
         i2c_read_thread(full_item);
       end else begin
@@ -117,8 +114,8 @@ class i3c_monitor extends uvm_monitor;
     start  = full_item.start;
     rstart = full_item.rstart;
 
-    `uvm_info(`gfn, $sformatf("%d", full_item.stop), UVM_HIGH)
-    `uvm_info(`gfn, $sformatf("%d", full_item.rstart), UVM_HIGH)
+    `uvm_info(`gfn, $sformatf("%d", stop), UVM_HIGH)
+    `uvm_info(`gfn, $sformatf("%d", rstart), UVM_HIGH)
     if (cfg.vif.rst_ni && (full_item.stop || full_item.rstart) && full_item.start &&
         !full_item.aborted) begin
       if (full_item.i3c && (full_item.CCC_valid || full_item.i3c_empty_broadcast)) begin
@@ -137,6 +134,49 @@ class i3c_monitor extends uvm_monitor;
                 UVM_HIGH)
     end
   endtask
+
+  virtual protected task collect_private_after_broadcast_header(ref i3c_item transaction);
+    i3c_item temp_val;
+    bit      header_ack;
+
+    header_ack = transaction.addr_ack;
+    transaction.addr = '0;
+    transaction.addr_ack = 1'b0;
+    transaction.i3c_empty_broadcast = 1'b0;
+    transaction.i3c_broadcast = 1'b0;
+    transaction.i3c_direct = 1'b0;
+    transaction.CCC_valid = 1'b0;
+    transaction.CCC_def.delete();
+    transaction.CCC_direct.delete();
+    transaction.data_q.delete();
+    transaction.data_ack_q.delete();
+    transaction.num_data = 0;
+    transaction.stop = 1'b0;
+    transaction.rstart = 1'b1;
+    transaction.aborted = 1'b0;
+    transaction.start_with_broadcast_header = 1'b1;
+    transaction.broadcast_header_ack = header_ack;
+
+    address_thread(transaction, temp_val);
+    transaction = temp_val;
+
+    if (transaction.aborted) return;
+
+    if (!transaction.addr_ack) begin
+      cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, transaction.rstart, transaction.stop);
+    end else if (is_i3c_target_addr(transaction.addr)) begin
+      i3c_data(.transaction(transaction), .updated_transaction(temp_val),
+               .device_to_host(transaction.bus_op == BusOpRead),
+               .msg("I3C Direct data type after broadcast header"));
+      transaction = temp_val;
+    end else begin
+      `uvm_error(`gfn, $sformatf(
+                 "Broadcast header preamble was followed by unsupported target address 0x%02h",
+                 transaction.addr
+                 ))
+      cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, transaction.rstart, transaction.stop);
+    end
+  endtask : collect_private_after_broadcast_header
 
   virtual protected task address_thread(input i3c_item transaction,
                                         output i3c_item updated_transaction);
@@ -194,6 +234,8 @@ class i3c_monitor extends uvm_monitor;
     `DV_CHECK_NE_FATAL({transaction.rstart, transaction.stop}, 2'b11)
     `uvm_info(`gfn, $sformatf("\nmonitor, CCC, detect HOST %s",
                               transaction.stop ? "STOP" : "RSTART"), UVM_HIGH)
+
+    if (transaction.i3c_empty_broadcast) return;
 
     if (transaction.i3c_direct) begin
       i3c_direct(transaction);
@@ -253,7 +295,7 @@ class i3c_monitor extends uvm_monitor;
 
       if (!next_item.stop && !next_item.rstart) begin
         // Address thread was successful
-        if (next_item.addr == 7'h7E)
+        if (next_item.addr == I3C_RSVD_ADDR)
           // Potential CCC command, break to main collect thread.
           break;
         if (next_item.addr_ack) begin
@@ -650,6 +692,6 @@ class i3c_monitor extends uvm_monitor;
   endfunction
 
   function bit is_i3c_broadcast(bit [6:0] addr);
-    return (addr == 7'h7E);
+    return (addr == I3C_RSVD_ADDR);
   endfunction
 endclass

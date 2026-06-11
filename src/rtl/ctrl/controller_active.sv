@@ -61,6 +61,7 @@ module controller_active
     input logic [19:0] i2c_t_buf_i,
 
     input  logic ctrl_enable_i,
+    input  logic broadcast_addr_enable_i,
     input  logic i3c_fsm_en_i,
     output logic i3c_fsm_idle_o
 );
@@ -326,6 +327,7 @@ module controller_active
       .daa_bcr_i          (daa_bcr),
       .daa_dcr_i          (daa_dcr),
       .sel_od_pp_o        (flow_sel_od_pp),
+      .broadcast_addr_enable_i,
       .i3c_fsm_en_i,
       .i3c_fsm_idle_o
   );
