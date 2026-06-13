@@ -1,12 +1,12 @@
 module csr_registers_sva
   import controller_pkg::dat_entry_t;
 #(
-    parameter int unsigned DatDepth     = 16,
-    parameter int unsigned AddrWidth    = 12,
-    parameter int unsigned DataWidth    = 32,
-    parameter int unsigned CmdDataWidth = 64,
-    parameter int unsigned CounterWidth = 20,
-    localparam int unsigned DatAw       = $clog2(DatDepth)
+    parameter  int unsigned DatDepth     = 16,
+    parameter  int unsigned AddrWidth    = 12,
+    parameter  int unsigned DataWidth    = 32,
+    parameter  int unsigned CmdDataWidth = 64,
+    parameter  int unsigned CounterWidth = 20,
+    localparam int unsigned DatAw        = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -20,7 +20,7 @@ module csr_registers_sva
 
     input logic hc_enable_i,
     input logic sw_reset_i,
-    input logic broadcast_addr_enable_i,
+    input logic broadcast_header_enable_i,
 
     input logic [DataWidth-1:0] hc_control_i,
     input logic [DataWidth-1:0] hc_status_i,
@@ -30,13 +30,13 @@ module csr_registers_sva
     input logic [CmdDataWidth-1:0] cmd_wdata_o,
     input logic                    cmd_wready_i,
     input logic                    tx_wvalid_o,
-    input logic [DataWidth-1:0]    tx_wdata_o,
+    input logic [   DataWidth-1:0] tx_wdata_o,
     input logic                    tx_wready_i,
     input logic                    rx_rvalid_i,
-    input logic [DataWidth-1:0]    rx_rdata_i,
+    input logic [   DataWidth-1:0] rx_rdata_i,
     input logic                    rx_rready_o,
     input logic                    resp_rvalid_i,
-    input logic [DataWidth-1:0]    resp_rdata_i,
+    input logic [   DataWidth-1:0] resp_rdata_i,
     input logic                    resp_rready_o,
 
     input logic [CounterWidth-1:0] t_r_i,
@@ -61,10 +61,10 @@ module csr_registers_sva
     input logic [CounterWidth-1:0] i2c_t_hd_dat_i,
     input logic [CounterWidth-1:0] i2c_t_buf_i,
 
-    input dat_entry_t dat_mem_i[DatDepth],
-    input logic                 dat_read_valid_i,
-    input logic [    DatAw-1:0] dat_index_i,
-    input logic [DataWidth-1:0] dat_rdata_o,
+    input dat_entry_t                 dat_mem_i       [DatDepth],
+    input logic                       dat_read_valid_i,
+    input logic       [    DatAw-1:0] dat_index_i,
+    input logic       [DataWidth-1:0] dat_rdata_o,
 
     input logic cmd_full_i,
     input logic cmd_empty_i,
@@ -77,11 +77,11 @@ module csr_registers_sva
     input logic i3c_fsm_idle_i,
 
     input logic                    cmd_staging_valid_i,
-    input logic [DataWidth-1:0]    cmd_dword0_i,
+    input logic [   DataWidth-1:0] cmd_dword0_i,
     input logic                    cmd_wvalid_int_i,
     input logic [CmdDataWidth-1:0] cmd_wdata_int_i,
     input logic                    tx_wvalid_int_i,
-    input logic [DataWidth-1:0]    tx_wdata_int_i
+    input logic [   DataWidth-1:0] tx_wdata_int_i
 );
 
   localparam logic [AddrWidth-1:0] ADDR_HC_CONTROL = 12'h000;
@@ -113,8 +113,7 @@ module csr_registers_sva
   localparam logic [AddrWidth-1:0] ADDR_RESP = 12'h10C;
   localparam logic [AddrWidth-1:0] ADDR_QUEUE_STATUS = 12'h110;
   localparam logic [AddrWidth-1:0] ADDR_DAT_BASE = 12'h200;
-  localparam logic [AddrWidth-1:0] ADDR_DAT_END =
-      ADDR_DAT_BASE + AddrWidth'(DatDepth * 4);
+  localparam logic [AddrWidth-1:0] ADDR_DAT_END = ADDR_DAT_BASE + AddrWidth'(DatDepth * 4);
   localparam int unsigned QS_CMD_FULL_BIT = 0;
   localparam int unsigned QS_CMD_EMPTY_BIT = 1;
   localparam int unsigned QS_TX_FULL_BIT = 2;
@@ -247,7 +246,7 @@ module csr_registers_sva
       (queue_status_i == 32'h0000_00AA);
 
   assign hc_control_write = wen_i && (addr_i == ADDR_HC_CONTROL);
-  assign hc_control_read  = ren_i && !wen_i && (addr_i == ADDR_HC_CONTROL);
+  assign hc_control_read = ren_i && !wen_i && (addr_i == ADDR_HC_CONTROL);
   assign queue_status_read = ren_i && !wen_i && (addr_i == ADDR_QUEUE_STATUS);
   assign csr_bus_known = !$isunknown({addr_i, wen_i, ren_i});
   assign cmd_queue_write = wen_i && (addr_i == ADDR_CMD_QUEUE);
@@ -258,415 +257,473 @@ module csr_registers_sva
   assign resp_read = ren_i && (addr_i == ADDR_RESP);
   assign repeated_sw_reset_write = hc_control_write && wdata_i[1];
 
-  ap_ready_backpressure_only:
+  ap_ready_backpressure_only :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    ready_o == !(cmd_queue_blocked || tx_data_blocked))
   else $error("csr_registers_sva: ready_o may deassert only for blocked CMD_QUEUE/TX_DATA writes");
 
-  cp_ready_cmd_backpressure:
+  cp_ready_cmd_backpressure :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   cmd_queue_blocked && !ready_o);
 
-  cp_ready_tx_backpressure:
+  cp_ready_tx_backpressure :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   tx_data_blocked && !ready_o);
 
-  ap_hc_status_mirror:
+  ap_hc_status_mirror :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    hc_status_i == {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i})
   else $error("csr_registers_sva: HC_STATUS mirror mismatch");
 
-  cp_hc_status_mirror:
+  cp_hc_status_mirror :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   hc_status_i == {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i});
 
-  ap_queue_status_mirror:
+  ap_queue_status_mirror :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    queue_status_i == {24'b0, resp_empty_i, resp_full_i, rx_empty_i, rx_full_i,
                                       tx_empty_i, tx_full_i, cmd_empty_i, cmd_full_i})
   else $error("csr_registers_sva: QUEUE_STATUS mirror mismatch");
 
-  cp_queue_status_mirror:
+  cp_queue_status_mirror :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   queue_status_i == {24'b0, resp_empty_i, resp_full_i, rx_empty_i, rx_full_i,
                                      tx_empty_i, tx_full_i, cmd_empty_i, cmd_full_i});
 
-  cp_queue_status_cmd_empty_read:
+  cp_queue_status_cmd_empty_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !cmd_full_i && cmd_empty_i
                   ##1 (!rdata_o[QS_CMD_FULL_BIT] && rdata_o[QS_CMD_EMPTY_BIT]));
 
-  cp_queue_status_cmd_middle_read:
+  cp_queue_status_cmd_middle_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !cmd_full_i && !cmd_empty_i
                   ##1 (!rdata_o[QS_CMD_FULL_BIT] && !rdata_o[QS_CMD_EMPTY_BIT]));
 
-  cp_queue_status_cmd_full_read:
+  cp_queue_status_cmd_full_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && cmd_full_i && !cmd_empty_i
                   ##1 (rdata_o[QS_CMD_FULL_BIT] && !rdata_o[QS_CMD_EMPTY_BIT]));
 
-  cp_queue_status_tx_empty_read:
+  cp_queue_status_tx_empty_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !tx_full_i && tx_empty_i
                   ##1 (!rdata_o[QS_TX_FULL_BIT] && rdata_o[QS_TX_EMPTY_BIT]));
 
-  cp_queue_status_tx_middle_read:
+  cp_queue_status_tx_middle_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !tx_full_i && !tx_empty_i
                   ##1 (!rdata_o[QS_TX_FULL_BIT] && !rdata_o[QS_TX_EMPTY_BIT]));
 
-  cp_queue_status_tx_full_read:
+  cp_queue_status_tx_full_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && tx_full_i && !tx_empty_i
                   ##1 (rdata_o[QS_TX_FULL_BIT] && !rdata_o[QS_TX_EMPTY_BIT]));
 
-  cp_queue_status_rx_empty_read:
+  cp_queue_status_rx_empty_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !rx_full_i && rx_empty_i
                   ##1 (!rdata_o[QS_RX_FULL_BIT] && rdata_o[QS_RX_EMPTY_BIT]));
 
-  cp_queue_status_rx_middle_read:
+  cp_queue_status_rx_middle_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !rx_full_i && !rx_empty_i
                   ##1 (!rdata_o[QS_RX_FULL_BIT] && !rdata_o[QS_RX_EMPTY_BIT]));
 
-  cp_queue_status_rx_full_read:
+  cp_queue_status_rx_full_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && rx_full_i && !rx_empty_i
                   ##1 (rdata_o[QS_RX_FULL_BIT] && !rdata_o[QS_RX_EMPTY_BIT]));
 
-  cp_queue_status_resp_empty_read:
+  cp_queue_status_resp_empty_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !resp_full_i && resp_empty_i
                   ##1 (!rdata_o[QS_RESP_FULL_BIT] && rdata_o[QS_RESP_EMPTY_BIT]));
 
-  cp_queue_status_resp_middle_read:
+  cp_queue_status_resp_middle_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !resp_full_i && !resp_empty_i
                   ##1 (!rdata_o[QS_RESP_FULL_BIT] && !rdata_o[QS_RESP_EMPTY_BIT]));
 
-  cp_queue_status_resp_full_read:
+  cp_queue_status_resp_full_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && resp_full_i && !resp_empty_i
                   ##1 (rdata_o[QS_RESP_FULL_BIT] && !rdata_o[QS_RESP_EMPTY_BIT]));
 
-  ap_hc_control_reset_defaults:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   $rose(rst_ni) |-> ((hc_control_i == 32'h0000_0000) &&
-                                      !hc_enable_i && !sw_reset_i &&
-                                      !broadcast_addr_enable_i))
+  ap_hc_control_reset_defaults :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) |-> ((hc_control_i == 32'h0000_0000) && !hc_enable_i && !sw_reset_i &&
+         !broadcast_header_enable_i))
   else $error("csr_registers_sva: HC_CONTROL reset defaults mismatch");
 
-  cp_hc_control_reset_defaults:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  $rose(rst_ni) && (hc_control_i == 32'h0000_0000) &&
-                  !hc_enable_i && !sw_reset_i && !broadcast_addr_enable_i);
+  cp_hc_control_reset_defaults :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) && (hc_control_i == 32'h0000_0000) && !hc_enable_i && !sw_reset_i &&
+      !broadcast_header_enable_i);
 
-  ap_hc_control_write_updates_bits:
+  ap_hc_control_write_updates_bits :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    hc_control_write
-                   |=> ((hc_enable_i == $past(wdata_i[0])) &&
-                        (sw_reset_i == $past(wdata_i[1])) &&
-                        (broadcast_addr_enable_i == $past(wdata_i[2])) &&
-                        (hc_control_i == {29'b0, $past(wdata_i[2]),
-                                          $past(wdata_i[1]), $past(wdata_i[0])})))
+                   |=> ((hc_enable_i == $past(
+      wdata_i[0]
+  )) && (sw_reset_i == $past(
+      wdata_i[1]
+  )) && (broadcast_header_enable_i == $past(
+      wdata_i[2]
+  )) && (hc_control_i == {29'b0, $past(
+      wdata_i[2]
+  ), $past(
+      wdata_i[1]
+  ), $past(
+      wdata_i[0]
+  )})))
   else $error("csr_registers_sva: HC_CONTROL write did not update control bits");
 
-  cp_hc_control_write_updates_bits:
+  cp_hc_control_write_updates_bits :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   hc_control_write
-                  ##1 ((hc_enable_i == $past(wdata_i[0])) &&
-                       (sw_reset_i == $past(wdata_i[1])) &&
-                       (broadcast_addr_enable_i == $past(wdata_i[2]))));
+                  ##1 ((hc_enable_i == $past(
+      wdata_i[0]
+  )) && (sw_reset_i == $past(
+      wdata_i[1]
+  )) && (broadcast_header_enable_i == $past(
+      wdata_i[2]
+  ))));
 
-  ap_broadcast_addr_enable_does_not_enable_hc:
+  ap_broadcast_header_enable_does_not_enable_hc :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    hc_control_write && wdata_i[2] && !wdata_i[0]
-                   |=> (!hc_enable_i && broadcast_addr_enable_i))
-  else $error("csr_registers_sva: BROADCAST_ADDR_ENABLE write must not enable HC");
+                   |=> (!hc_enable_i && broadcast_header_enable_i))
+  else $error("csr_registers_sva: BROADCAST_HEADER_ENABLE write must not enable HC");
 
-  cp_broadcast_addr_enable_does_not_enable_hc:
+  cp_broadcast_header_enable_does_not_enable_hc :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   hc_control_write && wdata_i[2] && !wdata_i[0]
-                  ##1 (!hc_enable_i && broadcast_addr_enable_i));
+                  ##1 (!hc_enable_i && broadcast_header_enable_i));
 
-  ap_hc_control_readback:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   hc_control_read |=> (rdata_o == $past(hc_control_i)))
+  ap_hc_control_readback :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) hc_control_read |=> (rdata_o == $past(
+      hc_control_i
+  )))
   else $error("csr_registers_sva: HC_CONTROL readback mismatch");
 
-  cp_hc_control_readback:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  hc_control_read ##1 (rdata_o == $past(hc_control_i)));
+  cp_hc_control_readback :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) hc_control_read ##1 (rdata_o == $past(
+      hc_control_i
+  )));
 
-  ap_sw_reset_self_clear:
+  ap_sw_reset_self_clear :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    sw_reset_i && !repeated_sw_reset_write |=> !sw_reset_i)
   else $error("csr_registers_sva: SW_RESET must self-clear without another reset write");
 
-  cp_sw_reset_self_clear:
+  cp_sw_reset_self_clear :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   sw_reset_i && !repeated_sw_reset_write ##1 !sw_reset_i);
 
-  ap_cmd_wvalid_output_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   cmd_wvalid_o == cmd_wvalid_int_i)
+  ap_cmd_wvalid_output_mirror :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) cmd_wvalid_o == cmd_wvalid_int_i)
   else $error("csr_registers_sva: cmd_wvalid_o must mirror internal cmd_wvalid");
 
-  cp_cmd_wvalid_output_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  cmd_wvalid_o == cmd_wvalid_int_i);
+  cp_cmd_wvalid_output_mirror :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) cmd_wvalid_o == cmd_wvalid_int_i);
 
-  ap_cmd_wdata_output_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   cmd_wdata_o == cmd_wdata_int_i)
+  ap_cmd_wdata_output_mirror :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) cmd_wdata_o == cmd_wdata_int_i)
   else $error("csr_registers_sva: cmd_wdata_o must mirror internal cmd_wdata");
 
-  cp_cmd_wdata_output_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  cmd_wdata_o == cmd_wdata_int_i);
+  cp_cmd_wdata_output_mirror :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) cmd_wdata_o == cmd_wdata_int_i);
 
-  ap_tx_wvalid_output_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   tx_wvalid_o == tx_wvalid_int_i)
+  ap_tx_wvalid_output_mirror :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) tx_wvalid_o == tx_wvalid_int_i)
   else $error("csr_registers_sva: tx_wvalid_o must mirror internal tx_wvalid");
 
-  cp_tx_wvalid_output_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  tx_wvalid_o == tx_wvalid_int_i);
+  cp_tx_wvalid_output_mirror :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) tx_wvalid_o == tx_wvalid_int_i);
 
-  ap_tx_wdata_output_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   tx_wdata_o == tx_wdata_int_i)
+  ap_tx_wdata_output_mirror :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) tx_wdata_o == tx_wdata_int_i)
   else $error("csr_registers_sva: tx_wdata_o must mirror internal tx_wdata");
 
-  cp_tx_wdata_output_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  tx_wdata_o == tx_wdata_int_i);
+  cp_tx_wdata_output_mirror :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) tx_wdata_o == tx_wdata_int_i);
 
-  ap_cmd_first_write_stages_dword0:
+  ap_cmd_first_write_stages_dword0 :
   assert property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i || !csr_bus_known)
                    cmd_queue_write && !cmd_wvalid_int_i && !cmd_staging_valid_i
                    |=> (cmd_staging_valid_i && !cmd_wvalid_int_i &&
-                        (cmd_dword0_i == $past(wdata_i))))
+                        (cmd_dword0_i == $past(
+      wdata_i
+  ))))
   else $error("csr_registers_sva: first CMD_QUEUE write must stage DWORD0 only");
 
-  cp_cmd_first_write_stages_dword0:
+  cp_cmd_first_write_stages_dword0 :
   cover property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i || !csr_bus_known)
                   cmd_queue_write && !cmd_wvalid_int_i && !cmd_staging_valid_i
                   ##1 (cmd_staging_valid_i && !cmd_wvalid_int_i &&
-                       (cmd_dword0_i == $past(wdata_i))));
+                       (cmd_dword0_i == $past(
+      wdata_i
+  ))));
 
-  ap_cmd_second_write_emits_command:
+  ap_cmd_second_write_emits_command :
   assert property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i || !csr_bus_known)
                    cmd_queue_write && !cmd_wvalid_int_i && cmd_staging_valid_i
                    |=> (!cmd_staging_valid_i && cmd_wvalid_int_i &&
-                        (cmd_wdata_int_i == {$past(wdata_i), $past(cmd_dword0_i)})))
+                        (cmd_wdata_int_i == {$past(
+      wdata_i
+  ), $past(
+      cmd_dword0_i
+  )})))
   else $error("csr_registers_sva: second CMD_QUEUE write must emit staged command");
 
-  cp_cmd_second_write_emits_command:
+  cp_cmd_second_write_emits_command :
   cover property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i || !csr_bus_known)
                   cmd_queue_write && !cmd_wvalid_int_i && cmd_staging_valid_i
                   ##1 (!cmd_staging_valid_i && cmd_wvalid_int_i &&
-                       (cmd_wdata_int_i == {$past(wdata_i), $past(cmd_dword0_i)})));
+                       (cmd_wdata_int_i == {$past(
+      wdata_i
+  ), $past(
+      cmd_dword0_i
+  )})));
 
-  ap_cmd_non_cmd_write_preserves_staging:
+  ap_cmd_non_cmd_write_preserves_staging :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    !sw_reset_i && cmd_staging_valid_i && !cmd_wvalid_int_i && wen_i &&
                    (addr_i != ADDR_CMD_QUEUE)
-                   |=> (cmd_staging_valid_i && (cmd_dword0_i == $past(cmd_dword0_i))))
+                   |=> (cmd_staging_valid_i && (cmd_dword0_i == $past(
+      cmd_dword0_i
+  ))))
   else $error("csr_registers_sva: non-CMD writes must not disturb CMD staging");
 
-  cp_cmd_non_cmd_write_preserves_staging:
+  cp_cmd_non_cmd_write_preserves_staging :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   !sw_reset_i && cmd_staging_valid_i && !cmd_wvalid_int_i && wen_i &&
                   (addr_i != ADDR_CMD_QUEUE)
-                  ##1 (cmd_staging_valid_i && (cmd_dword0_i == $past(cmd_dword0_i))));
+                  ##1 (cmd_staging_valid_i && (cmd_dword0_i == $past(
+      cmd_dword0_i
+  ))));
 
-  ap_cmd_wdata_stable_until_ready:
+  ap_cmd_wdata_stable_until_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i)
                    cmd_wvalid_int_i && !cmd_wready_i
-                   |=> (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(cmd_wdata_int_i))))
+                   |=> (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
+      cmd_wdata_int_i
+  ))))
   else $error("csr_registers_sva: CMD write data changed before ready");
 
-  cp_cmd_wdata_stable_until_ready:
+  cp_cmd_wdata_stable_until_ready :
   cover property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i)
                   cmd_wvalid_int_i && !cmd_wready_i
-                  ##1 (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(cmd_wdata_int_i))));
+                  ##1 (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
+      cmd_wdata_int_i
+  ))));
 
-  ap_sw_reset_clears_cmd_staging:
+  ap_sw_reset_clears_cmd_staging :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    sw_reset_i |=> (!cmd_staging_valid_i && !cmd_wvalid_int_i))
   else $error("csr_registers_sva: SW_RESET must clear CMD staging and valid");
 
-  cp_sw_reset_clears_cmd_staging:
+  cp_sw_reset_clears_cmd_staging :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   sw_reset_i ##1 (!cmd_staging_valid_i && !cmd_wvalid_int_i));
 
-  ap_sw_reset_clears_tx_pending:
+  ap_sw_reset_clears_tx_pending :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    sw_reset_i |=> (!tx_wvalid_int_i && (tx_wdata_int_i == '0)))
   else $error("csr_registers_sva: SW_RESET must clear pending TX write");
 
-  cp_sw_reset_clears_tx_pending:
+  cp_sw_reset_clears_tx_pending :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   sw_reset_i ##1 (!tx_wvalid_int_i && (tx_wdata_int_i == '0)));
 
-  ap_tx_data_write_captures_data:
+  ap_tx_data_write_captures_data :
   assert property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i || !csr_bus_known)
                    tx_data_write && !tx_wvalid_int_i
-                   |=> (tx_wvalid_int_i && (tx_wdata_int_i == $past(wdata_i))))
+                   |=> (tx_wvalid_int_i && (tx_wdata_int_i == $past(
+      wdata_i
+  ))))
   else $error("csr_registers_sva: TX_DATA write must raise tx_wvalid with written data");
 
-  cp_tx_data_write_captures_data:
+  cp_tx_data_write_captures_data :
   cover property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i || !csr_bus_known)
                   tx_data_write && !tx_wvalid_int_i
-                  ##1 (tx_wvalid_int_i && (tx_wdata_int_i == $past(wdata_i))));
+                  ##1 (tx_wvalid_int_i && (tx_wdata_int_i == $past(
+      wdata_i
+  ))));
 
-  ap_tx_wdata_stable_until_ready:
+  ap_tx_wdata_stable_until_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i)
                    tx_wvalid_int_i && !tx_wready_i
-                   |=> (tx_wvalid_int_i && (tx_wdata_int_i == $past(tx_wdata_int_i))))
+                   |=> (tx_wvalid_int_i && (tx_wdata_int_i == $past(
+      tx_wdata_int_i
+  ))))
   else $error("csr_registers_sva: TX write data changed before ready");
 
-  cp_tx_wdata_stable_until_ready:
+  cp_tx_wdata_stable_until_ready :
   cover property (@(posedge clk_i) disable iff (!rst_ni || sw_reset_i)
                   tx_wvalid_int_i && !tx_wready_i
-                  ##1 (tx_wvalid_int_i && (tx_wdata_int_i == $past(tx_wdata_int_i))));
+                  ##1 (tx_wvalid_int_i && (tx_wdata_int_i == $past(
+      tx_wdata_int_i
+  ))));
 
-  ap_tx_valid_clears_on_ready:
+  ap_tx_valid_clears_on_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    tx_wvalid_int_i && tx_wready_i |=> !tx_wvalid_int_i)
   else $error("csr_registers_sva: tx_wvalid must clear when TX accepts data");
 
-  cp_tx_valid_clears_on_ready:
+  cp_tx_valid_clears_on_ready :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   tx_wvalid_int_i && tx_wready_i ##1 !tx_wvalid_int_i);
 
-  ap_rx_rready_only_rx_read:
+  ap_rx_rready_only_rx_read :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    rx_rready_o == rx_data_read)
   else $error("csr_registers_sva: rx_rready_o must pulse only for RX_DATA reads");
 
-  cp_rx_rready_only_rx_read:
+  cp_rx_rready_only_rx_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   rx_rready_o == rx_data_read);
 
-  ap_resp_rready_only_resp_read:
+  ap_resp_rready_only_resp_read :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    resp_rready_o == resp_read)
   else $error("csr_registers_sva: resp_rready_o must pulse only for RESP reads");
 
-  cp_resp_rready_only_resp_read:
+  cp_resp_rready_only_resp_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   resp_rready_o == resp_read);
 
-  ap_rx_read_returns_fifo_data:
+  ap_rx_read_returns_fifo_data :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                   rx_data_read && rx_rvalid_i |=> (rdata_o == $past(rx_rdata_i)))
+                   rx_data_read && rx_rvalid_i |=> (rdata_o == $past(
+      rx_rdata_i
+  )))
   else $error("csr_registers_sva: RX_DATA read must return RX FIFO data");
 
-  cp_rx_read_returns_fifo_data:
+  cp_rx_read_returns_fifo_data :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  rx_data_read && rx_rvalid_i ##1 (rdata_o == $past(rx_rdata_i)));
+                  rx_data_read && rx_rvalid_i ##1 (rdata_o == $past(
+      rx_rdata_i
+  )));
 
-  ap_rx_empty_read_returns_zero:
+  ap_rx_empty_read_returns_zero :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    rx_data_read && !rx_rvalid_i |=> (rdata_o == '0))
   else $error("csr_registers_sva: empty RX_DATA read must return zero");
 
-  cp_rx_empty_read_returns_zero:
+  cp_rx_empty_read_returns_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   rx_data_read && !rx_rvalid_i ##1 (rdata_o == '0));
 
-  ap_resp_read_returns_fifo_data:
+  ap_resp_read_returns_fifo_data :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                   resp_read && resp_rvalid_i |=> (rdata_o == $past(resp_rdata_i)))
+                   resp_read && resp_rvalid_i |=> (rdata_o == $past(
+      resp_rdata_i
+  )))
   else $error("csr_registers_sva: RESP read must return RESP FIFO data");
 
-  cp_resp_read_returns_fifo_data:
+  cp_resp_read_returns_fifo_data :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  resp_read && resp_rvalid_i ##1 (rdata_o == $past(resp_rdata_i)));
+                  resp_read && resp_rvalid_i ##1 (rdata_o == $past(
+      resp_rdata_i
+  )));
 
-  ap_resp_empty_read_returns_zero:
+  ap_resp_empty_read_returns_zero :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    resp_read && !resp_rvalid_i |=> (rdata_o == '0))
   else $error("csr_registers_sva: empty RESP read must return zero");
 
-  cp_resp_empty_read_returns_zero:
+  cp_resp_empty_read_returns_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   resp_read && !resp_rvalid_i ##1 (rdata_o == '0));
 
-  ap_timing_reset_defaults:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   $rose(rst_ni) |-> timing_reset_defaults_match)
+  ap_timing_reset_defaults :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) |-> timing_reset_defaults_match)
   else $error("csr_registers_sva: timing register reset defaults mismatch");
 
-  cp_timing_reset_defaults:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  $rose(rst_ni) && timing_reset_defaults_match);
+  cp_timing_reset_defaults :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) && timing_reset_defaults_match);
 
-  ap_status_reset_defaults:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   $rose(rst_ni) |-> status_reset_defaults_match)
+  ap_status_reset_defaults :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) |-> status_reset_defaults_match)
   else $error("csr_registers_sva: HC_STATUS reset defaults mismatch");
 
-  cp_status_reset_defaults:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  $rose(rst_ni) && status_reset_defaults_match);
+  cp_status_reset_defaults :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) && status_reset_defaults_match);
 
-  ap_queue_reset_defaults:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   $rose(rst_ni) |-> queue_reset_defaults_match)
+  ap_queue_reset_defaults :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) |-> queue_reset_defaults_match)
   else $error("csr_registers_sva: QUEUE_STATUS reset defaults mismatch");
 
-  cp_queue_reset_defaults:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  $rose(rst_ni) && queue_reset_defaults_match);
+  cp_queue_reset_defaults :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      rst_ni
+  ) && queue_reset_defaults_match);
 
-  ap_reset_default_readback:
+  ap_reset_default_readback :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    ren_i && !wen_i && !csr_written_since_reset_q && reset_default_addr_valid
-                   |=> (rdata_o == $past(reset_default_rdata)))
+                   |=> (rdata_o == $past(
+      reset_default_rdata
+  )))
   else $error("csr_registers_sva: reset-default CSR readback mismatch");
 
-  cp_reset_default_readback:
+  cp_reset_default_readback :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   ren_i && !wen_i && !csr_written_since_reset_q && reset_default_addr_valid
-                  ##1 (rdata_o == $past(reset_default_rdata)));
+                  ##1 (rdata_o == $past(
+      reset_default_rdata
+  )));
 
-  ap_dat_hw_read_latency:
+  ap_dat_hw_read_latency :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   dat_read_valid_i |=> (dat_rdata_o == $past(dat_hw_read_exp)))
+                   dat_read_valid_i |=> (dat_rdata_o == $past(
+      dat_hw_read_exp
+  )))
   else $error("csr_registers_sva: DAT hardware read latency/data mismatch");
 
-  cp_dat_hw_read_latency:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  dat_read_valid_i ##1 (dat_rdata_o == $past(dat_hw_read_exp)));
+  cp_dat_hw_read_latency :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) dat_read_valid_i ##1 (dat_rdata_o == $past(
+      dat_hw_read_exp
+  )));
 
   for (genvar i = 0; i < DatDepth; i++) begin : gen_dat_reserved_zero
-    ap_dat_reserved_fields_zero:
+    ap_dat_reserved_fields_zero :
     assert property (@(posedge clk_i) disable iff (!rst_ni)
                      (dat_mem_i[i].reserved_15_7 == '0) &&
                      (dat_mem_i[i].reserved_30_23 == '0))
     else $error("csr_registers_sva: DAT[%0d] reserved fields are not zero", i);
 
-    cp_dat_reserved_fields_zero:
+    cp_dat_reserved_fields_zero :
     cover property (@(posedge clk_i) disable iff (!rst_ni)
                     (dat_mem_i[i].reserved_15_7 == '0) &&
                     (dat_mem_i[i].reserved_30_23 == '0));
   end
 
   for (genvar i = 0; i < DatDepth; i++) begin : gen_dat_reset_defaults
-    ap_dat_reset_default:
-    assert property (@(posedge clk_i) disable iff (!rst_ni)
-                     $rose(rst_ni) |-> (dat_mem_i[i] == dat_entry_t'('0)))
+    ap_dat_reset_default :
+    assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+        rst_ni
+    ) |-> (dat_mem_i[i] == dat_entry_t'('0)))
     else $error("csr_registers_sva: DAT[%0d] reset default mismatch", i);
 
-    cp_dat_reset_default:
-    cover property (@(posedge clk_i) disable iff (!rst_ni)
-                    $rose(rst_ni) && (dat_mem_i[i] == dat_entry_t'('0)));
+    cp_dat_reset_default :
+    cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+        rst_ni
+    ) && (dat_mem_i[i] == dat_entry_t'('0)));
   end
 
 endmodule
@@ -688,7 +745,7 @@ bind csr_registers csr_registers_sva #(
     .ready_o,
     .hc_enable_i(hc_enable),
     .sw_reset_i(sw_reset),
-    .broadcast_addr_enable_i(broadcast_addr_enable),
+    .broadcast_header_enable_i(broadcast_header_enable),
     .hc_control_i(hc_control),
     .hc_status_i(hc_status),
     .queue_status_i(queue_status),

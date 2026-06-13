@@ -6,19 +6,24 @@ class i3c_read_data_patterns_vseq extends i3c_base_vseq;
   endfunction
 
   task body();
-    configure_dut();
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    bit broadcast_modes[2] = '{1'b0, 1'b1};
 
-    run_pattern_case(0, "all_zero");
-    run_pattern_case(1, "all_one");
-    run_pattern_case(2, "walking_one");
-    run_pattern_case(3, "alternating");
-    run_pattern_case(4, "fixed_random");
+    foreach (broadcast_modes[mode_idx]) begin
+      enable_dut(broadcast_modes[mode_idx]);
+      write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+
+      run_pattern_case(0, "all_zero", broadcast_modes[mode_idx]);
+      run_pattern_case(1, "all_one", broadcast_modes[mode_idx]);
+      run_pattern_case(2, "walking_one", broadcast_modes[mode_idx]);
+      run_pattern_case(3, "alternating", broadcast_modes[mode_idx]);
+      run_pattern_case(4, "fixed_random", broadcast_modes[mode_idx]);
+    end
 
     `uvm_info(`gfn, "SDRR_007 I3C regular read data pattern checks passed", UVM_LOW)
   endtask
 
-  virtual task run_pattern_case(int unsigned pattern_idx, string pattern_name);
+  virtual task run_pattern_case(int unsigned pattern_idx, string pattern_name,
+                                bit broadcast_header_enable);
     transfer_stimulus_cfg_t cfg;
     byte_queue_t            read_data;
     word_queue_t            rx_words;
@@ -28,15 +33,23 @@ class i3c_read_data_patterns_vseq extends i3c_base_vseq;
     build_pattern_payload(pattern_idx, read_data);
 
     cfg                  = make_transfer_cfg(
-        $sformatf("SDRR_007 %s", pattern_name),
-        $sformatf("sdrr007_dev_seq_%s", pattern_name),
-        4'(pattern_idx + 1),
-        5'd0,
-        7'h08,
-        1'b1,
-        read_data.size()
+        .ctxt($sformatf("SDRR_007 %s %s", private_addr_mode_name(broadcast_header_enable),
+          pattern_name)),
+        .seq_name($sformatf("sdrr007_%s_dev_seq_%s", private_addr_mode_name(broadcast_header_enable),
+          pattern_name)),
+        .tid(4'(pattern_idx + 1)),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(read_data.size()),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
     );
-    cfg.wait_device_done = 1'b1;
 
     run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
 

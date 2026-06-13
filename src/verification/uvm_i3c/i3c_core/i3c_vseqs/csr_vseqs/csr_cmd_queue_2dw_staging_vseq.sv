@@ -48,7 +48,7 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
       dev_seq.start(p_sequencer.m_i3c_sequencer);
     join_none
 
-    configure_dut();
+    enable_dut();
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_cmd_queue_2dw_staging_vseq");

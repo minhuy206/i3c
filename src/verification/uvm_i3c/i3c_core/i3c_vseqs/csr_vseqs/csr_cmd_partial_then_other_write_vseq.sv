@@ -67,7 +67,7 @@ class csr_cmd_partial_then_other_write_vseq extends csr_base_vseq;
       dev_seq.start(p_sequencer.m_i3c_sequencer);
     join_none
 
-    configure_dut();
+    enable_dut();
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_cmd_partial_then_other_write_vseq");

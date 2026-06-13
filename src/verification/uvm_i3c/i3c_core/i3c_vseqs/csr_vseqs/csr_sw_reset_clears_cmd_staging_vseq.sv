@@ -67,7 +67,7 @@ class csr_sw_reset_clears_cmd_staging_vseq extends csr_base_vseq;
       dev_seq.start(p_sequencer.m_i3c_sequencer);
     join_none
 
-    configure_dut();
+    enable_dut();
     poll_idle();
     wait_for_device_done(dev_seq, "csr_sw_reset_clears_cmd_staging_vseq");
     `DV_CHECK_EQ(dev_seq.done, 1'b1,

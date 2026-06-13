@@ -167,6 +167,7 @@ class i3c_driver extends uvm_driver #(
           end
           rsp.start_with_broadcast_header = req.start_with_broadcast_header &&
               is_broadcast_header(rsp.addr);
+          rsp.observed_broadcast_header = rsp.start_with_broadcast_header;
           `uvm_info(`gfn, $sformatf("Sampled started addr=0x%h", rsp.addr), UVM_MEDIUM)
           cfg.vif.sample_target_data(.data(rsp.dir));
           `uvm_info(`gfn, $sformatf("Sampled started dir=%b", rsp.dir), UVM_MEDIUM)
@@ -178,6 +179,7 @@ class i3c_driver extends uvm_driver #(
             cfg.vif.sample_target_data(.data(rsp.addr[i]));
             `uvm_info(`gfn, $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]), UVM_MEDIUM)
           end
+          `uvm_info(`gfn, $sformatf("Sampled device addr=0x%h", rsp.addr), UVM_MEDIUM)
           cfg.vif.sample_target_data(.data(rsp.dir));
           `uvm_info(`gfn, $sformatf("Sampled device dir=%b", rsp.dir), UVM_MEDIUM)
           set_drive_device_state(DrvAck);
@@ -188,6 +190,7 @@ class i3c_driver extends uvm_driver #(
             cfg.vif.sample_target_data(.data(rsp.addr[i]));
             `uvm_info(`gfn, $sformatf("Sampled device addr[%0d]=%b", i, rsp.addr[i]), UVM_MEDIUM)
           end
+          `uvm_info(`gfn, $sformatf("Sampled device addr=0x%h", rsp.addr), UVM_MEDIUM)
           cfg.vif.sample_target_data(.data(rsp.dir));
           `uvm_info(`gfn, $sformatf("Sampled device dir=%b", rsp.dir), UVM_MEDIUM)
           set_drive_device_state(DrvAck);
@@ -243,6 +246,7 @@ class i3c_driver extends uvm_driver #(
           if (rstart) begin
             `uvm_info(`gfn, "Device got RStart after broadcast header", UVM_HIGH)
             rsp.start_with_broadcast_header = 1'b1;
+            rsp.observed_broadcast_rstart = 1'b1;
             rsp.end_with_rstart = 1'b1;
             set_drive_device_state(DrvAddrPushPull);
           end else begin
@@ -327,7 +331,7 @@ class i3c_driver extends uvm_driver #(
             cfg.vif.sample_target_data(t_bit);
             rsp.T_bit.push_back(t_bit);
             `uvm_info(`gfn, $sformatf(
-                      "Device sampled data[%0d]=%d, T_bit=%b", i, rsp.data[i], rsp.T_bit[i]),
+                      "Device sampled data[%0d]=0x%h, T_bit=%b", i, rsp.data[i], rsp.T_bit[i]),
                       UVM_MEDIUM)
             if (((^data) ^ t_bit) == 0) begin
               `uvm_warning(`gfn, $sformatf("Device sampled data is incorrect!"))

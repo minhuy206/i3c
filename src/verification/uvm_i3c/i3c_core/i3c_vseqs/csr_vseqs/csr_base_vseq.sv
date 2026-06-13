@@ -60,7 +60,7 @@ class csr_base_vseq extends i3c_base_vseq;
   endtask
 
   virtual task clear_scoreboard_cmd_tx_model(string ctxt);
-    uvm_component comp;
+    uvm_component  comp;
     i3c_scoreboard scb;
 
     comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
@@ -74,21 +74,21 @@ class csr_base_vseq extends i3c_base_vseq;
 
   virtual task request_sw_reset(bit keep_enabled = 1'b0);
     bit [31:0] data;
-    bit        keep_broadcast_addr_enable;
+    bit        keep_broadcast_header_enable;
 
     poll_idle();
     reg_read(ADDR_HC_CONTROL, data);
-    keep_broadcast_addr_enable = data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT];
-    reg_write(ADDR_HC_CONTROL, {29'h0, keep_broadcast_addr_enable, 1'b1, keep_enabled});
+    keep_broadcast_header_enable = data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
+    reg_write(ADDR_HC_CONTROL, {29'h0, keep_broadcast_header_enable, 1'b1, keep_enabled});
     settle_cycles();
 
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
                  $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
-    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0,
-                 $sformatf("%s: SW_RESET should self-clear", get_type_name()))
-    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], keep_broadcast_addr_enable,
-                 $sformatf("%s: SW_RESET should preserve BROADCAST_ADDR_ENABLE config",
+    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0, $sformatf("%s: SW_RESET should self-clear",
+                                                             get_type_name()))
+    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], keep_broadcast_header_enable,
+                 $sformatf("%s: SW_RESET should preserve BROADCAST_HEADER_ENABLE config",
                            get_type_name()))
   endtask
 

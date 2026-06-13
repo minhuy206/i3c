@@ -10,7 +10,7 @@ class i3c_ccc_broadcast_enec_vseq extends i3c_base_vseq;
     bit [31:0]                  resp;
     i3c_device_response_seq     dev_seq;
 
-    configure_dut();
+    enable_dut();
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     ccc_cmd                   = '0;

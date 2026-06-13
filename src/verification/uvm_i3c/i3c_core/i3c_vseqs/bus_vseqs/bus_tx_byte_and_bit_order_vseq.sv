@@ -19,11 +19,25 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
     exp_data[2] = 8'ha5;
     exp_data[3] = 8'h96;
 
-    configure_dut();
+    enable_dut();
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    cfg = make_transfer_cfg("BUS_008", "dev_seq", 4'd8, 5'd0, 7'h08, 1'b1, NUM_TEST_BYTES);
-    cfg.wait_device_done = 1'b1;
+    cfg = make_transfer_cfg(
+        .ctxt("BUS_008"),
+        .seq_name("dev_seq"),
+        .tid(4'd8),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
     tx_words.push_back({exp_data[3], exp_data[2], exp_data[1], exp_data[0]});
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);

@@ -61,7 +61,7 @@ class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
       dev_seq.start(p_sequencer.m_i3c_sequencer);
     join_none
 
-    configure_dut();
+    enable_dut();
     write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
     poll_idle();
     wait_for_device_done(dev_seq, "csr_sw_reset_flush_queues_vseq");

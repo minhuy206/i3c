@@ -33,6 +33,7 @@
 
 // ─── Verification: focused SVA checkers ──────────────────────────────────────
 uvm_i3c/i3c_core/sva/sync_fifo_sva.sv
+uvm_i3c/i3c_core/sva/flow_active_sva.sv
 uvm_i3c/i3c_core/sva/csr_registers_sva.sv
 uvm_i3c/i3c_core/sva/i3c_controller_top_sva.sv
 uvm_i3c/i3c_core/sva/tb_pad_model_sva.sv

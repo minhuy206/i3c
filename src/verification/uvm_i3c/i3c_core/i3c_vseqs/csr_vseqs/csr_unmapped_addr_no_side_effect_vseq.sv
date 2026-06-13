@@ -76,7 +76,7 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
   task setup_known_state();
     bit [31:0] cmd_dword0;
 
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0000);
+    disable_dut();
     reg_write(ADDR_T_LOW, 32'h0000_0011);
     reg_write(ADDR_T_HIGH, 32'h0000_0013);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);

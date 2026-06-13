@@ -14,7 +14,7 @@ module i3c_controller_top_sva #(
 
     input logic ctrl_enable_i,
     input logic i3c_fsm_en_i,
-    input logic broadcast_addr_enable_i,
+    input logic broadcast_header_enable_i,
     input logic i3c_fsm_idle_i,
 
     input logic cmd_hw_rvalid_i,
@@ -47,88 +47,88 @@ module i3c_controller_top_sva #(
     else if (ctrl_enable_i) seen_enable_q <= 1'b1;
   end
 
-  assign hc_control_write  = reg_wen_i && (reg_addr_i == ADDR_HC_CONTROL);
-  assign hc_control_read   = reg_ren_i && !reg_wen_i && (reg_addr_i == ADDR_HC_CONTROL);
+  assign hc_control_write = reg_wen_i && (reg_addr_i == ADDR_HC_CONTROL);
+  assign hc_control_read = reg_ren_i && !reg_wen_i && (reg_addr_i == ADDR_HC_CONTROL);
   assign queue_status_read = reg_ren_i && !reg_wen_i && (reg_addr_i == ADDR_QUEUE_STATUS);
   assign pre_enable_window = !seen_enable_q && !ctrl_enable_i;
   assign pre_enable_bus_idle =
       !flow_gen_start_i && !flow_gen_rstart_i && !flow_gen_stop_i &&
       !flow_gen_clock_i && !ctrl_sda_oe_to_phy_i && !sda_oe_o;
 
-  ap_ctrl_enable_matches_i3c_fsm_en:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   ctrl_enable_i == i3c_fsm_en_i)
+  ap_ctrl_enable_matches_i3c_fsm_en :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) ctrl_enable_i == i3c_fsm_en_i)
   else $error("i3c_controller_top_sva: ctrl_enable and i3c_fsm_en mismatch");
 
-  cp_ctrl_enable_matches_i3c_fsm_en:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  ctrl_enable_i == i3c_fsm_en_i);
+  cp_ctrl_enable_matches_i3c_fsm_en :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) ctrl_enable_i == i3c_fsm_en_i);
 
-  ap_pre_enable_no_cmd_pop:
+  ap_pre_enable_no_cmd_pop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    pre_enable_window && cmd_hw_rvalid_i |-> !cmd_hw_rready_i)
   else $error("i3c_controller_top_sva: command popped before HC_CONTROL.ENABLE");
 
-  cp_pre_enable_no_cmd_pop:
+  cp_pre_enable_no_cmd_pop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   pre_enable_window && cmd_hw_rvalid_i && !cmd_hw_rready_i);
 
-  ap_pre_enable_no_bus_activity:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   pre_enable_window |-> pre_enable_bus_idle)
+  ap_pre_enable_no_bus_activity :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) pre_enable_window |-> pre_enable_bus_idle)
   else $error("i3c_controller_top_sva: bus activity observed before HC_CONTROL.ENABLE");
 
-  cp_pre_enable_no_bus_activity:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  pre_enable_window && pre_enable_bus_idle);
+  cp_pre_enable_no_bus_activity :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) pre_enable_window && pre_enable_bus_idle);
 
-  ap_broadcast_only_write_keeps_disabled:
+  ap_broadcast_only_write_keeps_disabled :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    hc_control_write && reg_wdata_i[2] && !reg_wdata_i[0]
-                   |=> (!ctrl_enable_i && broadcast_addr_enable_i))
-  else $error("i3c_controller_top_sva: BROADCAST_ADDR_ENABLE-only write enabled controller");
+                   |=> (!ctrl_enable_i && broadcast_header_enable_i))
+  else $error("i3c_controller_top_sva: BROADCAST_HEADER_ENABLE-only write enabled controller");
 
-  cp_broadcast_only_write_keeps_disabled:
+  cp_broadcast_only_write_keeps_disabled :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   hc_control_write && reg_wdata_i[2] && !reg_wdata_i[0]
-                  ##1 (!ctrl_enable_i && broadcast_addr_enable_i));
+                  ##1 (!ctrl_enable_i && broadcast_header_enable_i));
 
-  ap_enable_with_pending_cmd_pops_cmd:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   $rose(ctrl_enable_i) && cmd_hw_rvalid_i
-                   |-> ##[1:MaxEnableToCmdAcceptCycles] cmd_hw_rready_i)
+  ap_enable_with_pending_cmd_pops_cmd :
+  assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      ctrl_enable_i
+  ) && cmd_hw_rvalid_i |-> ##[1:MaxEnableToCmdAcceptCycles] cmd_hw_rready_i)
   else $error("i3c_controller_top_sva: pending command was not accepted after enable");
 
-  cp_enable_with_pending_cmd_pops_cmd:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  $rose(ctrl_enable_i) && cmd_hw_rvalid_i
-                  ##[1:MaxEnableToCmdAcceptCycles] cmd_hw_rready_i);
+  cp_enable_with_pending_cmd_pops_cmd :
+  cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
+      ctrl_enable_i
+  ) && cmd_hw_rvalid_i ##[1:MaxEnableToCmdAcceptCycles] cmd_hw_rready_i);
 
-  ap_disabled_queue_status_has_pending_cmd_no_resp:
+  ap_disabled_queue_status_has_pending_cmd_no_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    pre_enable_window && queue_status_read && cmd_hw_rvalid_i
                    |=> (!reg_rdata_o[QS_CMD_EMPTY_BIT] && reg_rdata_o[QS_RESP_EMPTY_BIT]))
   else $error("i3c_controller_top_sva: disabled QUEUE_STATUS did not show pending CMD/no RESP");
 
-  cp_disabled_queue_status_has_pending_cmd_no_resp:
+  cp_disabled_queue_status_has_pending_cmd_no_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   pre_enable_window && queue_status_read && cmd_hw_rvalid_i
                   ##1 (!reg_rdata_o[QS_CMD_EMPTY_BIT] && reg_rdata_o[QS_RESP_EMPTY_BIT]));
 
-  ap_hc_control_enable_readback:
+  ap_hc_control_enable_readback :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   hc_control_read |=> (reg_rdata_o[0] == $past(ctrl_enable_i)))
+                   hc_control_read |=> (reg_rdata_o[0] == $past(
+      ctrl_enable_i
+  )))
   else $error("i3c_controller_top_sva: HC_CONTROL ENABLE readback mismatch");
 
-  cp_hc_control_enable_readback:
+  cp_hc_control_enable_readback :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  hc_control_read ##1 (reg_rdata_o[0] == $past(ctrl_enable_i)));
+                  hc_control_read ##1 (reg_rdata_o[0] == $past(
+      ctrl_enable_i
+  )));
 
-  cp_cmd_start_after_enable:
+  cp_cmd_start_after_enable :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   seen_enable_q && (flow_gen_start_i || flow_gen_rstart_i));
 
-  cp_status_returns_idle_after_enable:
+  cp_status_returns_idle_after_enable :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   seen_enable_q && i3c_fsm_idle_i && cmd_empty_i && resp_empty_i);
 
@@ -147,7 +147,7 @@ bind i3c_controller_top i3c_controller_top_sva #(
     .reg_rdata_o,
     .ctrl_enable_i(ctrl_enable),
     .i3c_fsm_en_i(i3c_fsm_en),
-    .broadcast_addr_enable_i(broadcast_addr_enable),
+    .broadcast_header_enable_i(broadcast_header_enable),
     .i3c_fsm_idle_i(i3c_fsm_idle),
     .cmd_hw_rvalid_i(cmd_hw_rvalid),
     .cmd_hw_rready_i(cmd_hw_rready),

@@ -50,8 +50,7 @@ class csr_enable_disable_vseq extends csr_base_vseq;
       dev_seq.start(p_sequencer.m_i3c_sequencer);
     join_none
 
-    // reg_write(ADDR_HC_CONTROL, 32'h0000_0001);
-    configure_dut();
+    enable_dut();
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_enable_disable_vseq");
@@ -75,6 +74,43 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     reg_read(ADDR_HC_STATUS, data);
     `DV_CHECK_EQ(data[HC_STS_FSM_IDLE_BIT], 1'b1,
                  "csr_enable_disable_vseq: controller should return idle after completion")
+
+    disable_dut();
+
+    fork
+      check_no_host_start_for_cycles(100, "csr_enable_disable_vseq disable_after_enable");
+      write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
+    join
+
+    reg_read(ADDR_QUEUE_STATUS, data);
+    `DV_CHECK_EQ(data[QS_CMD_EMPTY_BIT], 1'b0,
+                 "csr_enable_disable_vseq: command should remain pending after disable")
+    `DV_CHECK_EQ(data[QS_RESP_EMPTY_BIT], 1'b1,
+                 "csr_enable_disable_vseq: no response should exist while disabled after enable")
+
+    dev_seq               = i3c_device_response_seq::type_id::create("dev_seq_after_disable");
+    dev_seq.target_addr   = 7'h08;
+    dev_seq.ack_address   = 1'b1;
+    dev_seq.is_i3c        = 1'b1;
+    dev_seq.dir           = 1'b0;
+    dev_seq.read_data_cnt = 2;
+    fork
+      dev_seq.start(p_sequencer.m_i3c_sequencer);
+    join_none
+
+    enable_dut();
+
+    poll_idle();
+    wait_for_device_done(dev_seq, "csr_enable_disable_vseq disable_after_enable");
+    read_response(resp);
+    `DV_CHECK_EQ(resp[31:28], 4'h0,
+                 "csr_enable_disable_vseq: expected Success after re-enable")
+    `DV_CHECK_EQ(dev_seq.done, 1'b1,
+                 "csr_enable_disable_vseq: device response should finish after re-enable")
+    `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08,
+                 "csr_enable_disable_vseq: target address mismatch after re-enable")
+    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0,
+                 "csr_enable_disable_vseq: transfer direction should be write after re-enable")
 
     `uvm_info(`gfn, "CSR enable/disable checks passed", UVM_LOW)
   endtask

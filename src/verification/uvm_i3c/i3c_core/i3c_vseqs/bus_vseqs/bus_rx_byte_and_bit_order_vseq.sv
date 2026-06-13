@@ -22,14 +22,29 @@ class bus_rx_byte_and_bit_order_vseq extends bus_base_vseq;
     exp_data[3] = 8'h96;
     exp_rx      = {exp_data[3], exp_data[2], exp_data[1], exp_data[0]};
 
-    configure_dut();
+    enable_dut();
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     for (int i = 0; i < NUM_TEST_BYTES; i++) begin
       read_data.push_back(exp_data[i]);
     end
 
-    cfg = make_transfer_cfg("BUS_009", "dev_seq", 4'd9, 5'd0, 7'h08, 1'b1, NUM_TEST_BYTES);
+    cfg = make_transfer_cfg(
+        .ctxt("BUS_009"),
+        .seq_name("dev_seq"),
+        .tid(4'd9),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
     `DV_CHECK_EQ(rx, exp_rx, "BUS_009: RX FIFO data mismatch; byte or bit order is wrong")

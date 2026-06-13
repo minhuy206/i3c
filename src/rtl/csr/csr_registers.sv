@@ -21,7 +21,7 @@ module csr_registers
     output logic ctrl_enable_o,
     output logic i3c_fsm_en_o,
     output logic sw_reset_o,
-    output logic broadcast_addr_enable_o,
+    output logic broadcast_header_enable_o,
 
     output logic [CounterWidth-1:0] t_r_o,
     output logic [CounterWidth-1:0] t_f_o,
@@ -106,8 +106,7 @@ module csr_registers
   localparam logic [AddrWidth-1:0] ADDR_RESP = 12'h10C;
   localparam logic [AddrWidth-1:0] ADDR_QUEUE_STATUS = 12'h110;
   localparam logic [AddrWidth-1:0] ADDR_DAT_BASE = 12'h200;
-  localparam logic [AddrWidth-1:0] ADDR_DAT_END =
-      ADDR_DAT_BASE + AddrWidth'(DatDepth * 4);
+  localparam logic [AddrWidth-1:0] ADDR_DAT_END = ADDR_DAT_BASE + AddrWidth'(DatDepth * 4);
   localparam logic [DataWidth-1:0] DAT_WRITABLE_MASK = 32'h807F_007F;
 
   localparam logic [CounterWidth-1:0] RST_T_R = 20'd4;
@@ -154,7 +153,7 @@ module csr_registers
 
   logic hc_enable;
   logic sw_reset;
-  logic broadcast_addr_enable;
+  logic broadcast_header_enable;
   logic resp_rready;
   logic rx_rready;
   logic cmd_queue_write;
@@ -164,7 +163,7 @@ module csr_registers
     if (!rst_ni) begin
       hc_enable <= '0;
       sw_reset <= '0;
-      broadcast_addr_enable <= 1'b0;
+      broadcast_header_enable <= 1'b0;
       t_r <= RST_T_R;
       t_f <= RST_T_F;
       t_low <= RST_T_LOW;
@@ -197,7 +196,7 @@ module csr_registers
             hc_enable <= wdata_i[0];
             // SW_RESET only safe when HC_STATUS[FSM_IDLE]=1; see spec §HC_CONTROL[1]
             sw_reset <= wdata_i[1];
-            broadcast_addr_enable <= wdata_i[2];
+            broadcast_header_enable <= wdata_i[2];
           end
           ADDR_T_R: t_r <= wdata_i[19:0];
           ADDR_T_F: t_f <= wdata_i[19:0];
@@ -325,7 +324,7 @@ module csr_registers
   assign ctrl_enable_o = hc_enable;
   assign i3c_fsm_en_o = hc_enable;
   assign sw_reset_o = sw_reset;
-  assign broadcast_addr_enable_o = broadcast_addr_enable;
+  assign broadcast_header_enable_o = broadcast_header_enable;
   assign rdata_o = rdata_q;
   assign dat_rdata_o = dat_rdata;
   assign rx_rready_o = rx_rready;
@@ -364,7 +363,7 @@ module csr_registers
   assign tx_wvalid_o = tx_wvalid;
   assign tx_wdata_o = tx_wdata;
 
-  assign hc_control = {29'b0, broadcast_addr_enable, sw_reset, hc_enable};
+  assign hc_control = {29'b0, broadcast_header_enable, sw_reset, hc_enable};
   assign hc_status = {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i};
   assign queue_status = {
     24'b0,

@@ -178,20 +178,20 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 
 ```systemverilog
 typedef enum logic [3:0] {
-  Idle             = 4'd0,   // Wait for FSM enable
-  WaitForCmd       = 4'd1,   // Fetch command from CMD FIFO
-  FetchDAT         = 4'd2,   // Look up target in DAT
-  I3CWriteImmediate= 4'd3,   // Immediate write to I3C device (CCC or short data)
-  I2CWriteImmediate= 4'd4,   // Immediate write to I2C legacy device
-  FetchTxData      = 4'd5,   // Fetch DWORD from TX FIFO
-  FetchRxData      = 4'd6,   // Write received data to RX FIFO
-  InitI2CWrite     = 4'd7,   // Initialize I2C write transaction
-  InitI2CRead      = 4'd8,   // Initialize I2C read transaction
-  StallWrite       = 4'd9,   // Wait for TX FIFO data (underflow prevention)
-  StallRead        = 4'd10,  // Wait for RX FIFO space (overflow prevention)
-  IssueCmd         = 4'd11,  // Drive command bytes on bus
-  WriteResp        = 4'd12,  // Generate and write response descriptor
-  WaitDAT          = 4'd13   // Wait for dat_entry capture to settle (M-6 fix)
+  Idle              = 4'd0,   // Wait for FSM enable
+  WaitForCmd        = 4'd1,   // Fetch command from CMD FIFO
+  FetchDAT          = 4'd2,   // Look up target in DAT
+  WaitDAT           = 4'd3,   // Wait for dat_entry capture to settle
+  I3CBcastHeader    = 4'd4,   // Optional I3C broadcast-header preamble
+  I3CWriteImmediate = 4'd5,   // Immediate write to I3C device
+  I2CWriteImmediate = 4'd6,   // Immediate write to I2C legacy device
+  FetchTxData       = 4'd7,   // Fetch DWORD from TX FIFO
+  InitI3CWrite      = 4'd8,   // Initialize I3C write transaction
+  InitI3CRead       = 4'd9,   // Initialize I3C read transaction
+  InitI2CWrite      = 4'd10,  // Initialize I2C write transaction
+  InitI2CRead       = 4'd11,  // Initialize I2C read transaction
+  IssueCmd          = 4'd13,  // Drive command/data bytes on bus
+  WriteResp         = 4'd14   // Generate and write response descriptor
 } flow_fsm_state_e;
 ```
 
@@ -206,29 +206,24 @@ stateDiagram-v2
 
     WaitDAT --> I2CWriteImmediate: q=0, I2C + Immediate
     WaitDAT --> I3CWriteImmediate: q=0, I3C + Immediate
-    WaitDAT --> FetchTxData: q=0, Regular/Combo + Write
-    WaitDAT --> IssueCmd: q=0, Regular/Combo + Read
+    WaitDAT --> InitI3CWrite: q=0, I3C Regular/Combo + Write
+    WaitDAT --> InitI3CRead: q=0, I3C Regular/Combo + Read
+    WaitDAT --> InitI2CWrite: q=0, I2C Regular/Combo + Write
+    WaitDAT --> InitI2CRead: q=0, I2C Regular/Combo + Read
     WaitDAT --> IssueCmd: q=0, AddressAssignment (ENTDAA)
 
     I2CWriteImmediate --> WriteResp: transfer complete
     I3CWriteImmediate --> WriteResp: transfer complete
 
     FetchTxData --> IssueCmd: data fetched
-    FetchTxData --> StallWrite: TX FIFO empty
-
-    StallWrite --> FetchTxData: TX data available
+    FetchTxData --> WriteResp: TX FIFO empty, STOP complete, RESP Ovl
 
     IssueCmd --> FetchTxData: need more TX data
-    IssueCmd --> FetchRxData: RX data available
-    IssueCmd --> StallRead: RX FIFO full
     IssueCmd --> WriteResp: transfer complete
 
-    FetchRxData --> IssueCmd: continue receiving
-    FetchRxData --> StallRead: RX FIFO full
-
-    StallRead --> FetchRxData: RX FIFO space available
-
-    InitI2CWrite --> IssueCmd: I2C write initialized
+    InitI3CWrite --> FetchTxData: I3C write address phase complete
+    InitI3CRead --> IssueCmd: I3C read address phase complete
+    InitI2CWrite --> FetchTxData: I2C write address phase complete
     InitI2CRead --> IssueCmd: I2C read initialized
 
     WriteResp --> Idle: response written
@@ -262,10 +257,10 @@ stateDiagram-v2
 - **Outputs:** none (all defaults; `dat_read_valid_hw_d = 0` is critical — lets `q` drop to 0)
 - **Transition (on `!dat_read_valid_hw_q`):**
   - Immediate CCC (`cp = 1`) → `I3CBcastHeader`
-  - Private immediate I3C (`cp = 0`) → `I3CBcastHeader` only when `broadcast_addr_enable_i = 1` and this is not a continuation; otherwise `I3CWriteImmediate`
+  - Private immediate I3C (`cp = 0`) → `I3CBcastHeader` only when `broadcast_header_enable_i = 1` and this is not a continuation; otherwise `I3CWriteImmediate`
   - Legacy I2C immediate → `I2CWriteImmediate`
   - `cmd_attr == AddressAssignment` → `I3CBcastHeader` (ENTDAA)
-  - Private regular I3C write/read → `I3CBcastHeader` only when `broadcast_addr_enable_i = 1` and this is not a continuation; otherwise `InitI3CWrite`/`InitI3CRead`
+  - Private regular I3C write/read → `I3CBcastHeader` only when `broadcast_header_enable_i = 1` and this is not a continuation; otherwise `InitI3CWrite`/`InitI3CRead`
   - Legacy I2C regular write/read → `InitI2CWrite`/`InitI2CRead`
 - **Timing cost:** +2 cycles vs original FetchDAT direct dispatch (negligible vs SCL timing)
 
@@ -295,7 +290,7 @@ stateDiagram-v2
 
 **Sub-case A — Private I3C write (`cp = 0`):**
 
-1. If `broadcast_addr_enable_i = 1` and this is a fresh transfer, first send `START + 7E/W + Sr`.
+1. If `broadcast_header_enable_i = 1` and this is a fresh transfer, first send `START + 7E/W + Sr`.
 2. Generate START or repeated START as selected by the preamble path.
 3. Send `{dynamic_address, RnW}` from DAT entry.
 4. Read ACK (Open-Drain).
@@ -337,7 +332,7 @@ stateDiagram-v2
   - Track byte position within the DWORD (4 bytes per DWORD)
 - **Transition:**
   - → `IssueCmd` when data captured
-  - → `StallWrite` if TX FIFO empty
+  - → `WriteResp` with response error `Ovl` if TX FIFO is empty when the controller needs the next DWORD
 
 #### FetchRxData (State 6) — **NEW (was TODO)**
 
@@ -370,13 +365,15 @@ stateDiagram-v2
 - **OD/PP:** Open-Drain throughout
 - **Transition:** → `IssueCmd` to receive data bytes, or → `WriteResp` on NACK
 
-#### StallWrite (State 9) — **NEW (was TODO)**
+#### TX FIFO underflow handling
 
-- **Purpose:** Stall bus clock while waiting for TX FIFO data (prevents underflow)
+- **Purpose:** Terminate a regular/combo write deterministically when software did not provide enough TX FIFO data.
 - **Actions:**
-  - Hold SCL LOW (deassert `gen_clock_o`)
-  - Poll `tx_queue_empty_i`
-- **Transition:** → `FetchTxData` when TX data available
+  - Do not assert `tx_queue_rready_o` while the TX FIFO is empty.
+  - Latch `tx_underflow`.
+  - Generate STOP using the active I3C/I2C timing mode.
+  - Write a response descriptor with error status `Ovl` and `data_length` equal to the number of bytes already transferred.
+- **Transition:** `FetchTxData` → `WriteResp` after STOP completes.
 
 #### StallRead (State 10) — **NEW (was TODO)**
 
@@ -507,11 +504,11 @@ end
 | I3CWriteImmediate         | Empty TODO                                   | Full implementation                |
 | FetchTxData / FetchRxData | Empty TODO                                   | Full implementation                |
 | InitI2CWrite/Read         | Empty TODO                                   | Full implementation                |
-| StallWrite/Read           | Empty TODO                                   | Full implementation                |
+| TX underflow / RX overflow | Incomplete or delegated handling            | Error response with `Ovl`          |
 | IssueCmd                  | Empty TODO                                   | Full implementation                |
 | WaitDAT (State 13)        | Not present                                  | Added for M-6 DAT capture fix      |
 | Error handling            | Always returns `Success`                     | Proper error accumulation          |
-| Error codes emitted       | `Success` only                               | `Success`, `AddrHeader`, `Nack`, `I3cShortReadErr` |
+| Error codes emitted       | `Success` only                               | `Success`, `AddrHeader`, `Nack`, `Ovl`, `I3cShortReadErr` |
 | IBI interface             | 8 ports, always `'0`                         | Removed entirely                   |
 | DCT interface             | Full DCT read/write ports                    | Removed (SW stores PID/BCR/DCR)    |
 | I2C controller interface  | `fmt_fifo_*` signals to `i2c_controller_fsm` | Direct bus_tx/bus_rx control       |
@@ -527,6 +524,8 @@ end
 | ---------------- | ------------------------------------------------------ | ---------------- |
 | Address NACK     | ACK bit = 1 after address byte                         | `AddrHeader`     |
 | Data NACK        | ACK bit = 1 after data byte                            | `Nack`           |
+| TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
+| RX overflow      | RX FIFO cannot accept received data                    | `Ovl`            |
 | Short read       | Target drives T-bit=0 before all requested bytes sent  | `I3cShortReadErr`|
 | ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses    | `Nack`           |
 
@@ -534,7 +533,7 @@ end
 
 ### Scenarios
 
-1. **I3C Private Write (immediate):** Send 2-byte immediate write to I3C device with `broadcast_addr_enable_i=0`; verify direct target address and response
+1. **I3C Private Write (immediate):** Send 2-byte immediate write to I3C device with `broadcast_header_enable_i=0`; verify direct target address and response
 2. **I3C Private Write with broadcast header:** Enable `HC_CONTROL[2]`; verify `[S][0x7E+W][ACK][Sr][DA+W]...`
 3. **I3C Private Write (regular):** Send 8-byte write via TX FIFO; verify data integrity
 4. **I3C Private Read:** Read 4 bytes from I3C device; verify RX FIFO data and response
@@ -544,8 +543,8 @@ end
 8. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx
 9. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5; verify [S][0x7E+W][ACK][0x00][ACK][DefByte][P] frame
 10. **CCC DISEC direct:** ImmediateDataTransfer with cp=1, cmd=0x81; verify [S][0x7E+W][ACK][0x81][ACK][Sr][DA+W][ACK][DefByte][P] frame
-11. **TX FIFO stall:** Large write with slow TX FIFO fill; verify StallWrite recovery
-12. **RX FIFO stall:** Large read with full RX FIFO; verify StallRead recovery
+11. **TX FIFO underflow:** Large write with insufficient TX FIFO data; verify STOP and response `Ovl`
+12. **RX FIFO overflow:** Large read with full RX FIFO; verify response `Ovl`
 13. **Address NACK:** Target NACKs address; verify `AddrHeader` error in response
 14. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` in response
 15. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data

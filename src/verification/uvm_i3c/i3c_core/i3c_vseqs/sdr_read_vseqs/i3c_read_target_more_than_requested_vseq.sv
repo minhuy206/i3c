@@ -10,19 +10,24 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
   task body();
     int unsigned req_lengths[NUM_CASES] = '{1, 4, 5};
     int unsigned target_lengths[NUM_CASES] = '{3, 6, 8};
+    bit broadcast_modes[2] = '{1'b0, 1'b1};
 
-    configure_dut();
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    foreach (broadcast_modes[mode_idx]) begin
+      enable_dut(broadcast_modes[mode_idx]);
+      write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    foreach (req_lengths[case_idx]) begin
-      run_more_than_requested_case(case_idx, req_lengths[case_idx], target_lengths[case_idx]);
+      foreach (req_lengths[case_idx]) begin
+        run_more_than_requested_case(case_idx, req_lengths[case_idx], target_lengths[case_idx],
+                                     broadcast_modes[mode_idx]);
+      end
     end
 
     `uvm_info(`gfn, "SDRR_004 I3C read target-more-than-requested checks passed", UVM_LOW)
   endtask
 
   virtual task run_more_than_requested_case(int unsigned case_idx, int unsigned requested_length,
-                                            int unsigned target_length);
+                                            int unsigned target_length,
+                                            bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg;
     byte_queue_t                   read_data;
     word_queue_t                   rx_words;
@@ -36,19 +41,27 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
     build_payload(case_idx, target_length, read_data);
 
     cfg = make_transfer_cfg(
-        $sformatf(
-            "SDRR_004 req %0d target %0d", requested_length, target_length
-        ),
-        $sformatf(
-            "sdrr004_dev_seq_%0d_%0d", requested_length, target_length
-        ),
-        4'(case_idx + 1),
-        5'd0,
-        7'h08,
-        1'b1,
-        requested_length
+        .ctxt($sformatf(
+          "SDRR_004 %s req %0d target %0d", private_addr_mode_name(broadcast_header_enable),
+          requested_length, target_length
+          )),
+        .seq_name($sformatf(
+          "sdrr004_%s_dev_seq_%0d_%0d", private_addr_mode_name(broadcast_header_enable),
+          requested_length, target_length
+          )),
+        .tid(4'(case_idx + 1)),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(requested_length),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
     );
-    cfg.wait_device_done = 1'b1;
 
     run_read_stimulus_words_with_actual_len(cfg, read_data, requested_length, rx_words, resp,
                                             dev_seq, 1'b1);

@@ -86,7 +86,7 @@ class bus_base_vseq extends i3c_base_vseq;
   virtual task configure_bus_monitor_zero_delay();
     reg_write(ADDR_T_R, 32'h0);
     reg_write(ADDR_T_F, 32'h0);
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0001);
+    enable_dut();
     wait_sync_cycles(2);
   endtask
 
@@ -169,7 +169,7 @@ class bus_base_vseq extends i3c_base_vseq;
     release_hard_reset();
     program_timing_registers(t_r, t_f, t_low, t_high, t_su_sta, t_hd_sta, t_su_sto, t_su_dat,
                              t_hd_dat, t_bus_free, t_low_od);
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0001);
+    enable_dut();
     reset_scl_generator_to_idle();
   endtask
 

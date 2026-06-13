@@ -8,7 +8,7 @@ class bus_tb_pad_model_odpp_wiring_vseq extends bus_base_vseq;
   endfunction
 
   task body();
-    configure_dut();
+    enable_dut();
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     run_bus011_write_stimulus();
@@ -24,9 +24,22 @@ class bus_tb_pad_model_odpp_wiring_vseq extends bus_base_vseq;
     i3c_device_response_seq        dev_seq;
     bit                     [31:0] resp;
 
-    cfg = make_transfer_cfg("BUS_011 write", "bus011_write_dev_seq", 4'd11, 5'd0, 7'h08, 1'b1,
-                            NUM_TEST_BYTES);
-    cfg.wait_device_done = 1'b1;
+    cfg = make_transfer_cfg(
+        .ctxt("BUS_011 write"),
+        .seq_name("bus011_write_dev_seq"),
+        .tid(4'd11),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
     tx_words.push_back(32'hC33C_A55A);
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
@@ -54,8 +67,22 @@ class bus_tb_pad_model_odpp_wiring_vseq extends bus_base_vseq;
       read_data.push_back(exp_data[i]);
     end
 
-    cfg = make_transfer_cfg("BUS_011 read", "bus011_read_dev_seq", 4'd12, 5'd0, 7'h08, 1'b1,
-                            NUM_TEST_BYTES);
+    cfg = make_transfer_cfg(
+        .ctxt("BUS_011 read"),
+        .seq_name("bus011_read_dev_seq"),
+        .tid(4'd12),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
     `DV_CHECK_EQ(rx, exp_rx, "BUS_011 read: RX data mismatch")

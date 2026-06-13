@@ -10,7 +10,7 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
     exercise_empty_reads(resp_paths, ADDR_RESP);
 
     // Subsequent queue states are synthetic backdoor states, not reset defaults.
-    reg_write(ADDR_HC_CONTROL, 32'h0);
+    disable_dut();
     settle_cycles();
 
     backdoor_load_rx_queue(32'hAAAA_BBBB, 32'hCCCC_DDDD);

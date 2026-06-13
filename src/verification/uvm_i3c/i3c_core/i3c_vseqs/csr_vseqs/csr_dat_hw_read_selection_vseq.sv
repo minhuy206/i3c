@@ -47,7 +47,7 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
     p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.dynamic_addr = dynamic_addr[1];
     p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.dynamic_addr_valid = 1'b1;
 
-    configure_dut();
+    enable_dut();
 
     for (int unsigned i = 0; i < NUM_CASES; i++) begin
       write_dat_entry(dev_idx[i], static_addr[i], dynamic_addr[i], is_i2c[i]);
@@ -73,15 +73,21 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
     i3c_device_response_seq dev_seq;
 
     cfg = make_transfer_cfg(
-        $sformatf("CSR_005 DAT hardware read dev_idx %0d", dev_idx),
-        $sformatf("csr005_dat_hw_dev_seq_%0d", case_idx),
-        4'(4'h5 + case_idx),
-        dev_idx,
-        exp_addr,
-        is_i3c,
-        DATA_LENGTH
+        .ctxt($sformatf("CSR_005 DAT hardware read dev_idx %0d", dev_idx)),
+        .seq_name($sformatf("csr005_dat_hw_dev_seq_%0d", case_idx)),
+        .tid(4'(4'h5 + case_idx)),
+        .dev_idx(dev_idx),
+        .target_addr(exp_addr),
+        .is_i3c(is_i3c),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(DATA_LENGTH),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
     );
-    cfg.wait_device_done = 1'b1;
 
     tx_words.push_back({24'h0, payload});
 
@@ -89,13 +95,6 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
     check_success_resp(resp, cfg);
     check_device_write(dev_seq, cfg, payload);
     settle_cycles();
-  endtask
-
-  virtual task check_success_resp(input bit [31:0] resp, input transfer_stimulus_cfg_t cfg);
-    `DV_CHECK_EQ(resp[31:28], 4'h0, $sformatf("%s: expected Success response", cfg.ctxt))
-    `DV_CHECK_EQ(resp[27:24], cfg.tid, $sformatf("%s: response TID mismatch", cfg.ctxt))
-    `DV_CHECK_EQ(resp[15:0], 16'(cfg.data_length),
-                 $sformatf("%s: response length mismatch", cfg.ctxt))
   endtask
 
   virtual task check_device_write(input i3c_device_response_seq dev_seq,

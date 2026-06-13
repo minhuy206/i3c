@@ -54,7 +54,7 @@ package i3c_csr_addr_pkg;
   // HC_CONTROL
   localparam int HC_CTRL_ENABLE_BIT = 0;
   localparam int HC_CTRL_SW_RESET_BIT = 1;
-  localparam int HC_CTRL_BROADCAST_ADDR_ENABLE_BIT = 2;
+  localparam int HC_CTRL_BROADCAST_HEADER_ENABLE_BIT = 2;
 
   // HC_STATUS
   localparam int HC_STS_FSM_IDLE_BIT = 0;
