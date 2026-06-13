@@ -1,6 +1,8 @@
 class csr_dat_rw_all_entries_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_dat_rw_all_entries_vseq)
 
+  localparam bit [31:0] DAT_RESERVED_MASK = 32'h7F80_FF80;
+
   function new(string name = "csr_dat_rw_all_entries_vseq");
     super.new(name);
   endfunction
@@ -20,6 +22,13 @@ class csr_dat_rw_all_entries_vseq extends csr_base_vseq;
 
       foreach (exp_dat[j]) begin
         check_dat_entry(j, exp_dat[j], $sformatf("after DAT[%0d] write", i));
+      end
+
+      reg_write(dat_addr(i), exp_dat[i] | DAT_RESERVED_MASK);
+
+      foreach (exp_dat[j]) begin
+        check_dat_entry(j, exp_dat[j],
+                        $sformatf("after DAT[%0d] reserved-bit write", i));
       end
     end
 

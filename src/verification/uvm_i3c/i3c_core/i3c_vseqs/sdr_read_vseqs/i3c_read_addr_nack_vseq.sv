@@ -8,19 +8,39 @@ class i3c_read_addr_nack_vseq extends i3c_base_vseq;
   endfunction
 
   task body();
+    bit broadcast_modes[2] = '{1'b0, 1'b1};
+
+    foreach (broadcast_modes[mode_idx]) begin
+      run_addr_nack_case(broadcast_modes[mode_idx]);
+    end
+  endtask
+
+  virtual task run_addr_nack_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t cfg;
     regular_trans_desc_t    rd_cmd;
     byte_queue_t            no_read_data;
     bit [31:0]              resp;
     i3c_device_response_seq dev_seq;
 
-    configure_dut();
+    enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    cfg = make_transfer_cfg("SDRR_005 addr_nack", "sdrr005_dev_seq", 4'd5, 5'd0, 7'h08, 1'b1,
-                            DATA_LENGTH);
-    cfg.ack_address      = 1'b0;
-    cfg.wait_device_done = 1'b1;
+    cfg = make_transfer_cfg(
+        .ctxt($sformatf("SDRR_005 %s addr_nack", private_addr_mode_name(broadcast_header_enable))),
+        .seq_name($sformatf("sdrr005_%s_dev_seq", private_addr_mode_name(broadcast_header_enable))),
+        .tid(4'd5),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b0),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(DATA_LENGTH),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
 
     rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
     start_device_response(cfg, 1'b1, no_read_data, dev_seq);

@@ -46,15 +46,15 @@ package i3c_csr_addr_pkg;
 
   // Device Address Table
   localparam bit [11:0] ADDR_DAT_BASE = 12'h200;
-  localparam bit [11:0] ADDR_DAT_END = 12'h240;
-  localparam int unsigned DAT_DEPTH = 16;
+  localparam int unsigned DAT_DEPTH = 32;
+  localparam bit [11:0] ADDR_DAT_END = ADDR_DAT_BASE + 12'(DAT_DEPTH * 4);
 
   // 2. Field Bit Positions
 
   // HC_CONTROL
   localparam int HC_CTRL_ENABLE_BIT = 0;
   localparam int HC_CTRL_SW_RESET_BIT = 1;
-  localparam int HC_CTRL_BROADCAST_ADDR_ENABLE_BIT = 2;
+  localparam int HC_CTRL_BROADCAST_HEADER_ENABLE_BIT = 2;
 
   // HC_STATUS
   localparam int HC_STS_FSM_IDLE_BIT = 0;

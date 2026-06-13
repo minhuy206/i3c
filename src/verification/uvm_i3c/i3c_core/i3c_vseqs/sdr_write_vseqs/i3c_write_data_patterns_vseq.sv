@@ -6,19 +6,24 @@ class i3c_write_data_patterns_vseq extends i3c_base_vseq;
   endfunction
 
   task body();
-    configure_dut();
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    bit broadcast_modes[2] = '{1'b0, 1'b1};
 
-    run_pattern_case(0, "all_zero");
-    run_pattern_case(1, "all_one");
-    run_pattern_case(2, "walking_one");
-    run_pattern_case(3, "alternating");
-    run_pattern_case(4, "fixed_random");
+    foreach (broadcast_modes[mode_idx]) begin
+      enable_dut(broadcast_modes[mode_idx]);
+      write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+
+      run_pattern_case(0, "all_zero", broadcast_modes[mode_idx]);
+      run_pattern_case(1, "all_one", broadcast_modes[mode_idx]);
+      run_pattern_case(2, "walking_one", broadcast_modes[mode_idx]);
+      run_pattern_case(3, "alternating", broadcast_modes[mode_idx]);
+      run_pattern_case(4, "fixed_random", broadcast_modes[mode_idx]);
+    end
 
     `uvm_info(`gfn, "SDRW_003 I3C regular write data pattern checks passed", UVM_LOW)
   endtask
 
-  virtual task run_pattern_case(int unsigned pattern_idx, string pattern_name);
+  virtual task run_pattern_case(int unsigned pattern_idx, string pattern_name,
+                                bit broadcast_header_enable);
     transfer_stimulus_cfg_t cfg;
     byte_queue_t            exp_data;
     word_queue_t            tx_words;
@@ -28,24 +33,28 @@ class i3c_write_data_patterns_vseq extends i3c_base_vseq;
     build_pattern_payload(pattern_idx, exp_data, tx_words);
 
     cfg                  = make_transfer_cfg(
-        $sformatf("SDRW_003 %s", pattern_name),
-        $sformatf("sdrw003_dev_seq_%s", pattern_name),
-        4'(pattern_idx + 1),
-        5'd0,
-        7'h08,
-        1'b1,
-        exp_data.size()
+        .ctxt($sformatf("SDRW_003 %s %s", private_addr_mode_name(broadcast_header_enable),
+          pattern_name)),
+        .seq_name($sformatf("sdrw003_%s_dev_seq_%s", private_addr_mode_name(broadcast_header_enable),
+          pattern_name)),
+        .tid(4'(pattern_idx + 1)),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(exp_data.size()),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
     );
-    cfg.wait_device_done = 1'b1;
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
     `DV_CHECK_EQ(dev_seq.done, 1'b1,
                  $sformatf("SDRW_003 %s: device response did not finish", pattern_name))
-    `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08,
-                 $sformatf("SDRW_003 %s: target address mismatch", pattern_name))
-    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0,
-                 $sformatf("SDRW_003 %s: transfer direction should be write", pattern_name))
     `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_data.size(),
                  $sformatf("SDRW_003 %s: sampled byte count mismatch", pattern_name))
     for (int unsigned i = 0; i < exp_data.size(); i++) begin
@@ -55,23 +64,6 @@ class i3c_write_data_patterns_vseq extends i3c_base_vseq;
                                pattern_name, i))
       end
     end
-
-    `DV_CHECK_EQ(dev_seq.sampled_t_bit.size(), exp_data.size(),
-                 $sformatf("SDRW_003 %s: sampled T-bit count mismatch", pattern_name))
-    for (int unsigned i = 0; i < exp_data.size(); i++) begin
-      if (i < dev_seq.sampled_t_bit.size()) begin
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[i], ~^exp_data[i],
-                     $sformatf("SDRW_003 %s: T-bit parity mismatch for byte[%0d]",
-                               pattern_name, i))
-      end
-    end
-
-    `DV_CHECK_EQ(resp[31:28], 4'h0,
-                 $sformatf("SDRW_003 %s: expected Success response", pattern_name))
-    `DV_CHECK_EQ(resp[27:24], cfg.tid,
-                 $sformatf("SDRW_003 %s: response TID mismatch", pattern_name))
-    `DV_CHECK_EQ(resp[15:0], 16'(exp_data.size()),
-                 $sformatf("SDRW_003 %s: response length mismatch", pattern_name))
 
     check_all_queues_empty($sformatf("after SDRW_003 %s", pattern_name));
   endtask

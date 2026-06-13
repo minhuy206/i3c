@@ -17,6 +17,9 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit       is_ccc;
     bit [7:0] ccc;
     bit [7:0] event_byte;
+    bit       target_is_i3c;
+    bit       broadcast_header_eligible;
+    bit       updates_private_continuation;
     bit       start_with_broadcast_header;
   } exp_txn_t;
 
@@ -43,16 +46,17 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [7:0] data[$];
   } exp_read_data_t;
 
-  exp_txn_t exp_txn_queue[$];  // pending expected I3C transactions
-  bit [31:0] tx_data_queue[$];  // TX data words written to ADDR_TX_DATA
+  exp_txn_t exp_txn_queue[$];
+  bit [31:0] tx_data_queue[$];
   exp_resp_err_t exp_resp_err_queue[$];
+  exp_resp_err_t exp_resp_err_history[$];
   exp_read_data_t exp_read_data_queue[$];
   bit [31:0] exp_rx_data_queue[$];
   dat_model_entry_t dat_model[DAT_DEPTH];
 
   bit got_dw0;
   bit [31:0] cmd_dw0;
-  bit broadcast_addr_enable;
+  bit broadcast_header_enable;
   bit pending_private_continuation;
 
   int pass_cnt;
@@ -105,6 +109,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     exp_txn_queue.delete();
     tx_data_queue.delete();
     exp_resp_err_queue.delete();
+    exp_resp_err_history.delete();
     exp_read_data_queue.delete();
     exp_rx_data_queue.delete();
     got_dw0 = 1'b0;
@@ -114,7 +119,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   endfunction
 
   function void handle_hc_control_write(bit [31:0] wdata);
-    broadcast_addr_enable = wdata[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT];
+    broadcast_header_enable = wdata[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
     if (wdata[HC_CTRL_SW_RESET_BIT]) handle_sw_reset();
   endfunction
 
@@ -172,6 +177,9 @@ class i3c_scoreboard extends uvm_scoreboard;
       exp.is_immediate = 1'b0;
       exp.ccc = cmd;
       exp.event_byte = wdata[7:0];
+      exp.target_is_i3c = target_is_i3c;
+      exp.broadcast_header_eligible = 1'b0;
+      exp.updates_private_continuation = 1'b0;
       exp.start_with_broadcast_header = 1'b0;
 
       case (attr)
@@ -179,8 +187,8 @@ class i3c_scoreboard extends uvm_scoreboard;
           exp.rnw = rnw;
           exp.data_length = int'(wdata[31:16]);
           exp.uses_tx_queue = !rnw;
-          exp.start_with_broadcast_header =
-              target_is_i3c && broadcast_addr_enable && !pending_private_continuation;
+          exp.broadcast_header_eligible = target_is_i3c;
+          exp.updates_private_continuation = target_is_i3c;
         end
         ImmediateDataTransfer: begin
           exp.is_immediate = 1'b1;
@@ -192,9 +200,7 @@ class i3c_scoreboard extends uvm_scoreboard;
           end else begin
             exp.rnw = rnw;
             exp.data_length = int'(cmd_dw0[25:23]);
-            exp.start_with_broadcast_header =
-                !cp && target_is_i3c && broadcast_addr_enable &&
-                !pending_private_continuation;
+            exp.broadcast_header_eligible = !cp && target_is_i3c;
           end
         end
         AddressAssignment: begin
@@ -208,7 +214,6 @@ class i3c_scoreboard extends uvm_scoreboard;
       endcase
 
       exp_txn_queue.push_back(exp);
-      update_private_continuation(attr, exp, target_is_i3c);
       if (exp.is_ccc) begin
         `uvm_info(`gfn,
                   $sformatf(
@@ -217,14 +222,14 @@ class i3c_scoreboard extends uvm_scoreboard;
                   UVM_MEDIUM)
       end else begin
         `uvm_info(`gfn, $sformatf(
-                  "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d toc=%0b bcast_hdr=%0b",
+                  "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d toc=%0b target_i3c=%0b",
                   attr.name(),
                   dev_idx,
                   exp.addr,
                   exp.rnw,
                   exp.data_length,
                   exp.toc,
-                  exp.start_with_broadcast_header
+                  exp.target_is_i3c
                   ), UVM_MEDIUM)
       end
       got_dw0 = 1'b0;
@@ -238,6 +243,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     exp.tid         = tid;
     exp.data_length = data_length;
     exp_resp_err_queue.push_back(exp);
+    exp_resp_err_history.push_back(exp);
   endfunction
 
   function void expect_read_data(
@@ -292,8 +298,13 @@ class i3c_scoreboard extends uvm_scoreboard;
     return 1'b0;
   endfunction
 
-  function void update_private_continuation(i3c_cmd_attr_e attr, exp_txn_t exp, bit target_is_i3c);
-    if ((attr == RegularTransfer) && target_is_i3c && !exp.is_ccc) begin
+  function void update_expected_preamble(ref exp_txn_t exp);
+    exp.start_with_broadcast_header =
+        exp.broadcast_header_eligible && broadcast_header_enable && !pending_private_continuation;
+  endfunction
+
+  function void update_private_continuation(exp_txn_t exp);
+    if (exp.updates_private_continuation && !exp.is_ccc && !tx_underflow_expected(exp)) begin
       pending_private_continuation = !exp.toc;
     end else begin
       pending_private_continuation = 1'b0;
@@ -366,6 +377,7 @@ class i3c_scoreboard extends uvm_scoreboard;
       repeat (match_idx) begin
         exp = exp_txn_queue.pop_front();
         if (!exp.rnw && exp.uses_tx_queue) consume_tx_data_words(exp.data_length);
+        update_private_continuation(exp);
         `uvm_info(`gfn, $sformatf(
                   "Skipping unobserved expected command before monitored transaction: addr=0x%02h rnw=%0b len=%0d toc=%0b",
                   exp.addr,
@@ -380,10 +392,12 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     if (exp.is_ccc) begin
       check_ccc_txn(item, exp);
+      update_private_continuation(exp);
       pass_cnt++;
       return;
     end
 
+    update_expected_preamble(exp);
     `DV_CHECK_EQ(item.addr, exp.addr, "Target address mismatch")
     `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite, "Transfer direction mismatch")
     `DV_CHECK_EQ(item.start_with_broadcast_header, exp.start_with_broadcast_header,
@@ -394,6 +408,7 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     if (!item.addr_ack) begin
       if (!exp.rnw && exp.uses_tx_queue && exp.data_length > 0) consume_tx_data_words(1);
+      update_private_continuation(exp);
       pass_cnt++;
       return;
     end
@@ -401,9 +416,14 @@ class i3c_scoreboard extends uvm_scoreboard;
     if (exp.rnw) begin
       check_read_data(item, exp);
     end else if (exp.uses_tx_queue) begin
-      check_tx_data(item);
+      if (tx_underflow_expected(exp)) begin
+        check_underflow_tx_data(item, exp);
+      end else begin
+        check_tx_data(item, exp);
+      end
     end
 
+    update_private_continuation(exp);
     pass_cnt++;
   endfunction
 
@@ -514,16 +534,78 @@ class i3c_scoreboard extends uvm_scoreboard;
     `uvm_info(`gfn, $sformatf("RX FIFO data OK: rdata=0x%08h", rdata), UVM_MEDIUM)
   endfunction
 
-  function void check_tx_data(i3c_item item);
+  function void check_tx_data(i3c_item item, exp_txn_t exp);
+    `DV_CHECK_EQ(item.num_data, exp.data_length, "Write bus data byte count mismatch")
+    `DV_CHECK_EQ(item.data_q.size(), exp.data_length, "Write monitor data queue size mismatch")
+    `DV_CHECK_EQ(item.data_ack_q.size(), exp.data_length, "Write monitor T-bit count mismatch")
     foreach (item.data_q[i]) begin
       int word_idx = i / 4;
       int byte_off = (i % 4) * 8;
       if (word_idx < tx_data_queue.size()) begin
         bit [7:0] exp_byte = tx_data_queue[word_idx][byte_off+:8];
         `DV_CHECK_EQ(item.data_q[i], exp_byte, $sformatf("TX data mismatch at byte[%0d]", i))
+        if (i < item.data_ack_q.size()) begin
+          `DV_CHECK_EQ(item.data_ack_q[i], ~^exp_byte, $sformatf("TX T-bit mismatch at byte[%0d]",
+                                                                 i))
+        end
       end
     end
-    consume_tx_data_words(item.num_data);
+    consume_tx_data_words(exp.data_length);
+  endfunction
+
+  function bit tx_underflow_expected(exp_txn_t exp);
+    return tx_underflow_actual_length(exp) >= 0;
+  endfunction
+
+  function int tx_underflow_actual_length(exp_txn_t exp);
+    exp_resp_err_t exp_resp;
+
+    if (exp.rnw || !exp.uses_tx_queue) return -1;
+
+    foreach (exp_resp_err_queue[i]) begin
+      exp_resp = exp_resp_err_queue[i];
+      if ((exp_resp.err_status == 4'h6) &&
+          (exp_resp.tid == exp.tid) &&
+          (exp_resp.data_length <= exp.data_length)) begin
+        return int'(exp_resp.data_length);
+      end
+    end
+
+    foreach (exp_resp_err_history[i]) begin
+      exp_resp = exp_resp_err_history[i];
+      if ((exp_resp.err_status == 4'h6) &&
+          (exp_resp.tid == exp.tid) &&
+          (exp_resp.data_length <= exp.data_length)) begin
+        return int'(exp_resp.data_length);
+      end
+    end
+
+    return -1;
+  endfunction
+
+  function void check_underflow_tx_data(i3c_item item, exp_txn_t exp);
+    int actual_data_length;
+
+    actual_data_length = tx_underflow_actual_length(exp);
+    `DV_CHECK_EQ(item.num_data, actual_data_length, "Underflow write bus data byte count mismatch")
+    `DV_CHECK_EQ(item.data_q.size(), actual_data_length,
+                 "Underflow write monitor data queue size mismatch")
+    `DV_CHECK_EQ(item.data_ack_q.size(), actual_data_length,
+                 "Underflow write monitor T-bit count mismatch")
+    foreach (item.data_q[i]) begin
+      int word_idx = i / 4;
+      int byte_off = (i % 4) * 8;
+      if (word_idx < tx_data_queue.size()) begin
+        bit [7:0] exp_byte = tx_data_queue[word_idx][byte_off+:8];
+        `DV_CHECK_EQ(item.data_q[i], exp_byte, $sformatf("Underflow TX data mismatch at byte[%0d]",
+                                                         i))
+        if (i < item.data_ack_q.size()) begin
+          `DV_CHECK_EQ(item.data_ack_q[i], ~^exp_byte,
+                       $sformatf("Underflow TX T-bit mismatch at byte[%0d]", i))
+        end
+      end
+    end
+    consume_tx_data_words(actual_data_length);
   endfunction
 
   function void consume_tx_data_words(int data_len);

@@ -12,6 +12,8 @@ class i3c_seq_item extends uvm_sequence_item;
   rand bit        T_bit                       [$];
   rand bit        end_with_rstart;
   rand bit        start_with_broadcast_header;
+  bit             observed_broadcast_header;
+  bit             observed_broadcast_rstart;
   rand bit        is_daa;
 
   function new(string name = "");
@@ -29,7 +31,8 @@ class i3c_seq_item extends uvm_sequence_item;
     `uvm_field_queue_int(T_bit, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(end_with_rstart, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(start_with_broadcast_header, UVM_DEFAULT | UVM_NOCOMPARE)
+    `uvm_field_int(observed_broadcast_header, UVM_DEFAULT | UVM_NOCOMPARE)
+    `uvm_field_int(observed_broadcast_rstart, UVM_DEFAULT | UVM_NOCOMPARE)
   `uvm_object_utils_end
 
 endclass : i3c_seq_item
-

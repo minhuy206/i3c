@@ -30,17 +30,31 @@ Kết quả mong đợi là không có bus transaction trước khi enable. Sau 
 
 Test này đảm bảo software có quyền kiểm soát lúc nào controller được phép hoạt động.
 
-### CSR_003 - `csr_timing_rw`
+### CSR_003 - `csr_broadcast_header_control`
+
+Test này kiểm tra bit `BROADCAST_ADDR_ENABLE` trong `HC_CONTROL[2]` và kiểm tra luôn hiệu ứng của bit này lên private I3C transfer.
+
+Bit này chỉ điều khiển việc private I3C transfer có bắt đầu bằng broadcast header `0x7e/W` hay không. Nó không phải bit enable controller và không được tự tạo traffic trên bus.
+
+Testbench sẽ đọc `HC_CONTROL[BROADCAST_ADDR_ENABLE]` sau reset, sau đó ghi set và clear bit này qua `HC_CONTROL`. Testbench cũng thử set riêng bit này khi `HC_CONTROL[0]` vẫn bằng 0.
+
+Sau phần control-plane, testbench sẽ cấu hình DAT[0] là I3C target có dynamic address `0x08`, rồi issue hai regular SDR private write 4 byte với TX data đã biết. Lần thứ nhất chạy với `BROADCAST_ADDR_ENABLE=0`, lần thứ hai chạy với `BROADCAST_ADDR_ENABLE=1`. Ở mode enable, device model phải ACK broadcast header `0x7e/W`, sau đó ACK dynamic address `0x08/W`.
+
+Kết quả mong đợi là reset value của bit này bằng 0, software có thể ghi 1 và ghi lại 0 đúng như mong đợi, và việc set riêng `BROADCAST_ADDR_ENABLE` không làm controller enable cũng không làm phát START hay bất kỳ transaction nào trên bus. Khi bit bằng 0, private write phải bắt đầu trực tiếp bằng `START + 0x08/W`, không được phát `0x7e`. Khi bit bằng 1, bus frame phải là `START + 0x7e/W + ACK + Sr + 0x08/W + ACK + data/T-bit + STOP`. Monitor và scoreboard phải xem toàn bộ preamble cộng target phase là một transaction đầy đủ, không tách `0x7e` thành một transaction rỗng riêng.
+
+Test này quan trọng vì nó chứng minh cả hai mặt của cùng một CSR setting: CSR phải lưu đúng cấu hình, bit này không được tự enable controller, và khi software enable controller cùng command hợp lệ thì setting đó phải thật sự đổi first-address behavior của private I3C transfer.
+
+### CSR_004 - `csr_timing_rw`
 
 Test này kiểm tra khả năng ghi và đọc lại các timing register.
 
-Timing register điều khiển các tham số thời gian của bus, ví dụ `T_R`, `T_F`, `T_LOW`, `T_HIGH`, `T_SU_STA`, `T_HD_STA`, `T_SU_STO`, `T_SU_DAT`, và `T_HD_DAT`. Testbench sẽ ghi các giá trị default, giá trị nhỏ hợp lệ, và một số giá trị random hợp lệ, sau đó đọc lại.
+Timing register điều khiển các tham số thời gian của bus, gồm nhóm I3C `T_R`, `T_F`, `T_LOW`, `T_LOW_OD`, `T_HIGH`, `T_SU_STA`, `T_HD_STA`, `T_SU_STO`, `T_SU_DAT`, `T_HD_DAT`, `T_BUS_FREE` và nhóm I2C `I2C_T_R` tới `I2C_T_BUF`. Testbench sẽ ghi các giá trị default, 0, giá trị nhỏ hợp lệ, giá trị lớn nhất 20-bit, giá trị random hợp lệ, và giá trị có các bit reserved phía trên được set, sau đó đọc lại.
 
-Kết quả mong đợi là 20 bit thấp `[19:0]` đọc ra đúng với giá trị đã ghi. Các bit reserved phía trên phải đọc ra 0.
+Kết quả mong đợi là 20 bit thấp `[19:0]` đọc ra đúng với giá trị đã ghi. Các bit reserved phía trên phải đọc ra 0. Sau mỗi lần ghi một timing register, các timing register còn lại cũng được đọc lại để bảo đảm không có lỗi ghi nhầm địa chỉ hoặc làm hỏng giá trị lân cận.
 
 Test này giúp xác nhận software có thể lập trình timing cho I3C/I2C transaction và register không lưu sai các bit reserved.
 
-### CSR_004 - `csr_dat_rw_all_entries`
+### CSR_005 - `csr_dat_rw_all_entries`
 
 Test này kiểm tra DAT, viết tắt của Device Address Table.
 
@@ -50,7 +64,7 @@ Kết quả mong đợi là các field trong DAT khớp với encoding được 
 
 Test này quan trọng vì command chỉ chứa `dev_idx`; controller sẽ dùng `dev_idx` để đọc DAT và lấy địa chỉ device. Nếu DAT sai, command có thể đi đến sai device.
 
-### CSR_005 - `csr_cmd_queue_2dw_staging`
+### CSR_006 - `csr_cmd_queue_2dw_staging`
 
 Test này kiểm tra cách CSR ghép command 64-bit từ hai lần ghi 32-bit.
 
@@ -60,7 +74,7 @@ Kết quả mong đợi là sau khi chỉ ghi `DWORD0`, CMD FIFO chưa được 
 
 Test này đảm bảo controller không chạy command nửa chừng và không đảo sai thứ tự hai DWORD.
 
-### CSR_006 - `csr_cmd_partial_then_other_write`
+### CSR_007 - `csr_cmd_partial_then_other_write`
 
 Test này kiểm tra trường hợp ghi command bị chen giữa bởi các CSR write khác.
 
@@ -70,7 +84,7 @@ Kết quả mong đợi là command cuối cùng được assemble từ đúng `
 
 Test này bảo vệ một case thực tế trong software: software có thể cấu hình thêm register giữa hai lần ghi command.
 
-### CSR_007 - `csr_sw_reset_flush_queues`
+### CSR_008 - `csr_sw_reset_flush_queues`
 
 Test này kiểm tra software reset thông qua `HC_CONTROL[1]`.
 
@@ -80,7 +94,7 @@ Kết quả mong đợi là CMD, TX, RX, và RESP queue đều bị flush về e
 
 Test này đảm bảo software có cách đưa controller về trạng thái sạch sau lỗi, sau timeout, hoặc trước khi chạy test mới.
 
-### CSR_008 - `csr_sw_reset_clears_cmd_staging`
+### CSR_009 - `csr_sw_reset_clears_cmd_staging`
 
 Test này kiểm tra software reset có xóa command staging register hay không.
 
@@ -90,7 +104,7 @@ Kết quả mong đợi là chỉ command sau reset được thực thi. Không 
 
 Test này ngăn lỗi rất nguy hiểm: stale `DWORD0` có thể làm controller chạy sai command, sai địa chỉ device, sai hướng read/write, hoặc sai data length.
 
-### CSR_009 - `csr_queue_status_flags`
+### CSR_010 - `csr_queue_status_flags`
 
 Test này kiểm tra các bit full/empty trong `QUEUE_STATUS`.
 
@@ -100,7 +114,7 @@ Kết quả mong đợi là `QUEUE_STATUS` phản ánh đúng trạng thái th�
 
 Test này quan trọng vì software dựa vào `QUEUE_STATUS` để biết khi nào có thể ghi command/data và khi nào có response/data để đọc.
 
-### CSR_010 - `csr_rx_resp_read_pop`
+### CSR_011 - `csr_rx_resp_read_pop`
 
 Test này kiểm tra hành vi đọc từ `RX_DATA_PORT` và `RESP_PORT`.
 
@@ -118,7 +132,7 @@ Nếu software tiếp tục đọc khi FIFO đã empty, DUT phải trả về 0 
 
 Kết quả mong đợi là mỗi valid read chỉ pop một entry, data/response trả về đúng thứ tự FIFO, và empty read an toàn.
 
-### CSR_011 - `csr_unmapped_addr_no_side_effect`
+### CSR_012 - `csr_unmapped_addr_no_side_effect`
 
 Test này kiểm tra hành vi khi software đọc hoặc ghi vào địa chỉ register không tồn tại trong CSR map.
 
@@ -290,14 +304,13 @@ Test này liên quan đến `scl_generator` và `csr_registers`, vì register l�
 
 Test này kiểm tra việc stall clock khi controller phải chờ dữ liệu hoặc chờ chỗ trống trong FIFO.
 
-Có hai tình huống chính:
+Các tình huống stall clock hợp lệ còn lại không bao gồm TX FIFO empty trong regular write. Với TX FIFO empty, controller xử lý như underflow và kết thúc transaction bằng RESP `Ovl`.
 
 ```text
-StallWrite: controller cần data để write nhưng TX FIFO chưa có data
-StallRead : controller nhận data nhưng RX FIFO đang full hoặc chưa thể ghi thêm
+WaitCmd/backpressure: controller đang chờ command hoặc điều kiện backpressure được hỗ trợ
 ```
 
-Khi bị stall, DUT được phép giữ `SCL` low để kéo dài transaction. Sau khi điều kiện stall được gỡ, ví dụ software nạp thêm TX data hoặc drain RX FIFO, controller phải resume transaction.
+Khi bị stall ở điều kiện hợp lệ, DUT được phép giữ `SCL` low để kéo dài transaction. Sau khi điều kiện stall được gỡ, controller phải resume hoặc terminate transaction theo đúng protocol.
 
 Kết quả mong đợi là `SCL` được giữ low trong thời gian chờ, rồi chạy tiếp mà không tạo thêm START/STOP ngoài ý muốn và không làm hỏng data.
 
@@ -374,25 +387,27 @@ Test này quan trọng vì nếu pad model drive SDA sai thời điểm, simulat
 
 Phần 4.4 kiểm tra I3C SDR private write, nghĩa là controller ghi data đến một I3C target thông qua dynamic address trong DAT.
 
-Các test trong phần này tập trung vào regular write path: command được lấy từ CMD FIFO, data được lấy từ TX FIFO, controller phát địa chỉ `dynamic_address + W`, truyền các byte data, tạo T-bit, rồi ghi response vào RESP FIFO.
+Các test trong phần này tập trung vào regular write path: command được lấy từ CMD FIFO, data được lấy từ TX FIFO, controller phát địa chỉ private I3C, truyền các byte data, tạo T-bit, rồi ghi response vào RESP FIFO. Với `HC_CONTROL[BROADCAST_ADDR_ENABLE]=0`, transfer bắt đầu trực tiếp bằng `dynamic_address + W`. Với bit này bằng 1, transfer private mới phải có preamble `0x7e/W + ACK + Sr` trước khi phát dynamic address.
 
-### SDRW_001 - `i3c_regular_write`
+### SDRW_001 - `i3c_regular_write_4b_existing`
 
-DAT[0] được cấu hình là I3C device với dynamic address `0x08`. Target ACK địa chỉ và ACK các phase cần thiết. Testbench chạy `i3c_write_vseq` với TX word `32'hDEAD_BEEF`.
+DAT[0] được cấu hình là I3C device với dynamic address `0x08`, `HC_CONTROL[BROADCAST_ADDR_ENABLE]=0`. Target ACK địa chỉ và ACK các phase cần thiết. Testbench chạy `i3c_write_vseq` với TX word `32'hDEAD_BEEF`.
 
-Kết quả mong đợi là controller phát transaction write đến dynamic address `0x08` với bit direction là write. Bốn byte data được lấy từ TX word theo packing contract của TX FIFO trong project spec.
+Kết quả mong đợi là controller phát transaction write bắt đầu trực tiếp bằng `START + 0x08/W + ACK`, không được phát `0x7e` preamble. Bốn byte data được lấy từ TX word theo packing contract của TX FIFO trong project spec.
 
 RESP trả về phải là success và length bằng 4. Test này quan trọng vì đây là baseline để biết regular I3C write path vẫn tuân thủ spec sau các thay đổi khác.
 
 ### SDRW_002 - `i3c_regular_write_len_sweep`
 
-Test này kiểm tra nhiều độ dài write khác nhau và cách TX FIFO được pack thành byte trên bus.
+Test này kiểm tra nhiều độ dài write khác nhau, cách TX FIFO được pack thành byte trên bus, và framing của private write khi bật broadcast header.
 
-Testbench sẽ chạy các length như 1, 2, 3, 4, 5, 7, 8, và 16 byte. Data trong TX FIFO dùng pattern dễ kiểm tra để biết byte nào phải xuất hiện trên bus trước.
+Testbench sẽ chạy các length 0, 1, 2, 3, 4, 5, 7, 8, 16, 64, và 256 byte ở cả hai mode: `HC_CONTROL[BROADCAST_ADDR_ENABLE]=0` và `HC_CONTROL[BROADCAST_ADDR_ENABLE]=1`. Data trong TX FIFO dùng pattern dễ kiểm tra để biết byte nào phải xuất hiện trên bus trước.
 
-Kết quả mong đợi là controller truyền đúng số byte được yêu cầu, không thiếu byte và không dư byte. Với các length không chia hết cho 4, byte cuối cùng vẫn phải lấy đúng từ DWORD tương ứng trong TX FIFO.
+Kết quả mong đợi là controller truyền đúng số byte được yêu cầu, không thiếu byte và không dư byte. Với length 0, controller chỉ phát address, nhận ACK, rồi STOP; không được phát data byte hoặc T-bit, và RESP báo Success length 0. Với length 256, testbench nạp đúng 64 TX DWORD và kiểm tra toàn bộ payload theo thứ tự. Với các length không chia hết cho 4, byte cuối cùng vẫn phải lấy đúng từ DWORD tương ứng trong TX FIFO. Khi broadcast header bị tắt, transaction phải bắt đầu trực tiếp bằng `START + 0x08/W`; khi broadcast header được bật, bus phải có preamble `START + 0x7e/W + ACK + Sr + 0x08/W` trước data phase.
 
 RESP length phải bằng số byte thật sự đã truyền. Test này quan trọng vì lỗi ở boundary DWORD rất dễ xảy ra khi data length là 1, 2, 3, 5, hoặc 7 byte.
+
+Directed regression không chạy full length 65535 byte vì runtime cao. Case đó được giữ làm future stress/performance test; length 256 đã cover boundary lớn hơn với 64 DWORD liên tiếp trong regression thường.
 
 ### SDRW_003 - `i3c_regular_write_data_patterns`
 
@@ -428,17 +443,17 @@ Controller phải recover bus bằng STOP hoặc recovery sequence tương ứng
 
 Test này quan trọng vì address NACK là lỗi cơ bản nhất khi target không tồn tại, chưa sẵn sàng, hoặc địa chỉ trong DAT bị sai.
 
-### SDRW_006 - `i3c_write_tx_fifo_empty_stall`
+### SDRW_006 - `i3c_write_tx_fifo_underflow_ovl`
 
 Test này kiểm tra trường hợp controller cần write data nhưng TX FIFO chưa có đủ data.
 
-Testbench issue một write command có length lớn hơn lượng data ban đầu trong TX FIFO. Sau đó testbench delay một khoảng thời gian rồi mới nạp thêm TX data.
+Testbench issue một write command 8 byte nhưng chỉ nạp sẵn một DWORD, tương đương 4 byte, vào TX FIFO. Test cũng issue các command 4 byte và 8 byte khi TX FIFO rỗng ngay từ đầu. Các biến thể này chạy cả `toc=1` và `toc=0`, trong hai mode private-address trực tiếp và broadcast-header-enabled.
 
-Khi thiếu data, controller không được truyền byte rác hoặc đọc underflow từ TX FIFO. Thay vào đó controller phải stall an toàn, thường bằng cách giữ `SCL` low trong lúc chờ data.
+Khi thiếu data, controller không được truyền byte rác, không được đọc underflow từ TX FIFO, và không được đi vào state cũ `StallWrite`.
 
-Kết quả mong đợi là sau khi TX data được nạp thêm, controller resume transaction và tiếp tục truyền đúng byte tiếp theo. Data trên bus không bị corrupt và RESP cuối cùng vẫn đúng với số byte đã truyền.
+Kết quả mong đợi là controller truyền đúng 4 byte đã có trong partial-underflow case, hoặc không truyền data/T-bit nào khi FIFO rỗng ngay từ đầu. Controller phát STOP, rồi ghi RESP với error `Ovl`, TID đúng command, và `data_length` bằng số byte thật sự đã truyền: 4 hoặc 0. Với biến thể `toc=0`, underflow vẫn phải terminate bằng STOP, không được tạo Repeated START hoặc continuation. Nếu software nạp thêm TX data sau lỗi, data đó không được consume cho command đã bị abort; TX FIFO vẫn non-empty cho đến khi SW reset flush queue.
 
-Test này quan trọng vì software có thể cấp TX data chậm hơn tốc độ controller tiêu thụ.
+Test này quan trọng vì TX underflow là lỗi producer/software; controller phải terminate deterministically thay vì giữ bus vô hạn để chờ software refill.
 
 ### SDRW_007 - `i3c_write_toc_zero`
 
@@ -448,11 +463,19 @@ Test này kiểm tra behavior continuation của regular SDR I3C write khi comma
 
 Testbench queue hai regular write command đến cùng I3C target. Command thứ nhất có `toc=0`, length 2 byte. Command thứ hai có `toc=1`, length 2 byte. Cả hai command đều được queue trước khi transaction đầu tiên kết thúc để controller có thể tạo continuation ngay tại boundary sau T-bit cuối cùng.
 
+Testbench cũng chạy negative subcase trong đó command đầu tiên có `toc=0` nhưng không có command regular SDR I3C tiếp theo trong CMD FIFO.
+
+Test chạy cả hai mode private address: `HC_CONTROL[BROADCAST_ADDR_ENABLE]=0` và `HC_CONTROL[BROADCAST_ADDR_ENABLE]=1`.
+
 Kết quả mong đợi trên bus là command thứ nhất truyền address, ACK, data bytes và T-bit bình thường, sau đó tạo `Sr` thay vì STOP. Ngay sau `Sr`, controller phát address cho command thứ hai, tiếp tục truyền data của command thứ hai, rồi chỉ tạo STOP ở cuối command thứ hai vì command này có `toc=1`.
+
+Với `BROADCAST_ADDR_ENABLE=1`, command đầu tiên là private I3C transfer mới nên controller phải phát preamble `START + 0x7e/W + ACK + Sr`, rồi mới phát dynamic address của target. Nhưng command thứ hai là continuation trong cùng private sequence, nên sau `Sr` controller phải đi thẳng đến dynamic address của command thứ hai và không được phát lại `0x7e/W + ACK + Sr` trước command continuation.
 
 RESP của cả hai command phải báo Success, TID phải khớp từng command, và length phải bằng số byte đã truyền. Bus không được idle giữa command thứ nhất và command thứ hai; idle chỉ được quan sát sau STOP cuối cùng.
 
-Test này quan trọng vì `toc=0` ảnh hưởng trực tiếp đến ownership của bus và sequencing giữa nhiều SDR private transfer trong cùng một frame. Nếu controller tạo STOP quá sớm, transfer bị tách frame sai. Nếu controller không tạo được `Sr` hoặc không lấy command kế tiếp đúng lúc, continuation flow sẽ sai so với semantics đã specification hóa.
+Trong negative subcase, command đầu tiên vẫn phải truyền đủ data/T-bit đã yêu cầu, sau đó controller phát STOP thay vì Repeated START. RESP phải báo `NotSupported` với length bằng số byte thật sự đã truyền. Khi `BROADCAST_ADDR_ENABLE=1`, chỉ transfer đầu tiên có broadcast-header preamble; không được phát một preamble rỗng hoặc treo bus khi không có continuation hợp lệ.
+
+Test này quan trọng vì `toc=0` ảnh hưởng trực tiếp đến ownership của bus và sequencing giữa nhiều SDR private transfer trong cùng một frame. Nếu controller tạo STOP quá sớm, transfer bị tách frame sai. Nếu controller không tạo được `Sr`, không lấy command kế tiếp đúng lúc, hoặc phát lại `0x7e` ở mỗi continuation, continuation flow sẽ sai so với semantics đã specification hóa.
 
 ### SDRW_008 - `i3c_write_back_to_back`
 
@@ -466,25 +489,47 @@ Mỗi RESP phải có TID và length khớp với command tương ứng. Scorebo
 
 Test này quan trọng vì hệ thống thực tế thường không chỉ chạy một command đơn lẻ. Back-to-back command giúp phát hiện lỗi state cleanup, FIFO pointer, và response ordering.
 
+### SDRW_009 - `i3c_write_multi_dat_idx`
+
+Test này kiểm tra controller chọn đúng DAT entry khi regular SDR private write dùng `dev_idx` khác nhau.
+
+Testbench program `DAT[0]` là I3C device có dynamic address `0x08`, và `DAT[1]` là I3C device có dynamic address `0x12`. Sau đó testbench queue một write tới `dev_idx=0` và một write tới `dev_idx=1`, với TID và payload khác nhau. Directed case hiện tại chạy ở private-address mode trực tiếp (`BROADCAST_ADDR_ENABLE=0`); biến thể broadcast-header DAT[1] được giữ làm future extension, còn framing broadcast-header đã được cover ở các SDRW khác với DAT[0].
+
+Kết quả mong đợi là bus thấy address theo đúng thứ tự `0x08/W` rồi `0x12/W`. Data payload của từng command phải đúng với TX FIFO data tương ứng, không được lấy nhầm payload giữa hai DAT index. RESP của mỗi command phải báo Success, TID đúng, length đúng, và tất cả queue empty sau test.
+
+Test này quan trọng vì DAT index là contract giữa software command descriptor và hardware target lookup. Nếu controller luôn dùng DAT[0] hoặc giữ stale address từ command trước, các transfer multi-target sẽ đi sai device dù FIFO và data path vẫn có vẻ hoạt động.
+
 ## 4.5 I3C SDR Private Read
 
 Phần 4.5 kiểm tra I3C SDR private read, nghĩa là controller đọc data từ một I3C target thông qua dynamic address trong DAT.
 
-Các test trong phần này tập trung vào regular read path: command được lấy từ CMD FIFO, controller phát địa chỉ `dynamic_address + R`, nhận các byte data do target drive trên bus, xử lý T-bit của read phase, pack data vào RX FIFO, rồi ghi response vào RESP FIFO.
+Các test trong phần này tập trung vào regular read path: command được lấy từ CMD FIFO, controller phát địa chỉ private I3C, nhận các byte data do target drive trên bus, xử lý T-bit của read phase, pack data vào RX FIFO, rồi ghi response vào RESP FIFO. Tương tự write path, `BROADCAST_ADDR_ENABLE=0` nghĩa là bắt đầu trực tiếp bằng dynamic address; `BROADCAST_ADDR_ENABLE=1` nghĩa là private transfer mới bắt đầu bằng `0x7e/W + ACK + Sr` rồi mới tới dynamic address với direction read.
 
-### SDRR_001 - `i3c_regular_read`
+### SDRR_001 - `i3c_regular_read_4b_existing`
 
 Test này giữ lại regression read hiện có.
 
-DAT[0] được cấu hình là I3C device với dynamic address `0x08`. Target ACK địa chỉ read và trả về bốn byte data. Testbench chạy `i3c_read_vseq`.
+DAT[0] được cấu hình là I3C device với dynamic address `0x08`, `HC_CONTROL[BROADCAST_ADDR_ENABLE]=0`. Target ACK địa chỉ read và trả về bốn byte data. Testbench chạy `i3c_read_vseq`.
 
-Kết quả mong đợi là controller thực hiện transaction read đến dynamic address `0x08` với bit direction là read. Bốn byte nhận được được pack vào RX FIFO theo packing contract của RX FIFO trong project spec.
+Kết quả mong đợi là controller thực hiện transaction read bắt đầu trực tiếp bằng `START + 0x08/R + ACK`, không phát `0x7e` preamble. Bốn byte nhận được được pack vào RX FIFO theo packing contract của RX FIFO trong project spec.
 
 RX FIFO word mong đợi là `32'hBEBA_FECA`, và RESP trả về phải là success với length bằng 4.
 
 Test này quan trọng vì đây là baseline để biết regular I3C read path vẫn tuân thủ spec, bao gồm address phase, data receive phase, RX FIFO packing, và response generation.
 
-### SDRR_002 - `i3c_regular_read_len_sweep`
+### SDRR_002 - `i3c_read_broadcast_header_enabled`
+
+Test này kiểm tra private I3C read khi `HC_CONTROL[BROADCAST_ADDR_ENABLE]=1`.
+
+Với read, broadcast-header preamble vẫn dùng direction write cho reserved address `0x7e/W`, vì đây là header để mở private transfer. Sau ACK của broadcast header, controller phải tạo repeated START rồi mới phát dynamic address của target với direction read.
+
+DAT[0] chứa dynamic address `0x08`. Target ACK broadcast header, ACK `0x08/R`, sau đó drive bốn byte read data theo sequence đã cấu hình.
+
+Kết quả mong đợi trên bus là `START + 0x7e/W + ACK + Sr + 0x08/R + ACK + read data/T-bit + STOP`. RX FIFO phải chứa đúng data target trả về, RESP length phải khớp số byte đọc, và scoreboard phải xem preamble cộng target phase là một transaction đầy đủ.
+
+Test này quan trọng vì read path có cả address sequencing, target-driven data, T-bit read semantics, và RX FIFO packing. Nếu monitor tách `0x7e` thành transaction riêng, scoreboard có thể báo sai hoặc bỏ sót lỗi thật.
+
+### SDRR_003 - `i3c_regular_read_len_sweep`
 
 Test này kiểm tra nhiều độ dài read khác nhau và cách RX FIFO pack byte thành DWORD.
 
@@ -496,7 +541,7 @@ Ví dụ nếu read 3 byte, controller không được đợi đủ 4 byte mới
 
 Test này quan trọng vì lỗi partial DWORD rất dễ xảy ra ở read path, đặc biệt khi length là 1, 2, 3, 5, hoặc 7 byte.
 
-### SDRR_003 - `i3c_read_short_target_end`
+### SDRR_004 - `i3c_read_short_target_end`
 
 Test này kiểm tra trường hợp target kết thúc read sớm hơn số byte controller yêu cầu.
 
@@ -508,7 +553,7 @@ RESP phải báo error `I3cShortReadErr`, vì transaction kết thúc ngắn hơ
 
 Test này quan trọng vì trong giao tiếp thực tế, target có thể không có đủ data hoặc chủ động kết thúc transfer. Controller phải report lỗi đúng và không được corrupt RX FIFO.
 
-### SDRR_004 - `i3c_read_target_more_than_requested`
+### SDRR_005 - `i3c_read_target_more_than_requested`
 
 Test này kiểm tra trường hợp target vẫn muốn gửi tiếp data sau khi controller đã nhận đủ số byte yêu cầu.
 
@@ -520,7 +565,7 @@ Nói cách khác, requested length của command là giới hạn mà controller
 
 Test này quan trọng vì nếu controller đọc dư byte, RX FIFO sẽ chứa data ngoài mong muốn và response length sẽ không còn khớp với command.
 
-### SDRR_005 - `i3c_read_addr_nack`
+### SDRR_006 - `i3c_read_addr_nack`
 
 Test này kiểm tra phản ứng của controller khi target NACK địa chỉ trong regular read.
 
@@ -532,7 +577,7 @@ RESP phải báo error `AddrHeader`, vì lỗi xảy ra ở address/header phase
 
 Test này quan trọng vì address NACK có thể xảy ra khi target không tồn tại, dynamic address trong DAT sai, hoặc target chưa sẵn sàng trả lời read.
 
-### SDRR_006 - `i3c_read_rx_fifo_full_stall`
+### SDRR_007 - `i3c_read_rx_fifo_full_stall`
 
 Test này kiểm tra backpressure khi controller đang read nhưng RX FIFO không còn chỗ để ghi data.
 
@@ -544,7 +589,7 @@ Kết quả mong đợi là sau khi RX FIFO được drain, controller resume v�
 
 Test này quan trọng vì software có thể đọc RX FIFO chậm hơn tốc độ controller nhận data từ bus.
 
-### SDRR_007 - `i3c_read_data_patterns`
+### SDRR_008 - `i3c_read_data_patterns`
 
 Test này kiểm tra data integrity của read path với nhiều pattern khác nhau.
 
@@ -554,7 +599,7 @@ Kết quả mong đợi là nội dung RX FIFO phải khớp chính xác với d
 
 Test này giúp phát hiện lỗi trong `i3c_driver`, `bus_rx_flow`, byte ordering, RX FIFO packing, và scoreboard expectation.
 
-### SDRR_008 - `i3c_read_no_parity_error_on_end_tbit`
+### SDRR_009 - `i3c_read_no_parity_error_on_end_tbit`
 
 Test này kiểm tra ý nghĩa của T-bit trong I3C SDR read.
 
@@ -566,7 +611,7 @@ Kết quả mong đợi là controller không báo `Parity` response chỉ vì f
 
 Test này quan trọng vì nếu controller diễn giải sai T-bit read phase thành parity error, các read transaction hợp lệ hoặc short-read hợp lệ sẽ bị báo sai nguyên nhân lỗi.
 
-### SDRR_009 - `i3c_read_toc_zero`
+### SDRR_010 - `i3c_read_toc_zero`
 
 Test này kiểm tra behavior continuation của regular SDR I3C read khi command đầu tiên có `toc=0`.
 
@@ -579,6 +624,18 @@ Kết quả mong đợi là controller nhận đúng hai byte read, ghi đúng v
 RESP của read command phải báo Success với TID và length đúng. RESP của write command cũng phải báo Success với TID và length đúng. Bus không được idle hoặc tạo STOP giữa read đầu tiên và write thứ hai; boundary hợp lệ giữa hai command là `Sr`.
 
 Test này quan trọng vì read termination có thêm RX FIFO packing và T-bit semantics, nên không thể chỉ dùng write `toc=0` để kết luận read continuation đã đúng. Nếu controller flush RX data sai thời điểm, tạo STOP quá sớm, hoặc không tạo được `Sr`, response và bus sequencing đều có thể sai.
+
+### SDRR_011 - `i3c_read_toc_zero_broadcast_header_once`
+
+Test này kiểm tra private I3C read continuation khi `BROADCAST_ADDR_ENABLE=1`.
+
+Command đầu tiên là một private read mới, nên controller phải phát broadcast-header preamble một lần: `START + 0x7e/W + ACK + Sr`, rồi tới dynamic address với direction read. Sau khi read command đầu tiên kết thúc với `toc=0`, repeated START tiếp theo là continuation của cùng private sequence, không phải private sequence mới.
+
+Testbench queue command read đầu tiên với `toc=0` và command thứ hai với `toc=1`. Target trả data hợp lệ cho read command đầu tiên.
+
+Kết quả mong đợi là chỉ command đầu tiên có `0x7e` preamble. Sau data/T-bit của read đầu tiên, controller tạo `Sr` rồi tiếp tục command kế tiếp mà không phát lại `0x7e/W`. RX FIFO phải chứa đúng data read, và RESP của cả hai command phải đúng TID/length.
+
+Test này quan trọng vì nó bắt lỗi state `continuation pending`. Nếu controller quên rằng bus chưa có STOP, nó có thể phát lại broadcast header và làm frame sai. Nếu controller giữ state quá lâu sau STOP, transfer kế tiếp lại có thể thiếu preamble.
 
 ## 4.6 Immediate Data Transfer
 
@@ -892,7 +949,7 @@ Phần 4.9 kiểm tra khả năng tương thích I2C legacy của controller.
 
 Trong thiết kế này, DAT entry có field `device`. Khi `device=1`, controller phải xử lý target như I2C legacy device: dùng `static_address` thay vì `dynamic_address`, chạy bus ở open-drain mode, dùng ACK/NACK theo I2C, và không dùng các semantics riêng của I3C như T-bit SDR data phase.
 
-Các test trong phần này đảm bảo regular read/write I2C chạy đúng, length packing giống expectation của HCI queues, address NACK và data NACK được report đúng, OD mode được giữ trong toàn bộ transaction, và timing register có thể cấu hình bus theo hướng I2C.
+Các test trong phần này đảm bảo regular read/write I2C chạy đúng, length packing giống expectation của HCI queues, address NACK và data NACK được report đúng, OD mode được giữ trong toàn bộ transaction, timing register có thể cấu hình bus theo hướng I2C, và cấu hình `BROADCAST_ADDR_ENABLE` của private I3C không ảnh hưởng đến I2C legacy transfer.
 
 ### I2C_001 - `i2c_regular_write_basic`
 
@@ -918,7 +975,19 @@ Data nhận được phải được ghi vào RX FIFO đúng thứ tự và RESP
 
 Test này quan trọng vì I2C read có ACK/NACK policy khác với I3C read T-bit semantics. Nếu dùng nhầm logic I3C, target I2C có thể không hiểu thời điểm kết thúc transfer.
 
-### I2C_003 - `i2c_len_sweep_partial_rx`
+### I2C_003 - `i2c_broadcast_addr_enable_ignored`
+
+Test này kiểm tra rằng `HC_CONTROL[BROADCAST_ADDR_ENABLE]` không ảnh hưởng đến I2C legacy transfer.
+
+DAT[0] được cấu hình là I2C device bằng cách set `device=1`, static address hợp lệ được program, và `HC_CONTROL[BROADCAST_ADDR_ENABLE]` được set bằng 1. Sau đó testbench chạy một I2C write và một I2C read đại diện.
+
+Kết quả mong đợi là first address trên bus vẫn là static address từ DAT, với direction tương ứng write hoặc read. Controller không được phát `0x7e/W` preamble trước I2C transfer, dù bit `BROADCAST_ADDR_ENABLE` đang bằng 1.
+
+Toàn bộ transaction vẫn phải giữ open-drain behavior của I2C, dùng ACK/NACK theo I2C, và không dùng T-bit hoặc private I3C preamble semantics.
+
+Test này quan trọng vì cùng một RegularTransfer descriptor có thể trỏ đến I3C hoặc I2C tùy field `device` trong DAT. `BROADCAST_ADDR_ENABLE` chỉ dành cho private I3C; nếu nó bị áp dụng nhầm cho I2C, controller sẽ phát frame không hợp lệ cho target I2C.
+
+### I2C_004 - `i2c_len_sweep_partial_rx`
 
 Test này kiểm tra nhiều độ dài read/write trong I2C legacy path.
 
@@ -930,7 +999,7 @@ Các length không chia hết cho 4 phải xử lý partial DWORD đúng, đặc
 
 Test này quan trọng vì I2C path vẫn dùng HCI queues giống các path khác. Lỗi packing ở boundary DWORD có thể xuất hiện riêng ở I2C read/write dù I3C path đã pass.
 
-### I2C_004 - `i2c_addr_nack`
+### I2C_005 - `i2c_addr_nack`
 
 Test này kiểm tra address NACK trong I2C legacy transaction.
 
@@ -942,7 +1011,7 @@ RESP phải báo error `AddrHeader`, và bus phải quay về idle hoặc recove
 
 Test này quan trọng vì address NACK là lỗi phổ biến khi target I2C không tồn tại, sai static address, hoặc device đang bận.
 
-### I2C_005 - `i2c_data_nack_write`
+### I2C_006 - `i2c_data_nack_write`
 
 Test này kiểm tra data-byte NACK trong I2C write.
 
@@ -954,7 +1023,7 @@ Controller không được tiếp tục truyền các byte còn lại như thể
 
 Test này quan trọng vì I2C target có thể NACK data để báo không nhận thêm được. Controller phải xử lý đây là lỗi data phase, không nhầm với address error.
 
-### I2C_006 - `i2c_od_only_check`
+### I2C_007 - `i2c_od_only_check`
 
 Test này kiểm tra rằng I2C legacy transfer luôn dùng open-drain mode.
 
@@ -966,7 +1035,7 @@ SDA drive/release cũng phải phù hợp với open-drain semantics: chỉ kéo
 
 Test này quan trọng vì push-pull trong I2C legacy bus có thể gây contention điện và không tương thích với target I2C.
 
-### I2C_007 - `i2c_timing_400k_equivalent`
+### I2C_008 - `i2c_timing_400k_equivalent`
 
 Test này kiểm tra timing path khi controller chạy I2C legacy transfer.
 

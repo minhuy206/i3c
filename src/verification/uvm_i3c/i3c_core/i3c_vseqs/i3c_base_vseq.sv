@@ -33,15 +33,15 @@ class i3c_base_vseq extends uvm_sequence;
   typedef struct {
     string       ctxt;
     string       seq_name;
-    bit [ 3:0]  tid;
-    bit [ 4:0]  dev_idx;
-    bit [ 6:0]  target_addr;
-    bit         is_i3c;
-    bit         ack_address;
-    bit         ack_data;
-    bit         tx_before_cmd;
-    bit         wait_device_done;
-    bit         start_with_broadcast_header;
+    bit [3:0]    tid;
+    bit [4:0]    dev_idx;
+    bit [6:0]    target_addr;
+    bit          is_i3c;
+    bit          ack_address;
+    bit          ack_data;
+    bit          tx_before_cmd;
+    bit          wait_device_done;
+    bit          start_with_broadcast_header;
     int unsigned data_length;
     int unsigned settle_before_cmd;
     int unsigned timeout_cycles;
@@ -56,53 +56,53 @@ class i3c_base_vseq extends uvm_sequence;
   endtask
 
   virtual function void init_queue_hdl_paths();
-    cmd_paths.name             = "CMD";
-    cmd_paths.fifo_path        = "tb_i3c_top.dut.u_queues.cmd_fifo";
-    cmd_paths.mem_path_fmt     = "tb_i3c_top.dut.u_queues.cmd_fifo.mem[%0d]";
-    cmd_paths.rptr_path        = "tb_i3c_top.dut.u_queues.cmd_fifo.rptr_q";
-    cmd_paths.wptr_path        = "tb_i3c_top.dut.u_queues.cmd_fifo.wptr_q";
-    cmd_paths.depth_path       = "tb_i3c_top.dut.u_queues.cmd_fifo.depth_o";
-    cmd_paths.write_valid_path = "tb_i3c_top.dut.cmd_csr_wvalid";
-    cmd_paths.write_ready_path = "tb_i3c_top.dut.cmd_csr_wready";
-    cmd_paths.write_data_path  = "tb_i3c_top.dut.cmd_csr_wdata";
-    cmd_paths.read_valid_path  = "tb_i3c_top.dut.cmd_hw_rvalid";
-    cmd_paths.read_ready_path  = "tb_i3c_top.dut.cmd_hw_rready";
-    cmd_paths.read_data_path   = "tb_i3c_top.dut.cmd_hw_rdata";
-    cmd_paths.full_bit         = QS_CMD_FULL_BIT;
-    cmd_paths.empty_bit        = QS_CMD_EMPTY_BIT;
-    cmd_paths.data_width       = 64;
+    cmd_paths.name              = "CMD";
+    cmd_paths.fifo_path         = "tb_i3c_top.dut.u_queues.cmd_fifo";
+    cmd_paths.mem_path_fmt      = "tb_i3c_top.dut.u_queues.cmd_fifo.mem[%0d]";
+    cmd_paths.rptr_path         = "tb_i3c_top.dut.u_queues.cmd_fifo.rptr_q";
+    cmd_paths.wptr_path         = "tb_i3c_top.dut.u_queues.cmd_fifo.wptr_q";
+    cmd_paths.depth_path        = "tb_i3c_top.dut.u_queues.cmd_fifo.depth_o";
+    cmd_paths.write_valid_path  = "tb_i3c_top.dut.cmd_csr_wvalid";
+    cmd_paths.write_ready_path  = "tb_i3c_top.dut.cmd_csr_wready";
+    cmd_paths.write_data_path   = "tb_i3c_top.dut.cmd_csr_wdata";
+    cmd_paths.read_valid_path   = "tb_i3c_top.dut.cmd_hw_rvalid";
+    cmd_paths.read_ready_path   = "tb_i3c_top.dut.cmd_hw_rready";
+    cmd_paths.read_data_path    = "tb_i3c_top.dut.cmd_hw_rdata";
+    cmd_paths.full_bit          = QS_CMD_FULL_BIT;
+    cmd_paths.empty_bit         = QS_CMD_EMPTY_BIT;
+    cmd_paths.data_width        = 64;
 
-    tx_paths.name             = "TX";
-    tx_paths.fifo_path        = "tb_i3c_top.dut.u_queues.tx_fifo";
-    tx_paths.mem_path_fmt     = "tb_i3c_top.dut.u_queues.tx_fifo.mem[%0d]";
-    tx_paths.rptr_path        = "tb_i3c_top.dut.u_queues.tx_fifo.rptr_q";
-    tx_paths.wptr_path        = "tb_i3c_top.dut.u_queues.tx_fifo.wptr_q";
-    tx_paths.depth_path       = "tb_i3c_top.dut.u_queues.tx_fifo.depth_o";
-    tx_paths.write_valid_path = "tb_i3c_top.dut.tx_csr_wvalid";
-    tx_paths.write_ready_path = "tb_i3c_top.dut.tx_csr_wready";
-    tx_paths.write_data_path  = "tb_i3c_top.dut.tx_csr_wdata";
-    tx_paths.read_valid_path  = "tb_i3c_top.dut.tx_hw_rvalid";
-    tx_paths.read_ready_path  = "tb_i3c_top.dut.tx_hw_rready";
-    tx_paths.read_data_path   = "tb_i3c_top.dut.tx_hw_rdata";
-    tx_paths.full_bit         = QS_TX_FULL_BIT;
-    tx_paths.empty_bit        = QS_TX_EMPTY_BIT;
-    tx_paths.data_width       = 32;
+    tx_paths.name               = "TX";
+    tx_paths.fifo_path          = "tb_i3c_top.dut.u_queues.tx_fifo";
+    tx_paths.mem_path_fmt       = "tb_i3c_top.dut.u_queues.tx_fifo.mem[%0d]";
+    tx_paths.rptr_path          = "tb_i3c_top.dut.u_queues.tx_fifo.rptr_q";
+    tx_paths.wptr_path          = "tb_i3c_top.dut.u_queues.tx_fifo.wptr_q";
+    tx_paths.depth_path         = "tb_i3c_top.dut.u_queues.tx_fifo.depth_o";
+    tx_paths.write_valid_path   = "tb_i3c_top.dut.tx_csr_wvalid";
+    tx_paths.write_ready_path   = "tb_i3c_top.dut.tx_csr_wready";
+    tx_paths.write_data_path    = "tb_i3c_top.dut.tx_csr_wdata";
+    tx_paths.read_valid_path    = "tb_i3c_top.dut.tx_hw_rvalid";
+    tx_paths.read_ready_path    = "tb_i3c_top.dut.tx_hw_rready";
+    tx_paths.read_data_path     = "tb_i3c_top.dut.tx_hw_rdata";
+    tx_paths.full_bit           = QS_TX_FULL_BIT;
+    tx_paths.empty_bit          = QS_TX_EMPTY_BIT;
+    tx_paths.data_width         = 32;
 
-    rx_paths.name             = "RX";
-    rx_paths.fifo_path        = "tb_i3c_top.dut.u_queues.rx_fifo";
-    rx_paths.mem_path_fmt     = "tb_i3c_top.dut.u_queues.rx_fifo.mem[%0d]";
-    rx_paths.rptr_path        = "tb_i3c_top.dut.u_queues.rx_fifo.rptr_q";
-    rx_paths.wptr_path        = "tb_i3c_top.dut.u_queues.rx_fifo.wptr_q";
-    rx_paths.depth_path       = "tb_i3c_top.dut.u_queues.rx_fifo.depth_o";
-    rx_paths.write_valid_path = "tb_i3c_top.dut.rx_hw_wvalid";
-    rx_paths.write_ready_path = "tb_i3c_top.dut.rx_hw_wready";
-    rx_paths.write_data_path  = "tb_i3c_top.dut.rx_hw_wdata";
-    rx_paths.read_valid_path  = "tb_i3c_top.dut.rx_csr_rvalid";
-    rx_paths.read_ready_path  = "tb_i3c_top.dut.rx_csr_rready";
-    rx_paths.read_data_path   = "tb_i3c_top.dut.rx_csr_rdata";
-    rx_paths.full_bit         = QS_RX_FULL_BIT;
-    rx_paths.empty_bit        = QS_RX_EMPTY_BIT;
-    rx_paths.data_width       = 32;
+    rx_paths.name               = "RX";
+    rx_paths.fifo_path          = "tb_i3c_top.dut.u_queues.rx_fifo";
+    rx_paths.mem_path_fmt       = "tb_i3c_top.dut.u_queues.rx_fifo.mem[%0d]";
+    rx_paths.rptr_path          = "tb_i3c_top.dut.u_queues.rx_fifo.rptr_q";
+    rx_paths.wptr_path          = "tb_i3c_top.dut.u_queues.rx_fifo.wptr_q";
+    rx_paths.depth_path         = "tb_i3c_top.dut.u_queues.rx_fifo.depth_o";
+    rx_paths.write_valid_path   = "tb_i3c_top.dut.rx_hw_wvalid";
+    rx_paths.write_ready_path   = "tb_i3c_top.dut.rx_hw_wready";
+    rx_paths.write_data_path    = "tb_i3c_top.dut.rx_hw_wdata";
+    rx_paths.read_valid_path    = "tb_i3c_top.dut.rx_csr_rvalid";
+    rx_paths.read_ready_path    = "tb_i3c_top.dut.rx_csr_rready";
+    rx_paths.read_data_path     = "tb_i3c_top.dut.rx_csr_rdata";
+    rx_paths.full_bit           = QS_RX_FULL_BIT;
+    rx_paths.empty_bit          = QS_RX_EMPTY_BIT;
+    rx_paths.data_width         = 32;
 
     resp_paths.name             = "RESP";
     resp_paths.fifo_path        = "tb_i3c_top.dut.u_queues.resp_fifo";
@@ -125,27 +125,28 @@ class i3c_base_vseq extends uvm_sequence;
     repeat (cycles) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
   endtask
 
-  virtual function transfer_stimulus_cfg_t make_transfer_cfg(string ctxt, string seq_name,
-                                                             bit [3:0] tid, bit [4:0] dev_idx,
-                                                             bit [6:0] target_addr,
-                                                             bit is_i3c,
-                                                             int unsigned data_length);
+  virtual function transfer_stimulus_cfg_t make_transfer_cfg(
+      string ctxt, string seq_name, bit [3:0] tid, bit [4:0] dev_idx, bit [6:0] target_addr,
+      bit is_i3c, bit ack_address = 1'b1, bit ack_data = 1'b1,
+      bit tx_before_cmd = 1'b1, bit wait_device_done = 1'b1,
+      bit start_with_broadcast_header = 1'b0, int unsigned data_length = 0,
+      int unsigned settle_before_cmd = 0, int unsigned timeout_cycles = 0);
     transfer_stimulus_cfg_t cfg;
 
-    cfg.ctxt              = ctxt;
-    cfg.seq_name          = seq_name;
-    cfg.tid               = tid;
-    cfg.dev_idx           = dev_idx;
-    cfg.target_addr       = target_addr;
-    cfg.is_i3c            = is_i3c;
-    cfg.ack_address       = 1'b1;
-    cfg.ack_data          = 1'b1;
-    cfg.tx_before_cmd     = 1'b1;
-    cfg.wait_device_done  = 1'b0;
-    cfg.start_with_broadcast_header = 1'b0;
-    cfg.data_length       = data_length;
-    cfg.settle_before_cmd = 0;
-    cfg.timeout_cycles    = 0;
+    cfg.ctxt                        = ctxt;
+    cfg.seq_name                    = seq_name;
+    cfg.tid                         = tid;
+    cfg.dev_idx                     = dev_idx;
+    cfg.target_addr                 = target_addr;
+    cfg.is_i3c                      = is_i3c;
+    cfg.ack_address                 = ack_address;
+    cfg.ack_data                    = ack_data;
+    cfg.tx_before_cmd               = tx_before_cmd;
+    cfg.wait_device_done            = wait_device_done;
+    cfg.start_with_broadcast_header = start_with_broadcast_header && is_i3c;
+    cfg.data_length                 = data_length;
+    cfg.settle_before_cmd           = settle_before_cmd;
+    cfg.timeout_cycles              = timeout_cycles;
     return cfg;
   endfunction
 
@@ -159,21 +160,39 @@ class i3c_base_vseq extends uvm_sequence;
     int unsigned bit_period_cycles;
     int unsigned framing_cycles;
 
-    bit_count         = 9 + (9 * data_bytes);
+    bit_count = 9 + (9 * data_bytes);
     bit_period_cycles = ns_to_cycles(i2c_400.tClockLow + i2c_400.tClockPulse);
-    framing_cycles    = ns_to_cycles(i2c_400.tSetupStart + i2c_400.tHoldStart +
-                                      i2c_400.tSetupStop + i2c_400.tHoldStop);
+    framing_cycles = ns_to_cycles(
+        i2c_400.tSetupStart + i2c_400.tHoldStart + i2c_400.tSetupStop + i2c_400.tHoldStop);
     return framing_cycles + (bit_count * bit_period_cycles) + 512;
+  endfunction
+
+  virtual function int unsigned i3c_device_done_timeout_cycles(transfer_stimulus_cfg_t cfg);
+    int unsigned od_bit_count;
+    int unsigned pp_bit_count;
+    int unsigned od_bit_period_cycles;
+    int unsigned pp_bit_period_cycles;
+    int unsigned framing_cycles;
+
+    od_bit_count = 9;
+    if (cfg.start_with_broadcast_header) od_bit_count += 9;
+    pp_bit_count = 9 * cfg.data_length;
+    od_bit_period_cycles = ns_to_cycles(i3c_sdr.tClockLowOD + i3c_sdr.tClockPulse);
+    pp_bit_period_cycles = ns_to_cycles(i3c_sdr.tClockLowPP + i3c_sdr.tClockPulse);
+    framing_cycles = ns_to_cycles(
+        i3c_sdr.tSetupStart + i3c_sdr.tHoldStart + i3c_sdr.tSetupStop + i3c_sdr.tHoldStop);
+    return framing_cycles + (od_bit_count * od_bit_period_cycles) +
+           (pp_bit_count * pp_bit_period_cycles) + 1024;
   endfunction
 
   virtual function int unsigned device_done_timeout_cycles(transfer_stimulus_cfg_t cfg);
     if (cfg.timeout_cycles != 0) return cfg.timeout_cycles;
     if (!cfg.is_i3c) return i2c_device_done_timeout_cycles(cfg.data_length);
-    return 1000;
+    return i3c_device_done_timeout_cycles(cfg);
   endfunction
 
-  virtual function regular_trans_desc_t build_regular_transfer_cmd(
-      transfer_stimulus_cfg_t cfg, bit rnw, bit toc = 1'b1);
+  virtual function regular_trans_desc_t build_regular_transfer_cmd(transfer_stimulus_cfg_t cfg,
+                                                                   bit rnw, bit toc = 1'b1);
     regular_trans_desc_t cmd;
 
     cmd             = '0;
@@ -218,32 +237,27 @@ class i3c_base_vseq extends uvm_sequence;
     `uvm_error(`gfn, $sformatf("%s: device response request was not issued", ctxt))
   endtask
 
-  virtual task start_device_response(transfer_stimulus_cfg_t cfg, bit dir,
-                                     byte_queue_t read_data,
+  virtual task start_device_response(transfer_stimulus_cfg_t cfg, bit dir, byte_queue_t read_data,
                                      output i3c_device_response_seq dev_seq);
-    dev_seq               = i3c_device_response_seq::type_id::create(cfg.seq_name);
-    dev_seq.target_addr   = cfg.target_addr;
-    dev_seq.ack_address   = cfg.ack_address;
-    dev_seq.ack_data      = cfg.ack_data;
-    dev_seq.is_i3c        = cfg.is_i3c;
-    dev_seq.dir           = dir;
+    dev_seq                             = i3c_device_response_seq::type_id::create(cfg.seq_name);
+    dev_seq.target_addr                 = cfg.target_addr;
+    dev_seq.ack_address                 = cfg.ack_address;
+    dev_seq.ack_data                    = cfg.ack_data;
+    dev_seq.is_i3c                      = cfg.is_i3c;
+    dev_seq.dir                         = dir;
     dev_seq.start_with_broadcast_header = cfg.start_with_broadcast_header;
-    dev_seq.read_data_cnt = cfg.data_length;
-    dev_seq.read_data     = read_data;
+    dev_seq.read_data_cnt               = cfg.data_length;
+    dev_seq.read_data                   = read_data;
 
     fork
       dev_seq.start(p_sequencer.m_i3c_sequencer);
     join_none
   endtask
 
-  virtual task start_ordered_device_responses(input transfer_stimulus_cfg_t cfg0,
-                                              input bit dir0,
-                                              input byte_queue_t read_data0,
-                                              output i3c_device_response_seq dev_seq0,
-                                              input transfer_stimulus_cfg_t cfg1,
-                                              input bit dir1,
-                                              input byte_queue_t read_data1,
-                                              output i3c_device_response_seq dev_seq1);
+  virtual task start_ordered_device_responses(
+      input transfer_stimulus_cfg_t cfg0, input bit dir0, input byte_queue_t read_data0,
+      output i3c_device_response_seq dev_seq0, input transfer_stimulus_cfg_t cfg1, input bit dir1,
+      input byte_queue_t read_data1, output i3c_device_response_seq dev_seq1);
     start_device_response(cfg0, dir0, read_data0, dev_seq0);
     wait_for_device_request_issued(dev_seq0, cfg0.ctxt);
     start_device_response(cfg1, dir1, read_data1, dev_seq1);
@@ -256,21 +270,28 @@ class i3c_base_vseq extends uvm_sequence;
     end
   endtask
 
-  virtual task run_write_stimulus(transfer_stimulus_cfg_t cfg, word_queue_t tx_words,
-                                  output bit [31:0] resp,
-                                  output i3c_device_response_seq dev_seq);
+  virtual task write_write_cmd(input transfer_stimulus_cfg_t cfg, input bit toc = 1'b1);
     regular_trans_desc_t wr_cmd;
-    byte_queue_t         no_read_data;
 
-    wr_cmd = build_regular_transfer_cmd(cfg, 1'b0, 1'b1);
+    wr_cmd = build_regular_transfer_cmd(cfg, 1'b0, toc);
+    `uvm_info(`gfn, $sformatf("%s: write CMD dw0=0x%08h dw1=0x%08h tid=0x%0h dev_idx=%0d len=%0d toc=%0d",
+                              cfg.ctxt, wr_cmd[31:0], wr_cmd[63:32], wr_cmd.tid, wr_cmd.dev_idx,
+                              wr_cmd.data_length, wr_cmd.toc), UVM_LOW)
+    write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
+  endtask
+
+  virtual task run_write_stimulus(transfer_stimulus_cfg_t cfg, word_queue_t tx_words,
+                                  output bit [31:0] resp, output i3c_device_response_seq dev_seq);
+    byte_queue_t no_read_data;
+
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
 
     if (cfg.tx_before_cmd) begin
       write_tx_words(tx_words);
-      write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
+      write_write_cmd(cfg);
     end else begin
-      write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
+      write_write_cmd(cfg);
       write_tx_words(tx_words);
     end
 
@@ -307,13 +328,10 @@ class i3c_base_vseq extends uvm_sequence;
                                             dev_seq);
   endtask
 
-  virtual task run_read_stimulus_words_with_actual_len(transfer_stimulus_cfg_t cfg,
-                                                       byte_queue_t read_data,
-                                                       int unsigned actual_data_length,
-                                                       output word_queue_t rx_words,
-                                                       output bit [31:0] resp,
-                                                       output i3c_device_response_seq dev_seq,
-                                                       input bit final_t_bit = 1'b0);
+  virtual task run_read_stimulus_words_with_actual_len(
+      transfer_stimulus_cfg_t cfg, byte_queue_t read_data, int unsigned actual_data_length,
+      output word_queue_t rx_words, output bit [31:0] resp, output i3c_device_response_seq dev_seq,
+      input bit final_t_bit = 1'b0);
     regular_trans_desc_t rd_cmd;
 
     rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
@@ -330,26 +348,38 @@ class i3c_base_vseq extends uvm_sequence;
     read_response(resp);
   endtask
 
-  virtual task run_toc_zero_write_stimulus(transfer_stimulus_cfg_t cfg0,
-                                           transfer_stimulus_cfg_t cfg1,
-                                           word_queue_t tx_words, output bit [31:0] resp0,
-                                           output bit [31:0] resp1, output int rstart_count,
-                                           output i3c_device_response_seq dev_seq0,
-                                           output i3c_device_response_seq dev_seq1);
+  virtual task run_toc_zero_write_stimulus(
+      transfer_stimulus_cfg_t cfg0, transfer_stimulus_cfg_t cfg1, word_queue_t tx_words,
+      output bit [31:0] resp0, output bit [31:0] resp1, output int rstart_count,
+      output i3c_device_response_seq dev_seq0, output i3c_device_response_seq dev_seq1);
     regular_trans_desc_t wr_cmd0;
     regular_trans_desc_t wr_cmd1;
     byte_queue_t         no_read_data;
+    word_queue_t         tx_words0;
+    word_queue_t         tx_words1;
+    int unsigned         cfg0_word_count;
 
     wr_cmd0 = build_regular_transfer_cmd(cfg0, 1'b0, 1'b0);
     wr_cmd1 = build_regular_transfer_cmd(cfg1, 1'b0, 1'b1);
+    cfg0_word_count = (cfg0.data_length + 3) / 4;
+    foreach (tx_words[i]) begin
+      if (i < cfg0_word_count) begin
+        tx_words0.push_back(tx_words[i]);
+      end else begin
+        tx_words1.push_back(tx_words[i]);
+      end
+    end
 
-    start_ordered_device_responses(cfg0, 1'b0, no_read_data, dev_seq0,
-                                   cfg1, 1'b0, no_read_data, dev_seq1);
+    start_ordered_device_responses(cfg0, 1'b0, no_read_data, dev_seq0, cfg1, 1'b0, no_read_data,
+                                   dev_seq1);
     if (cfg0.settle_before_cmd != 0) settle_cycles(cfg0.settle_before_cmd);
 
+    if (cfg0.tx_before_cmd) write_tx_words(tx_words0);
     write_cmd(wr_cmd0[31:0], wr_cmd0[63:32]);
+    if (!cfg0.tx_before_cmd) write_tx_words(tx_words0);
+    if (cfg1.tx_before_cmd) write_tx_words(tx_words1);
     write_cmd(wr_cmd1[31:0], wr_cmd1[63:32]);
-    write_tx_words(tx_words);
+    if (!cfg1.tx_before_cmd) write_tx_words(tx_words1);
 
     poll_idle();
     wait_for_device_done(dev_seq0, cfg0.ctxt, device_done_timeout_cycles(cfg0));
@@ -360,14 +390,11 @@ class i3c_base_vseq extends uvm_sequence;
     read_response(resp1);
   endtask
 
-  virtual task run_toc_zero_read_write_stimulus(transfer_stimulus_cfg_t rd_cfg,
-                                                transfer_stimulus_cfg_t wr_cfg,
-                                                byte_queue_t read_data, word_queue_t tx_words,
-                                                output bit [31:0] rx, output bit [31:0] resp0,
-                                                output bit [31:0] resp1,
-                                                output int rstart_count,
-                                                output i3c_device_response_seq dev_seq0,
-                                                output i3c_device_response_seq dev_seq1);
+  virtual task run_toc_zero_read_write_stimulus(
+      transfer_stimulus_cfg_t rd_cfg, transfer_stimulus_cfg_t wr_cfg, byte_queue_t read_data,
+      word_queue_t tx_words, output bit [31:0] rx, output bit [31:0] resp0, output bit [31:0] resp1,
+      output int rstart_count, output i3c_device_response_seq dev_seq0,
+      output i3c_device_response_seq dev_seq1);
     regular_trans_desc_t rd_cmd0;
     regular_trans_desc_t wr_cmd1;
     byte_queue_t         no_read_data;
@@ -375,8 +402,8 @@ class i3c_base_vseq extends uvm_sequence;
     rd_cmd0 = build_regular_transfer_cmd(rd_cfg, 1'b1, 1'b0);
     wr_cmd1 = build_regular_transfer_cmd(wr_cfg, 1'b0, 1'b1);
 
-    start_ordered_device_responses(rd_cfg, 1'b1, read_data, dev_seq0,
-                                   wr_cfg, 1'b0, no_read_data, dev_seq1);
+    start_ordered_device_responses(rd_cfg, 1'b1, read_data, dev_seq0, wr_cfg, 1'b0, no_read_data,
+                                   dev_seq1);
     expect_scoreboard_read_data(rd_cfg, read_data, rd_cfg.data_length);
     if (rd_cfg.settle_before_cmd != 0) settle_cycles(rd_cfg.settle_before_cmd);
 
@@ -414,7 +441,7 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual function void expect_scoreboard_resp_error(bit [3:0] err_status, bit [3:0] tid,
                                                      bit [15:0] data_length, string ctxt);
-    uvm_component comp;
+    uvm_component  comp;
     i3c_scoreboard scb;
 
     comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
@@ -424,14 +451,12 @@ class i3c_base_vseq extends uvm_sequence;
     scb.expect_resp_error(err_status, tid, data_length);
   endfunction
 
-  virtual function void expect_scoreboard_read_data(transfer_stimulus_cfg_t cfg,
-                                                    byte_queue_t read_data,
-                                                    int unsigned actual_data_length,
-                                                    bit final_t_bit = 1'b0,
-                                                    bit expect_rx_fifo = 1'b1);
-    uvm_component comp;
+  virtual function void expect_scoreboard_read_data(
+      transfer_stimulus_cfg_t cfg, byte_queue_t read_data, int unsigned actual_data_length,
+      bit final_t_bit = 1'b0, bit expect_rx_fifo = 1'b1);
+    uvm_component  comp;
     i3c_scoreboard scb;
-    byte_queue_t exp_read_data;
+    byte_queue_t   exp_read_data;
 
     comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
     if (!$cast(scb, comp)) begin
@@ -529,9 +554,37 @@ class i3c_base_vseq extends uvm_sequence;
     data = reg_seq.rdata;
   endtask
 
-  virtual task configure_dut();
-    reg_write(ADDR_HC_CONTROL, 32'h0000_0001);
+  virtual task enable_dut(bit broadcast_header_enable = 1'b0);
+    reg_write(ADDR_HC_CONTROL, {29'h0, broadcast_header_enable, 1'b0, 1'b1});
   endtask
+
+  virtual task disable_dut();
+    reg_write(ADDR_HC_CONTROL, {29'h0, 1'b0, 1'b0, 1'b0});
+  endtask
+
+  virtual task request_sw_reset(bit keep_enabled = 1'b0);
+    bit [31:0] data;
+    bit        keep_broadcast_header_enable;
+
+    poll_idle();
+    reg_read(ADDR_HC_CONTROL, data);
+    keep_broadcast_header_enable = data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
+    reg_write(ADDR_HC_CONTROL, {29'h0, keep_broadcast_header_enable, 1'b1, keep_enabled});
+    settle_cycles();
+
+    reg_read(ADDR_HC_CONTROL, data);
+    `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
+                 $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
+    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0, $sformatf("%s: SW_RESET should self-clear",
+                                                             get_type_name()))
+    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], keep_broadcast_header_enable,
+                 $sformatf("%s: SW_RESET should preserve BROADCAST_HEADER_ENABLE config",
+                           get_type_name()))
+  endtask
+
+  virtual function string private_addr_mode_name(bit broadcast_header_enable);
+    return broadcast_header_enable ? "broadcast" : "private";
+  endfunction
 
   virtual task write_dat_entry(int index, bit [6:0] static_addr, bit [6:0] dynamic_addr,
                                bit is_i2c);
@@ -568,6 +621,18 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual task read_response(output bit [31:0] data);
     reg_read(ADDR_RESP, data);
+  endtask
+
+  virtual task check_success_resp_fields(input bit [31:0] resp, input bit [3:0] tid,
+                                         input int unsigned data_length, input string ctxt);
+    `DV_CHECK_EQ(resp[31:28], 4'h0, $sformatf("%s: expected Success response", ctxt))
+    `DV_CHECK_EQ(resp[27:24], tid, $sformatf("%s: response TID mismatch", ctxt))
+    `DV_CHECK_EQ(resp[15:0], 16'(data_length),
+                 $sformatf("%s: response length mismatch", ctxt))
+  endtask
+
+  virtual task check_success_resp(input bit [31:0] resp, input transfer_stimulus_cfg_t cfg);
+    check_success_resp_fields(resp, cfg.tid, cfg.data_length, cfg.ctxt);
   endtask
 
   virtual task poll_idle(int timeout = 10000);

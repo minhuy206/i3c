@@ -98,6 +98,7 @@ Include file for all virtual sequences:
 `include "i3c_vseqs/csr_vseqs/csr_enable_disable_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_timing_rw_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_multi_dat_idx_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"
 `include "i3c_vseqs/imm_vseqs/i3c_smoke_vseq.sv"
 ```
@@ -149,12 +150,17 @@ virtual task reg_read(bit [11:0] addr, output bit [31:0] data);
 endtask
 ```
 
-#### configure_dut()
+#### enable_dut(broadcast_header_enable)
 ```systemverilog
-virtual task configure_dut();
-  // Use default timing values (already set by reset)
-  // Just enable the controller
-  reg_write(ADDR_HC_CONTROL, 32'h0000_0001); // ENABLE=1
+virtual task enable_dut(bit broadcast_header_enable = 1'b0);
+  reg_write(ADDR_HC_CONTROL, {29'h0, broadcast_header_enable, 1'b0, 1'b1});
+endtask
+```
+
+#### disable_dut()
+```systemverilog
+virtual task disable_dut();
+  reg_write(ADDR_HC_CONTROL, {29'h0, 1'b0, 1'b0, 1'b0});
 endtask
 ```
 
@@ -231,7 +237,7 @@ First test to bring up. Performs a minimal Immediate Data Transfer (1-2 byte wri
 ### 7.2. Sequence Body
 
 ```
-1. configure_dut()                         — Enable controller
+1. enable_dut()                           — Enable controller
 2. write_dat_entry(0, 7'h50, 7'h08, 0)   — DAT[0] = I3C device, dynamic addr 0x08
 3. Build ImmediateDataTransfer CMD descriptor:
    - DWORD0: attr=001, tid=0, cmd=0, cp=0, dev_idx=0, rnw=0, mode=SDR0, dtt=2, toc=1, wroc=1
@@ -262,7 +268,7 @@ Test Regular Transfer write with data from TX queue.
 ### 8.2. Sequence Body
 
 ```
-1. configure_dut()
+1. enable_dut()
 2. write_dat_entry(0, 7'h50, 7'h08, 0)
 3. Build RegularTransfer CMD descriptor:
    - DWORD0: attr=000, tid=1, cmd=0, cp=0, dev_idx=0, rnw=0, mode=SDR0, toc=1, wroc=1
@@ -293,7 +299,7 @@ Test Regular Transfer read with data to RX queue.
 ### 9.2. Sequence Body
 
 ```
-1. configure_dut()
+1. enable_dut()
 2. write_dat_entry(0, 7'h50, 7'h08, 0)
 3. Build RegularTransfer CMD descriptor:
    - DWORD0: attr=000, tid=2, cmd=0, cp=0, dev_idx=0, rnw=1, mode=SDR0, toc=1, wroc=1

@@ -101,6 +101,10 @@ class i3c_monitor extends uvm_monitor;
       end else if (is_i3c_broadcast(full_item.addr)) begin
         i3c_thread(full_item);
         if (full_item.i3c_empty_broadcast) collect_private_after_broadcast_header(full_item);
+      end else if (is_i3c_target_addr(full_item.addr)) begin
+        i3c_data(.transaction(full_item), .updated_transaction(temp_val),
+                 .device_to_host(full_item.bus_op == BusOpRead), .msg("I3C Direct data type"));
+        full_item = temp_val;
       end else if (full_item.bus_op == BusOpRead) begin
         i2c_read_thread(full_item);
       end else begin

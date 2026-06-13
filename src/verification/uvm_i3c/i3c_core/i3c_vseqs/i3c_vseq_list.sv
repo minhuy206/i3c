@@ -4,8 +4,10 @@
 // 4.1 CSR, DAT, and Register Bus
 `include "i3c_vseqs/csr_vseqs/csr_reset_defaults_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_enable_disable_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_broadcast_header_control_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_timing_rw_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_dat_rw_all_entries_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_dat_hw_read_selection_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_cmd_queue_2dw_staging_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_cmd_partial_then_other_write_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_sw_reset_flush_queues_vseq.sv"
@@ -41,9 +43,10 @@
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_data_patterns_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_tbit_parity_generation_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_addr_nack_vseq.sv"
-`include "i3c_vseqs/sdr_write_vseqs/i3c_write_tx_fifo_empty_stall_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_tx_fifo_underflow_ovl_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_toc_zero_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_back_to_back_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_multi_dat_idx_vseq.sv"
 
 // 4.5 I3C SDR Private Read
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"

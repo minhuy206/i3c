@@ -6,6 +6,14 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
   endfunction
 
   virtual task body();
+    bit broadcast_modes[2] = '{1'b0, 1'b1};
+
+    foreach (broadcast_modes[mode_idx]) begin
+      run_read_toc_zero_case(broadcast_modes[mode_idx]);
+    end
+  endtask
+
+  virtual task run_read_toc_zero_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t rd_cfg;
     transfer_stimulus_cfg_t wr_cfg;
     byte_queue_t            read_data;
@@ -17,14 +25,41 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
     i3c_device_response_seq dev_seq0;
     i3c_device_response_seq dev_seq1;
 
-    configure_dut();
+    enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    rd_cfg                   = make_transfer_cfg("read_toc0_vseq first", "dev_seq0", 4'd5, 5'd0,
-                                                 7'h08, 1'b1, 2);
-    wr_cfg                   = make_transfer_cfg("read_toc0_vseq second", "dev_seq1", 4'd6, 5'd0,
-                                                 7'h08, 1'b1, 2);
-    rd_cfg.settle_before_cmd = 5;
+    rd_cfg                   = make_transfer_cfg(
+        .ctxt($sformatf("read_toc0_vseq %s first", private_addr_mode_name(broadcast_header_enable))),
+        .seq_name($sformatf("dev_seq0_%s", private_addr_mode_name(broadcast_header_enable))),
+        .tid(4'd5),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(2),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
+    );
+    wr_cfg                   = make_transfer_cfg(
+        .ctxt($sformatf("read_toc0_vseq %s second", private_addr_mode_name(broadcast_header_enable))),
+        .seq_name($sformatf("dev_seq1_%s", private_addr_mode_name(broadcast_header_enable))),
+        .tid(4'd6),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(2),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
     read_data.push_back(8'h11);
     read_data.push_back(8'h22);
     tx_words.push_back(32'h0000_4433);

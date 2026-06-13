@@ -10,19 +10,23 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
   task body();
     int unsigned req_lengths[NUM_CASES] = '{4, 8, 8, 9};
     int unsigned actual_lengths[NUM_CASES] = '{1, 3, 4, 5};
+    bit broadcast_modes[2] = '{1'b0, 1'b1};
 
-    configure_dut();
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    foreach (broadcast_modes[mode_idx]) begin
+      enable_dut(broadcast_modes[mode_idx]);
+      write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    foreach (req_lengths[case_idx]) begin
-      run_short_case(case_idx, req_lengths[case_idx], actual_lengths[case_idx]);
+      foreach (req_lengths[case_idx]) begin
+        run_short_case(case_idx, req_lengths[case_idx], actual_lengths[case_idx],
+                       broadcast_modes[mode_idx]);
+      end
     end
 
     `uvm_info(`gfn, "SDRR_003 I3C short read target-end checks passed", UVM_LOW)
   endtask
 
   virtual task run_short_case(int unsigned case_idx, int unsigned requested_length,
-                              int unsigned actual_length);
+                              int unsigned actual_length, bit broadcast_header_enable);
     transfer_stimulus_cfg_t cfg;
     byte_queue_t            read_data;
     word_queue_t            rx_words;
@@ -35,15 +39,23 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
     build_payload(case_idx, actual_length, read_data);
 
     cfg                  = make_transfer_cfg(
-        $sformatf("SDRR_003 req %0d actual %0d", requested_length, actual_length),
-        $sformatf("sdrr003_dev_seq_%0d_%0d", requested_length, actual_length),
-        4'(case_idx + 1),
-        5'd0,
-        7'h08,
-        1'b1,
-        requested_length
+        .ctxt($sformatf("SDRR_003 %s req %0d actual %0d",
+          private_addr_mode_name(broadcast_header_enable), requested_length, actual_length)),
+        .seq_name($sformatf("sdrr003_%s_dev_seq_%0d_%0d", private_addr_mode_name(broadcast_header_enable),
+          requested_length, actual_length)),
+        .tid(4'(case_idx + 1)),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(requested_length),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
     );
-    cfg.wait_device_done = 1'b1;
 
     expect_scoreboard_resp_error(4'h7, cfg.tid, 16'(actual_length), cfg.ctxt);
     run_read_stimulus_words_with_actual_len(cfg, read_data, actual_length, rx_words, resp,

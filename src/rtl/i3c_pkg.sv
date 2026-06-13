@@ -6,7 +6,7 @@ package i3c_pkg;
   localparam logic [7:0] CCC_ENTDAA = 8'h07;
 
   // DAT configuration
-  localparam int unsigned DatDepth = 16;
+  localparam int unsigned DatDepth = 32;
   localparam int unsigned DatAw = $clog2(DatDepth);
 
   // Response error ID width

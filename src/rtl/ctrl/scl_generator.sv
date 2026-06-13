@@ -57,7 +57,7 @@ module scl_generator #(
 
   logic                    tcount_expired;
   assign tcount_expired = (tcount == '0);
-  assign active_t_low = scl_use_od_low_i ? t_low_od_i : t_low_i;
+  assign active_t_low   = scl_use_od_low_i ? t_low_od_i : t_low_i;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_tcount
     if (!rst_ni) tcount <= '0;
@@ -109,16 +109,21 @@ module scl_generator #(
       end
 
       DriveHigh: begin
-        if (tcount_expired && (gen_stop_i || gen_clock_i)) begin
+        if (tcount_expired) begin
           load_tcount     = 1'b1;
           tcount_load_val = active_t_low + t_f_i;
         end
       end
 
       DriveLow: begin
-        if (tcount_expired && gen_clock_i) begin
-          load_tcount     = 1'b1;
-          tcount_load_val = t_high_i + t_r_i;
+        if (tcount_expired) begin
+          if (gen_stop_i) begin
+            load_tcount     = 1'b1;
+            tcount_load_val = active_t_low + t_f_i;
+          end else if (gen_clock_i && !gen_rstart_i) begin
+            load_tcount     = 1'b1;
+            tcount_load_val = t_high_i + t_r_i;
+          end
         end
       end
 
@@ -169,7 +174,11 @@ module scl_generator #(
 
         DriveLow: begin
           if (tcount_expired) begin
-            if (gen_clock_i) begin
+            if (gen_stop_i) begin
+              state_d = GenerateStop;
+            end else if (gen_rstart_i) begin
+              state_d = GenerateRstart;
+            end else if (gen_clock_i) begin
               state_d = DriveHigh;
             end else begin
               state_d = WaitCmd;
@@ -179,15 +188,7 @@ module scl_generator #(
 
         DriveHigh: begin
           if (tcount_expired) begin
-            if (gen_stop_i) begin
-              state_d = GenerateStop;
-            end else if (gen_rstart_i) begin
-              state_d = GenerateRstart;
-            end else if (gen_clock_i) begin
-              state_d = DriveLow;
-            end else begin
-              state_d = WaitCmd;
-            end
+            state_d = DriveLow;
           end
         end
 
@@ -259,7 +260,9 @@ module scl_generator #(
     endcase
   end
 
-  assign done_o = ((state_d == DriveLow) && (state_q != DriveLow)) ||
+  assign done_o = ((state_d == DriveLow) && (state_q != DriveLow) &&
+                   (state_q != DriveHigh ||
+                    (gen_clock_i && !gen_stop_i && !gen_rstart_i))) ||
                   ((state_q == BusFree) && (state_d == Idle));
 
   assign busy_o = (state_q != Idle);

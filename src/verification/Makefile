@@ -15,8 +15,10 @@ FIFO_005_LIB ?= xcelium_fifo005.d
 CSR_REGRESSION_SEQS ?= \
 	csr_reset_defaults_vseq \
 	csr_enable_disable_vseq \
+	csr_broadcast_header_control_vseq \
 	csr_timing_rw_vseq \
 	csr_dat_rw_all_entries_vseq \
+	csr_dat_hw_read_selection_vseq \
 	csr_cmd_queue_2dw_staging_vseq \
 	csr_cmd_partial_then_other_write_vseq \
 	csr_rx_resp_read_pop_vseq \
@@ -50,9 +52,10 @@ SDRW_REGRESSION_SEQS ?= \
 	i3c_write_data_patterns_vseq \
 	i3c_write_tbit_parity_generation_vseq \
 	i3c_write_addr_nack_vseq \
-	i3c_write_tx_fifo_empty_stall_vseq \
+	i3c_write_tx_fifo_underflow_ovl_vseq \
 	i3c_write_toc_zero_vseq \
-	i3c_write_back_to_back_vseq
+	i3c_write_back_to_back_vseq \
+	i3c_write_multi_dat_idx_vseq
 
 SDRR_REGRESSION_SEQS ?= \
 	i3c_read_vseq \

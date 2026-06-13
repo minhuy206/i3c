@@ -114,10 +114,10 @@ typedef struct packed {
 | `tx_wready_i`   | Input     | 1            | TX FIFO ready                                          |
 | `rx_rvalid_i`   | Input     | 1            | RX FIFO has data                                       |
 | `rx_rdata_i`    | Input     | DataWidth    | RX data                                                |
-| `rx_rready_o`   | Output    | 1            | RX FIFO read acknowledge                               |
+| `rx_rready_o`   | Output    | 1            | RX FIFO read request / consumer ready                  |
 | `resp_rvalid_i` | Input     | 1            | RESP FIFO has data                                     |
 | `resp_rdata_i`  | Input     | DataWidth    | Response descriptor                                    |
-| `resp_rready_o` | Output    | 1            | RESP FIFO read acknowledge                             |
+| `resp_rready_o` | Output    | 1            | RESP FIFO read request / consumer ready                |
 
 ### Hardware Interface — Queue Status (from HCI queues)
 
@@ -149,12 +149,24 @@ typedef struct packed {
 | 0x010       | `T_R_REG`        | RW    | 0x4   | Rise time (system clock cycles)      |
 | 0x014       | `T_F_REG`        | RW    | 0x4   | Fall time                            |
 | 0x018       | `T_LOW_REG`      | RW    | 0x8   | SCL LOW period                       |
-| 0x01C       | `T_HIGH_REG`     | RW    | 0x8   | SCL HIGH period                      |
-| 0x020       | `T_SU_STA_REG`   | RW    | 0x8   | START setup time                     |
-| 0x024       | `T_HD_STA_REG`   | RW    | 0x8   | START hold time                      |
-| 0x028       | `T_SU_STO_REG`   | RW    | 0x4   | STOP setup time                      |
-| 0x02C       | `T_SU_DAT_REG`   | RW    | 0x1   | Data setup time                      |
-| 0x030       | `T_HD_DAT_REG`   | RW    | 0x4   | Data hold time                       |
+| 0x01C       | `T_LOW_OD_REG`   | RW    | 0x14  | Open-drain SCL LOW period            |
+| 0x020       | `T_HIGH_REG`     | RW    | 0x8   | SCL HIGH period                      |
+| 0x024       | `T_SU_STA_REG`   | RW    | 0x8   | START setup time                     |
+| 0x028       | `T_HD_STA_REG`   | RW    | 0x8   | START hold time                      |
+| 0x02C       | `T_SU_STO_REG`   | RW    | 0x4   | STOP setup time                      |
+| 0x030       | `T_SU_DAT_REG`   | RW    | 0x1   | Data setup time                      |
+| 0x034       | `T_HD_DAT_REG`   | RW    | 0x4   | Data hold time                       |
+| 0x038       | `T_BUS_FREE_REG` | RW    | 0x4   | Bus free time                        |
+| 0x040       | `I2C_T_R_REG`    | RW    | 0x4   | I2C rise time                        |
+| 0x044       | `I2C_T_F_REG`    | RW    | 0x4   | I2C fall time                        |
+| 0x048       | `I2C_T_LOW_REG`  | RW    | 0xA0  | I2C SCL LOW period                   |
+| 0x04C       | `I2C_T_HIGH_REG` | RW    | 0x5A  | I2C SCL HIGH period                  |
+| 0x050       | `I2C_T_SU_STA_REG` | RW  | 0x3C  | I2C START setup time                 |
+| 0x054       | `I2C_T_HD_STA_REG` | RW  | 0x3C  | I2C START hold time                  |
+| 0x058       | `I2C_T_SU_STO_REG` | RW  | 0x82  | I2C STOP setup time                  |
+| 0x05C       | `I2C_T_SU_DAT_REG` | RW  | 0xA   | I2C data setup time                  |
+| 0x060       | `I2C_T_HD_DAT_REG` | RW  | 0x0   | I2C data hold time                   |
+| 0x064       | `I2C_T_BUF_REG`  | RW    | 0x82  | I2C bus free time                    |
 | 0x100       | `CMD_QUEUE_PORT` | W     | -     | Write command descriptor (2x writes) |
 | 0x104       | `TX_DATA_PORT`   | W     | -     | Write TX data                        |
 | 0x108       | `RX_DATA_PORT`   | R     | -     | Read RX data                         |
@@ -188,7 +200,7 @@ typedef struct packed {
 | [2]    | `RESP_EMPTY` | R      | 1     | 1 = RESP FIFO empty        |
 | [31:3] | Reserved     | -      | 0     | -                          |
 
-#### Timing Registers (0x010–0x030)
+#### Timing Registers (0x010–0x064)
 
 | Bits             | Field    | Description                         |
 | ---------------- | -------- | ----------------------------------- |
@@ -265,7 +277,7 @@ end
 
 The module has exactly three `always_ff` blocks:
 
-1. **`reg_write`** — Latches `hc_enable_q`, `sw_reset_q`, all 9 timing registers, and the 16-entry `dat_mem[]` on write cycles (`wen_i`). This is the main configuration register FF.
+1. **`reg_write`** — Latches `hc_enable_q`, `sw_reset_q`, all 21 timing registers, and the 16-entry `dat_mem[]` on write cycles (`wen_i`). This is the main configuration register FF.
 2. **`cmd_write`** — 64-bit two-DWORD staging for `CMD_QUEUE_PORT`. Holds DWORD0 until DWORD1 arrives, then pulses `cmd_wvalid_o`.
 3. **`tx_write`** — TX FIFO push: pulses `tx_wvalid_o` and latches `tx_wdata_o` on each write to `TX_DATA_PORT`.
 
@@ -273,34 +285,39 @@ The module has exactly three `always_ff` blocks:
 
 ```systemverilog
 always_comb begin
-  rdata_o = '0;
-  ready_o = 1'b1;
+  rdata_d = '0;
+  cmd_queue_write = wen_i && (addr_i == 12'h100);
+  tx_data_write = wen_i && (addr_i == 12'h104);
+  ready_o = !((cmd_queue_write && (cmd_wvalid || sw_reset)) ||
+              (tx_data_write && (tx_wvalid || sw_reset)));
   rx_rready_o = 1'b0;
   resp_rready_o = 1'b0;
 
   if (ren_i) begin
     case (addr_i)
-      12'h000: rdata_o = hc_control;
-      12'h004: rdata_o = hc_status;
-      12'h010: rdata_o = {'0, t_r_reg};
+      12'h000: rdata_d = hc_control;
+      12'h004: rdata_d = hc_status;
+      12'h010: rdata_d = {'0, t_r_reg};
       // ... other timing regs ...
       12'h108: begin
-        rdata_o = rx_rdata_i;
-        rx_rready_o = rx_rvalid_i;  // Pop from RX FIFO on read
+        rx_rready_o = 1'b1;
+        if (rx_rvalid_i) rdata_d = rx_rdata_i;
       end
       12'h10C: begin
-        rdata_o = resp_rdata_i;
-        resp_rready_o = resp_rvalid_i;  // Pop from RESP FIFO on read
+        resp_rready_o = 1'b1;
+        if (resp_rvalid_i) rdata_d = resp_rdata_i;
       end
-      12'h110: rdata_o = queue_status;
+      12'h110: rdata_d = queue_status;
       default: begin
         if (addr_i >= 12'h200 && addr_i < 12'h240)
-          rdata_o = dat_mem[(addr_i - 12'h200) >> 2];
+          rdata_d = dat_mem[(addr_i - 12'h200) >> 2];
       end
     endcase
   end
 end
 ```
+
+`rx_rready_o` pulses on every `RX_DATA_PORT` read, and `resp_rready_o` pulses on every `RESP_PORT` read. These signals are the CSR-side consumer-ready requests; the FIFO only removes an entry when both ready and valid are high (`rready && rvalid`). Therefore, reading an empty RX/RESP port returns zero and does not pop or underflow the FIFO, even though the CSR read still asserts the corresponding `rready_o` for that cycle.
 
 ### 5.5. DAT Hardware Read Path
 
@@ -349,7 +366,7 @@ This is a 1-cycle latency read (registered output). `flow_active` and `entdaa_co
 | Read from write-only reg | Returns 0                              |
 | Invalid address          | Returns 0, no side effects             |
 | Write to full CMD/TX     | CSR passes write; FIFO ignores if full |
-| Read from empty RX/RESP  | Returns 0, rready not asserted         |
+| Read from empty RX/RESP  | Returns 0; CSR asserts rready, FIFO does not pop because rvalid is 0 |
 
 ## 9. Test Plan
 
@@ -390,7 +407,7 @@ src/verification/uvm_i3c/
 
 ## 10. Implementation Notes
 
-- The `ready_o` output is always HIGH (single-cycle access, no wait states). If a FIFO is full when SW writes, the write is silently dropped — software must check QUEUE_STATUS first.
+- The `ready_o` output is normally HIGH. It deasserts for `CMD_QUEUE_PORT` or `TX_DATA_PORT` writes while the corresponding pending valid is still waiting for FIFO acceptance, or during the one-cycle `SW_RESET` pulse, so software/reg-agent writes are held instead of silently dropped.
 - The CMD staging register introduces state — if only DWORD0 is written before a reset, the staging state is lost (by design). Software always writes both DWORDs in sequence.
 - DAT entries use 32-bit width (not 64-bit as in reference). The reference's upper 32 bits contained DCR/BCR/PID fields which are stored in software after ENTDAA.
 - Timing register defaults target I3C SDR at 333 MHz. For I2C FM mode, software must write the appropriate timing values before initiating I2C transfers.

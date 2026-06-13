@@ -10,8 +10,8 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
 
     check_reg_eq(ADDR_HC_CONTROL, 32'h0000_0000, "HC_CONTROL", "after reset");
     reg_read(ADDR_HC_CONTROL, data);
-    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_ADDR_ENABLE_BIT], 1'b0,
-                 "csr_reset_defaults_vseq: HC_CONTROL[BROADCAST_ADDR_ENABLE] should reset to 0")
+    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], 1'b0,
+                 "csr_reset_defaults_vseq: HC_CONTROL[BROADCAST_HEADER_ENABLE] should reset to 0")
 
     reg_read(ADDR_HC_STATUS, data);
     `DV_CHECK_EQ(data, 32'h0000_0005, "csr_reset_defaults_vseq: HC_STATUS reset value mismatch")

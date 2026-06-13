@@ -11,6 +11,8 @@ class i3c_device_response_seq extends uvm_sequence #(
   bit start_with_broadcast_header;
   int read_data_cnt = 4;
   bit observed_rstart;
+  bit observed_broadcast_header;
+  bit observed_broadcast_rstart;
   bit done;
   bit request_issued;
   bit [6:0] sampled_addr;
@@ -29,6 +31,8 @@ class i3c_device_response_seq extends uvm_sequence #(
     i3c_seq_item rsp_item;
     req = i3c_seq_item::type_id::create("req");
     observed_rstart = 1'b0;
+    observed_broadcast_header = 1'b0;
+    observed_broadcast_rstart = 1'b0;
     done = 1'b0;
     request_issued = 1'b0;
     sampled_addr = '0;
@@ -72,6 +76,8 @@ class i3c_device_response_seq extends uvm_sequence #(
     get_response(rsp_item);
     if (rsp_item != null) begin
       observed_rstart = rsp_item.end_with_rstart;
+      observed_broadcast_header = rsp_item.observed_broadcast_header;
+      observed_broadcast_rstart = rsp_item.observed_broadcast_rstart;
       sampled_addr = rsp_item.addr;
       sampled_dir = rsp_item.dir;
       sampled_data = rsp_item.data;

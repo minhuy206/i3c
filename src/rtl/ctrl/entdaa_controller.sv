@@ -1,7 +1,7 @@
 module entdaa_controller
   import controller_pkg::dat_entry_t;
 #(
-    parameter int DatDepth = 16,
+    parameter int unsigned DatDepth = 32,
     localparam int unsigned DatAw = $clog2(DatDepth)
 ) (
     input logic clk_i,

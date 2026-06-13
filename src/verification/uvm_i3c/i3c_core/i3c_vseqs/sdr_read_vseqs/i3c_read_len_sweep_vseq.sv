@@ -9,18 +9,22 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
 
   task body();
     int unsigned lengths[NUM_LENGTHS] = '{1, 2, 3, 4, 5, 7, 8, 16};
+    bit broadcast_modes[2] = '{1'b0, 1'b1};
 
-    configure_dut();
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    foreach (broadcast_modes[mode_idx]) begin
+      enable_dut(broadcast_modes[mode_idx]);
+      write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    foreach (lengths[sweep_idx]) begin
-      run_len_case(sweep_idx, lengths[sweep_idx]);
+      foreach (lengths[sweep_idx]) begin
+        run_len_case(sweep_idx, lengths[sweep_idx], broadcast_modes[mode_idx]);
+      end
     end
 
     `uvm_info(`gfn, "SDRR_002 I3C regular read length sweep checks passed", UVM_LOW)
   endtask
 
-  virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length);
+  virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length,
+                            bit broadcast_header_enable);
     transfer_stimulus_cfg_t cfg;
     byte_queue_t            read_data;
     word_queue_t            rx_words;
@@ -30,15 +34,23 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
     build_payload(sweep_idx, data_length, read_data);
 
     cfg                  = make_transfer_cfg(
-        $sformatf("SDRR_002 len %0d", data_length),
-        $sformatf("sdrr002_dev_seq_%0d", data_length),
-        4'(sweep_idx + 1),
-        5'd0,
-        7'h08,
-        1'b1,
-        data_length
+        .ctxt($sformatf("SDRR_002 %s len %0d", private_addr_mode_name(broadcast_header_enable),
+          data_length)),
+        .seq_name($sformatf("sdrr002_%s_dev_seq_%0d", private_addr_mode_name(broadcast_header_enable),
+          data_length)),
+        .tid(4'(sweep_idx + 1)),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(data_length),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
     );
-    cfg.wait_device_done = 1'b1;
 
     run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
 

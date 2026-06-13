@@ -9,7 +9,8 @@ module flow_active
     parameter int HciTxDataWidth = 32,
     parameter int HciRxDataWidth = 32,
     parameter int HciRespDataWidth = 32,
-    parameter int DatDepth = 16
+    parameter int unsigned DatDepth = 32,
+    localparam int unsigned DatAw = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -74,7 +75,7 @@ module flow_active
 
     output logic sel_od_pp_o,
 
-    input  logic broadcast_addr_enable_i,
+    input  logic broadcast_header_enable_i,
     input  logic i3c_fsm_en_i,
     output logic i3c_fsm_idle_o
 );
@@ -92,7 +93,6 @@ module flow_active
     InitI3CRead       = 4'd9,
     InitI2CWrite      = 4'd10,
     InitI2CRead       = 4'd11,
-    StallWrite        = 4'd12,
     IssueCmd          = 4'd13,
     WriteResp         = 4'd14
   } flow_fsm_state_e;
@@ -136,6 +136,7 @@ module flow_active
   logic [31:0] tx_dword_q;
   logic [1:0] tx_byte_idx_d, tx_byte_idx_q;
   logic tx_queue_rready;
+  logic tx_underflow_d, tx_underflow_q;
 
   logic [31:0] rx_dword_d, rx_dword_q;
   logic [1:0] rx_byte_idx_d, rx_byte_idx_q;
@@ -285,6 +286,7 @@ module flow_active
     rx_byte_idx_d           = 2'h0;
     rx_dword_d              = 32'h0;
     rx_overflow_d           = 1'b0;
+    tx_underflow_d          = 1'b0;
     remaining_len_d         = 16'h0;
     resp_data_len_d         = 16'h0;
     addr_nack_d             = 1'b0;
@@ -484,6 +486,14 @@ module flow_active
     end
   end
 
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_tx_underflow
+    if (!rst_ni) begin
+      tx_underflow_q <= 1'b0;
+    end else begin
+      tx_underflow_q <= tx_underflow_d;
+    end
+  end
+
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_rx_dword
     if (!rst_ni) begin
       rx_dword_q <= '0;
@@ -589,7 +599,7 @@ module flow_active
       resp_err_status_q <= AddrHeader;
     end else if (data_nack_q) begin
       resp_err_status_q <= Nack;
-    end else if (rx_overflow_q) begin
+    end else if (rx_overflow_q || tx_underflow_q) begin
       resp_err_status_q <= Ovl;
     end else if (short_read_q) begin
       resp_err_status_q <= I3cShortReadErr;
@@ -693,7 +703,9 @@ module flow_active
       end
 
       WaitForCmd: begin
-        if (!cmd_queue_empty_i && cmd_queue_rvalid_i) begin
+        if (!i3c_fsm_en_i) begin
+          state_d = Idle;
+        end else if (!cmd_queue_empty_i && cmd_queue_rvalid_i) begin
           state_d = FetchDAT;
         end
       end
@@ -713,7 +725,7 @@ module flow_active
               state_d = I3CBcastHeader;
             end else if (!target_is_i3c) begin
               state_d = I2CWriteImmediate;
-            end else if (cont_pending_q || !broadcast_addr_enable_i) begin
+            end else if (cont_pending_q || !broadcast_header_enable_i) begin
               state_d = I3CWriteImmediate;
             end else begin
               state_d = I3CBcastHeader;
@@ -723,7 +735,7 @@ module flow_active
           end else if (cmd_dir == Write) begin
             if (!target_is_i3c) begin
               state_d = InitI2CWrite;
-            end else if (cont_pending_q || !broadcast_addr_enable_i) begin
+            end else if (cont_pending_q || !broadcast_header_enable_i) begin
               state_d = InitI3CWrite;
             end else begin
               state_d = I3CBcastHeader;
@@ -731,7 +743,7 @@ module flow_active
           end else begin
             if (!target_is_i3c) begin
               state_d = InitI2CRead;
-            end else if (cont_pending_q || !broadcast_addr_enable_i) begin
+            end else if (cont_pending_q || !broadcast_header_enable_i) begin
               state_d = InitI3CRead;
             end else begin
               state_d = I3CBcastHeader;
@@ -813,8 +825,12 @@ module flow_active
       end
 
       FetchTxData: begin
-        if (tx_queue_empty_i) begin
-          state_d = StallWrite;
+        if (tx_underflow_q) begin
+          if (scl_stop_done_q) begin
+            state_d = WriteResp;
+          end
+        end else if (tx_queue_empty_i) begin
+          state_d = FetchTxData;
         end else if (tx_queue_rvalid_i) begin
           state_d = IssueCmd;
         end
@@ -857,12 +873,6 @@ module flow_active
           end
         end else if (issue_phase_q > PhaseAddrAck) begin
           state_d = IssueCmd;
-        end
-      end
-
-      StallWrite: begin
-        if (!tx_queue_empty_i) begin
-          state_d = FetchTxData;
         end
       end
 
@@ -951,6 +961,7 @@ module flow_active
 
     tx_queue_rready         = 1'b0;
     tx_byte_idx_d           = tx_byte_idx_q;
+    tx_underflow_d          = tx_underflow_q;
 
     rx_dword_d              = rx_dword_q;
     rx_byte_idx_d           = rx_byte_idx_q;
@@ -1012,6 +1023,7 @@ module flow_active
         rx_byte_idx_d = 2'h0;
         rx_dword_d = 32'h0;
         rx_overflow_d = 1'b0;
+        tx_underflow_d = 1'b0;
         remaining_len_d = 16'h0;
         resp_data_len_d = 16'h0;
         addr_nack_d = 1'b0;
@@ -1031,7 +1043,7 @@ module flow_active
       WaitForCmd: begin
         i3c_fsm_idle = cmd_queue_empty_i;
         gen_idle = cmd_queue_empty_i;
-        cmd_queue_rready = 1'b1;
+        cmd_queue_rready = i3c_fsm_en_i;
         issue_phase_d = 8'h0;
       end
 
@@ -1328,9 +1340,15 @@ module flow_active
       end
 
       FetchTxData: begin
-        use_i2c_timing  = !target_is_i3c;
-        tx_queue_rready = 1'b1;
-        if (tx_queue_rvalid_i) begin
+        use_i2c_timing = !target_is_i3c;
+        if (tx_underflow_q || tx_queue_empty_i) begin
+          tx_underflow_d  = 1'b1;
+          tx_queue_rready = 1'b0;
+          request_stop(1'b0);
+        end else begin
+          tx_queue_rready = 1'b1;
+        end
+        if (!tx_underflow_q && tx_queue_rvalid_i) begin
           tx_byte_idx_d = 2'h0;
         end
       end
@@ -1377,11 +1395,6 @@ module flow_active
         end else begin
           drive_i2c_addr_preamble(Read);
         end
-      end
-
-      StallWrite: begin
-        use_i2c_timing = !target_is_i3c;
-        gen_clock = 1'b0;
       end
 
       IssueCmd: begin

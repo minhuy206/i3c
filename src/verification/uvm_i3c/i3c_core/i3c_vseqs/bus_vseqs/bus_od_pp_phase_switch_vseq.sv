@@ -15,7 +15,7 @@ class bus_od_pp_phase_switch_vseq extends bus_base_vseq;
   endfunction
 
   task body();
-    configure_dut();
+    enable_dut();
     write_dat_entry(I3C_DEV_IDX, I3C_STATIC_ADDR, I3C_DYNAMIC_ADDR, 1'b0);
     write_dat_entry(I2C_DEV_IDX, I2C_STATIC_ADDR, I2C_DYNAMIC_ADDR, 1'b1);
 
@@ -36,16 +36,21 @@ class bus_od_pp_phase_switch_vseq extends bus_base_vseq;
     bit                     [31:0] resp;
 
     cfg = make_transfer_cfg(
-        "BUS_010 write",
-        "bus010_write_dev_seq",
-        4'd10,
-        I3C_DEV_IDX[4:0],
-        I3C_DYNAMIC_ADDR,
-        1'b1,
-        NUM_TEST_BYTES
+        .ctxt("BUS_010 write"),
+        .seq_name("bus010_write_dev_seq"),
+        .tid(4'd10),
+        .dev_idx(I3C_DEV_IDX[4:0]),
+        .target_addr(I3C_DYNAMIC_ADDR),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
     );
-    cfg.settle_before_cmd = 5;
-    cfg.wait_device_done = 1'b1;
     tx_words.push_back(32'h5AA5_00FF);
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
@@ -74,16 +79,21 @@ class bus_od_pp_phase_switch_vseq extends bus_base_vseq;
     end
 
     cfg = make_transfer_cfg(
-        "BUS_010 I3C read",
-        "bus010_i3c_read_dev_seq",
-        4'd11,
-        I3C_DEV_IDX[4:0],
-        I3C_DYNAMIC_ADDR,
-        1'b1,
-        NUM_TEST_BYTES
+        .ctxt("BUS_010 I3C read"),
+        .seq_name("bus010_i3c_read_dev_seq"),
+        .tid(4'd11),
+        .dev_idx(I3C_DEV_IDX[4:0]),
+        .target_addr(I3C_DYNAMIC_ADDR),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
     );
-    cfg.settle_before_cmd = 5;
-    cfg.wait_device_done = 1'b1;
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
     `DV_CHECK_EQ(rx, exp_rx, "BUS_010 I3C read: RX data mismatch")
@@ -103,24 +113,37 @@ class bus_od_pp_phase_switch_vseq extends bus_base_vseq;
     int                            rstart_count;
 
     cfg0 = make_transfer_cfg(
-        "BUS_010 TOC0 first write",
-        "bus010_toc0_dev_seq0",
-        4'd12,
-        I3C_DEV_IDX[4:0],
-        I3C_DYNAMIC_ADDR,
-        1'b1,
-        2
+        .ctxt("BUS_010 TOC0 first write"),
+        .seq_name("bus010_toc0_dev_seq0"),
+        .tid(4'd12),
+        .dev_idx(I3C_DEV_IDX[4:0]),
+        .target_addr(I3C_DYNAMIC_ADDR),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(2),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
     );
     cfg1 = make_transfer_cfg(
-        "BUS_010 TOC0 second write",
-        "bus010_toc0_dev_seq1",
-        4'd13,
-        I3C_DEV_IDX[4:0],
-        I3C_DYNAMIC_ADDR,
-        1'b1,
-        2
+        .ctxt("BUS_010 TOC0 second write"),
+        .seq_name("bus010_toc0_dev_seq1"),
+        .tid(4'd13),
+        .dev_idx(I3C_DEV_IDX[4:0]),
+        .target_addr(I3C_DYNAMIC_ADDR),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(2),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
     );
-    cfg0.settle_before_cmd = 5;
     tx_words.push_back(32'h0000_BBAA);
     tx_words.push_back(32'h0000_DDCC);
 
@@ -144,16 +167,21 @@ class bus_od_pp_phase_switch_vseq extends bus_base_vseq;
     bit                     [31:0] resp;
 
     cfg = make_transfer_cfg(
-        "BUS_010 I2C write",
-        "bus010_i2c_write_dev_seq",
-        4'd14,
-        I2C_DEV_IDX[4:0],
-        I2C_STATIC_ADDR,
-        1'b0,
-        NUM_TEST_BYTES
+        .ctxt("BUS_010 I2C write"),
+        .seq_name("bus010_i2c_write_dev_seq"),
+        .tid(4'd14),
+        .dev_idx(I2C_DEV_IDX[4:0]),
+        .target_addr(I2C_STATIC_ADDR),
+        .is_i3c(1'b0),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
     );
-    cfg.settle_before_cmd = 5;
-    cfg.wait_device_done = 1'b1;
     tx_words.push_back(32'h1122_3344);
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
@@ -185,16 +213,21 @@ class bus_od_pp_phase_switch_vseq extends bus_base_vseq;
     end
 
     cfg = make_transfer_cfg(
-        "BUS_010 I2C read",
-        "bus010_i2c_read_dev_seq",
-        4'd15,
-        I2C_DEV_IDX[4:0],
-        I2C_STATIC_ADDR,
-        1'b0,
-        NUM_TEST_BYTES
+        .ctxt("BUS_010 I2C read"),
+        .seq_name("bus010_i2c_read_dev_seq"),
+        .tid(4'd15),
+        .dev_idx(I2C_DEV_IDX[4:0]),
+        .target_addr(I2C_STATIC_ADDR),
+        .is_i3c(1'b0),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(NUM_TEST_BYTES),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
     );
-    cfg.settle_before_cmd = 5;
-    cfg.wait_device_done = 1'b1;
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
     `DV_CHECK_EQ(dev_seq.sampled_addr, I2C_STATIC_ADDR,
