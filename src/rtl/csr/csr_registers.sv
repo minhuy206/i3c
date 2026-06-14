@@ -1,5 +1,8 @@
 module csr_registers
   import controller_pkg::dat_entry_t;
+  import controller_pkg::fifo_status_t;
+  import controller_pkg::hc_control_cfg_t;
+  import controller_pkg::intr_event_t;
 #(
     parameter int unsigned DatDepth  = 32,
     parameter int unsigned AddrWidth = 12,
@@ -18,10 +21,7 @@ module csr_registers
     output logic [DataWidth-1:0] rdata_o,
     output logic                 ready_o,
 
-    output logic ctrl_enable_o,
-    output logic i3c_fsm_en_o,
-    output logic sw_reset_o,
-    output logic broadcast_header_enable_o,
+    output hc_control_cfg_t hc_control_cfg_o,
 
     output logic [CounterWidth-1:0] t_r_o,
     output logic [CounterWidth-1:0] t_f_o,
@@ -65,20 +65,19 @@ module csr_registers
     input  logic [DataWidth-1:0] resp_rdata_i,
     output logic                 resp_rready_o,
 
-    input logic cmd_full_i,
-    input logic cmd_empty_i,
-    input logic tx_full_i,
-    input logic tx_empty_i,
-    input logic rx_full_i,
-    input logic rx_empty_i,
-    input logic resp_full_i,
-    input logic resp_empty_i,
+    input fifo_status_t cmd_status_i,
+    input fifo_status_t tx_status_i,
+    input fifo_status_t rx_status_i,
+    input fifo_status_t resp_status_i,
+
+    input intr_event_t intr_event_i,
 
     input logic i3c_fsm_idle_i
 );
 
   localparam logic [AddrWidth-1:0] ADDR_HC_CONTROL = 12'h000;
   localparam logic [AddrWidth-1:0] ADDR_HC_STATUS = 12'h004;
+  localparam logic [AddrWidth-1:0] ADDR_INTR_STATUS = 12'h008;
   localparam logic [AddrWidth-1:0] ADDR_T_R = 12'h010;
   localparam logic [AddrWidth-1:0] ADDR_T_F = 12'h014;
   localparam logic [AddrWidth-1:0] ADDR_T_LOW = 12'h018;
@@ -108,6 +107,17 @@ module csr_registers
   localparam logic [AddrWidth-1:0] ADDR_DAT_BASE = 12'h200;
   localparam logic [AddrWidth-1:0] ADDR_DAT_END = ADDR_DAT_BASE + AddrWidth'(DatDepth * 4);
   localparam logic [DataWidth-1:0] DAT_WRITABLE_MASK = 32'h807F_007F;
+  localparam int unsigned INTR_HC_INTERNAL_ERR_BIT = 10;
+  localparam int unsigned INTR_HC_SEQ_CANCEL_BIT = 11;
+  localparam int unsigned INTR_HC_WARN_CMD_SEQ_STALL_BIT = 12;
+  localparam int unsigned INTR_HC_ERR_CMD_SEQ_TIMEOUT_BIT = 13;
+  localparam int unsigned INTR_SCHED_CMD_MISSED_TICK_BIT = 14;
+  localparam logic [DataWidth-1:0] INTR_STATUS_W1C_MASK =
+      (DataWidth'(1) << INTR_HC_INTERNAL_ERR_BIT) |
+      (DataWidth'(1) << INTR_HC_SEQ_CANCEL_BIT) |
+      (DataWidth'(1) << INTR_HC_WARN_CMD_SEQ_STALL_BIT) |
+      (DataWidth'(1) << INTR_HC_ERR_CMD_SEQ_TIMEOUT_BIT) |
+      (DataWidth'(1) << INTR_SCHED_CMD_MISSED_TICK_BIT);
 
   localparam logic [CounterWidth-1:0] RST_T_R = 20'd4;
   localparam logic [CounterWidth-1:0] RST_T_F = 20'd4;
@@ -131,7 +141,8 @@ module csr_registers
   localparam logic [CounterWidth-1:0] RST_I2C_T_HD_DAT = 20'd0;
   localparam logic [CounterWidth-1:0] RST_I2C_T_BUF = 20'd130;
 
-  logic [DataWidth-1:0] hc_control, hc_status, queue_status;
+  logic [DataWidth-1:0] hc_control, hc_status, intr_status, queue_status;
+  logic [DataWidth-1:0] intr_status_event;
   logic [CounterWidth-1:0] t_r, t_f, t_low, t_low_od, t_high;
   logic [CounterWidth-1:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat, t_bus_free;
   logic [CounterWidth-1:0] i2c_t_r, i2c_t_f, i2c_t_low, i2c_t_high;
@@ -154,16 +165,29 @@ module csr_registers
   logic hc_enable;
   logic sw_reset;
   logic broadcast_header_enable;
+  logic hc_abort;
   logic resp_rready;
   logic rx_rready;
   logic cmd_queue_write;
   logic tx_data_write;
+  logic intr_status_write;
+
+  always_comb begin : compute_intr_status_event
+    intr_status_event = '0;
+    intr_status_event[INTR_HC_INTERNAL_ERR_BIT] = intr_event_i.hc_internal_err;
+    intr_status_event[INTR_HC_SEQ_CANCEL_BIT] = intr_event_i.hc_seq_cancel;
+    intr_status_event[INTR_HC_WARN_CMD_SEQ_STALL_BIT] = intr_event_i.hc_warn_cmd_seq_stall;
+    intr_status_event[INTR_HC_ERR_CMD_SEQ_TIMEOUT_BIT] = intr_event_i.hc_err_cmd_seq_timeout;
+    intr_status_event[INTR_SCHED_CMD_MISSED_TICK_BIT] = intr_event_i.sched_cmd_missed_tick;
+  end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : reg_write
     if (!rst_ni) begin
       hc_enable <= '0;
       sw_reset <= '0;
       broadcast_header_enable <= 1'b0;
+      hc_abort <= 1'b0;
+      intr_status <= '0;
       t_r <= RST_T_R;
       t_f <= RST_T_F;
       t_low <= RST_T_LOW;
@@ -190,6 +214,9 @@ module csr_registers
       end
     end else begin
       sw_reset <= 0;
+      intr_status <= (intr_status &
+                      ~(intr_status_write ? (wdata_i & INTR_STATUS_W1C_MASK) : '0)) |
+                     intr_status_event;
       if (wen_i && ready_o) begin
         unique case (addr_i)
           ADDR_HC_CONTROL: begin
@@ -197,6 +224,9 @@ module csr_registers
             // SW_RESET only safe when HC_STATUS[FSM_IDLE]=1; see spec §HC_CONTROL[1]
             sw_reset <= wdata_i[1];
             broadcast_header_enable <= wdata_i[2];
+            hc_abort <= wdata_i[3];
+          end
+          ADDR_INTR_STATUS: begin
           end
           ADDR_T_R: t_r <= wdata_i[19:0];
           ADDR_T_F: t_f <= wdata_i[19:0];
@@ -283,6 +313,7 @@ module csr_registers
       unique case (addr_i)
         ADDR_HC_CONTROL:   rdata_d = hc_control;
         ADDR_HC_STATUS:    rdata_d = hc_status;
+        ADDR_INTR_STATUS:  rdata_d = intr_status;
         ADDR_T_R:          rdata_d = {12'b0, t_r};
         ADDR_T_F:          rdata_d = {12'b0, t_f};
         ADDR_T_LOW:        rdata_d = {12'b0, t_low};
@@ -321,10 +352,11 @@ module csr_registers
     end
   end
 
-  assign ctrl_enable_o = hc_enable;
-  assign i3c_fsm_en_o = hc_enable;
-  assign sw_reset_o = sw_reset;
-  assign broadcast_header_enable_o = broadcast_header_enable;
+  assign hc_control_cfg_o.ctrl_enable = hc_enable;
+  assign hc_control_cfg_o.i3c_fsm_en = hc_enable;
+  assign hc_control_cfg_o.sw_reset = sw_reset;
+  assign hc_control_cfg_o.broadcast_header_enable = broadcast_header_enable;
+  assign hc_control_cfg_o.abort = hc_abort;
   assign rdata_o = rdata_q;
   assign dat_rdata_o = dat_rdata;
   assign rx_rready_o = rx_rready;
@@ -354,6 +386,7 @@ module csr_registers
 
   assign cmd_queue_write = wen_i && (addr_i == ADDR_CMD_QUEUE);
   assign tx_data_write = wen_i && (addr_i == ADDR_TX_DATA);
+  assign intr_status_write = wen_i && ready_o && (addr_i == ADDR_INTR_STATUS);
   assign ready_o         = !((cmd_queue_write && (cmd_wvalid || sw_reset)) ||
                              (tx_data_write && (tx_wvalid || sw_reset)));
 
@@ -363,18 +396,18 @@ module csr_registers
   assign tx_wvalid_o = tx_wvalid;
   assign tx_wdata_o = tx_wdata;
 
-  assign hc_control = {29'b0, broadcast_header_enable, sw_reset, hc_enable};
-  assign hc_status = {29'b0, resp_empty_i, cmd_full_i, i3c_fsm_idle_i};
+  assign hc_control = {28'b0, hc_abort, broadcast_header_enable, sw_reset, hc_enable};
+  assign hc_status = {29'b0, resp_status_i.empty, cmd_status_i.full, i3c_fsm_idle_i};
   assign queue_status = {
     24'b0,
-    resp_empty_i,
-    resp_full_i,
-    rx_empty_i,
-    rx_full_i,
-    tx_empty_i,
-    tx_full_i,
-    cmd_empty_i,
-    cmd_full_i
+    resp_status_i.empty,
+    resp_status_i.full,
+    rx_status_i.empty,
+    rx_status_i.full,
+    tx_status_i.empty,
+    tx_status_i.full,
+    cmd_status_i.empty,
+    cmd_status_i.full
   };
 
 endmodule

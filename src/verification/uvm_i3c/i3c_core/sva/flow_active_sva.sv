@@ -6,6 +6,7 @@ module flow_active_sva
   import i3c_pkg::AddressAssignment;
   import i3c_pkg::AddrHeader;
   import i3c_pkg::I3cShortReadErr;
+  import i3c_pkg::NotSupported;
   import i3c_pkg::Ovl;
   import i3c_pkg::Success;
   import i3c_pkg::i3c_cmd_attr_e;
@@ -18,7 +19,8 @@ module flow_active_sva
     parameter int HciTxDataWidth = 32,
     parameter int HciRxDataWidth = 32,
     parameter int HciRespDataWidth = 32,
-    parameter int DatDepth = 16
+    parameter int DatDepth = 16,
+    parameter int unsigned DatAw = $clog2(DatDepth)
 ) (
     input logic                                              clk_i,
     input logic                                              rst_ni,
@@ -32,6 +34,8 @@ module flow_active_sva
     input immediate_data_trans_desc_t                        imm_desc,
     input regular_trans_desc_t                               reg_desc,
     input dat_entry_t                                        dat_entry,
+    input logic                                              dat_read_valid_hw_o,
+    input logic                       [            DatAw-1:0] dat_index_hw_o,
     input logic                       [                15:0] remaining_len_q,
     input logic                       [                15:0] resp_data_len_q,
     input logic                                              short_read_q,
@@ -45,6 +49,7 @@ module flow_active_sva
     input logic                                              gen_rstart_o,
     input logic                                              gen_stop_o,
     input logic                                              gen_clock_o,
+    input logic                                              scl_gen_done_i,
     input logic                                              tx_queue_empty_i,
     input logic                                              tx_queue_rvalid_i,
     input logic                                              tx_queue_rready_o,
@@ -55,6 +60,8 @@ module flow_active_sva
     input logic                       [  HciRxDataWidth-1:0] rx_queue_wdata,
     input logic                                              resp_queue_wready_i,
     input logic                                              cmd_queue_rready_o,
+    input logic                                              hc_seq_cancel_event_o,
+    input logic                                              hc_err_cmd_seq_timeout_event_o,
     input logic                                              bus_tx_idle_i,
     input logic                                              bus_rx_idle_i,
     input logic                                              next_cmd_available,
@@ -137,14 +144,10 @@ module flow_active_sva
 
     if (attr == AddressAssignment || dat.device) begin
       expected_regular_sel_od_pp = 1'b0;
-    end else if (phase == PhaseAddr) begin
-      expected_regular_sel_od_pp = addr_after_rstart;
-    end else if (phase > PhaseAddrAck) begin
-      if (dir == Write) begin
-        expected_regular_sel_od_pp = (remaining_len > 16'h0);
-      end else begin
-        expected_regular_sel_od_pp = !short_read && (remaining_len > 16'h0);
-      end
+    end else if (dir == Write) begin
+      expected_regular_sel_od_pp = (remaining_len > 16'h0);
+    end else begin
+      expected_regular_sel_od_pp = !short_read && (remaining_len > 16'h0);
     end
   endfunction
 
@@ -236,6 +239,16 @@ module flow_active_sva
     expected_next_rx_byte_idx = (idx == 2'd3) ? 2'd0 : (idx + 2'd1);
   endfunction
 
+  function automatic logic [1:0] expected_rx_byte_idx_after_tbit(
+      input logic [1:0] idx, input logic [15:0] remaining_len, input logic rx_ready,
+      input logic rx_full);
+    if ((remaining_len == 16'h1) && rx_ready && !rx_full) begin
+      expected_rx_byte_idx_after_tbit = 2'h0;
+    end else begin
+      expected_rx_byte_idx_after_tbit = expected_next_rx_byte_idx(idx);
+    end
+  endfunction
+
   function automatic logic [31:0] expected_rx_word_with_byte(
       input logic [31:0] word, input logic [1:0] idx, input logic [7:0] data);
     expected_rx_word_with_byte = word;
@@ -280,6 +293,20 @@ module flow_active_sva
            (resp_queue_wdata[15:0] == resp_data_len_q);
   endfunction
 
+  function automatic logic not_supported_resp_matches_current_len();
+    return resp_queue_wvalid &&
+           (resp_queue_wdata[31:28] == NotSupported) &&
+           (resp_queue_wdata[27:24] == cmd_tid) &&
+           (resp_queue_wdata[23:16] == 8'h00) &&
+           (resp_queue_wdata[15:0] == resp_data_len_q);
+  endfunction
+
+  function automatic logic sdr_write_active_state();
+    return (state_q == InitI3CWrite) ||
+           (state_q == FetchTxData) ||
+           (state_q == IssueCmd);
+  endfunction
+
   function automatic logic sdr_write_done_ready();
     return state_q == IssueCmd &&
            sdr_regular_i3c_write() &&
@@ -317,7 +344,26 @@ module flow_active_sva
       gen_rstart_o,
       gen_stop_o
   ))
-  else $error("flow_active_sva: sel_od_pp_o mismatch in %m");
+  else
+    $error(
+        "flow_active_sva: sel_od_pp_o mismatch in %m state=%0d phase=0x%02h rem=%0d dir=%0b sel=%0b exp=%0b gen_start=%0b gen_rstart=%0b gen_stop=%0b",
+        state_q, issue_phase_q, remaining_len_q, cmd_dir, sel_od_pp_o,
+        expected_sel_od_pp(
+            state_q,
+            cmd_attr,
+            cmd_dir,
+            imm_desc,
+            dat_entry,
+            issue_phase_q,
+            remaining_len_q,
+            short_read_q,
+            addr_after_rstart_q,
+            gen_start_o,
+            gen_rstart_o,
+            gen_stop_o
+        ),
+        gen_start_o, gen_rstart_o, gen_stop_o
+    );
 
   cp_sel_od_pp_matches_expected :
   cover property (@(posedge clk_i) disable iff (!rst_ni) sel_od_pp_o === expected_sel_od_pp(
@@ -352,7 +398,27 @@ module flow_active_sva
       gen_stop_o,
       use_i2c_timing_o
   ))
-  else $error("flow_active_sva: scl_use_od_low_o mismatch in %m");
+  else
+    $error(
+        "flow_active_sva: scl_use_od_low_o mismatch in %m state=%0d phase=0x%02h rem=%0d dir=%0b scl_od=%0b exp=%0b gen_start=%0b gen_rstart=%0b gen_stop=%0b",
+        state_q, issue_phase_q, remaining_len_q, cmd_dir, scl_use_od_low_o,
+        expected_scl_use_od_low(
+            state_q,
+            cmd_attr,
+            cmd_dir,
+            imm_desc,
+            dat_entry,
+            issue_phase_q,
+            remaining_len_q,
+            short_read_q,
+            addr_after_rstart_q,
+            gen_start_o,
+            gen_rstart_o,
+            gen_stop_o,
+            use_i2c_timing_o
+        ),
+        gen_start_o, gen_rstart_o, gen_stop_o
+    );
 
   cp_scl_use_od_low_matches_expected :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -417,6 +483,72 @@ module flow_active_sva
                                                  bus_tx_req_bit &&
                                                  !bus_tx_req_byte &&
                                                  bus_tx_req_value === 8'h00);
+
+  ap_sdr_write_dat_read_uses_cmd_dev_idx :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            cmd_attr == RegularTransfer &&
+                                            dat_read_valid_hw_o
+                                            |->
+                                            dat_index_hw_o == reg_desc.dev_idx[DatAw-1:0])
+  else $error("flow_active_sva: regular transfer DAT read index must match command dev_idx in %m");
+
+  cp_sdr_write_dat0_read :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            sdr_regular_i3c_write() &&
+                                            dat_read_valid_hw_o &&
+                                            reg_desc.dev_idx == 5'd0 &&
+                                            dat_index_hw_o == reg_desc.dev_idx[DatAw-1:0]);
+
+  cp_sdr_write_dat1_read :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            sdr_regular_i3c_write() &&
+                                            dat_read_valid_hw_o &&
+                                            reg_desc.dev_idx == 5'd1 &&
+                                            dat_index_hw_o == reg_desc.dev_idx[DatAw-1:0]);
+
+  ap_sdr_write_addr_uses_dynamic_address :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI3CWrite &&
+                                            sdr_regular_i3c_write() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte
+                                            |->
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Write})
+  else $error("flow_active_sva: SDR write address byte must use selected DAT dynamic address in %m");
+
+  cp_sdr_write_addr_uses_dynamic_address :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI3CWrite &&
+                                            sdr_regular_i3c_write() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Write});
+
+  ap_sdr_write_zero_len_no_data_phase :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (state_q == InitI3CWrite || state_q == IssueCmd) &&
+                                            sdr_regular_i3c_write() &&
+                                            !addr_nack_q &&
+                                            remaining_len_q == 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck
+                                            |->
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: zero-length SDR write must not request data or T-bit phase in %m");
+
+  cp_sdr_write_zero_len_no_data_phase :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (state_q == InitI3CWrite || state_q == IssueCmd) &&
+                                            sdr_regular_i3c_write() &&
+                                            !addr_nack_q &&
+                                            remaining_len_q == 16'h0 &&
+                                            resp_data_len_q == 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit);
 
   ap_fetch_tx_empty_latches_underflow :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -653,6 +785,26 @@ module flow_active_sva
                                           addr_nack_q &&
                                           addr_nack_resp_matches());
 
+  ap_sdr_write_toc1_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_write() &&
+                                            reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !tx_underflow_q
+                                            |->
+                                            success_resp_matches_current_len())
+  else $error("flow_active_sva: SDR write success response descriptor mismatch in %m");
+
+  cp_sdr_write_toc1_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_write() &&
+                                            reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !tx_underflow_q &&
+                                            success_resp_matches_current_len());
+
   ap_sdr_read_addr_nack_no_data_phase :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                                          state_q == InitI3CRead &&
@@ -766,8 +918,9 @@ module flow_active_sva
                                             !issue_phase_q[0] &&
                                             bus_rx_done_i
                                             |=>
-                                            rx_byte_idx_q == expected_next_rx_byte_idx(
-      $past(rx_byte_idx_q)
+                                            rx_byte_idx_q == expected_rx_byte_idx_after_tbit(
+      $past(rx_byte_idx_q), $past(remaining_len_q), $past(rx_queue_wready_i),
+      $past(rx_queue_full_i)
   ) && remaining_len_q == ($past(
       remaining_len_q
   ) - 16'h1) && resp_data_len_q == ($past(
@@ -990,6 +1143,129 @@ module flow_active_sva
                                             !gen_stop_o)
   else $error("flow_active_sva: SDRW_007 toc=0 must accept continuation without STOP in %m");
 
+  cp_toc0_accept_continuation :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            resp_queue_wready_i &&
+                                            success_resp_matches_current_len() &&
+                                            cmd_queue_rready_o &&
+                                            !gen_stop_o);
+
+  ap_sdr_write_no_cmd_pop_except_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_active_state() &&
+                                            sdr_regular_i3c_write() &&
+                                            !(sdr_write_done_ready() &&
+                                              !reg_desc.toc &&
+                                              next_cmd_available &&
+                                              next_cmd_supported &&
+                                              resp_queue_wready_i)
+                                            |->
+                                            !cmd_queue_rready_o)
+  else $error("flow_active_sva: SDR write must not pop CMD FIFO except accepted continuation in %m");
+
+  cp_sdr_write_no_cmd_pop_except_continuation :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_active_state() &&
+                                            sdr_regular_i3c_write() &&
+                                            !(sdr_write_done_ready() &&
+                                              !reg_desc.toc &&
+                                              next_cmd_available &&
+                                              next_cmd_supported &&
+                                              resp_queue_wready_i) &&
+                                            !cmd_queue_rready_o);
+
+  ap_toc0_missing_continuation_requests_stop :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            !next_cmd_available
+                                            |->
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !cmd_queue_rready_o)
+  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation must STOP without CMD pop in %m");
+
+  cp_toc0_missing_continuation_requests_stop :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            !next_cmd_available &&
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !cmd_queue_rready_o);
+
+  ap_toc0_missing_continuation_sets_intr_events :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            !next_cmd_available &&
+                                            gen_stop_o &&
+                                            scl_gen_done_i
+                                            |->
+                                            hc_seq_cancel_event_o &&
+                                            hc_err_cmd_seq_timeout_event_o)
+  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation must raise interrupt events in %m");
+
+  cp_toc0_missing_continuation_sets_intr_events :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            !next_cmd_available &&
+                                            gen_stop_o &&
+                                            scl_gen_done_i &&
+                                            hc_seq_cancel_event_o &&
+                                            hc_err_cmd_seq_timeout_event_o);
+
+  ap_toc0_missing_continuation_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_write() &&
+                                            !reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !tx_underflow_q &&
+                                            !next_cmd_available
+                                            |->
+                                            success_resp_matches_current_len())
+  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation response must be Success in %m");
+
+  cp_toc0_missing_continuation_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_write() &&
+                                            !reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !tx_underflow_q &&
+                                            !next_cmd_available &&
+                                            success_resp_matches_current_len());
+
+  ap_toc0_unsupported_continuation_not_supported_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_write() &&
+                                            !reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !tx_underflow_q &&
+                                            next_cmd_available &&
+                                            !next_cmd_supported
+                                            |->
+                                            not_supported_resp_matches_current_len())
+  else $error("flow_active_sva: SDRW_007 toc=0 unsupported continuation response must be NotSupported in %m");
+
+  cp_toc0_unsupported_continuation_not_supported_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_write() &&
+                                            !reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !tx_underflow_q &&
+                                            next_cmd_available &&
+                                            !next_cmd_supported &&
+                                            not_supported_resp_matches_current_len());
+
   ap_rstart_instead_of_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == InitI3CWrite &&
@@ -1102,6 +1378,8 @@ bind flow_active flow_active_sva #(
     .imm_desc,
     .reg_desc,
     .dat_entry,
+    .dat_read_valid_hw_o,
+    .dat_index_hw_o,
     .remaining_len_q,
     .resp_data_len_q,
     .short_read_q,
@@ -1115,6 +1393,7 @@ bind flow_active flow_active_sva #(
     .gen_rstart_o,
     .gen_stop_o,
     .gen_clock_o,
+    .scl_gen_done_i,
     .tx_queue_empty_i,
     .tx_queue_rvalid_i,
     .tx_queue_rready_o,
@@ -1125,6 +1404,8 @@ bind flow_active flow_active_sva #(
     .rx_queue_wdata,
     .resp_queue_wready_i,
     .cmd_queue_rready_o,
+    .hc_seq_cancel_event_o,
+    .hc_err_cmd_seq_timeout_event_o,
     .bus_tx_idle_i,
     .bus_rx_idle_i,
     .next_cmd_available,

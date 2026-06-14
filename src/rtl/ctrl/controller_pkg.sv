@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Adapted from CHIPS Alliance i3c-core for simplified I3C Master Controller
-
 package controller_pkg;
 
   // Transfer direction
@@ -17,4 +14,25 @@ package controller_pkg;
     logic [8:0] reserved_15_7;    // [15:7]  Reserved
     logic [6:0] static_address;   // [6:0]   I2C static address
   } dat_entry_t;
+
+  typedef struct packed {
+    logic full;
+    logic empty;
+  } fifo_status_t;
+
+  typedef struct packed {
+    logic hc_internal_err;
+    logic hc_seq_cancel;
+    logic hc_warn_cmd_seq_stall;
+    logic hc_err_cmd_seq_timeout;
+    logic sched_cmd_missed_tick;
+  } intr_event_t;
+
+  typedef struct packed {
+    logic ctrl_enable;
+    logic i3c_fsm_en;
+    logic sw_reset;
+    logic broadcast_header_enable;
+    logic abort;
+  } hc_control_cfg_t;
 endpackage

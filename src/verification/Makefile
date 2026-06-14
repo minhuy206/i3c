@@ -9,6 +9,10 @@ WAVE_ROOT   ?= waves
 RUN_NAME    ?= $(SEQ)
 WAVE_DIR    ?= $(WAVE_ROOT)/$(RUN_NAME)
 WAVE_FILE   ?= $(WAVE_DIR)/waves.shm
+COV         ?= 0
+COV_ROOT    ?= cov_work
+COV_TEST    ?= $(SEQ)_$(SEED)
+COV_OPTS    = -coverage all -covworkdir $(COV_ROOT) -covtest $(COV_TEST)
 FIFO_005_LOG ?= fifo_non_power_of_two_elaboration.log
 FIFO_005_LIB ?= xcelium_fifo005.d
 
@@ -76,7 +80,8 @@ compile:
 	  -access +rwc \
 	  -define UVM \
 	  -64 \
-	  -xceligen on
+	  -xceligen on \
+	  $(if $(filter 1,$(COV)),$(COV_OPTS),)
 
 sim: compile
 	$(if $(filter 1,$(DUMP_WAVES)),@mkdir -p $(WAVE_DIR),)
@@ -85,7 +90,9 @@ sim: compile
 	  +UVM_TEST_SEQ=$(SEQ) \
 	  +UVM_VERBOSITY=$(VERBOSITY) \
 	  -svseed $(SEED) \
-	  -xceligen on $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES +WAVE_FILE=$(WAVE_FILE),) \
+	  -xceligen on \
+	  $(if $(filter 1,$(COV)),$(COV_OPTS),) \
+	  $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES +WAVE_FILE=$(WAVE_FILE),) \
 	  2>&1 | tee sim.log
 
 smoke:
@@ -156,10 +163,13 @@ fifo_non_power_of_two_elaboration:
 waves:
 	$(MAKE) sim DUMP_WAVES=1
 
+coverage:
+	$(MAKE) sim COV=1
+
 clean:
-	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs waves.shm xrun.history .simvision \
+	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs $(COV_ROOT) waves.shm xrun.history .simvision \
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
         sdrw_regression sdrr_regression sdr_regression \
-        fifo_non_power_of_two_elaboration waves clean
+        fifo_non_power_of_two_elaboration waves coverage clean

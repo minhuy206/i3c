@@ -63,6 +63,9 @@ module controller_active
     input  logic ctrl_enable_i,
     input  logic broadcast_header_enable_i,
     input  logic i3c_fsm_en_i,
+    input  logic abort_i,
+    output logic hc_seq_cancel_event_o,
+    output logic hc_err_cmd_seq_timeout_event_o,
     output logic i3c_fsm_idle_o
 );
 
@@ -100,6 +103,8 @@ module controller_active
   logic flow_ccc_valid;
   logic [4:0] flow_daa_dev_idx;
   logic [3:0] flow_ccc_dev_count;
+  logic flow_hc_seq_cancel_event;
+  logic flow_hc_err_cmd_seq_timeout_event;
   logic flow_dat_read_valid;
   logic [DatAw-1:0] flow_dat_index;
 
@@ -329,8 +334,14 @@ module controller_active
       .sel_od_pp_o        (flow_sel_od_pp),
       .broadcast_header_enable_i,
       .i3c_fsm_en_i,
+      .abort_i,
+      .hc_seq_cancel_event_o(flow_hc_seq_cancel_event),
+      .hc_err_cmd_seq_timeout_event_o(flow_hc_err_cmd_seq_timeout_event),
       .i3c_fsm_idle_o
   );
+
+  assign hc_seq_cancel_event_o = flow_hc_seq_cancel_event;
+  assign hc_err_cmd_seq_timeout_event_o = flow_hc_err_cmd_seq_timeout_event;
 
   entdaa_controller #(
       .DatDepth(DatDepth)

@@ -92,6 +92,8 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t cfg;
     byte_queue_t            no_read_data;
     bit              [31:0] resp;
+    bit              [31:0] intr_status;
+    bit              [31:0] exp_intr_bits;
     i3c_device_response_seq dev_seq;
 
     enable_dut(broadcast_header_enable);
@@ -117,7 +119,6 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     );
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
-    expect_scoreboard_resp_error(4'hA, cfg.tid, 16'(cfg.data_length), cfg.ctxt);
     write_tx_data(32'h0000_2211);
     write_write_cmd(cfg, 1'b0);
 
@@ -134,12 +135,20 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq.observed_broadcast_rstart, broadcast_header_enable,
                  "toc0_missing_next_cmd_vseq: broadcast header RSTART mismatch")
 
-    `DV_CHECK_EQ(resp[31:28], 4'hA,
-                 "toc0_missing_next_cmd_vseq: expected NotSupported response")
-    `DV_CHECK_EQ(resp[27:24], cfg.tid,
-                 "toc0_missing_next_cmd_vseq: response TID mismatch")
-    `DV_CHECK_EQ(resp[15:0], 16'(cfg.data_length),
-                 "toc0_missing_next_cmd_vseq: response length mismatch")
+    check_success_resp(resp, cfg);
+
+    exp_intr_bits = (32'h1 << INTR_HC_SEQ_CANCEL_STAT_BIT) |
+                    (32'h1 << INTR_HC_ERR_CMD_SEQ_TIMEOUT_STAT_BIT);
+    reg_read(ADDR_INTR_STATUS, intr_status);
+    `DV_CHECK_EQ(intr_status & exp_intr_bits, exp_intr_bits,
+                 "toc0_missing_next_cmd_vseq: missing continuation interrupt bits not set")
+    `DV_CHECK_EQ(intr_status & ~exp_intr_bits, 32'h0,
+                 "toc0_missing_next_cmd_vseq: unexpected INTR_STATUS bits set")
+
+    reg_write(ADDR_INTR_STATUS, exp_intr_bits);
+    reg_read(ADDR_INTR_STATUS, intr_status);
+    `DV_CHECK_EQ(intr_status & exp_intr_bits, 32'h0,
+                 "toc0_missing_next_cmd_vseq: W1C did not clear interrupt bits")
 
     check_all_queues_empty($sformatf("after toc0_missing_next_cmd_vseq %s",
                                      private_addr_mode_name(broadcast_header_enable)));

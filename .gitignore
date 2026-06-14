@@ -31,6 +31,7 @@ docs/i3c_scope_analysis.md
 # Xcelium generated files
 xcelium.d/
 xcelium_fifo005.d/
+cov_work/
 INCA_libs/
 xrun.history
 xrun.log
