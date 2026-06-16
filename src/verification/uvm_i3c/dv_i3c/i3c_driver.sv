@@ -106,9 +106,8 @@ class i3c_driver extends uvm_driver #(
                 if (req.dir || req.is_daa) begin
                   wait (bus_state == DrvRd || bus_state == DrvRdPushPull || bus_state == DrvDAA || bus_state == DrvStop);
                 end else begin
-                  wait (bus_state == DrvStop);
+                  wait (bus_state == DrvWrPushPull || bus_state == DrvWr || bus_state == DrvStop);
                 end
-
                 if (req.i3c) cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, rstart, stop);
                 else cfg.vif.wait_for_i2c_host_stop_or_rstart(cfg.tc.i2c_tc, rstart, stop);
               end else wait (0);
@@ -283,9 +282,14 @@ class i3c_driver extends uvm_driver #(
           for (int i = 0; i < req.data_cnt; i++) begin
             for (int j = 7; j >= 0; j--) begin
               cfg.vif.device_i2c_send_bit(cfg.tc.i2c_tc, req.data[i][j]);
+              `uvm_info(`gfn, $sformatf("Device drive data[%0d]=%b", i, req.data[i][j]), UVM_HIGH)
             end
             cfg.vif.wait_for_host_ack_or_nack(.ack_r(ack));
+            `uvm_info(`gfn, $sformatf("Device drive T-bit=%b", req.T_bit[i]), UVM_HIGH)
             rsp.T_bit.push_back(ack);
+            `uvm_info(`gfn, $sformatf(
+                      "Device drive data[%0d]=0x%h, T_bit=%b", i, req.data[i], req.T_bit[i]),
+                      UVM_HIGH)
             if (!ack) begin
               set_drive_device_state(DrvStop);
               break;
@@ -297,8 +301,13 @@ class i3c_driver extends uvm_driver #(
           for (int i = 0; i < req.data_cnt; i++) begin
             for (int j = 7; j >= 0; j--) begin
               cfg.vif.device_i3c_send_bit(cfg.tc.i3c_tc, req.data[i][j]);
+              `uvm_info(`gfn, $sformatf("Device drive data[%0d]=%b", i, req.data[i][j]), UVM_HIGH)
             end
             cfg.vif.device_i3c_send_t_bit(cfg.tc.i3c_tc, req.T_bit[i]);
+            `uvm_info(`gfn, $sformatf("Device drive T-bit=%b", req.T_bit[i]), UVM_HIGH)
+            `uvm_info(`gfn, $sformatf(
+                      "Device drive data[%0d]=0x%h, T_bit=%b", i, req.data[i], req.T_bit[i]),
+                      UVM_HIGH)
           end
           set_drive_device_state(DrvStop);
         end

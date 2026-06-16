@@ -96,8 +96,8 @@ module flow_active
     InitI3CRead       = 4'd9,
     InitI2CWrite      = 4'd10,
     InitI2CRead       = 4'd11,
-    IssueCmd          = 4'd13,
-    WriteResp         = 4'd14
+    IssueCmd          = 4'd12,
+    WriteResp         = 4'd13
   } flow_fsm_state_e;
 
   typedef enum logic [1:0] {
@@ -716,266 +716,266 @@ module flow_active
   always_comb begin : update_fsm_state_d
     state_d = state_q;
 
-    unique case (state_q)
-      Idle: begin
-        if (i3c_fsm_en_i) begin
-          state_d = WaitForCmd;
-        end
-      end
-
-      WaitForCmd: begin
-        if (!i3c_fsm_en_i) begin
-          state_d = Idle;
-        end else if (!abort_i && !cmd_queue_empty_i && cmd_queue_rvalid_i) begin
-          state_d = FetchDAT;
-        end
-      end
-
-      FetchDAT: begin
-        if (dat_read_valid_hw_q) begin
-          state_d = WaitDAT;
-        end
-      end
-
-      WaitDAT: begin
-        if (cont_pending_q && !target_is_i3c) begin
-          if (scl_stop_done_q) state_d = WriteResp;
-        end else if (!dat_read_valid_hw_q) begin
-          if (cmd_attr == ImmediateDataTransfer) begin
-            if (imm_desc.cp) begin
-              state_d = I3CBcastHeader;
-            end else if (!target_is_i3c) begin
-              state_d = I2CWriteImmediate;
-            end else if (cont_pending_q || !broadcast_header_enable_i) begin
-              state_d = I3CWriteImmediate;
-            end else begin
-              state_d = I3CBcastHeader;
-            end
-          end else if (cmd_attr == AddressAssignment) begin
-            state_d = I3CBcastHeader;
-          end else if (cmd_dir == Write) begin
-            if (!target_is_i3c) begin
-              state_d = InitI2CWrite;
-            end else if (cont_pending_q || !broadcast_header_enable_i) begin
-              state_d = InitI3CWrite;
-            end else begin
-              state_d = I3CBcastHeader;
-            end
-          end else begin
-            if (!target_is_i3c) begin
-              state_d = InitI2CRead;
-            end else if (cont_pending_q || !broadcast_header_enable_i) begin
-              state_d = InitI3CRead;
-            end else begin
-              state_d = I3CBcastHeader;
-            end
-          end
-        end else begin
-          state_d = WaitDAT;
-        end
-      end
-
-      I3CBcastHeader: begin
-        if (addr_nack_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (issue_phase_q > PhaseAddrAck) begin
-          unique case (bcast_header_next_q)
-            BcastHeaderPrivate: begin
-              if (cmd_attr == ImmediateDataTransfer) begin
-                state_d = I3CWriteImmediate;
-              end else begin
-                state_d = (cmd_dir == Read) ? InitI3CRead : InitI3CWrite;
-              end
-            end
-
-            BcastHeaderBroadcastCCC: begin
-              state_d = I3CWriteImmediate;
-            end
-
-            BcastHeaderDirectCCC: begin
-              state_d = I3CWriteImmediate;
-            end
-
-            BcastHeaderEntdaa: begin
-              state_d = IssueCmd;
-            end
-          endcase
-        end
-      end
-
-      I2CWriteImmediate: begin
-        if (addr_nack_q || data_nack_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (issue_phase_q > (PhaseDataStart + (imm_desc.dtt << 1))) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end
-      end
-
-      I3CWriteImmediate: begin
-        if (addr_nack_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (imm_desc.cp) begin
-          if (imm_desc.cmd[7]) begin
-            if (issue_phase_q >= PhaseDirectCccStop) begin
-              if (scl_stop_done_q) begin
-                state_d = WriteResp;
-              end
-            end
-          end else begin
-            if (issue_phase_q >= 8'd6) begin
-              if (scl_stop_done_q) begin
-                state_d = WriteResp;
-              end
-            end
-          end
-        end else begin
-          if (issue_phase_q > (PhaseAddrAck + (imm_desc.dtt << 1))) begin
-            if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end
-        end
-      end
-
-      FetchTxData: begin
-        if (tx_underflow_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (tx_queue_empty_i) begin
-          state_d = FetchTxData;
-        end else if (tx_queue_rvalid_i) begin
-          state_d = IssueCmd;
-        end
-      end
-
-      InitI2CWrite: begin
-        if (addr_nack_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (issue_phase_q > PhaseAddrAck) begin
-          state_d = FetchTxData;
-        end
-      end
-
-      InitI2CRead: begin
-        if (addr_nack_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (issue_phase_q > PhaseAddrAck) begin
-          state_d = IssueCmd;
-        end
-      end
-
-      InitI3CWrite: begin
-        if (addr_nack_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (issue_phase_q > PhaseAddrAck) begin
-          state_d = (remaining_len_q > 16'h0) ? FetchTxData : IssueCmd;
-        end
-      end
-
-      InitI3CRead: begin
-        if (addr_nack_q) begin
-          if (scl_stop_done_q) begin
-            state_d = WriteResp;
-          end
-        end else if (issue_phase_q > PhaseAddrAck) begin
-          state_d = IssueCmd;
-        end
-      end
-
-      IssueCmd: begin
-        if (cmd_attr == AddressAssignment) begin
-          if (entdaa_stop_req_q && scl_gen_done_i) begin
-            state_d = WriteResp;
-          end
-        end else if (cmd_dir == Write) begin
-          if (addr_nack_q) begin
-            if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end else if (data_nack_q && !target_is_i3c) begin
-            if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end else if (remaining_len_q == 16'h0 && issue_phase_q > PhaseAddrAck) begin
-            if (bus_tx_idle_i && bus_rx_idle_i) begin
-              if (reg_desc.toc && scl_stop_done_q) begin
-                state_d = WriteResp;
-              end else if (!reg_desc.toc) begin
-                if (target_is_i3c && next_cmd_available && next_cmd_supported &&
-                    resp_queue_wready_i) begin
-                  state_d = FetchDAT;
-                end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
-                             scl_stop_done_q) begin
-                  state_d = WriteResp;
-                end
-              end
-            end
-          end else if (tx_byte_idx_q == 2'd3 && remaining_len_q > 16'h1) begin
-            if (target_is_i3c) begin
-              if (!issue_phase_q[0] && bus_tx_done_i) state_d = FetchTxData;
-            end else begin
-              if (!issue_phase_q[0] && bus_rx_done_i) state_d = FetchTxData;
-            end
-          end
-        end else begin
-          if (rx_overflow_q) begin
-            if (target_is_i3c && read_takeover_pending_q) begin
-              state_d = IssueCmd;
-            end else if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end else if ((remaining_len_q == 16'h0 || short_read_q) && issue_phase_q > PhaseAddrAck) begin
-            if (target_is_i3c && read_takeover_pending_q) begin
-              state_d = IssueCmd;
-            end else if (bus_tx_idle_i && bus_rx_idle_i) begin
-              if ((short_read_q || reg_desc.toc) && scl_stop_done_q) begin
-                state_d = WriteResp;
-              end else if (!short_read_q && !reg_desc.toc) begin
-                if (target_is_i3c && next_cmd_available && next_cmd_supported &&
-                    resp_queue_wready_i) begin
-                  state_d = FetchDAT;
-                end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
-                             scl_stop_done_q) begin
-                  state_d = WriteResp;
-                end
-              end
-            end
-          end
-        end
-      end
-
-      WriteResp: begin
-        if (resp_queue_wready_i) begin
-          state_d = Idle;
-        end
-      end
-
-      default: begin
-        state_d = Idle;
-      end
-    endcase
-
     if (abort_i && abort_active_state(state_q)) begin
       if (abort_stop_required(state_q, cont_pending_q)) begin
         state_d = scl_stop_done_q ? WriteResp : state_q;
       end else begin
         state_d = hc_aborted_q ? WriteResp : state_q;
       end
+    end else begin
+      unique case (state_q)
+        Idle: begin
+          if (i3c_fsm_en_i) begin
+            state_d = WaitForCmd;
+          end
+        end
+
+        WaitForCmd: begin
+          if (!i3c_fsm_en_i) begin
+            state_d = Idle;
+          end else if (!abort_i && !cmd_queue_empty_i && cmd_queue_rvalid_i) begin
+            state_d = FetchDAT;
+          end
+        end
+
+        FetchDAT: begin
+          if (dat_read_valid_hw_q) begin
+            state_d = WaitDAT;
+          end
+        end
+
+        WaitDAT: begin
+          if (cont_pending_q && !target_is_i3c) begin
+            if (scl_stop_done_q) state_d = WriteResp;
+          end else if (!dat_read_valid_hw_q) begin
+            if (cmd_attr == ImmediateDataTransfer) begin
+              if (imm_desc.cp) begin
+                state_d = I3CBcastHeader;
+              end else if (!target_is_i3c) begin
+                state_d = I2CWriteImmediate;
+              end else if (cont_pending_q || !broadcast_header_enable_i) begin
+                state_d = I3CWriteImmediate;
+              end else begin
+                state_d = I3CBcastHeader;
+              end
+            end else if (cmd_attr == AddressAssignment) begin
+              state_d = I3CBcastHeader;
+            end else if (cmd_dir == Write) begin
+              if (!target_is_i3c) begin
+                state_d = InitI2CWrite;
+              end else if (cont_pending_q || !broadcast_header_enable_i) begin
+                state_d = InitI3CWrite;
+              end else begin
+                state_d = I3CBcastHeader;
+              end
+            end else begin
+              if (!target_is_i3c) begin
+                state_d = InitI2CRead;
+              end else if (cont_pending_q || !broadcast_header_enable_i) begin
+                state_d = InitI3CRead;
+              end else begin
+                state_d = I3CBcastHeader;
+              end
+            end
+          end else begin
+            state_d = WaitDAT;
+          end
+        end
+
+        I3CBcastHeader: begin
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (issue_phase_q > PhaseAddrAck) begin
+            unique case (bcast_header_next_q)
+              BcastHeaderPrivate: begin
+                if (cmd_attr == ImmediateDataTransfer) begin
+                  state_d = I3CWriteImmediate;
+                end else begin
+                  state_d = (cmd_dir == Read) ? InitI3CRead : InitI3CWrite;
+                end
+              end
+
+              BcastHeaderBroadcastCCC: begin
+                state_d = I3CWriteImmediate;
+              end
+
+              BcastHeaderDirectCCC: begin
+                state_d = I3CWriteImmediate;
+              end
+
+              BcastHeaderEntdaa: begin
+                state_d = IssueCmd;
+              end
+            endcase
+          end
+        end
+
+        I2CWriteImmediate: begin
+          if (addr_nack_q || data_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (issue_phase_q > (PhaseDataStart + (imm_desc.dtt << 1))) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end
+        end
+
+        I3CWriteImmediate: begin
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (imm_desc.cp) begin
+            if (imm_desc.cmd[7]) begin
+              if (issue_phase_q >= PhaseDirectCccStop) begin
+                if (scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end
+              end
+            end else begin
+              if (issue_phase_q >= 8'd6) begin
+                if (scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end
+              end
+            end
+          end else begin
+            if (issue_phase_q > (PhaseAddrAck + (imm_desc.dtt << 1))) begin
+              if (scl_stop_done_q) begin
+                state_d = WriteResp;
+              end
+            end
+          end
+        end
+
+        FetchTxData: begin
+          if (tx_underflow_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (tx_queue_empty_i) begin
+            state_d = FetchTxData;
+          end else if (tx_queue_rvalid_i) begin
+            state_d = IssueCmd;
+          end
+        end
+
+        InitI2CWrite: begin
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (issue_phase_q > PhaseAddrAck) begin
+            state_d = FetchTxData;
+          end
+        end
+
+        InitI2CRead: begin
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (issue_phase_q > PhaseAddrAck) begin
+            state_d = IssueCmd;
+          end
+        end
+
+        InitI3CWrite: begin
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (issue_phase_q > PhaseAddrAck) begin
+            state_d = (remaining_len_q > 16'h0) ? FetchTxData : IssueCmd;
+          end
+        end
+
+        InitI3CRead: begin
+          if (addr_nack_q) begin
+            if (scl_stop_done_q) begin
+              state_d = WriteResp;
+            end
+          end else if (issue_phase_q > PhaseAddrAck) begin
+            state_d = IssueCmd;
+          end
+        end
+
+        IssueCmd: begin
+          if (cmd_attr == AddressAssignment) begin
+            if (entdaa_stop_req_q && scl_gen_done_i) begin
+              state_d = WriteResp;
+            end
+          end else if (cmd_dir == Write) begin
+            if (addr_nack_q) begin
+              if (scl_stop_done_q) begin
+                state_d = WriteResp;
+              end
+            end else if (data_nack_q && !target_is_i3c) begin
+              if (scl_stop_done_q) begin
+                state_d = WriteResp;
+              end
+            end else if (remaining_len_q == 16'h0 && issue_phase_q > PhaseAddrAck) begin
+              if (bus_tx_idle_i && bus_rx_idle_i) begin
+                if (reg_desc.toc && scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end else if (!reg_desc.toc) begin
+                  if (target_is_i3c && next_cmd_available && next_cmd_supported &&
+                    resp_queue_wready_i) begin
+                    state_d = FetchDAT;
+                  end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
+                             scl_stop_done_q) begin
+                    state_d = WriteResp;
+                  end
+                end
+              end
+            end else if (tx_byte_idx_q == 2'd3 && remaining_len_q > 16'h1) begin
+              if (target_is_i3c) begin
+                if (!issue_phase_q[0] && bus_tx_done_i) state_d = FetchTxData;
+              end else begin
+                if (!issue_phase_q[0] && bus_rx_done_i) state_d = FetchTxData;
+              end
+            end
+          end else begin
+            if (rx_overflow_q) begin
+              if (target_is_i3c && read_takeover_pending_q) begin
+                state_d = IssueCmd;
+              end else if (scl_stop_done_q) begin
+                state_d = WriteResp;
+              end
+            end else if ((remaining_len_q == 16'h0 || short_read_q) && issue_phase_q > PhaseAddrAck) begin
+              if (target_is_i3c && read_takeover_pending_q) begin
+                state_d = IssueCmd;
+              end else if (bus_tx_idle_i && bus_rx_idle_i) begin
+                if ((short_read_q || reg_desc.toc) && scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end else if (!short_read_q && !reg_desc.toc) begin
+                  if (target_is_i3c && next_cmd_available && next_cmd_supported &&
+                    resp_queue_wready_i) begin
+                    state_d = FetchDAT;
+                  end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
+                             scl_stop_done_q) begin
+                    state_d = WriteResp;
+                  end
+                end
+              end
+            end
+          end
+        end
+
+        WriteResp: begin
+          if (resp_queue_wready_i) begin
+            state_d = Idle;
+          end
+        end
+
+        default: begin
+          state_d = Idle;
+        end
+      endcase
     end
   end
 
@@ -1604,7 +1604,7 @@ module flow_active
                       request_rx_commit(rx_dword_q);
                       request_stop(1'b0);
                       short_read_d = 1'b1;
-                    end else if (rx_byte_idx_q == 2'd3) begin
+                    end else if (rx_byte_idx_q == 2'd3 && bus_rx_data_i[0] == 1'b1) begin
                       request_rx_commit(rx_dword_q);
                       if (rx_overflow_d) begin
                         request_read_takeover();

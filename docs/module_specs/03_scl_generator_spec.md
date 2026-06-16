@@ -61,6 +61,8 @@ This module does NOT exist as a standalone component in the reference design —
 
 ### ENTDAA Restart Interface (from controller_active `daa_restart_pending_q`)
 
+> Consider later: current RTL does not expose explicit `req_restart_i` / `req_restart_ack_o` ports on `scl_generator`. `controller_active` currently folds DAA restart requests into `gen_rstart_i` and clears its pending latch using `scl_gen_done` or `!daa_active`. Keep this intended handshake noted for a future cleanup decision.
+
 | Signal               | Direction | Width | Description                                                    |
 | -------------------- | --------- | ----- | -------------------------------------------------------------- |
 | `req_restart_i`      | Input     | 1     | Extended restart request from `daa_restart_pending_q` latch    |
@@ -68,15 +70,18 @@ This module does NOT exist as a standalone component in the reference design —
 
 ### Timing Configuration (from CSR, in system clock cycles)
 
-| Signal       | Direction | Width        | Description         |
-| ------------ | --------- | ------------ | ------------------- |
-| `t_low_i`    | Input     | CounterWidth | SCL LOW period      |
-| `t_high_i`   | Input     | CounterWidth | SCL HIGH period     |
-| `t_su_sta_i` | Input     | CounterWidth | START setup time    |
-| `t_hd_sta_i` | Input     | CounterWidth | START hold time     |
-| `t_su_sto_i` | Input     | CounterWidth | STOP setup time     |
-| `t_r_i`      | Input     | CounterWidth | Rise time allowance |
-| `t_f_i`      | Input     | CounterWidth | Fall time allowance |
+| Signal             | Direction | Width        | Description                                      |
+| ------------------ | --------- | ------------ | ------------------------------------------------ |
+| `t_low_i`          | Input     | CounterWidth | SCL LOW period for push-pull-capable phases      |
+| `t_low_od_i`       | Input     | CounterWidth | SCL LOW period for open-drain low phases         |
+| `t_high_i`         | Input     | CounterWidth | SCL HIGH period                                  |
+| `t_su_sta_i`       | Input     | CounterWidth | START setup time                                 |
+| `t_hd_sta_i`       | Input     | CounterWidth | START hold time                                  |
+| `t_su_sto_i`       | Input     | CounterWidth | STOP setup time                                  |
+| `t_bus_free_i`     | Input     | CounterWidth | Bus-free delay after STOP before returning idle  |
+| `t_r_i`            | Input     | CounterWidth | Rise time allowance                              |
+| `t_f_i`            | Input     | CounterWidth | Fall time allowance                              |
+| `scl_use_od_low_i` | Input     | 1            | Select `t_low_od_i` instead of `t_low_i` for LOW |
 
 ### Bus Monitor Feedback
 
@@ -115,12 +120,15 @@ flowchart LR
     subgraph TI["Timing In\nfrom csr_registers"]
         direction TB
         t_low_i
+        t_low_od_i
         t_high_i
         t_su_sta_i
         t_hd_sta_i
         t_su_sto_i
+        t_bus_free_i
         t_r_i
         t_f_i
+        scl_use_od_low_i
     end
 
     scl_fb["scl_i\n(readback)"]
@@ -129,20 +137,20 @@ flowchart LR
     subgraph SG["scl_generator"]
         direction TB
 
-        FSM["13-State FSM\nIdle / GenerateStart / SdaFall\nHoldStart / DriveLow / DriveHigh\nWaitCmd / GenerateRstart / SclHigh\nRstartSdaFall / GenerateStop\nSclHighForStop / SdaRise"]
+        FSM["14-State FSM\nIdle / GenerateStart / SdaFall\nHoldStart / DriveLow / DriveHigh\nWaitCmd / GenerateRstart / SclHigh\nRstartSdaFall / GenerateStop\nSclHighForStop / SdaRise / BusFree"]
 
         subgraph CNT["Timing Counter"]
             direction LR
-            MUX["Load MUX\nt_su_sta / t_hd_sta\nt_low+t_f / t_high+t_r\nt_su_sto"]
+            MUX["Load MUX\nt_su_sta / t_hd_sta\nactive_t_low+t_f / t_high+t_r\nt_su_sto / t_bus_free"]
             TC["tcount\ncountdown"]
             MUX --> TC
         end
 
         subgraph OL["Output Logic\n(combinational)"]
             direction TB
-            SCL_DRV["scl_o\n0: DriveLow, WaitCmd\n1: otherwise"]
+            SCL_DRV["scl_o\n0: DriveLow, WaitCmd\n   GenerateStop before expiry\n1: otherwise"]
             SDA_DRV["sda_o\n0: SdaFall, HoldStart\n   RstartSdaFall\n   GenerateStop, SclHighForStop\n1: otherwise"]
-            SDA_ACT["sda_ctrl_active_o\n1: SdaFall, HoldStart\n   RstartSdaFall, GenerateRstart\n   SclHigh, GenerateStop\n   SclHighForStop, SdaRise\n0: Idle, DriveLow, DriveHigh\n   WaitCmd, GenerateStart"]
+            SDA_ACT["sda_ctrl_active_o\n1: GenerateStart, SdaFall, HoldStart\n   RstartSdaFall, GenerateRstart\n   SclHigh, GenerateStop\n   SclHighForStop, SdaRise\n0: Idle, DriveLow, DriveHigh\n   WaitCmd"]
         end
 
         FSM -->|"load on\nstate entry"| MUX
@@ -183,7 +191,8 @@ typedef enum logic [3:0] {
   RstartSdaFall  = 4'd9,
   GenerateStop   = 4'd10,
   SclHighForStop = 4'd11,
-  SdaRise        = 4'd12
+  SdaRise        = 4'd12,
+  BusFree        = 4'd13
 } state_e;
 ```
 
@@ -202,12 +211,11 @@ stateDiagram-v2
     SclHigh --> RstartSdaFall: t_su_sta expired
     RstartSdaFall --> HoldStart: SDA driven LOW
 
+    DriveLow --> GenerateStop: gen_stop_i & t_low expired
+    DriveLow --> GenerateRstart: (gen_rstart_i || req_restart_i) & t_low expired
     DriveLow --> DriveHigh: gen_clock_i & t_low expired
-    DriveHigh --> DriveLow: gen_clock_i & t_high expired
-    DriveHigh --> GenerateStop: gen_stop_i & t_high expired
-    DriveHigh --> GenerateRstart: (gen_rstart_i || req_restart_i) & t_high expired
-
-    DriveLow --> WaitCmd: !gen_clock_i
+    DriveLow --> WaitCmd: !gen_clock_i & t_low expired
+    DriveHigh --> DriveLow: t_high expired
 
     WaitCmd --> DriveLow: gen_clock_i
     WaitCmd --> GenerateStop: gen_stop_i
@@ -215,7 +223,8 @@ stateDiagram-v2
 
     GenerateStop --> SclHighForStop: SCL released HIGH
     SclHighForStop --> SdaRise: t_su_sto expired
-    SdaRise --> Idle: SDA released HIGH (done_o pulse)
+    SdaRise --> BusFree: SDA released HIGH
+    BusFree --> Idle: t_bus_free expired (done_o pulse)
 ```
 
 ### 6.2. State Descriptions
@@ -223,18 +232,19 @@ stateDiagram-v2
 | State            | SCL | SDA | `sda_ctrl_active_o` | Description                            |
 | ---------------- | --- | --- | ------------------- | -------------------------------------- |
 | `Idle`           | Z/H | Z/H | 0                   | Both lines released, bus idle          |
-| `GenerateStart`  | H   | H   | 0                   | Ensure SCL is HIGH, wait t_su_sta      |
+| `GenerateStart`  | H   | H   | 1                   | Own SDA mux and release SDA HIGH while waiting t_su_sta |
 | `SdaFall`        | H   | L   | 1                   | Pull SDA LOW (START condition)         |
 | `HoldStart`      | H   | L   | 1                   | Hold SDA LOW for t_hd_sta              |
-| `DriveLow`       | L   | -   | 0                   | Drive SCL LOW, count t_low             |
+| `DriveLow`       | L   | -   | 0                   | Drive SCL LOW, count active_t_low      |
 | `DriveHigh`      | H   | -   | 0                   | Release SCL HIGH, count t_high         |
 | `WaitCmd`        | L   | -   | 0                   | Hold SCL LOW, wait for next command    |
 | `GenerateRstart` | L→H | L→H | 1                   | From clock LOW, release SDA HIGH first |
 | `SclHigh`        | H   | H   | 1                   | SCL goes HIGH, wait t_su_sta for Sr    |
 | `RstartSdaFall`  | H   | L   | 1                   | Pull SDA LOW (Repeated START)          |
-| `GenerateStop`   | L   | L   | 1                   | SDA LOW, then release SCL HIGH         |
+| `GenerateStop`   | L→H | L   | 1                   | Hold SDA LOW, then release SCL HIGH    |
 | `SclHighForStop` | H   | L   | 1                   | SCL HIGH, wait t_su_sto                |
 | `SdaRise`        | H   | H   | 1                   | Release SDA HIGH (STOP condition)      |
+| `BusFree`        | H   | H   | 0                   | Wait t_bus_free before returning idle  |
 
 ### 6.3. `sda_ctrl_active_o` (M-2 MUX Signal)
 
@@ -247,9 +257,11 @@ assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda
                   :                      1'b1;
 ```
 
-`sda_ctrl_active_o` is asserted in all states where `scl_generator` owns SDA (START/STOP/Sr generation). It is deasserted during `DriveLow`, `DriveHigh`, `WaitCmd`, `Idle`, and `GenerateStart` — phases when `bus_tx_flow` may drive data.
+`sda_ctrl_active_o` is asserted in all states where `scl_generator` owns the SDA mux for START/STOP/Sr generation. In `GenerateStart`, the generator owns the SDA mux but keeps `sda_o` released HIGH so the START setup window is protected from `bus_tx_flow`. It is deasserted during `DriveLow`, `DriveHigh`, `WaitCmd`, and `Idle` — phases when `bus_tx_flow` may drive data.
 
 ### 6.4. ENTDAA Restart Handling (`req_restart_i` / `req_restart_ack_o`)
+
+> Consider later: this subsection documents the intended explicit restart handshake, but the current RTL implementation routes DAA restart through combined `gen_rstart_i` instead.
 
 During ENTDAA multi-device rounds, `entdaa_controller` pulses `req_restart_o` for one cycle. `controller_active`'s `daa_restart_pending_q` extends this to a held signal (`req_restart_i` into `scl_generator`). When `scl_generator` sees `req_restart_i` and acts on it (entering `GenerateRstart`), it pulses `req_restart_ack_o` to clear the latch.
 
@@ -277,9 +289,10 @@ The `tcount_load_value` is selected based on the current state transition:
 
 - Entering `GenerateStart` / `SclHigh`: load `t_su_sta_i`
 - Entering `HoldStart`: load `t_hd_sta_i`
-- Entering `DriveLow`: load `t_low_i + t_f_i`
+- Entering `DriveLow`: load `active_t_low + t_f_i`, where `active_t_low` is `t_low_od_i` when `scl_use_od_low_i` is 1, otherwise `t_low_i`
 - Entering `DriveHigh`: load `t_high_i + t_r_i`
 - Entering `SclHighForStop`: load `t_su_sto_i`
+- Entering `BusFree`: load `t_bus_free_i`
 
 ### 6.6. Output Logic
 
@@ -291,6 +304,14 @@ always_comb begin
 
   case (state)
     DriveLow, WaitCmd: scl_o = 1'b0;
+    GenerateStart: begin
+      sda_ctrl_active_o = 1'b1;  // Own SDA mux while releasing SDA HIGH
+    end
+    GenerateStop: begin
+      sda_o = 1'b0;
+      if (!tcount_expired) scl_o = 1'b0;
+      sda_ctrl_active_o = 1'b1;
+    end
     SdaFall, HoldStart: begin
       sda_o = 1'b0;
       sda_ctrl_active_o = 1'b1;
@@ -299,7 +320,7 @@ always_comb begin
       sda_o = (state == RstartSdaFall) ? 1'b0 : 1'b1;
       sda_ctrl_active_o = 1'b1;
     end
-    GenerateStop, SclHighForStop, SdaRise: begin
+    SclHighForStop, SdaRise: begin
       sda_o = (state == SdaRise) ? 1'b1 : 1'b0;
       sda_ctrl_active_o = 1'b1;
     end
@@ -315,24 +336,28 @@ end
 | Parameter    | Min Spec | Register Value | Actual Time |
 | ------------ | -------- | -------------- | ----------- |
 | `t_low_i`    | 24 ns    | 8              | 24 ns       |
+| `t_low_od_i` | 200 ns   | 67             | 201 ns      |
 | `t_high_i`   | 24 ns    | 8              | 24 ns       |
 | `t_su_sta_i` | -        | 8              | 24 ns       |
 | `t_hd_sta_i` | -        | 8              | 24 ns       |
 | `t_su_sto_i` | 12 ns    | 4              | 12 ns       |
 | `t_r_i`      | 12 ns    | 4              | 12 ns       |
 | `t_f_i`      | 12 ns    | 4              | 12 ns       |
+| `t_bus_free_i` | -      | 0              | 0 ns        |
 
 ### I2C FM Mode (at 333 MHz, T_clk = 3 ns)
 
 | Parameter    | Min Spec | Register Value | Actual Time |
 | ------------ | -------- | -------------- | ----------- |
 | `t_low_i`    | 1300 ns  | 434            | 1302 ns     |
+| `t_low_od_i` | N/A      | Unused         | N/A         |
 | `t_high_i`   | 600 ns   | 200            | 600 ns      |
 | `t_su_sta_i` | 600 ns   | 200            | 600 ns      |
 | `t_hd_sta_i` | 600 ns   | 200            | 600 ns      |
 | `t_su_sto_i` | 600 ns   | 200            | 600 ns      |
 | `t_r_i`      | 300 ns   | 100            | 300 ns      |
 | `t_f_i`      | 300 ns   | 100            | 300 ns      |
+| `t_bus_free_i` | 1300 ns | 434           | 1302 ns     |
 
 ## 8. Changes from Reference Design
 
@@ -349,7 +374,7 @@ This is a completely new module. In the reference design:
 
 ## 9. Error Handling
 
-- **SCL stuck LOW:** If `scl_i` does not go HIGH after releasing `scl_o`, the module will wait indefinitely in `DriveHigh`. `flow_active` should implement a timeout and issue `gen_idle_i` to abort.
+- **SCL stuck LOW:** Normal clock generation advances from `DriveHigh` by counter expiry and does not wait for `scl_i`. STOP and repeated-START sequencing do check `scl_i` while releasing SCL HIGH, so a stuck-low bus can still stall those bus-condition flows. Timeout/recovery is outside this block and should be handled by higher-level control.
 - **Bus contention:** Not explicitly detected. `flow_active` should monitor for unexpected bus states via `bus_monitor`.
 
 ## 10. Test Plan
@@ -358,13 +383,13 @@ This is a completely new module. In the reference design:
 
 1. **START generation:** Assert `gen_start_i`; verify SDA falls while SCL is HIGH with correct t_su_sta and t_hd_sta timing
 2. **STOP generation:** Assert `gen_stop_i`; verify SDA rises while SCL is HIGH with correct t_su_sto timing
-3. **Repeated START (from flow_active):** During clock generation, assert `gen_rstart_i`; verify Sr condition with correct timing
+3. **Repeated START (from flow_active):** During clock generation, assert and hold `gen_rstart_i` until the generator services it from a low-phase state; verify Sr condition with correct timing
 4. **Repeated START (from ENTDAA):** Assert `req_restart_i` via `daa_restart_pending_q`; verify Sr generation and `req_restart_ack_o` pulse
 5. **I3C SDR clock:** Set I3C timing values; verify SCL frequency of ~12.5 MHz with correct duty cycle
 6. **I2C FM clock:** Set I2C timing values; verify SCL frequency of ~400 kHz
 7. **Clock gating:** Deassert `gen_clock_i` during DriveLow; verify SCL stays LOW until re-asserted
 8. **Full transaction:** START → 9 clock cycles → Sr → 9 clock cycles → STOP; verify complete waveform
-9. **`sda_ctrl_active_o`:** Verify asserted during SdaFall, HoldStart, GenerateRstart, SclHigh, RstartSdaFall, GenerateStop, SclHighForStop, SdaRise; deasserted during DriveLow, DriveHigh, WaitCmd
+9. **`sda_ctrl_active_o`:** Verify asserted during GenerateStart, SdaFall, HoldStart, GenerateRstart, SclHigh, RstartSdaFall, GenerateStop, SclHighForStop, SdaRise; deasserted during Idle, DriveLow, DriveHigh, WaitCmd
 10. **Reset behavior:** Verify both outputs go HIGH (idle) immediately on reset
 
 ### UVM Test Structure
@@ -391,6 +416,8 @@ src/verification/uvm_i3c/
 
 - The `sda_o` output of this module is ONLY used for START/STOP/Sr conditions. During data phases, SDA is driven by `bus_tx_flow`. `controller_active` MUXes between `scl_generator.sda_o` and `bus_tx_flow.sda_o` using `sda_ctrl_active_o` as the select signal (M-2 fix).
 - The counter width of 20 bits supports up to 2^20 = ~1M cycles, which at 333 MHz is ~3 ms — more than sufficient for any I3C/I2C timing parameter.
+- STOP and repeated START requests are serviced from `DriveLow` or `WaitCmd`, not directly from `DriveHigh`. Callers must hold `gen_stop_i` or `gen_rstart_i` until the generator reaches one of those low-phase states and reports completion.
 - For Repeated START: the module first releases SDA HIGH (from data LOW), then releases SCL HIGH, then pulls SDA LOW. This 3-step sequence is critical for proper Sr generation.
+- After STOP, `SdaRise` transitions to `BusFree`; `done_o` pulses when `BusFree` expires and the FSM returns to `Idle`.
 - The `sel_i3c_i2c_i` input is informational only — the actual timing comes from the register values. The module does not use it to select different counter presets; the caller must write correct timing values for the active mode.
 - The `req_restart_i` / `req_restart_ack_o` handshake ensures the 1-cycle pulse from `entdaa_controller` is not missed. The latch in `controller_active` holds `req_restart_i` until `scl_generator` acknowledges via `req_restart_ack_o`.

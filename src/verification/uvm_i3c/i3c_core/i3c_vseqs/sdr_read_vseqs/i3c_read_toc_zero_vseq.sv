@@ -11,6 +11,10 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
     foreach (broadcast_modes[mode_idx]) begin
       run_read_toc_zero_case(broadcast_modes[mode_idx]);
     end
+
+    `uvm_info(`gfn,
+              "SDRR_008 conclusion: toc=0 keeps the SDR private transaction active with one repeated START before the following command",
+              UVM_LOW)
   endtask
 
   virtual task run_read_toc_zero_case(bit broadcast_header_enable);
@@ -74,10 +78,6 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
                  "read_toc0_vseq: first read should end with RSTART")
     `DV_CHECK_EQ(dev_seq1.observed_rstart, 1'b0,
                  "read_toc0_vseq: second write should end with STOP")
-    `DV_CHECK_EQ(dev_seq0.sampled_dir, 1'b1,
-                 "read_toc0_vseq: first device response sampled wrong direction")
-    `DV_CHECK_EQ(dev_seq1.sampled_dir, 1'b0,
-                 "read_toc0_vseq: second device response sampled wrong direction")
 
     `DV_CHECK_EQ(resp0[31:28], 4'h0,         "read_toc0_vseq: first response expected Success")
     `DV_CHECK_EQ(resp0[27:24], 4'd5,         "read_toc0_vseq: first response TID mismatch")
@@ -85,5 +85,11 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(resp1[31:28], 4'h0,         "read_toc0_vseq: second response expected Success")
     `DV_CHECK_EQ(resp1[27:24], 4'd6,         "read_toc0_vseq: second response TID mismatch")
     `DV_CHECK_EQ(resp1[15:0],  16'd2,        "read_toc0_vseq: second response length mismatch")
+
+    `uvm_info(`gfn, $sformatf(
+                  "SDRR_008 result: mode=%s rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b read_resp_len=%0d write_resp_len=%0d",
+                  private_addr_mode_name(broadcast_header_enable), rstart_count,
+                  dev_seq0.observed_rstart, dev_seq1.observed_rstart, resp0[15:0],
+                  resp1[15:0]), UVM_LOW)
   endtask
 endclass

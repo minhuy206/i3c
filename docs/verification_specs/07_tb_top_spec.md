@@ -52,7 +52,7 @@ Both DUT and agent pull low to drive LOW; release for HIGH via pull-up. DUT's 2F
 | `TxFifoDepth` | 8 | Reduced for sim |
 | `RxFifoDepth` | 8 | Reduced for sim |
 | `RespFifoDepth` | 8 | Reduced for sim |
-| `DatDepth` | 16 | Default |
+| `DatDepth` | 32 | Default |
 
 ## 7. UVM Config DB
 

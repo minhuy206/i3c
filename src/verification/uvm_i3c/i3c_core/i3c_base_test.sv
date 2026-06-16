@@ -26,7 +26,7 @@ class i3c_base_test extends uvm_test;
     uvm_object obj;
     uvm_factory factory;
     uvm_sequence test_seq;
-    string test_seq_s = "i3c_smoke_vseq";
+    string test_seq_s = "i3c_imm_vseq";
 
     void'($value$plusargs("UVM_TEST_SEQ=%0s", test_seq_s));
 

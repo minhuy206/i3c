@@ -1,8 +1,10 @@
 CLAUDE.md
 .DS_Store
 AGENTS.md
+GEMINI.md
 docs/architecture_qa_session.md
 docs/i3c_scope_analysis.md
+docs/thesis_report/*.pdf
 
 # LaTeX compiler output
 *.aux

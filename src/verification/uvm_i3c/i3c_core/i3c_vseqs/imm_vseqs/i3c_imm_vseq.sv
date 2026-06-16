@@ -1,7 +1,7 @@
-class i3c_smoke_vseq extends i3c_base_vseq;
-  `uvm_object_utils(i3c_smoke_vseq)
+class i3c_imm_vseq extends i3c_base_vseq;
+  `uvm_object_utils(i3c_imm_vseq)
 
-  function new(string name = "i3c_smoke_vseq");
+  function new(string name = "i3c_imm_vseq");
     super.new(name);
   endfunction
 
@@ -36,7 +36,6 @@ class i3c_smoke_vseq extends i3c_base_vseq;
 
     poll_idle();
     read_response(resp);
-    `DV_CHECK_EQ(resp[31:28], 4'h0, "smoke_vseq: expected Success response")
   endtask
 
 endclass

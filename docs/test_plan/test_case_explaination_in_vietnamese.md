@@ -431,19 +431,7 @@ Kết quả mong đợi là T-bit trên bus luôn làm tổng số bit 1 của `
 
 Test này quan trọng vì target dùng T-bit để kiểm tra/đồng bộ data phase. Nếu T-bit sai, data byte có thể đúng nhưng transaction vẫn sai protocol.
 
-### SDRW_005 - `i3c_write_addr_nack`
-
-Test này kiểm tra phản ứng của controller khi target NACK địa chỉ trong regular write.
-
-Target được cấu hình để không ACK dynamic address. Testbench issue một regular write command như bình thường.
-
-Kết quả mong đợi là controller dừng transaction trước data phase, nghĩa là không được lấy và truyền data byte từ TX FIFO ra bus sau khi địa chỉ bị NACK.
-
-Controller phải recover bus bằng STOP hoặc recovery sequence tương ứng, sau đó ghi RESP với error `AddrHeader`.
-
-Test này quan trọng vì address NACK là lỗi cơ bản nhất khi target không tồn tại, chưa sẵn sàng, hoặc địa chỉ trong DAT bị sai.
-
-### SDRW_006 - `i3c_write_tx_fifo_underflow_ovl`
+### SDRW_005 - `i3c_write_tx_fifo_underflow_ovl`
 
 Test này kiểm tra trường hợp controller cần write data nhưng TX FIFO chưa có đủ data.
 
@@ -451,11 +439,11 @@ Testbench issue một write command 8 byte nhưng chỉ nạp sẵn một DWORD,
 
 Khi thiếu data, controller không được truyền byte rác, không được đọc underflow từ TX FIFO, và không được đi vào state cũ `StallWrite`.
 
-Kết quả mong đợi là controller truyền đúng 4 byte đã có trong partial-underflow case, hoặc không truyền data/T-bit nào khi FIFO rỗng ngay từ đầu. Controller phát STOP, rồi ghi RESP với error `Ovl`, TID đúng command, và `data_length` bằng số byte thật sự đã truyền: 4 hoặc 0. Với biến thể `toc=0`, underflow vẫn phải terminate bằng STOP, không được tạo Repeated START hoặc continuation. Nếu software nạp thêm TX data sau lỗi, data đó không được consume cho command đã bị abort; TX FIFO vẫn non-empty cho đến khi SW reset flush queue.
+Kết quả mong đợi là controller truyền đúng 4 byte đã có trong partial-underflow case, hoặc không truyền data/T-bit nào khi FIFO rỗng ngay từ đầu. Controller phát STOP và ghi response để software có thể drain RESP FIFO, nhưng test này không check các field RESP. Với biến thể `toc=0`, underflow vẫn phải terminate bằng STOP, không được tạo Repeated START hoặc continuation. Nếu software nạp thêm TX data sau lỗi, data đó không được consume cho command đã bị abort; TX FIFO vẫn non-empty cho đến khi SW reset flush queue. Encoding chi tiết của RESP `Ovl` thuộc nhóm `ERR_005`.
 
 Test này quan trọng vì TX underflow là lỗi producer/software; controller phải terminate deterministically thay vì giữ bus vô hạn để chờ software refill.
 
-### SDRW_007 - `i3c_write_toc_zero`
+### SDRW_006 - `i3c_write_toc_zero`
 
 Test này kiểm tra behavior continuation của regular SDR I3C write khi command đầu tiên có `toc=0`.
 
@@ -477,7 +465,7 @@ Trong negative subcase, command đầu tiên vẫn phải truyền đủ data/T-
 
 Test này quan trọng vì `toc=0` ảnh hưởng trực tiếp đến ownership của bus và sequencing giữa nhiều SDR private transfer trong cùng một frame. Nếu controller tạo STOP quá sớm, transfer bị tách frame sai. Nếu controller không tạo được `Sr`, không lấy command kế tiếp đúng lúc, hoặc phát lại `0x7e` ở mỗi continuation, continuation flow sẽ sai so với semantics đã specification hóa.
 
-### SDRW_008 - `i3c_write_back_to_back`
+### SDRW_007 - `i3c_write_back_to_back`
 
 Test này kiểm tra nhiều regular write command chạy liên tiếp.
 
@@ -489,7 +477,7 @@ Mỗi RESP phải có TID và length khớp với command tương ứng. Scorebo
 
 Test này quan trọng vì hệ thống thực tế thường không chỉ chạy một command đơn lẻ. Back-to-back command giúp phát hiện lỗi state cleanup, FIFO pointer, và response ordering.
 
-### SDRW_009 - `i3c_write_multi_dat_idx`
+### SDRW_008 - `i3c_write_multi_dat_idx`
 
 Test này kiểm tra controller chọn đúng DAT entry khi regular SDR private write dùng `dev_idx` khác nhau.
 
@@ -549,7 +537,7 @@ Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M <
 
 Kết quả mong đợi là controller không được tiếp tục lấy thêm data giả. RX FIFO chỉ chứa đúng `M` byte đã thật sự nhận được từ target.
 
-RESP phải báo error `I3cShortReadErr`, vì transaction kết thúc ngắn hơn requested length.
+Controller phải ghi response để software có thể drain RESP FIFO, nhưng test này chỉ kiểm tra flow read ngắn và dữ liệu RX hợp lệ. Encoding chi tiết của RESP `I3cShortReadErr` thuộc nhóm `ERR_004`.
 
 Test này quan trọng vì trong giao tiếp thực tế, target có thể không có đủ data hoặc chủ động kết thúc transfer. Controller phải report lỗi đúng và không được corrupt RX FIFO.
 
@@ -565,19 +553,7 @@ Nói cách khác, requested length của command là giới hạn mà controller
 
 Test này quan trọng vì nếu controller đọc dư byte, RX FIFO sẽ chứa data ngoài mong muốn và response length sẽ không còn khớp với command.
 
-### SDRR_006 - `i3c_read_addr_nack`
-
-Test này kiểm tra phản ứng của controller khi target NACK địa chỉ trong regular read.
-
-Target được cấu hình để không ACK dynamic address với direction read. Testbench issue một regular read command như bình thường.
-
-Kết quả mong đợi là controller không được đi vào data phase, không được ghi bất kỳ data nào vào RX FIFO, và phải recover bus về trạng thái hợp lệ.
-
-RESP phải báo error `AddrHeader`, vì lỗi xảy ra ở address/header phase.
-
-Test này quan trọng vì address NACK có thể xảy ra khi target không tồn tại, dynamic address trong DAT sai, hoặc target chưa sẵn sàng trả lời read.
-
-### SDRR_007 - `i3c_read_rx_fifo_full_stall`
+### SDRR_006 - `i3c_read_rx_fifo_full_stall`
 
 Test này kiểm tra backpressure khi controller đang read nhưng RX FIFO không còn chỗ để ghi data.
 
@@ -589,7 +565,7 @@ Kết quả mong đợi là sau khi RX FIFO được drain, controller resume v�
 
 Test này quan trọng vì software có thể đọc RX FIFO chậm hơn tốc độ controller nhận data từ bus.
 
-### SDRR_008 - `i3c_read_data_patterns`
+### SDRR_007 - `i3c_read_data_patterns`
 
 Test này kiểm tra data integrity của read path với nhiều pattern khác nhau.
 
@@ -599,23 +575,23 @@ Kết quả mong đợi là nội dung RX FIFO phải khớp chính xác với d
 
 Test này giúp phát hiện lỗi trong `i3c_driver`, `bus_rx_flow`, byte ordering, RX FIFO packing, và scoreboard expectation.
 
-### SDRR_009 - `i3c_read_no_parity_error_on_end_tbit`
+### SDRR_008 - `i3c_read_no_parity_error_on_end_tbit`
 
 Test này kiểm tra ý nghĩa của T-bit trong I3C SDR read.
 
 Trong read phase, T-bit do target gửi không phải parity của data byte. Theo MIPI I3C SDR read semantics, khi target gửi T-bit bằng 0 thì đó là tín hiệu end-of-data.
 
-Testbench chạy một read transaction trong đó final T-bit bằng 0.
+Testbench chạy một read transaction trong đó final T-bit bằng 0 đúng tại requested length.
 
-Kết quả mong đợi là controller không báo `Parity` response chỉ vì final T-bit bằng 0. Nếu transfer kết thúc sớm hơn requested length thì lỗi phù hợp là short read; nếu kết thúc đúng theo expected behavior thì response không được là parity error.
+Kết quả mong đợi là controller xem T-bit này là kết thúc data hợp lệ, không đọc thêm byte giả, và drain các queue sạch sau khi transaction hoàn tất. Encoding chi tiết của RESP cho trường hợp này thuộc nhóm `ERR_013`.
 
-Test này quan trọng vì nếu controller diễn giải sai T-bit read phase thành parity error, các read transaction hợp lệ hoặc short-read hợp lệ sẽ bị báo sai nguyên nhân lỗi.
+Test này quan trọng vì nếu controller diễn giải sai T-bit read phase, các read transaction hợp lệ có thể bị đọc dư byte hoặc kết thúc sai flow.
 
-### SDRR_010 - `i3c_read_toc_zero`
+### SDRR_009 - `i3c_read_toc_zero`
 
 Test này kiểm tra behavior continuation của regular SDR I3C read khi command đầu tiên có `toc=0`.
 
-Trong scope project hiện tại, `toc=0` continuation được định nghĩa cho SDR regular I3C private transfer, bao gồm cả write và read. Vì vậy read path cũng cần test riêng, không chỉ dựa vào `SDRW_007`.
+Trong scope project hiện tại, `toc=0` continuation được định nghĩa cho SDR regular I3C private transfer, bao gồm cả write và read. Vì vậy read path cũng cần test riêng, không chỉ dựa vào `SDRW_006`.
 
 Testbench queue hai command đến cùng I3C target. Command thứ nhất là regular read với `toc=0`, length 2 byte. Target trả về hai byte hợp lệ và T-bit cuối báo kết thúc đúng tại requested length. Command thứ hai là regular write với `toc=1`, length 2 byte, và command này đã nằm sẵn trong CMD FIFO trước khi read đầu tiên kết thúc.
 
@@ -625,7 +601,7 @@ RESP của read command phải báo Success với TID và length đúng. RESP c�
 
 Test này quan trọng vì read termination có thêm RX FIFO packing và T-bit semantics, nên không thể chỉ dùng write `toc=0` để kết luận read continuation đã đúng. Nếu controller flush RX data sai thời điểm, tạo STOP quá sớm, hoặc không tạo được `Sr`, response và bus sequencing đều có thể sai.
 
-### SDRR_011 - `i3c_read_toc_zero_broadcast_header_once`
+### SDRR_010 - `i3c_read_toc_zero_broadcast_header_once`
 
 Test này kiểm tra private I3C read continuation khi `BROADCAST_ADDR_ENABLE=1`.
 
@@ -647,7 +623,7 @@ Trong thiết kế này, immediate path chủ yếu áp dụng cho write-style c
 
 Test này giữ lại smoke regression hiện có cho I3C immediate write.
 
-DAT[0] được cấu hình là I3C device, target ACK địa chỉ và các phase cần thiết. Testbench chạy `i3c_smoke_vseq`, trong đó command immediate chứa hai byte data inline.
+DAT[0] được cấu hình là I3C device, target ACK địa chỉ và các phase cần thiết. Testbench chạy `i3c_imm_vseq`, trong đó command immediate chứa hai byte data inline.
 
 Kết quả mong đợi là controller truyền đúng hai byte inline đó ra bus, không cần lấy data từ TX FIFO. Sau khi transaction hoàn tất, RESP phải báo success.
 
@@ -673,7 +649,7 @@ Immediate Data Transfer descriptor vẫn có field `toc`, nên testplan cần ki
 
 Với `toc=1`, kết quả mong đợi là controller tạo STOP ở cuối immediate transfer và RESP báo success nếu các phase trước đó đều hợp lệ.
 
-Với `toc=0`, test không nên tự suy ra một continuation hợp lệ như `SDRW_007`. Đây là clarification/negative case cho đến khi project spec định nghĩa policy. Policy được chấp nhận cho sign-off phải là một hành vi rõ ràng như reject/abort với error response hoặc force STOP; điểm quan trọng là controller không được để bus treo ở trạng thái không có STOP cũng không có `Sr`, và không được tự ý nối sang command kế tiếp bằng waveform sai.
+Với `toc=0`, test không nên tự suy ra một continuation hợp lệ như `SDRW_006`. Đây là clarification/negative case cho đến khi project spec định nghĩa policy. Policy được chấp nhận cho sign-off phải là một hành vi rõ ràng như reject/abort với error response hoặc force STOP; điểm quan trọng là controller không được để bus treo ở trạng thái không có STOP cũng không có `Sr`, và không được tự ý nối sang command kế tiếp bằng waveform sai.
 
 Test này quan trọng vì `toc` xuất hiện trong descriptor immediate, nhưng MIPI I3C spec chỉ định bus-level START, Repeated START và STOP, không định nghĩa trực tiếp khái niệm Immediate descriptor. Vì vậy test này dùng để khóa policy của project spec, còn test chứng minh `toc=0` continuation hợp lệ nằm ở regular SDR private transfer.
 
@@ -1051,7 +1027,7 @@ Test này quan trọng vì legacy I2C thường chạy chậm hơn I3C. Nếu ti
 
 Phần 4.10 kiểm tra cách controller report lỗi, ghi response, xử lý reset, và recover khỏi các tình huống bất thường.
 
-Các test trước đó tập trung vào từng protocol flow riêng lẻ. Phần này gom lại các yêu cầu chung về status và recovery: RESP descriptor phải encode đúng success/error/TID/length, lỗi address và data phải được phân loại đúng, short read phải báo đúng error, FIFO response full phải tạo backpressure an toàn, reset không được để lại state rác, và các behavior chưa được hỗ trợ như bus stuck hoặc invalid descriptor phải được document rõ.
+Các test trước đó tập trung vào từng protocol flow riêng lẻ: data đúng, không corrupt FIFO, terminate/recover đúng, và không đi vào phase sai. Phần này gom lại các yêu cầu chung về status và recovery: RESP descriptor phải encode đúng success/error/TID/reserved/length, lỗi address và data phải được phân loại đúng, short read và overflow phải báo đúng error, FIFO response full phải tạo backpressure an toàn, reset không được để lại state rác, và các behavior chưa được hỗ trợ như bus stuck hoặc invalid descriptor phải được document rõ.
 
 ### ERR_001 - `resp_success_tid_length`
 
@@ -1069,11 +1045,11 @@ Test này quan trọng vì software dựa vào RESP để biết command nào đ
 
 Test này kiểm tra response khi lỗi xảy ra ở address/header phase.
 
-Target được cấu hình để NACK address. Testbench chạy nhiều loại command có address phase: I3C write, I3C read, I2C write, I2C read, và direct CCC target address phase.
+Target được cấu hình để NACK address. Testbench chạy `i3c_addr_header_nack_resp_vseq` cho I3C write/read address NACK; I2C write/read và direct CCC target address phase sẽ extend cùng rule khi các directed test tương ứng được thêm.
 
 Kết quả mong đợi là controller không được đi vào data phase sau address NACK. Với write, không truyền data. Với read, không ghi RX data. Với direct CCC, không gửi direct data byte sau khi target address bị NACK.
 
-RESP phải báo error `AddrHeader` ở mọi command class được support có address/header NACK.
+RESP phải báo error `AddrHeader` ở mọi command class được support có address/header NACK. TID phải khớp command, reserved bits phải bằng 0, và length phải bằng 0.
 
 Test này quan trọng vì address/header NACK là lỗi phổ biến và cần được phân loại riêng với data NACK hoặc short read.
 
@@ -1095,23 +1071,23 @@ Test này kiểm tra response khi I3C target kết thúc read sớm.
 
 Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M < N`, rồi báo end bằng T-bit theo read semantics.
 
-Kết quả mong đợi là RX FIFO chỉ chứa đúng `M` byte đã nhận được. RESP phải báo error `I3cShortReadErr`.
+Stimulus có thể giống SDRR short-read flow, nhưng check trong test này tập trung vào response descriptor.
 
-Length trong response phải phản ánh số byte thật sự đã nhận, không phải requested length `N`.
+RESP phải báo error `I3cShortReadErr`. TID phải khớp command, reserved bits phải bằng 0, và length trong response phải phản ánh số byte thật sự đã nhận, không phải requested length `N`.
 
 Test này quan trọng vì short read không nhất thiết là bus corruption. Nó là một tình huống protocol cần report chính xác để software biết có bao nhiêu data hợp lệ trong RX FIFO.
 
-### ERR_005 - `resp_unreachable_error_codes`
+### ERR_005 - `resp_ovl_error`
 
-Test này document các error code đã được định nghĩa nhưng chưa nằm trong feature scope hoặc chưa có stimulus spec rõ.
+Test này kiểm tra response khi transfer kết thúc bằng overflow/underflow class `Ovl`.
 
-Testbench kết hợp code review và một số directed unsupported stimuli để thử tạo các lỗi như CRC, Frame, Ovl, HcAborted, NotSupported, hoặc Parity.
+Testbench chạy cùng nhóm stimulus lỗi với flow tests: regular write thiếu TX data và regular read khi RX FIFO đã full.
 
-Kết quả mong đợi theo testplan là các error code ngoài scope hoặc chưa có stimulus spec rõ phải được đánh dấu là N/A hoặc enhancement request, không tính như positive coverage bắt buộc.
+Kết quả mong đợi là RESP báo error `Ovl`. TID phải khớp command, reserved bits phải bằng 0, và length phải bằng số byte thật sự đã xử lý: số byte đã truyền trước TX underflow hoặc số byte đã nhận/quan sát trước RX overflow.
 
-Nếu một stimuli unsupported làm controller phát frame, trả error khác, hoặc không validate opcode, behavior đó phải được ghi lại rõ.
+Stimulus có thể giống SDRW/SDRR boundary flow tests, nhưng check trong test này tập trung vào response descriptor.
 
-Test này quan trọng vì nó tránh việc verification plan giả định controller đã support đầy đủ mọi error code chỉ vì enum có định nghĩa trong package.
+Test này quan trọng vì `Ovl` là error in-scope của FIFO boundary path. Software cần phân biệt nó với address NACK và short read để biết lỗi đến từ producer/consumer FIFO thay vì target không phản hồi.
 
 ### ERR_006 - `resp_fifo_full_backpressure`
 
@@ -1184,6 +1160,18 @@ Kết quả mong đợi là controller không được gây queue corruption, kh
 Nếu project spec chưa định nghĩa đầy đủ validation cho descriptor, test phải ghi nhận spec gap và đề xuất enhancement hoặc software restriction.
 
 Test này quan trọng vì command descriptor là input từ software. Một descriptor sai không nên làm hỏng internal state hoặc phá toàn bộ controller.
+
+### ERR_013 - `i3c_read_tbit_no_parity_resp`
+
+Test này kiểm tra response classification của T-bit cuối trong I3C SDR read và bảo đảm controller không report sai thành parity error.
+
+Trong read phase, T-bit do target gửi không phải parity của data byte. Theo MIPI I3C SDR read semantics, khi target gửi T-bit bằng 0 thì đó là tín hiệu end-of-data.
+
+Testbench chạy `i3c_read_tbit_no_parity_resp_vseq`, trong đó final T-bit bằng 0 đúng tại requested length, trong cả hai private-address mode.
+
+Kết quả mong đợi là controller không báo `Parity` response chỉ vì final T-bit bằng 0. RESP phải là `Success`, TID phải khớp command, reserved bits phải bằng 0, và length phải bằng requested length.
+
+Test này quan trọng vì nếu controller diễn giải sai T-bit read phase thành parity error, các read transaction hợp lệ sẽ bị báo sai nguyên nhân lỗi.
 
 ## 4.11 Arbitration and Bus Behavior
 

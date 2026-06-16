@@ -54,6 +54,7 @@ module flow_active_sva
     input logic                                              tx_queue_rvalid_i,
     input logic                                              tx_queue_rready_o,
     input logic                                              tx_underflow_q,
+    input logic                                              rx_overflow_q,
     input logic                                              rx_queue_full_i,
     input logic                                              rx_queue_wvalid,
     input logic                                              rx_queue_wready_i,
@@ -77,6 +78,7 @@ module flow_active_sva
     input logic                                              bus_rx_done_i,
     input logic                       [                 7:0] bus_rx_data_i,
     input logic                                              scl_stop_done_q,
+    input logic                                              hc_aborted_q,
     input logic                                              resp_queue_wvalid,
     input logic                       [HciRespDataWidth-1:0] resp_queue_wdata
 );
@@ -93,8 +95,8 @@ module flow_active_sva
   localparam logic [3:0] InitI3CRead = 4'd9;
   localparam logic [3:0] InitI2CWrite = 4'd10;
   localparam logic [3:0] InitI2CRead = 4'd11;
-  localparam logic [3:0] IssueCmd = 4'd13;
-  localparam logic [3:0] WriteResp = 4'd14;
+  localparam logic [3:0] IssueCmd = 4'd12;
+  localparam logic [3:0] WriteResp = 4'd13;
 
   localparam logic [7:0] PhaseStart = 8'd0;
   localparam logic [7:0] PhaseAddr = 8'd1;
@@ -791,7 +793,8 @@ module flow_active_sva
                                             sdr_regular_i3c_write() &&
                                             reg_desc.toc &&
                                             !addr_nack_q &&
-                                            !tx_underflow_q
+                                            !tx_underflow_q &&
+                                            !hc_aborted_q
                                             |->
                                             success_resp_matches_current_len())
   else $error("flow_active_sva: SDR write success response descriptor mismatch in %m");
@@ -1047,7 +1050,8 @@ module flow_active_sva
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_read() &&
                                             !addr_nack_q &&
-                                            !short_read_q
+                                            !short_read_q &&
+                                            !rx_overflow_q
                                             |->
                                             success_resp_matches_current_len())
   else $error("flow_active_sva: SDR read success response length mismatch in %m");
@@ -1058,6 +1062,7 @@ module flow_active_sva
                                             sdr_regular_i3c_read() &&
                                             !addr_nack_q &&
                                             !short_read_q &&
+                                            !rx_overflow_q &&
                                             success_resp_matches_current_len());
 
   ap_sdr_read_short_resp_len :
@@ -1398,6 +1403,7 @@ bind flow_active flow_active_sva #(
     .tx_queue_rvalid_i,
     .tx_queue_rready_o,
     .tx_underflow_q,
+    .rx_overflow_q,
     .rx_queue_full_i,
     .rx_queue_wvalid,
     .rx_queue_wready_i,
@@ -1421,6 +1427,7 @@ bind flow_active flow_active_sva #(
     .bus_rx_done_i,
     .bus_rx_data_i,
     .scl_stop_done_q,
+    .hc_aborted_q,
     .resp_queue_wvalid,
     .resp_queue_wdata
 );

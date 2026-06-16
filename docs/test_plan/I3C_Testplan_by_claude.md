@@ -69,7 +69,7 @@ This test plan covers functional, performance, and coverage verification of the 
 | 0x108 | RX_DATA | 32-bit RX payload read |
 | 0x10C | RESP | 32-bit response descriptor read |
 | 0x110 | QUEUE_STATUS | `[7:0]` = resp_empty/full, rx_empty/full, tx_empty/full, cmd_empty/full |
-| 0x200–0x23C | DAT[0..15] | 32-bit device address table entries |
+| 0x200–0x27C | DAT[0..31] | 32-bit device address table entries |
 
 ### 2.3 Phase-1 Feature Matrix
 
@@ -84,7 +84,7 @@ This test plan covers functional, performance, and coverage verification of the 
 | I2C FM backward compat (400 kHz) | Implemented | BUG-004/005: ACK never received; require fixes |
 | SCL timing programmability | Implemented | T_R, T_F, T_LOW, T_HIGH, T_SU_STA, T_HD_STA, T_SU_STO, T_SU_DAT, T_HD_DAT |
 | HCI CMD/TX/RX/RESP FIFOs | Implemented | depth=8 in TB (depth=64 in RTL default) |
-| 16-entry DAT | Implemented | 32-bit simplified entry; HW-readonly dynamic-addr update |
+| 32-entry DAT | Implemented | 32-bit simplified entry; HW-readonly dynamic-addr update |
 | OD/PP switching (sel_od_pp_o) | Implemented | Address phase=OD, data phase=PP |
 
 ### 2.4 Not-Implemented / Out-of-Scope
@@ -117,7 +117,7 @@ This test plan covers functional, performance, and coverage verification of the 
 | `i3c_scoreboard` | `i3c_core/i3c_scoreboard.sv` | Partial (CMD+RESP err check + TX byte match; no RX check, no CCC/ENTDAA check) |
 | `i3c_virtual_sequencer` | `i3c_core/i3c_virtual_sequencer.sv` | Implemented |
 | `i3c_base_vseq` | `i3c_core/i3c_vseqs/i3c_base_vseq.sv` | Implemented (helpers: reg_write, reg_read, write_dat_entry, write_cmd, write_tx_data, read_rx_data, read_response) |
-| `i3c_smoke_vseq` | `i3c_core/i3c_vseqs/i3c_smoke_vseq.sv` | Implemented |
+| `i3c_imm_vseq` | `i3c_core/i3c_vseqs/i3c_imm_vseq.sv` | Implemented |
 | `i3c_write_vseq` | `i3c_core/i3c_vseqs/i3c_write_vseq.sv` | Implemented |
 | `i3c_read_vseq` | `i3c_core/i3c_vseqs/i3c_read_vseq.sv` | Implemented |
 | `i3c_agent` (Device-mode monitor+driver) | `dv_i3c/` | Implemented |
@@ -145,7 +145,7 @@ The following additions are implied by the new test categories but are not yet i
 
 > **Table columns:** No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags
 >
-> **TB constraints:** TB clock = 100 MHz (10 ns cycle); FIFO depths = 8; DatDepth = 16. Adjust test counts accordingly.
+> **TB constraints:** TB clock = 100 MHz (10 ns cycle); FIFO depths = 8; DatDepth = 32. Adjust test counts accordingly.
 >
 > **Bug annotations:** Tests marked `[BUG-NNN required]` need the referenced bug fix before they can pass. See Section 9 for the full bug list.
 
@@ -165,8 +165,8 @@ The following additions are implied by the new test categories but are not yet i
 | 1.8 | Timing reg | csr_timing_tlow_thigh_rw | Verify T_LOW and T_HIGH registers programmability | Write T_LOW=8, T_HIGH=10; read back | Readback correct; SCL period changes accordingly when command issued | High | csr_register.sv, scl_generator.sv | cp_timing_reg.min, cp_timing_reg.max |
 | 1.9 | Timing reg | csr_timing_all_rw | Verify all 9 timing registers accept writes and read back | Write distinct non-default values to T_R, T_F, T_LOW, T_HIGH, T_SU_STA, T_HD_STA, T_SU_STO, T_SU_DAT, T_HD_DAT | All 9 registers read back the written values | Medium | csr_register.sv | cp_timing_reg.typ |
 | 1.10 | DAT | csr_dat_entry0_rw | Verify DAT entry 0 (0x200) write and read back | Write DAT[0] with I3C device (device=0, dyn_addr=0x0A, static_addr=0x00); read back | Readback matches written value | High | csr_register.sv | cp_dat_index.0 |
-| 1.11 | DAT | csr_dat_entry15_rw | Verify DAT entry 15 (last, 0x23C) write and read back | Write DAT[15] with I3C device (dyn_addr=0x7F); read back | Readback matches; no overflow into unmapped space | High | csr_register.sv | cp_dat_index.15 |
-| 1.12 | DAT | csr_dat_all_entries_rw | Verify all 16 DAT entries write/read independently | Write distinct values to DAT[0..15]; read all back | All 16 entries correct; no aliasing | Medium | csr_register.sv | cp_dat_index.0, cp_dat_index.15, cp_dat_index.mid |
+| 1.11 | DAT | csr_dat_entry31_rw | Verify DAT entry 31 (last, 0x27C) write and read back | Write DAT[31] with I3C device (dyn_addr=0x7F); read back | Readback matches; no overflow into unmapped space | High | csr_register.sv | cp_dat_index.31 |
+| 1.12 | DAT | csr_dat_all_entries_rw | Verify all 32 DAT entries write/read independently | Write distinct values to DAT[0..31]; read all back | All 32 entries correct; no aliasing | Medium | csr_register.sv | cp_dat_index.0, cp_dat_index.31, cp_dat_index.mid |
 | 1.13 | HC_CONTROL | csr_sw_reset_clears_staging | Verify sw_reset clears CMD staging register (BUG-008 regression) | Write DWORD0 to CMD_QUEUE; assert sw_reset; write new DWORD0 + DWORD1; issue enable | New CMD dispatches correctly; no mix with stale DWORD0 | High | csr_register.sv | cp_reset_point.Idle |
 
 ---
@@ -270,8 +270,8 @@ The following additions are implied by the new test categories but are not yet i
 | 7.2 | ENTDAA | i3c_entdaa_2_devices | Verify ENTDAA assigns addresses to 2 devices in 2 rounds | DAT[0]=0x08, DAT[1]=0x12; dev_count=2; simulate 2 devices responding arbitration | Two RESP entries or accumulated RX data; both dynamic addresses assigned in 2 rounds | High | entdaa_controller.sv | cp_entdaa_dev_count.2 |
 | 7.3 | ENTDAA | i3c_entdaa_no_device | Verify NoDev path when no device responds to ENTDAA | AddressAssignment dev_count=1; no device pulls SDA low for ACK after SendRsvdByte | entdaa_fsm reaches NoDev; entdaa_controller sets no_device; RESP issued normally | High | entdaa_fsm.sv | cp_entdaa_dev_count.0 |
 | 7.4 | ENTDAA | i3c_entdaa_8_devices | Verify ENTDAA handles 8 device rounds | DAT[0..7] configured; dev_count=8; 8 simulated devices respond in turn | All 8 rounds complete; 8 addresses assigned; 8 restart cycles observed | Medium | entdaa_controller.sv | cp_entdaa_dev_count.8 |
-| 7.5 | ENTDAA | i3c_entdaa_15_devices | Verify ENTDAA handles 15 devices (DatDepth-1) | DAT[0..14] configured; dev_count=15 | 15 rounds complete; no DAT index out-of-bounds error | Medium | entdaa_controller.sv | cp_entdaa_dev_count.15 |
-| 7.6 | ENTDAA | i3c_entdaa_16_devices | Verify ENTDAA handles exactly DatDepth=16 devices | DAT[0..15] configured; dev_count=16 | All 16 rounds complete; dev_round cycles through 0..15; RESP Success | Medium | entdaa_controller.sv | cp_entdaa_dev_count.16 |
+| 7.5 | ENTDAA | i3c_entdaa_15_devices | Verify ENTDAA handles 15 devices | DAT[0..14] configured; dev_count=15 | 15 rounds complete; no DAT index out-of-bounds error | Medium | entdaa_controller.sv | cp_entdaa_dev_count.15 |
+| 7.6 | ENTDAA | i3c_entdaa_32_devices | Verify ENTDAA handles exactly DatDepth=32 devices | DAT[0..31] configured; dev_count=32 | All 32 rounds complete; dev_round cycles through 0..31; RESP Success | Medium | entdaa_controller.sv | cp_entdaa_dev_count.32 |
 | 7.7 | ENTDAA | i3c_entdaa_stop_during_daa | Verify STOP condition during DAA terminates gracefully | Start ENTDAA; inject bus STOP mid-ID-shift (e.g., target releases bus) | entdaa_controller transitions to Done; no hang; RESP issued | High | entdaa_controller.sv | cp_entdaa_dev_count.1 |
 | 7.8 | ENTDAA | i3c_entdaa_pid_shift_64bit | Verify 64-bit PID/BCR/DCR shift register captures correct value | Device drives known 64-bit ID = 0x12345678_9ABCDEF0; observe id_shift_q after ReceiveIDBit | PID[47:0]=0x123456789ABC, BCR=0xDE, DCR=0xF0 captured in entdaa_fsm id_shift_q | High | entdaa_fsm.sv | cp_entdaa_dev_count.1 |
 | 7.9 | ENTDAA | i3c_entdaa_addr_parity | Verify dynamic address transmitted with correct odd parity bit | DAT[0].dynamic_address=0x08 (0b0001000); parity=~^0b0001000 | 7-bit address + parity bit transmitted on SDA; target samples correct parity | High | entdaa_fsm.sv | cp_entdaa_dev_count.1 |
@@ -393,7 +393,7 @@ The following additions are implied by the new test categories but are not yet i
 | 14.3 | Scoreboard | scb_rx_data_check | Verify scoreboard RX data path (Phase-2 addition implied) | Device drives 4 known bytes; scoreboard checks RX FIFO content | RX DWORD read by SW matches device-driven bytes; scoreboard pass_cnt increments | High | i3c_scoreboard.sv | — |
 | 14.4 | Scoreboard | scb_resp_tid_match | Verify scoreboard matches RESP TID to CMD TID | Issue CMD with tid=0xA; read RESP; scoreboard compares | No scoreboard mismatch on TID; pass_cnt increments | High | i3c_scoreboard.sv | — |
 | 14.5 | Scoreboard | scb_eot_unconsumed_tx | Verify scoreboard flags leftover TX data at end-of-test | Write TX data without issuing matching CMD; let test end | DV_EOT_PRINT_TLM_FIFO_CONTENTS outputs unconsumed TX entries; testbench reports error | Medium | i3c_scoreboard.sv, dv_macros.svh | — |
-| 14.6 | Scoreboard | scb_zero_fail_count | Verify fail_count=0 after clean smoke/write/read regression | Run i3c_smoke_vseq + i3c_write_vseq + i3c_read_vseq | i3c_scoreboard.fail_cnt=0; pass_cnt ≥ 3 | High | i3c_scoreboard.sv | cp_resp_err.Success |
+| 14.6 | Scoreboard | scb_zero_fail_count | Verify fail_count=0 after clean smoke/write/read regression | Run i3c_imm_vseq + i3c_write_vseq + i3c_read_vseq | i3c_scoreboard.fail_cnt=0; pass_cnt >= 3 | High | i3c_scoreboard.sv | cp_resp_err.Success |
 
 ---
 
@@ -420,7 +420,7 @@ The following additions are implied by the new test categories but are not yet i
 | 16.1 | Stress | stress_100_random_writes | Verify 100 randomized SDR writes complete without scoreboard errors [BUG-007 required] | Random dev_idx (0–3), random data_length (1–8), random data for 100 CMDs | All 100 RESPs Success; scoreboard fail_cnt=0; no bus lockup | High | flow_active.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write |
 | 16.2 | Stress | stress_100_random_reads | Verify 100 randomized SDR reads [BUG-007 required] | Random dev_idx, random data_length (1–8), device provides known data for 100 reads | All 100 RESPs Success; all RX data correct; scoreboard clean | High | flow_active.sv | cp_dir.Read |
 | 16.3 | Stress | stress_mixed_rw_500 | Mixed write/read sequence of 500 transactions [BUG-007 required] | Randomly interleave write and read CMDs; random dev_idx and lengths | No scoreboard mismatch; no deadlock; pass_cnt=500 | High | flow_active.sv | cp_dir.Write, cp_dir.Read, cp_cmd_attr×cp_dir |
-| 16.4 | Stress | stress_random_dat_entries | Random access to all 16 DAT entries | Configure DAT[0..15]; randomly issue CMDs with dev_idx 0..15 | Correct dynamic/static address used per dev_idx; no address collision | Medium | flow_active.sv, csr_register.sv | cp_dat_index.0, cp_dat_index.mid, cp_dat_index.15 |
+| 16.4 | Stress | stress_random_dat_entries | Random access to all 32 DAT entries | Configure DAT[0..31]; randomly issue CMDs with dev_idx 0..31 | Correct dynamic/static address used per dev_idx; no address collision | Medium | flow_active.sv, csr_register.sv | cp_dat_index.0, cp_dat_index.mid, cp_dat_index.31 |
 | 16.5 | Stress | stress_random_data_length | Randomize data_length from 1 to 64 for write/read [BUG-007 + BUG-003 required] | Issue CMDs with random data_length 1–64; mix aligned and non-aligned | All RESP Success; data_length in RESP matches commanded length; no data loss | High | flow_active.sv | cp_data_length.[1], cp_data_length.[2:4], cp_data_length.[5:16], cp_data_length.[17:64] |
 | 16.6 | Stress | stress_random_toc | Random toc=0 and toc=1 per transaction [BUG-007 required] | Alternate toc=0 (chain) and toc=1 (stop) across 50 CMDs | Chained frames generate no spurious STOP; independent frames generate STOP; no lockup | High | flow_active.sv, scl_generator.sv | cp_toc.STOP, cp_toc.no_STOP |
 | 16.7 | Stress | stress_sw_reset_injection | Periodic sw_reset between random transactions | Issue CMD; randomly inject sw_reset; issue next CMD | Post-reset CMDs complete normally; staging register cleared; no stale CMD | High | csr_register.sv, flow_active.sv | cp_reset_point.Idle, cp_reset_point.IssueCmd_data |
@@ -510,7 +510,7 @@ The following additions are implied by the new test categories but are not yet i
 | hc_enable / sw_reset | 1.1, 1.2, 1.13 | 10.8, 13.12, 13.13 | cp_reset_point.Idle |
 | HC_STATUS / QUEUE_STATUS | 1.3, 1.4, 1.5, 1.6 | 10.7 | cp_fifo_state.* |
 | Timing register programmability | 1.7, 1.8, 1.9, 12.1–12.10 | P1–P16 | cp_timing_reg.min, .typ, .max |
-| DAT (16 entries) | 1.10, 1.11, 1.12, 3.7 | 16.4, 15.2 | cp_dat_index.0, .15, .mid, .out_of_range |
+| DAT (32 entries) | 1.10, 1.11, 1.12, 3.7 | 16.4, 15.2 | cp_dat_index.0, .31, .mid, .out_of_range |
 | START / Sr / STOP condition | 2.1, 2.2, 2.3, 2.4 | 3.8, 3.9, 8.8 | cp_toc.STOP, cp_toc.no_STOP |
 | OD/PP switching (sel_od_pp) | 2.5 | 3.10, 4.8 | — |
 | SCL timing (t_LOW, t_HIGH) | 2.6, 2.7, 12.4, 12.5 | P1–P8 | cp_timing_reg.typ |

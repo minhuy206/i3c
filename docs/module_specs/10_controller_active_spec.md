@@ -40,7 +40,7 @@ The `controller_active` module is the structural wrapper that instantiates and i
 
 | Parameter  | Type | Default | Description     |
 | ---------- | ---- | ------- | --------------- |
-| `DatDepth` | int  | 16      | DAT table depth |
+| `DatDepth` | int  | 32      | DAT table depth |
 
 ## 4. Ports / Interfaces
 
@@ -59,6 +59,7 @@ The `controller_active` module is the structural wrapper that instantiates and i
 | `ctrl_sda_i`  | Input     | 1     | Synchronized SDA from PHY |
 | `ctrl_scl_o`  | Output    | 1     | SCL drive to PHY          |
 | `ctrl_sda_o`  | Output    | 1     | SDA drive to PHY          |
+| `ctrl_sda_oe_o` | Output | 1     | SDA output-enable to PHY  |
 | `sel_od_pp_o` | Output    | 1     | OD/PP mode select to PHY  |
 
 ### HCI Queue Interfaces
@@ -77,25 +78,41 @@ Passed through from `flow_active`: CMD read, TX read, RX write, RESP write — a
 
 ### Timing Configuration (from CSR)
 
-| Signal       | Direction | Width | Description      |
-| ------------ | --------- | ----- | ---------------- |
-| `t_r_i`      | Input     | 20    | Rise time        |
-| `t_f_i`      | Input     | 20    | Fall time        |
-| `t_low_i`    | Input     | 20    | SCL LOW period   |
-| `t_high_i`   | Input     | 20    | SCL HIGH period  |
-| `t_su_sta_i` | Input     | 20    | START setup time |
-| `t_hd_sta_i` | Input     | 20    | START hold time  |
-| `t_su_sto_i` | Input     | 20    | STOP setup time  |
-| `t_su_dat_i` | Input     | 20    | Data setup time  |
-| `t_hd_dat_i` | Input     | 20    | Data hold time   |
+| Signal           | Direction | Width | Description                            |
+| ---------------- | --------- | ----- | -------------------------------------- |
+| `t_r_i`          | Input     | 20    | I3C rise time                          |
+| `t_f_i`          | Input     | 20    | I3C fall time                          |
+| `t_low_i`        | Input     | 20    | I3C push-pull-capable SCL LOW period   |
+| `t_low_od_i`     | Input     | 20    | I3C open-drain SCL LOW period          |
+| `t_high_i`       | Input     | 20    | I3C SCL HIGH period                    |
+| `t_su_sta_i`     | Input     | 20    | I3C START setup time                   |
+| `t_hd_sta_i`     | Input     | 20    | I3C START hold time                    |
+| `t_su_sto_i`     | Input     | 20    | I3C STOP setup time                    |
+| `t_su_dat_i`     | Input     | 20    | I3C data setup time                    |
+| `t_hd_dat_i`     | Input     | 20    | I3C data hold time                     |
+| `t_bus_free_i`   | Input     | 20    | I3C bus-free time after STOP           |
+| `i2c_t_r_i`      | Input     | 20    | I2C rise time                          |
+| `i2c_t_f_i`      | Input     | 20    | I2C fall time                          |
+| `i2c_t_low_i`    | Input     | 20    | I2C SCL LOW period                     |
+| `i2c_t_high_i`   | Input     | 20    | I2C SCL HIGH period                    |
+| `i2c_t_su_sta_i` | Input     | 20    | I2C START setup time                   |
+| `i2c_t_hd_sta_i` | Input     | 20    | I2C START hold time                    |
+| `i2c_t_su_sto_i` | Input     | 20    | I2C STOP setup time                    |
+| `i2c_t_su_dat_i` | Input     | 20    | I2C data setup time                    |
+| `i2c_t_hd_dat_i` | Input     | 20    | I2C data hold time                     |
+| `i2c_t_buf_i`    | Input     | 20    | I2C bus-free time after STOP           |
 
 ### Control / Status
 
-| Signal           | Direction | Width | Description                                |
-| ---------------- | --------- | ----- | ------------------------------------------ |
-| `ctrl_enable_i`  | Input     | 1     | Controller enable (from CSR HC_CONTROL[0]) |
-| `i3c_fsm_en_i`   | Input     | 1     | FSM enable (from CSR)                      |
-| `i3c_fsm_idle_o` | Output    | 1     | FSM idle status                            |
+| Signal                             | Direction | Width | Description                                |
+| ---------------------------------- | --------- | ----- | ------------------------------------------ |
+| `ctrl_enable_i`                    | Input     | 1     | Controller enable (from CSR HC_CONTROL[0]) |
+| `broadcast_header_enable_i`        | Input     | 1     | Enable private-transfer broadcast header   |
+| `i3c_fsm_en_i`                     | Input     | 1     | FSM enable (from CSR)                      |
+| `abort_i`                          | Input     | 1     | Abort active transfer request              |
+| `hc_seq_cancel_event_o`            | Output    | 1     | Command sequence cancellation event        |
+| `hc_err_cmd_seq_timeout_event_o`   | Output    | 1     | Missing/invalid continuation event         |
+| `i3c_fsm_idle_o`                   | Output    | 1     | FSM idle status                            |
 
 ## 5. Functional Description
 
@@ -204,29 +221,42 @@ assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;
 
 When `scl_generator` controls SDA (START/STOP/Sr), the bus is always open-drain. Otherwise, `bus_tx_flow` determines the mode based on the transaction phase.
 
-### 5.7. Bus Monitor Connection
+### 5.7. Bus Monitor and TX Edge Connections
 
-`bus_monitor` receives only the timing inputs it uses (`t_r_i` and `t_f_i`); the remaining timing registers are not wired to it:
+`bus_monitor` receives the active rise/fall timing selected by `flow_active.use_i2c_timing_o`. It monitors the synchronized PHY readback and provides bus state, START, repeated START, and STOP detection:
 
 ```systemverilog
-bus_monitor #(.CounterWidth(20)) u_bus_mon (
+bus_monitor u_bus_mon (
   .clk_i, .rst_ni,
   .enable_i  (ctrl_enable_i),
   .scl_i     (ctrl_scl_i),
   .sda_i     (ctrl_sda_i),
-  .t_r_i     (t_r_i),
-  .t_f_i     (t_f_i),
+  .t_r_i     (active_t_r),
+  .t_f_i     (active_t_f),
   .state_o   (bus_state)
 );
 ```
 
-The `bus_state_t` struct is unpacked and distributed to sub-modules:
+For TX timing, the RTL intentionally uses a direct copy of `scl_generator.scl_o` rather than the delayed PHY/readback path. `controller_active` registers `scl_gen_scl` for one cycle and derives local TX edge/stable signals:
+
+```systemverilog
+always_ff @(posedge clk_i or negedge rst_ni) begin
+  if (!rst_ni) scl_gen_scl_q <= 1'b1;
+  else         scl_gen_scl_q <= scl_gen_scl;
+end
+
+assign scl_tx_negedge    =  scl_gen_scl_q & ~scl_gen_scl;
+assign scl_tx_posedge    = ~scl_gen_scl_q &  scl_gen_scl;
+assign scl_tx_stable_low = ~scl_gen_scl_q & ~scl_gen_scl;
+```
+
+These local TX timing signals are connected to `bus_tx_flow`. RX sampling and bus-condition detection continue to use `bus_monitor` readback:
 
 ```systemverilog
 // bus_tx_flow
-.scl_negedge_i    (bus_state.scl.neg_edge),
-.scl_posedge_i    (bus_state.scl.pos_edge),
-.scl_stable_low_i (bus_state.scl.stable_low),
+.scl_negedge_i    (scl_tx_negedge),
+.scl_posedge_i    (scl_tx_posedge),
+.scl_stable_low_i (scl_tx_stable_low),
 
 // bus_rx_flow
 .scl_posedge_i    (bus_state.scl.pos_edge),
@@ -253,7 +283,7 @@ The `bus_state_t` struct is unpacked and distributed to sub-modules:
 
 ## 6. Timing Requirements
 
-No additional timing constraints beyond those of sub-modules. All behavioral logic is single-cycle registered (the `daa_restart_pending_q` latch uses standard FF timing).
+No additional timing constraints beyond those of sub-modules. Behavioral sequential logic in this wrapper is limited to `daa_restart_pending_q` and the one-cycle `scl_gen_scl_q` register used to derive local TX edge/stable signals.
 
 ## 7. Changes from Reference Design
 
@@ -307,9 +337,17 @@ src/verification/uvm_i3c/
 
 ## 10. Implementation Notes
 
-- `controller_active` has **no FSM**. Its only sequential logic is `daa_restart_pending_q`. Everything else is combinational wiring or pass-through.
+- `controller_active` has **no FSM**. Its only sequential logic is `daa_restart_pending_q` and `scl_gen_scl_q`; everything else is combinational wiring or pass-through.
 - FIFO depth parameters (`CmdFifoDepth`, `TxFifoDepth`, `RxFifoDepth`, `RespFifoDepth`) do **not** appear in `controller_active` — they are parameters of `i3c_controller_top` and `hci_queues` only.
 - The `daa_active` signal is simply `flow_ccc_valid` — `flow_active` holds it high for the entire ENTDAA loop, which is sufficient to multiplex bus ownership to `entdaa_controller`.
-- `bus_monitor` is connected to only `t_r_i` and `t_f_i` from the timing bus. The other timing registers (`t_low_i`, `t_high_i`, `t_su_sta_i`, `t_hd_sta_i`, `t_su_sto_i`, `t_su_dat_i`, `t_hd_dat_i`) are routed to `scl_generator` and `flow_active` but not to `bus_monitor`.
+- `bus_monitor` is connected to active `t_r` and `t_f` only. The other active timing registers are routed to `scl_generator` and `bus_tx_flow`, not to `bus_monitor`.
+- `bus_tx_flow` uses local edge/stable signals derived from `scl_generator.scl_o`; `bus_rx_flow` still samples from `bus_monitor` readback.
 - The single hardware DAT read port design is safe because `flow_active` reads DAT in `FetchDAT` before enabling `entdaa_controller` (via `ccc_valid_o`), and during ENTDAA rounds `flow_active` blocks in a wait state until `ccc_done_i` is asserted.
 - There is no arbitration-lost detection. On the master side, the master is a passive observer during the PID transmission — it reads the bit-by-bit result of target arbitration without needing to compare drive vs readback.
+
+## 11. Deferred RTL/Spec Cleanup Notes
+
+The remaining known mismatches are intentionally deferred for a later cleanup pass:
+
+- `daa_restart_pending_q` is documented as an explicit `req_restart_i` / `req_restart_ack_o` handshake with `scl_generator`, but current RTL folds DAA restart into `gen_rstart_i` and clears the pending latch using `scl_gen_done || !daa_active`.
+- The ENTDAA TX/RX MUX examples show some DAA request signals forced in `controller_active`; current RTL passes the corresponding `entdaa_controller` signals through. Current behavior remains equivalent because `entdaa_fsm` ties the unused request paths low and keeps ENTDAA open-drain.

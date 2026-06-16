@@ -13,6 +13,10 @@ class i3c_write_tbit_parity_generation_vseq extends i3c_base_vseq;
     foreach (broadcast_modes[mode_idx]) begin
       run_tbit_case(broadcast_modes[mode_idx]);
     end
+
+    `uvm_info(`gfn,
+              "SDRW_004 conclusion: generated write T-bits match odd-parity expectations for every sampled data byte in both private-address modes",
+              UVM_LOW)
   endtask
 
   virtual task run_tbit_case(bit broadcast_header_enable);
@@ -64,7 +68,11 @@ class i3c_write_tbit_parity_generation_vseq extends i3c_base_vseq;
 
     check_all_queues_empty("after SDRW_004 tbit_parity");
 
-    `uvm_info(`gfn, "SDRW_004 I3C write T-bit parity generation checks passed", UVM_LOW)
+    `uvm_info(`gfn, $sformatf(
+                  "SDRW_004 result: mode=%s len=%0d sampled_bytes=%0d sampled_t_bits=%0d parity_checks=%0d",
+                  private_addr_mode_name(broadcast_header_enable), NUM_TEST_BYTES,
+                  dev_seq.sampled_data.size(), dev_seq.sampled_t_bit.size(), NUM_TEST_BYTES),
+              UVM_LOW)
   endtask
 
 endclass

@@ -109,7 +109,7 @@ module scl_generator #(
       end
 
       DriveHigh: begin
-        if (tcount_expired) begin
+        if (tcount_expired && (gen_stop_i || gen_clock_i)) begin
           load_tcount     = 1'b1;
           tcount_load_val = active_t_low + t_f_i;
         end
@@ -188,7 +188,13 @@ module scl_generator #(
 
         DriveHigh: begin
           if (tcount_expired) begin
-            state_d = DriveLow;
+            if (gen_rstart_i) begin
+              state_d = GenerateRstart;
+            end else if (gen_stop_i) begin
+              state_d = GenerateStop;
+            end else begin
+              state_d = gen_clock_i ? DriveLow : WaitCmd;
+            end
           end
         end
 
@@ -260,9 +266,9 @@ module scl_generator #(
     endcase
   end
 
-  assign done_o = ((state_d == DriveLow) && (state_q != DriveLow) &&
-                   (state_q != DriveHigh ||
-                    (gen_clock_i && !gen_stop_i && !gen_rstart_i))) ||
+  assign done_o = ((state_q == HoldStart) && (state_d == DriveLow)) ||
+                  ((state_q == DriveHigh) && (state_d == DriveLow) &&
+                   gen_clock_i && !gen_stop_i && !gen_rstart_i) ||
                   ((state_q == BusFree) && (state_d == Idle));
 
   assign busy_o = (state_q != Idle);

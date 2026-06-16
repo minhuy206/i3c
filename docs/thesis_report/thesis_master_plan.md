@@ -16,7 +16,7 @@ This document is the consolidated *master plan* for writing the LaTeX graduation
 - `src/verification/Makefile`, `filelist.f`, `xrun.args` — Xcelium build flow
 - `docs/Vo_Minh_Huy_Graduation_Thesis_Outline.pdf` — supervisor-approved outline
 
-The thesis demonstrates the complete frontend digital IC design pipeline (RTL → UVM → optional FPGA) by taking the ~25 K-line CHIPS Alliance `i3c-core` reference, simplifying it to ~2 K lines (~92% reduction), and completing the 8 of 13 `flow_active` FSM states the reference left as TODO. Today's status is *end of Phase 1*: smoke/write/read vseqs pass; ENTDAA/CCC/error-inject/coverage deferred to Phase 2; FPGA validation not yet started (outline §7 tags it optional, Phase 4: 08/06–28/06/2026).
+The thesis demonstrates the complete frontend digital IC design pipeline (RTL → UVM → optional FPGA) by taking the ~25 K-line CHIPS Alliance `i3c-core` reference, simplifying it to ~2 K lines (~92% reduction), and completing the 8 of 14 `flow_active` FSM states the reference left as TODO. Today's status is *end of Phase 1*: smoke/write/read vseqs pass; ENTDAA/CCC/error-inject/coverage deferred to Phase 2; FPGA validation not yet started (outline §7 tags it optional, Phase 4: 08/06–28/06/2026).
 
 ---
 
@@ -31,7 +31,7 @@ Sources: `docs/Vo_Minh_Huy_Graduation_Thesis_Outline.pdf` §3, `README.md`.
 
 | Feature | Evidence |
 |---|---|
-| SDR mode push-pull data, ≤12.5 MHz SCL | `scl_generator.sv` (13-state), `bus_tx.sv`, OD/PP mux in `controller_active.sv` |
+| SDR mode push-pull data, ≤12.5 MHz SCL | `scl_generator.sv` (14-state), `bus_tx.sv`, OD/PP mux in `controller_active.sv` |
 | I2C Fast Mode 400 kHz (legacy) | `flow_active.sv` `InitI2CWrite`/`InitI2CRead` paths; `dat_entry_t.device` flag |
 | START / Sr / STOP / Bus Idle | `bus_monitor.sv`, `scl_generator.sv` `GenerateStart`/`GenerateRstart`/`GenerateStop` |
 | Private I3C Write (0x7E+W → Sr → dyn-addr+W → N bytes + T-bit) | `flow_active.sv` `IssueCmd` Write path |
@@ -39,7 +39,7 @@ Sources: `docs/Vo_Minh_Huy_Graduation_Thesis_Outline.pdf` §3, `README.md`.
 | Immediate Data Transfer (≤4 inline bytes in CMD descriptor) | `flow_active.sv` `I3CWriteImmediate` / `I2CWriteImmediate` |
 | ENTDAA multi-device DAA loop | `entdaa_controller.sv` (7-state) + `entdaa_fsm.sv` (8-state) |
 | CCC: ENTDAA (0x07), ENEC/DISEC broadcast & direct (5 frame variants) | `flow_active.sv`, `i3c_pkg.sv` |
-| 16-entry DAT; 12-bit/32-bit reg bus; 4×64-deep FIFOs (CMD64, TX/RX/RESP 32) | `csr_register.sv`, `hci_queues.sv`, `sync_fifo.sv` |
+| 32-entry DAT; 12-bit/32-bit reg bus; 4×64-deep FIFOs (CMD64, TX/RX/RESP 32) | `csr_register.sv`, `hci_queues.sv`, `sync_fifo.sv` |
 | Single-clock domain, ≥333 MHz target (meets tSCO=12 ns) | `CLAUDE.md`, `i3c_phy.sv` 2-FF sync |
 
 ## 1.3 Out of scope (deliberately)
@@ -183,10 +183,10 @@ Chapter 5 — RTL Design and Implementation
         (bus_monitor + edge_detector + stable_high_detector)
   5.5  Bus serializers
         (bus_tx_flow 4-state + bus_tx 5-state + bus_rx_flow 4-state)
-  5.6  SCL generator (scl_generator — 13-state, single-counter strategy)
+  5.6  SCL generator (scl_generator — 14-state, single-counter strategy)
   5.7  ENTDAA subsystem
         (entdaa_controller 7-state + entdaa_fsm 8-state)
-  5.8  Main protocol FSM: flow_active (13-state — flagship RTL contribution)
+  5.8  Main protocol FSM: flow_active (14-state — flagship RTL contribution)
         5.8.1  State architecture and the five issue-phase counters
         5.8.2  Six branch decisions out of FetchDAT
         5.8.3  I3CWriteImmediate sub-cases A/B/C
@@ -352,8 +352,8 @@ Appendices
 | 5.9 controller_active | `src/rtl/ctrl/controller_active.sv` | `docs/module_specs/10_controller_active_spec.md` | 323 |
 
 **Figures** (critical — one FSM bubble chart per FSM):
-- `flow_active` 13-state — **flagship figure, span a full landscape page**
-- `scl_generator` 13-state
+- `flow_active` 14-state — **flagship figure, span a full landscape page**
+- `scl_generator` 14-state
 - `entdaa_controller` 7-state
 - `entdaa_fsm` 8-state
 - `bus_tx` 5-state
@@ -375,9 +375,9 @@ Appendices
 2. Wired-AND of `scl_gen_sda & tx_flow_sda` in `controller_active` for open-drain modelling.
 3. `bus_rx_flow` emitting 7 stored bits + live SDA on cycle 8 — aligned byte on `rx_done_o`.
 4. `entdaa_fsm` re-written from target-side (reference) to master perspective.
-5. 16-entry vs 128-entry DAT (scope reduction decision).
+5. 32-entry vs 128-entry DAT (scope reduction decision).
 6. Hand-written CSR (~300 LoC) vs PeakRDL auto-gen (~14 K LoC).
-7. All 13 `flow_active` states implemented — reference left 8 as TODO (**headline RTL contribution**).
+7. All 14 `flow_active` states implemented — reference left 8 as TODO (**headline RTL contribution**).
 
 ---
 
@@ -477,7 +477,7 @@ Appendices
 
 ## Chapter 10 — Conclusion and Future Work
 
-**Content**: contributions (all 13 `flow_active` states; clean simplified architecture; working dual-agent UVM; first ENTDAA-capable master in this lab); lessons learned (spec-vs-code drift, hand-written CSR educational value); future work prioritised — (1) fix 3 CRITICAL bugs, (2) ENTDAA/CCC/coverage Phase 2, (3) IBI/Hot-Join, (4) Target mode.
+**Content**: contributions (all 14 `flow_active` states; clean simplified architecture; working dual-agent UVM; first ENTDAA-capable master in this lab); lessons learned (spec-vs-code drift, hand-written CSR educational value); future work prioritised — (1) fix 3 CRITICAL bugs, (2) ENTDAA/CCC/coverage Phase 2, (3) IBI/Hot-Join, (4) Target mode.
 
 ---
 
@@ -496,7 +496,7 @@ i3c_controller_top
 │     ├── u_scl_gen  : scl_generator
 │     ├── u_tx_flow  : bus_tx_flow → bus_tx
 │     ├── u_rx_flow  : bus_rx_flow
-│     ├── u_flow_fsm : flow_active           [13-state command FSM]
+│     ├── u_flow_fsm : flow_active           [14-state command FSM]
 │     └── u_daa_ctrl : entdaa_controller → entdaa_fsm
 └── u_phy     : i3c_phy          (2-FF sync + output bypass)
 ```
@@ -505,8 +505,8 @@ i3c_controller_top
 
 | FSM | File | States | Role |
 |---|---|---:|---|
-| `flow_active.flow_fsm_state_e` | `flow_active.sv` | 13 | Command dispatch |
-| `scl_generator.state_e` | `scl_generator.sv` | 13 | Bus event sequencer |
+| `flow_active.flow_fsm_state_e` | `flow_active.sv` | 14 | Command dispatch |
+| `scl_generator.state_e` | `scl_generator.sv` | 14 | Bus event sequencer |
 | `entdaa_controller.state_e` | `entdaa_controller.sv` | 7 | DAA loop manager |
 | `entdaa_fsm.state_e` | `entdaa_fsm.sv` | 8 | Per-device DAA handshake |
 | `bus_tx_flow.tx_state_e` | `bus_tx_flow.sv` | 4 | Byte/bit serializer |
@@ -634,13 +634,13 @@ If neither real I3C target nor working host bridge is available by 28/06/2026, C
 | F10 | CSR command-staging diagram | TikZ |
 | F11 | sync_fifo pointer / full / empty | TikZ |
 | F12 | bus_monitor START/Sr/STOP logic | TikZ + waveform |
-| F13 | **scl_generator FSM (13 states)** | TikZ `automata` |
+| F13 | **scl_generator FSM (14 states)** | TikZ `automata` |
 | F14 | bus_tx_flow FSM (4 states) | TikZ |
 | F15 | bus_tx FSM (5 states) | TikZ |
 | F16 | bus_rx_flow FSM (4 states) | TikZ |
 | F17 | entdaa_controller FSM (7 states) | TikZ |
 | F18 | entdaa_fsm FSM (8 states) | TikZ |
-| F19 | **flow_active FSM (13 states) — flagship, landscape** | TikZ |
+| F19 | **flow_active FSM (14 states) — flagship, landscape** | TikZ |
 | F20 | flow_active issue-phase diagram (I3CWriteImmediate sub-case C) | TikZ |
 | F21 | OD↔PP boundary timing | Annotated SimVision capture |
 | F22 | controller_active arbitration wired-AND | TikZ |
@@ -767,7 +767,7 @@ Use `\documentclass[12pt,a4paper,oneside]{report}` (or HCMUS-mandated template).
 
 ## 12.2 FSM figures
 
-Use `tikz` `automata` library: nodes as `state, initial, accepting`; transitions via `edge`. The `flow_active` 13-state diagram should be a `\begin{figure}[!p]` full-page figure rotated with `pdflscape`. All other FSM diagrams fit `\begin{figure}[!htb]` at `width=0.95\textwidth`.
+Use `tikz` `automata` library: nodes as `state, initial, accepting`; transitions via `edge`. The `flow_active` 14-state diagram should be a `\begin{figure}[!p]` full-page figure rotated with `pdflscape`. All other FSM diagrams fit `\begin{figure}[!htb]` at `width=0.95\textwidth`.
 
 ## 12.3 Code formatting
 

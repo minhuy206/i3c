@@ -1,7 +1,7 @@
 SIMULATOR   ?= xrun
 UVM_HOME    ?= CDNS-1.2
 TEST        ?= i3c_base_test
-SEQ         ?= i3c_smoke_vseq
+SEQ         ?= i3c_imm_vseq
 VERBOSITY   ?= UVM_MEDIUM
 SEED        ?= random
 DUMP_WAVES  ?= 0
@@ -55,11 +55,11 @@ SDRW_REGRESSION_SEQS ?= \
 	i3c_write_len_sweep_vseq \
 	i3c_write_data_patterns_vseq \
 	i3c_write_tbit_parity_generation_vseq \
-	i3c_write_addr_nack_vseq \
-	i3c_write_tx_fifo_underflow_ovl_vseq \
+	i3c_write_tx_fifo_underflow_vseq \
 	i3c_write_toc_zero_vseq \
 	i3c_write_back_to_back_vseq \
-	i3c_write_multi_dat_idx_vseq
+	i3c_write_multi_dat_idx_vseq \
+	i3c_write_abort_vseq
 
 SDRR_REGRESSION_SEQS ?= \
 	i3c_read_vseq \
@@ -67,10 +67,16 @@ SDRR_REGRESSION_SEQS ?= \
 	i3c_read_short_target_end_vseq \
 	i3c_read_no_parity_error_on_end_tbit_vseq \
 	i3c_read_target_more_than_requested_vseq \
-	i3c_read_addr_nack_vseq \
 	i3c_read_rx_fifo_full_overflow_vseq \
 	i3c_read_data_patterns_vseq \
-	i3c_read_toc_zero_vseq
+	i3c_read_toc_zero_vseq \
+	i3c_read_abort_vseq
+
+ERR_REGRESSION_SEQS ?= \
+	i3c_addr_header_nack_resp_vseq \
+	i3c_read_tbit_no_parity_resp_vseq \
+	i3c_short_read_resp_vseq \
+	i3c_ovl_resp_vseq
 
 compile:
 	$(SIMULATOR) -compile -elaborate \
@@ -96,10 +102,10 @@ sim: compile
 	  2>&1 | tee sim.log
 
 smoke:
-	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_smoke_vseq
+	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_imm_vseq
 
 regression:
-	$(MAKE) sim SEQ=i3c_smoke_vseq
+	$(MAKE) sim SEQ=i3c_imm_vseq
 	$(MAKE) sim SEQ=i3c_write_vseq
 	$(MAKE) sim SEQ=i3c_read_vseq
 
@@ -131,6 +137,12 @@ sdrw_regression:
 sdrr_regression:
 	@set -e; \
 	for seq in $(SDRR_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+err_regression:
+	@set -e; \
+	for seq in $(ERR_REGRESSION_SEQS); do \
 	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
 	done
 
@@ -171,5 +183,5 @@ clean:
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
-        sdrw_regression sdrr_regression sdr_regression \
+        sdrw_regression sdrr_regression err_regression sdr_regression \
         fifo_non_power_of_two_elaboration waves coverage clean

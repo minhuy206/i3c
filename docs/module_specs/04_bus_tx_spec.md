@@ -125,11 +125,11 @@ Same as `bus_tx_flow` (passed through).
 ### 5.1. bus_tx_flow FSM (4 states)
 
 ```systemverilog
-typedef enum logic [1:0] {
-  Idle             = 2'd0,
-  DriveByte        = 2'd1,
-  DriveBit         = 2'd2,
-  NextTaskDecision = 2'd3
+typedef enum logic [2:0] {
+  Idle             = 3'd0,
+  DriveByte        = 3'd1,
+  DriveBit         = 3'd2,
+  NextTaskDecision = 3'd3
 } tx_flow_state_e;
 ```
 

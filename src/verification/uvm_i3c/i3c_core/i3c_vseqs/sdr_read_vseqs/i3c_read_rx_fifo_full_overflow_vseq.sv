@@ -5,6 +5,8 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
   localparam int unsigned OBSERVED_LENGTH = 4;
   localparam int unsigned RX_FIFO_DEPTH = 8;
   localparam int unsigned PREFILL_WORDS = RX_FIFO_DEPTH;
+  localparam int unsigned PARTIAL_PREFILL_WORDS = RX_FIFO_DEPTH - 1;
+  localparam logic [3:0]  RESP_OVL = 4'h6;
 
   function new(string name = "i3c_read_rx_fifo_full_overflow_vseq");
     super.new(name);
@@ -16,6 +18,11 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
     foreach (broadcast_modes[mode_idx]) begin
       run_rx_fifo_full_overflow_case(broadcast_modes[mode_idx]);
     end
+    run_rx_fifo_partial_overflow_case();
+
+    `uvm_info(`gfn,
+              "SDRR_006 conclusion: RX FIFO overflow preserves existing FIFO data, accepts only available space, and drains cleanly after recovery",
+              UVM_LOW)
   endtask
 
   virtual task run_rx_fifo_full_overflow_case(bit broadcast_header_enable);
@@ -50,25 +57,13 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b0);
+    rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
     start_device_response(cfg, 1'b1, read_data, dev_seq);
-    expect_scoreboard_read_data(cfg, read_data, OBSERVED_LENGTH, 1'b1, 1'b0);
-    expect_scoreboard_resp_error(4'h6, cfg.tid, 16'(OBSERVED_LENGTH), cfg.ctxt);
     write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
-
-    `DV_CHECK_EQ(dev_seq.done, 1'b1, "SDRR_006: device response did not finish")
-    `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08, "SDRR_006: target address mismatch")
-    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b1, "SDRR_006: transfer direction should be read")
-    `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b1,
-                 "SDRR_006: controller should take over read before forcing STOP")
-
-    `DV_CHECK_EQ(resp[31:28], 4'h6, "SDRR_006: expected Ovl response")
-    `DV_CHECK_EQ(resp[27:24], cfg.tid, "SDRR_006: response TID mismatch")
-    `DV_CHECK_EQ(resp[15:0], 16'(OBSERVED_LENGTH), "SDRR_006: response length mismatch")
 
     check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
                       "before SDRR_006 prefill drain");
@@ -80,7 +75,69 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
     check_all_queues_empty("after SDRR_006 rx_fifo_full_overflow");
 
-    `uvm_info(`gfn, "SDRR_006 I3C read RX FIFO full overflow checks passed", UVM_LOW)
+    `uvm_info(`gfn, $sformatf(
+                  "SDRR_006 result: mode=%s full_prefill_words=%0d read_len=%0d drained_prefill_words=%0d accepted_read_words=0",
+                  private_addr_mode_name(broadcast_header_enable), PREFILL_WORDS, DATA_LENGTH,
+                  PREFILL_WORDS), UVM_LOW)
+  endtask
+
+  virtual task run_rx_fifo_partial_overflow_case();
+    transfer_stimulus_cfg_t cfg;
+    regular_trans_desc_t    rd_cmd;
+    byte_queue_t            read_data;
+    bit [31:0]              rx_word;
+    bit [31:0]              resp;
+    i3c_device_response_seq dev_seq;
+
+    enable_dut(1'b0);
+    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+
+    build_read_payload(read_data);
+    prefill_rx_fifo_count(PARTIAL_PREFILL_WORDS, "after SDRR_006 partial RX prefill");
+
+    cfg = make_transfer_cfg(
+        .ctxt("SDRR_006 partial_rx_fifo_overflow"),
+        .seq_name("sdrr006_partial_overflow_dev_seq"),
+        .tid(4'd7),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(DATA_LENGTH),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
+
+    rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
+    start_device_response(cfg, 1'b1, read_data, dev_seq);
+    write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
+
+    poll_idle();
+    wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+    read_response(resp);
+    check_error_resp_fields(resp, RESP_OVL, cfg.tid, DATA_LENGTH, cfg.ctxt);
+
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
+                      "before SDRR_006 partial drain");
+    for (int unsigned i = 0; i < PARTIAL_PREFILL_WORDS; i++) begin
+      read_rx_data(rx_word);
+      `DV_CHECK_EQ(rx_word, make_prefill_word(i), $sformatf(
+                   "SDRR_006 partial: drained RX prefill word[%0d] mismatch", i))
+    end
+    read_rx_data(rx_word);
+    `DV_CHECK_EQ(rx_word, make_read_word(read_data, 0),
+                 "SDRR_006 partial: accepted read word mismatch")
+
+    check_all_queues_empty("after SDRR_006 partial_rx_fifo_overflow");
+
+    `uvm_info(`gfn, $sformatf(
+                  "SDRR_006 result: mode=%s partial_prefill_words=%0d read_len=%0d drained_prefill_words=%0d accepted_read_words=1",
+                  private_addr_mode_name(1'b0), PARTIAL_PREFILL_WORDS, DATA_LENGTH,
+                  PARTIAL_PREFILL_WORDS), UVM_LOW)
   endtask
 
   virtual function bit [31:0] make_prefill_word(int unsigned index);
@@ -88,13 +145,17 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
   endfunction
 
   virtual task prefill_rx_fifo();
+    prefill_rx_fifo_count(PREFILL_WORDS, "after SDRR_006 RX prefill");
+  endtask
+
+  virtual task prefill_rx_fifo_count(int unsigned count, string ctxt);
     for (int unsigned i = 0; i < PREFILL_WORDS; i++) begin
-      backdoor_write_fifo_entry(rx_paths, i, make_prefill_word(i));
+      if (i < count) backdoor_write_fifo_entry(rx_paths, i, make_prefill_word(i));
     end
-    backdoor_set_fifo_level(rx_paths, PREFILL_WORDS);
+    backdoor_set_fifo_level(rx_paths, count);
     settle_cycles();
-    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
-                      "after SDRR_006 RX prefill");
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, (count == RX_FIFO_DEPTH),
+                      (count == 0), ctxt);
   endtask
 
   virtual function void build_read_payload(ref byte_queue_t read_data);
@@ -103,6 +164,19 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
     for (int unsigned i = 0; i < DATA_LENGTH; i++) begin
       read_data.push_back(8'(8'h60 + i));
     end
+  endfunction
+
+  virtual function bit [31:0] make_read_word(byte_queue_t read_data, int unsigned word_idx);
+    bit [31:0] word;
+
+    word = '0;
+    for (int unsigned byte_idx = 0; byte_idx < 4; byte_idx++) begin
+      int unsigned data_idx;
+
+      data_idx = (word_idx * 4) + byte_idx;
+      if (data_idx < read_data.size()) word[(byte_idx*8)+:8] = read_data[data_idx];
+    end
+    return word;
   endfunction
 
 endclass

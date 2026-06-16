@@ -265,14 +265,6 @@ interface i3c_if (
     device_sda_o = 1'b1;
   endtask : device_i2c_send_bit
 
-  task automatic device_i2c_send_ack(input i2c_timing_t tc);
-    device_i2c_send_bit(tc, 1'b0);
-  endtask : device_i2c_send_ack
-
-  task automatic device_i2c_send_nack(input i2c_timing_t tc);
-    device_i2c_send_bit(tc, 1'b1);
-  endtask : device_i2c_send_nack
-
   task automatic wait_for_i3c_target_sda_handoff(input string phase, output bit ok);
     bit handoff_seen;
 
@@ -347,8 +339,10 @@ interface i3c_if (
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
     `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Value sampled", UVM_DEBUG)
     #(12 * 1ns);
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit", UVM_DEBUG)
     device_sda_pp_en = 0;
     time_check(tc.tClockPulse - 12, 1'b0, scl_i, "I3C device bit clock high pulse width");
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit", UVM_DEBUG)
     device_sda_o = 1;
   endtask : device_i3c_raw_pp_send_t_bit
 

@@ -47,7 +47,7 @@ No dependencies. Can be written and reviewed in one session.
 **Source:** `i3c-core/src/i3c_pkg.sv`
 
 - Remove `` `include `` directives — inline all needed constants
-- Replace `` `DAT_DEPTH `` / `` `DCT_DEPTH `` macros with `parameter int DatDepth = 16` and `localparam int DatAw = $clog2(DatDepth)`
+- Replace `` `DAT_DEPTH `` / `` `DCT_DEPTH `` macros with `parameter int DatDepth = 32` and `localparam int DatAw = $clog2(DatDepth)`
 - Remove: `dat_mem_sink_t`, `dat_mem_src_t`, `dct_mem_*` (auto-gen CSR ports), `i3c_tti_*` (target mode), `internal_control_desc_t`, `mipi_cmd_e`, `target_dev_*`
 - Keep: `signal_state_t`, `bus_state_t`, `i3c_resp_err_status_e`, `i3c_response_desc_t`, `i3c_cmd_attr_e`, all 4 command descriptor typedefs
 - Add: `localparam logic [6:0] I3C_RSVD_ADDR = 7'h7E`
@@ -169,7 +169,7 @@ Based on spec 07. Replaces the PeakRDL-generated CSR.
 | `0x108`     | RX_DATA_PORT   | RO     | Pop from RX FIFO                           |
 | `0x10C`     | RESP_PORT      | RO     | Pop from RESP FIFO                         |
 | `0x110`     | QUEUE_STATUS   | RO     | 8-bit FIFO flags                           |
-| `0x200-23C` | DAT[0..15]     | RW     | 32-bit device address table entries        |
+| `0x200-27C` | DAT[0..31]     | RW     | 32-bit device address table entries        |
 
 **Key implementation details:**
 

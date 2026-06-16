@@ -407,7 +407,9 @@ module csr_registers_sva
       wdata_i[1]
   )) && (hc_control_cfg_i.broadcast_header_enable == $past(
       wdata_i[2]
-  )) && (hc_control_i == {29'b0, $past(
+  )) && (hc_control_i == {28'b0, $past(
+      wdata_i[3]
+  ), $past(
       wdata_i[2]
   ), $past(
       wdata_i[1]

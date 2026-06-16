@@ -396,7 +396,7 @@ endpackage
 | 5 | Reset during transaction | Assert reset mid-write, verify agent recovers |
 | 6 | Passive mode | Instantiate agent passive, verify no driving |
 
-Agent-level tests are run as part of the environment smoke test (`i3c_smoke_vseq`), not as standalone agent unit tests in Phase 1.
+Agent-level tests are run as part of the environment smoke test (`i3c_imm_vseq`), not as standalone agent unit tests in Phase 1.
 
 ## 12. Implementation Notes
 

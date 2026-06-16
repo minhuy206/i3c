@@ -28,7 +28,7 @@ Makefile, filelist, and Xcelium arguments for compiling and running UVM simulati
 | `SIMULATOR` | `xrun` | Simulator command |
 | `UVM_HOME` | `CDNS-1.2` | UVM library identifier |
 | `TEST` | `i3c_base_test` | UVM test name |
-| `SEQ` | `i3c_smoke_vseq` | Virtual sequence name |
+| `SEQ` | `i3c_imm_vseq` | Virtual sequence name |
 | `VERBOSITY` | `UVM_MEDIUM` | UVM verbosity level |
 | `SEED` | `random` | Simulation seed |
 | `DUMP_WAVES` | `0` | 1 = dump waveforms |
@@ -65,14 +65,14 @@ sim: compile
 Quick smoke test:
 ```makefile
 smoke:
-	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_smoke_vseq
+	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_imm_vseq
 ```
 
 #### `regression`
 Run all Phase 1 tests:
 ```makefile
 regression:
-	$(MAKE) sim SEQ=i3c_smoke_vseq
+	$(MAKE) sim SEQ=i3c_imm_vseq
 	$(MAKE) sim SEQ=i3c_write_vseq
 	$(MAKE) sim SEQ=i3c_read_vseq
 ```

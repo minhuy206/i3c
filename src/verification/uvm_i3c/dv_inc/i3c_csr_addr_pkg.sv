@@ -56,6 +56,7 @@ package i3c_csr_addr_pkg;
   localparam int HC_CTRL_ENABLE_BIT = 0;
   localparam int HC_CTRL_SW_RESET_BIT = 1;
   localparam int HC_CTRL_BROADCAST_HEADER_ENABLE_BIT = 2;
+  localparam int HC_CTRL_HC_ABORT_BIT = 3;  // SW rw level bit; cleared by SW writing 0 or async reset
 
   // HC_STATUS
   localparam int HC_STS_FSM_IDLE_BIT = 0;
