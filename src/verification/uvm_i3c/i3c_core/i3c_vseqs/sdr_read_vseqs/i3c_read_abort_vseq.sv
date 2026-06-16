@@ -84,7 +84,8 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t        cfg;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
-    uvm_hdl_data_t                 rx_depth;
+    uvm_hdl_data_t                 rx_depth_raw;
+    int unsigned                   rx_depth;
 
     byte_queue_t                   read_data;
     for (int i = 0; i < DATA_LENGTH_DEEP; i++) read_data.push_back(8'hB0 + 8'(i));
@@ -122,8 +123,9 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
       int timeout = device_done_timeout_cycles(cfg);
       for (int i = 0; i < timeout; i++) begin
         @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-        if (!uvm_hdl_read(rx_paths.depth_path, rx_depth))
+        if (!uvm_hdl_read(rx_paths.depth_path, rx_depth_raw))
           `uvm_fatal(`gfn, "SDRR_009 deep: uvm_hdl_read failed for rx_paths.depth_path")
+        rx_depth = int'(rx_depth_raw[3:0]);
         if (rx_depth >= 1) break;
       end
       if (rx_depth < 1)

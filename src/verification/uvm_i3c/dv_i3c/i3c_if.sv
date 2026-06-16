@@ -95,7 +95,7 @@ interface i3c_if (
   task automatic get_bit_data(input string src = "host", output bit bit_o);
     @(posedge scl_i);
     bit_o = sda_i;
-    `uvm_info(msg_id, $sformatf("get bit data %d from %s", bit_o, src), UVM_DEBUG)
+    `uvm_info(msg_id, $sformatf("get bit data %d from %s", bit_o, src), UVM_HIGH)
     @(negedge scl_i);
   endtask : get_bit_data
 
@@ -149,26 +149,45 @@ interface i3c_if (
     join
   endtask : wait_for_i3c_host_stop_or_rstart
 
+  task automatic wait_for_i3c_host_stop_or_rstart_after_ack(input i3c_timing_t tc,
+                                                            output bit rstart, output bit stop);
+    int delay = tc.tHoldStop;
+    rstart = 1'b0;
+    stop   = 1'b0;
+    fork
+      begin : iso_fork
+        fork
+          wait_for_host_rstart(.rstart(rstart));
+          begin
+            if (scl_i === 1'b1) @(negedge scl_i);
+            wait_for_host_stop(.wait_delay(delay), .stop(stop));
+          end
+        join_any
+        disable fork;
+      end : iso_fork
+    join
+  endtask : wait_for_i3c_host_stop_or_rstart_after_ack
+
   task automatic wait_for_host_ack();
-    `uvm_info(msg_id, "Wait for host ack::Begin", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host ack::Begin", UVM_HIGH)
     forever begin
       @(posedge scl_i);
       if (!sda_i) begin
         break;
       end
     end
-    `uvm_info(msg_id, "Wait for host ack::Ack received", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host ack::Ack received", UVM_HIGH)
   endtask : wait_for_host_ack
 
   task automatic wait_for_host_nack();
-    `uvm_info(msg_id, "Wait for host nack::Begin", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host nack::Begin", UVM_HIGH)
     forever begin
       @(posedge scl_i);
       if (sda_i) begin
         break;
       end
     end
-    `uvm_info(msg_id, "Wait for host nack::Nack received", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host nack::Nack received", UVM_HIGH)
   endtask : wait_for_host_nack
 
   task automatic wait_for_host_ack_or_nack(output bit ack_r);
@@ -229,10 +248,10 @@ interface i3c_if (
     device_sda_pp_en = 0;
     device_sda_o = 1'b1;
     wait (!scl_i);
-    `uvm_info(msg_id, "device_i2c_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i2c_send_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I2C device bit setup");
-    `uvm_info(msg_id, "device_i2c_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i2c_send_bit::Value sampled", UVM_HIGH)
 
     min_high_done  = 1'b0;
     scl_fell_early = 1'b0;
@@ -298,33 +317,46 @@ interface i3c_if (
   task automatic device_i3c_raw_od_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 0;
-    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Value sampled", UVM_HIGH)
     time_check(tc.tClockPulse, 1'b0, scl_i, "I3C device bit clock high pulse width");
     #(tc.tHoldBit * 1ns);
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Released SDA", UVM_HIGH)
     device_sda_o = 1;
   endtask : device_i3c_raw_od_send_bit
 
-  task automatic device_i3c_send_addr_ack(input i3c_timing_t tc, input bit ack);
+  task automatic device_i3c_send_addr_ack(input i3c_timing_t tc, input bit ack,
+                                          input bit wait_low_after_handoff);
     bit handoff_ok;
 
     wait_for_i3c_target_sda_handoff("I3C address ACK/NACK slot", handoff_ok);
     if (!handoff_ok) return;
 
     `uvm_info(msg_id, $sformatf("device_i3c_send_addr_ack::Drive %s", ack ? "ACK" : "NACK"),
-              UVM_DEBUG)
-    device_i3c_raw_od_send_bit(tc, ack ? 1'b0 : 1'b1);
+              UVM_HIGH)
+
+    wait (!scl_i);
+    device_sda_pp_en = 0;
+    device_sda_o = ack ? 1'b0 : 1'b1;
+    time_check(tc.tSetupBit, 1'b1, scl_i, "I3C address ACK setup");
+    `uvm_info(msg_id, "device_i3c_send_addr_ack::ACK sampled", UVM_HIGH)
+
+    #(tc.tSCO * 1ns);
+    device_sda_o = 1'b1;
+    `uvm_info(msg_id, "device_i3c_send_addr_ack::Released SDA after ACK handoff", UVM_HIGH)
+
+    if (wait_low_after_handoff) wait (!scl_i);
   endtask : device_i3c_send_addr_ack
 
   task automatic device_i3c_raw_pp_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Value sampled", UVM_HIGH)
     time_check(tc.tClockPulse, 1'b0, scl_i, "I3C device bit clock high pulse width");
     #(tc.tHoldBit * 1ns);
     device_sda_pp_en = 0;
@@ -334,34 +366,69 @@ interface i3c_if (
   task automatic device_i3c_raw_pp_send_t_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Value sampled", UVM_HIGH)
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Value sampled", UVM_DEBUG)
-    #(12 * 1ns);
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit", UVM_DEBUG)
+    #(tc.tSCO * 1ns);
     device_sda_pp_en = 0;
-    time_check(tc.tClockPulse - 12, 1'b0, scl_i, "I3C device bit clock high pulse width");
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit", UVM_DEBUG)
+    time_check(tc.tClockPulse - tc.tSCO, 1'b0, scl_i, "I3C device bit clock high pulse width");
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit", UVM_HIGH)
     device_sda_o = 1;
   endtask : device_i3c_raw_pp_send_t_bit
 
-  task automatic device_i3c_send_bit(input i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_send_bit(input i3c_timing_t tc, input bit bit_i,
+                                     output bit sent);
     bit handoff_ok;
+    bit rstart;
+    bit stop;
 
+    sent = 1'b0;
     wait_for_i3c_target_sda_handoff("I3C read data bit", handoff_ok);
     if (!handoff_ok) return;
 
-    device_i3c_raw_pp_send_bit(tc, bit_i);
+    fork
+      begin
+        device_i3c_raw_pp_send_bit(tc, bit_i);
+        sent = 1'b1;
+      end
+      begin
+        wait_for_i3c_host_stop_or_rstart(tc, rstart, stop);
+      end
+    join_any
+    disable fork;
+
+    if (!sent) begin
+      device_sda_pp_en = 1'b0;
+      device_sda_o = 1'b1;
+    end
   endtask : device_i3c_send_bit
 
-  task automatic device_i3c_send_t_bit(input i3c_timing_t tc, input bit bit_i);
+  task automatic device_i3c_send_t_bit(input i3c_timing_t tc, input bit bit_i,
+                                       output bit sent);
     bit handoff_ok;
+    bit rstart;
+    bit stop;
 
+    sent = 1'b0;
     wait_for_i3c_target_sda_handoff("I3C read T-bit", handoff_ok);
     if (!handoff_ok) return;
 
-    device_i3c_raw_pp_send_t_bit(tc, bit_i);
+    fork
+      begin
+        device_i3c_raw_pp_send_t_bit(tc, bit_i);
+        sent = 1'b1;
+      end
+      begin
+        wait_for_i3c_host_stop_or_rstart(tc, rstart, stop);
+      end
+    join_any
+    disable fork;
+
+    if (!sent) begin
+      device_sda_pp_en = 1'b0;
+      device_sda_o = 1'b1;
+    end
   endtask : device_i3c_send_t_bit
 
   task automatic device_i3c_send_daa_bit(input i3c_timing_t tc, input bit bit_i);

@@ -32,6 +32,7 @@ package i3c_timing_pkg;
     int tClockLowOD = 200;
     int tClockLowPP = 48;
     int tSetupStop  = 20;
+    int tSCO        = 12;
   } i3c_timing_t;
 
   parameter i3c_timing_t I3C_SDR = '{
@@ -44,7 +45,8 @@ package i3c_timing_pkg;
       tClockPulse : 32,
       tClockLowOD : 200,
       tClockLowPP : 48,
-      tSetupStop  : 20
+      tSetupStop  : 20,
+      tSCO        : 12
   };
 
   typedef struct {

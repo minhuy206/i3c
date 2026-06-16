@@ -191,6 +191,7 @@ class i3c_monitor extends uvm_monitor;
   virtual protected task address_thread(input i3c_item transaction,
                                         output i3c_item updated_transaction);
     bit rw_req = 1'b0;
+    bit addr_phase_done = 1'b0;
     fork
       begin : iso_fork
         fork
@@ -207,22 +208,27 @@ class i3c_monitor extends uvm_monitor;
             transaction.bus_op = (rw_req) ? BusOpRead : BusOpWrite;
             transaction.i3c = is_i3c_target_addr(transaction.addr) ||
                 is_i3c_broadcast(transaction.addr);
-            cfg.vif.wait_for_device_ack_or_nack(transaction.addr_ack);
-            `uvm_info(`gfn, $sformatf("monitor, address: %s", transaction.addr_ack ? "ACK" : "NACK"
-                      ), UVM_DEBUG)
-            `uvm_info(`gfn, "monitor, address, detect TARGET ACK", UVM_HIGH)
+            addr_phase_done = 1'b1;
             transaction.aborted = 1'b0;
           end
           begin
             cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, transaction.rstart,
                                                      transaction.stop);
-            transaction.aborted = 1'b1;
-            `uvm_info(`gfn, "monitor, address, Aborted address phase", UVM_HIGH)
+            if (!addr_phase_done) begin
+              transaction.aborted = 1'b1;
+              `uvm_info(`gfn, "monitor, address, Aborted address phase", UVM_HIGH)
+            end
           end
         join_any
         disable fork;
       end
     join
+    if (!transaction.aborted) begin
+      cfg.vif.wait_for_device_ack_or_nack(transaction.addr_ack);
+      `uvm_info(`gfn, $sformatf("monitor, address: %s", transaction.addr_ack ? "ACK" : "NACK"
+                ), UVM_DEBUG)
+      `uvm_info(`gfn, "monitor, address, detect TARGET ACK", UVM_HIGH)
+    end
     updated_transaction = transaction;
   endtask : address_thread
 

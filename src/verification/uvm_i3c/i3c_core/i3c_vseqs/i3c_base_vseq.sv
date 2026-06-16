@@ -309,8 +309,6 @@ class i3c_base_vseq extends uvm_sequence;
     `uvm_error(`gfn, $sformatf("%s: device response request was not issued", ctxt))
   endtask
 
-  // Poll FLOW_FSM_STATE_PATH until it equals target_state.  Used to inject stimuli at an
-  // exact FSM state (e.g. IssueCmd = 4'd12 to guarantee the data phase is active).
   virtual task wait_for_flow_fsm_state(bit [3:0] target_state, string ctxt,
                                        int unsigned timeout_cycles = 500);
     uvm_hdl_data_t state_val;
@@ -320,8 +318,8 @@ class i3c_base_vseq extends uvm_sequence;
         `uvm_fatal(`gfn, $sformatf("%s: uvm_hdl_read failed for %s", ctxt, FLOW_FSM_STATE_PATH))
       if (state_val[3:0] == target_state) return;
     end
-    `uvm_error(`gfn, $sformatf("%s: FSM did not reach state 4'd%0d within %0d cycles",
-                               ctxt, target_state, timeout_cycles))
+    `uvm_error(`gfn, $sformatf("%s: FSM did not reach state 4'd%0d within %0d cycles", ctxt,
+                               target_state, timeout_cycles))
   endtask
 
   virtual task start_device_response(transfer_stimulus_cfg_t cfg, bit dir, byte_queue_t read_data,
@@ -483,6 +481,35 @@ class i3c_base_vseq extends uvm_sequence;
     wait_for_device_done(dev_seq1, cfg1.ctxt, device_done_timeout_cycles(cfg1));
     rstart_count = int'(dev_seq0.observed_rstart) + int'(dev_seq1.observed_rstart);
 
+    read_response(resp0);
+    read_response(resp1);
+  endtask
+
+  virtual task run_toc_zero_read_stimulus(
+      transfer_stimulus_cfg_t cfg0, transfer_stimulus_cfg_t cfg1, byte_queue_t read_data0,
+      byte_queue_t read_data1, output word_queue_t rx_words0, output word_queue_t rx_words1,
+      output bit [31:0] resp0, output bit [31:0] resp1, output int rstart_count,
+      output i3c_device_response_seq dev_seq0, output i3c_device_response_seq dev_seq1);
+    regular_trans_desc_t rd_cmd0;
+    regular_trans_desc_t rd_cmd1;
+
+    rd_cmd0 = build_regular_transfer_cmd(cfg0, 1'b1, 1'b0);
+    rd_cmd1 = build_regular_transfer_cmd(cfg1, 1'b1, 1'b1);
+
+    start_ordered_device_responses(cfg0, 1'b1, read_data0, dev_seq0, cfg1, 1'b1, read_data1,
+                                   dev_seq1);
+    if (cfg0.settle_before_cmd != 0) settle_cycles(cfg0.settle_before_cmd);
+
+    write_cmd(rd_cmd0[31:0], rd_cmd0[63:32]);
+    write_cmd(rd_cmd1[31:0], rd_cmd1[63:32]);
+
+    poll_idle();
+    wait_for_device_done(dev_seq0, cfg0.ctxt, device_done_timeout_cycles(cfg0));
+    wait_for_device_done(dev_seq1, cfg1.ctxt, device_done_timeout_cycles(cfg1));
+    rstart_count = int'(dev_seq0.observed_rstart) + int'(dev_seq1.observed_rstart);
+
+    read_rx_words(cfg0.data_length, rx_words0);
+    read_rx_words(cfg1.data_length, rx_words1);
     read_response(resp0);
     read_response(resp1);
   endtask

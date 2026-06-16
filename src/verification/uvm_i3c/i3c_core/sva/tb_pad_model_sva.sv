@@ -11,6 +11,7 @@ module tb_pad_model_sva (
     input logic if_dut_sel_od_pp_i,
     input logic device_sda_o_i,
     input logic device_sda_pp_en_i,
+    input logic hc_abort_i,
 
     input wire sda_bus_i
 );
@@ -22,7 +23,10 @@ module tb_pad_model_sva (
   wire device_released = !device_sda_pp_en_i && device_sda_o_i;
   wire safe_od_low_overlap = dut_drives && !dut_sda_o_i && !dut_sel_od_pp_i &&
       !device_sda_pp_en_i && !device_sda_o_i;
-  wire unsafe_contention = dut_drives && device_drives && !safe_od_low_overlap;
+  wire hc_abort_read_contention = hc_abort_i && dut_drives && !dut_sda_o_i &&
+      device_drives_high;
+  wire unsafe_contention = dut_drives && device_drives && !safe_od_low_overlap &&
+      !hc_abort_read_contention;
 
   ap_pad_model_signals_known:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -35,8 +39,8 @@ module tb_pad_model_sva (
                        if_dut_sel_od_pp_i,
                        device_sda_o_i,
                        device_sda_pp_en_i,
-                       sda_bus_i
-                   }))
+                       hc_abort_i
+                   }) && (!$isunknown(sda_bus_i) || hc_abort_read_contention))
   else $error("tb_pad_model_sva: pad-model signals must not be X/Z");
 
   cp_pad_model_signals_known:
@@ -50,15 +54,17 @@ module tb_pad_model_sva (
                       if_dut_sel_od_pp_i,
                       device_sda_o_i,
                       device_sda_pp_en_i,
-                      sda_bus_i
-                  }));
+                      hc_abort_i
+                  }) && (!$isunknown(sda_bus_i) || hc_abort_read_contention));
 
   ap_sda_bus_known:
-  assert property (@(posedge clk_i) disable iff (!rst_ni) !$isunknown(sda_bus_i))
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   !$isunknown(sda_bus_i) || hc_abort_read_contention)
   else $error("tb_pad_model_sva: SDA bus must not resolve to X/Z");
 
   cp_sda_bus_known:
-  cover property (@(posedge clk_i) disable iff (!rst_ni) !$isunknown(sda_bus_i));
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  !$isunknown(sda_bus_i) || hc_abort_read_contention);
 
   ap_if_dut_sda_oe_mirror:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -89,12 +95,14 @@ module tb_pad_model_sva (
 
   ap_dut_sda_low_drive_bus_low:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   dut_sda_oe_i && !dut_sda_o_i |-> sda_bus_i === 1'b0)
+                   dut_sda_oe_i && !dut_sda_o_i && !hc_abort_read_contention
+                   |-> sda_bus_i === 1'b0)
   else $error("tb_pad_model_sva: DUT SDA low drive must pull bus low");
 
   cp_dut_sda_low_drive_bus_low:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  dut_sda_oe_i && !dut_sda_o_i && (sda_bus_i === 1'b0));
+                  dut_sda_oe_i && !dut_sda_o_i && !hc_abort_read_contention &&
+                  (sda_bus_i === 1'b0));
 
   ap_dut_sda_high_drive_bus_high:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -152,5 +160,9 @@ module tb_pad_model_sva (
   cp_safe_od_low_overlap:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   safe_od_low_overlap && (sda_bus_i === 1'b0));
+
+  cp_hc_abort_read_contention:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  hc_abort_read_contention);
 
 endmodule

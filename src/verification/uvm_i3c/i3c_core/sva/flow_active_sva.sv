@@ -1051,7 +1051,8 @@ module flow_active_sva
                                             sdr_regular_i3c_read() &&
                                             !addr_nack_q &&
                                             !short_read_q &&
-                                            !rx_overflow_q
+                                            !rx_overflow_q &&
+                                            !hc_aborted_q
                                             |->
                                             success_resp_matches_current_len())
   else $error("flow_active_sva: SDR read success response length mismatch in %m");
@@ -1063,6 +1064,7 @@ module flow_active_sva
                                             !addr_nack_q &&
                                             !short_read_q &&
                                             !rx_overflow_q &&
+                                            !hc_aborted_q &&
                                             success_resp_matches_current_len());
 
   ap_sdr_read_short_resp_len :

@@ -70,6 +70,7 @@ SDRR_REGRESSION_SEQS ?= \
 	i3c_read_rx_fifo_full_overflow_vseq \
 	i3c_read_data_patterns_vseq \
 	i3c_read_toc_zero_vseq \
+	i3c_read_multi_dat_idx_vseq \
 	i3c_read_abort_vseq
 
 ERR_REGRESSION_SEQS ?= \

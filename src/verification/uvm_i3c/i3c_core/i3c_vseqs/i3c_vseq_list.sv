@@ -57,6 +57,7 @@
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_rx_fifo_full_overflow_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_data_patterns_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_toc_zero_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_multi_dat_idx_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_abort_vseq.sv"
 
 // 4.10 Error Response Encoding
