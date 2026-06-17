@@ -1,0 +1,112 @@
+% =====================================================================
+%  Graduation Thesis — "Design of an I3C Communication Controller"
+%  Author : Vo Minh Huy (22207042)   Supervisor: ThS. Nguyen Duy Manh Thi
+%  HCMUS  · 10 credits
+%
+%  DRAFT SKELETON. Each chapter holds a section-level BRIEF plus framed
+%  figure/table PLACEHOLDERS (\figph / \tabph). No figures are drawn yet.
+%  Ch.8 (FPGA) omitted; Appendix F dropped. See ../draft/ for the source briefs.
+% =====================================================================
+\documentclass[12pt,a4paper,oneside]{report}
+
+% ---- encoding / language -------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage[strings]{underscore} % allow _ in identifiers/filenames in text
+
+% ---- layout --------------------------------------------------------
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% ---- graphics / tables ---------------------------------------------
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+
+% ---- references ----------------------------------------------------
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\usepackage{cleveref}
+
+% ---- diagrams (FSMs to be drawn later) -----------------------------
+\usepackage{tikz}
+\usetikzlibrary{automata,arrows.meta,positioning,shapes,chains}
+\usepackage{pdflscape} % for the flagship flow_active landscape figure
+
+% ---- code listings -------------------------------------------------
+\usepackage{listings}
+\lstdefinestyle{sv}{language={[2017]Verilog},basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\bfseries,numbers=left,numberstyle=\tiny,frame=single,
+  breaklines=true,tabsize=2,
+  morekeywords={logic,always_ff,always_comb,typedef,struct,packed,enum,
+                interface,module,endmodule,package,endpackage,import}}
+\lstset{style=sv}
+
+% ---- units ---------------------------------------------------------
+\usepackage{siunitx}
+
+% ---- handy macros --------------------------------------------------
+\newcommand{\iic}{I\textsuperscript{2}C}
+
+% Figure placeholder: #1=caption  #2=shows  #3=source  #4=render tool
+\newcommand{\figph}[4]{%
+  \begin{figure}[!htb]\centering
+    \setlength{\fboxsep}{10pt}%
+    \fbox{\begin{minipage}{0.86\textwidth}\centering
+        \textbf{[FIGURE --- NOT YET DRAWN]}\\[4pt]
+        \footnotesize\itshape Shows: #2\\[2pt] Source: #3\\[2pt] Render: #4
+    \end{minipage}}%
+    \caption{#1}
+  \end{figure}}
+
+% Table placeholder: #1=caption  #2=source
+\newcommand{\tabph}[2]{%
+  \begin{table}[!htb]\centering
+    \setlength{\fboxsep}{10pt}%
+    \fbox{\begin{minipage}{0.72\textwidth}\centering
+        \textbf{[TABLE --- NOT YET FILLED]}\\[4pt]
+        \footnotesize\itshape Source: #2
+    \end{minipage}}%
+    \caption{#1}
+  \end{table}}
+
+% Brief banner shown at the top of each (sub)section while drafting
+\newcommand{\brief}[1]{\par\noindent\textit{\small\textcolor{gray}{Brief: #1}}\par\medskip}
+
+% =====================================================================
+\title{Design of an I3C Communication Controller}
+\author{Vo Minh Huy (22207042)}
+\date{HCMUS --- 2026}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\include{chapters/01_introduction}
+\include{chapters/02_background}
+\include{chapters/03_requirements}
+\include{chapters/04_architecture}
+\include{chapters/05_rtl_design}
+\include{chapters/06_verification_methodology}
+\include{chapters/07_uvm_environment}
+% Chapter 8 (FPGA) intentionally OMITTED.
+\include{chapters/09_results}
+\include{chapters/10_conclusion}
+
+\appendix
+\include{appendices/appendices}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
