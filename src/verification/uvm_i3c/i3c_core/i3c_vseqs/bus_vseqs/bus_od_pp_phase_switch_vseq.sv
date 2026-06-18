@@ -25,8 +25,6 @@ class bus_od_pp_phase_switch_vseq extends bus_base_vseq;
     run_i2c_write_stimulus();
     run_i2c_read_stimulus();
 
-    `uvm_info(`gfn, "BUS_010 OD/PP phase switch stimuli completed; SVA checks phase behavior",
-              UVM_LOW)
   endtask
 
   virtual task run_i3c_write_stimulus();

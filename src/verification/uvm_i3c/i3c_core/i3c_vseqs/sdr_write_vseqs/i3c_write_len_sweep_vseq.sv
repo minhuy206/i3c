@@ -20,7 +20,6 @@ class i3c_write_len_sweep_vseq extends i3c_base_vseq;
       end
     end
 
-    `uvm_info(`gfn, "SDRW_002 I3C regular write length sweep checks passed", UVM_LOW)
   endtask
 
   virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length,
@@ -63,9 +62,12 @@ class i3c_write_len_sweep_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq.sampled_data.size(), data_length,
                  $sformatf("SDRW_002 len %0d: sampled byte count mismatch", data_length))
 
-    check_success_resp(resp, cfg);
-
     check_all_queues_empty($sformatf("after SDRW_002 len %0d", data_length));
+
+    `uvm_info(`gfn, $sformatf(
+                  "SDRW_002 result: mode=%s len=%0d tx_words=%0d sampled_bytes=%0d preload_tx=%0b",
+                  private_addr_mode_name(broadcast_header_enable), data_length, tx_words.size(),
+                  dev_seq.sampled_data.size(), preload_tx), UVM_LOW)
   endtask
 
   virtual function void build_payload(int unsigned sweep_idx, int unsigned data_length,

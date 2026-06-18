@@ -11,7 +11,6 @@ class fifo_full_empty_boundaries_vseq extends fifo_base_vseq;
     exercise_rx_boundaries();
     exercise_resp_boundaries();
 
-    `uvm_info(`gfn, "FIFO full/empty boundary checks passed", UVM_LOW)
   endtask
 
   task exercise_cmd_boundaries();

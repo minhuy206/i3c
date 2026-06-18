@@ -19,7 +19,7 @@ For Phase 1, only one sequence is needed: `i3c_device_response_seq` — a generi
 
 ### Used By
 
-- Virtual sequences (`i3c_smoke_vseq`, `i3c_write_vseq`, `i3c_read_vseq`) start this on the I3C sequencer
+- Virtual sequences (`i3c_imm_vseq`, `i3c_write_vseq`, `i3c_read_vseq`) start this on the I3C sequencer
 - Runs concurrently with the DUT's bus activity initiated by register agent sequences
 
 ---

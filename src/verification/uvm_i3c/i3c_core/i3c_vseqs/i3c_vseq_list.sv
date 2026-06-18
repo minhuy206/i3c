@@ -42,11 +42,11 @@
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_len_sweep_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_data_patterns_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_tbit_parity_generation_vseq.sv"
-`include "i3c_vseqs/sdr_write_vseqs/i3c_write_addr_nack_vseq.sv"
-`include "i3c_vseqs/sdr_write_vseqs/i3c_write_tx_fifo_underflow_ovl_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_tx_fifo_underflow_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_toc_zero_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_back_to_back_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_multi_dat_idx_vseq.sv"
+`include "i3c_vseqs/sdr_write_vseqs/i3c_write_abort_vseq.sv"
 
 // 4.5 I3C SDR Private Read
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"
@@ -54,13 +54,32 @@
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_short_target_end_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_no_parity_error_on_end_tbit_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_target_more_than_requested_vseq.sv"
-`include "i3c_vseqs/sdr_read_vseqs/i3c_read_addr_nack_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_rx_fifo_full_overflow_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_data_patterns_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_toc_zero_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_multi_dat_idx_vseq.sv"
+`include "i3c_vseqs/sdr_read_vseqs/i3c_read_abort_vseq.sv"
+
+// 4.10 Error Response Encoding
+`include "i3c_vseqs/resp_vseqs/i3c_addr_header_nack_resp_vseq.sv"
+`include "i3c_vseqs/resp_vseqs/i3c_read_tbit_no_parity_resp_vseq.sv"
+`include "i3c_vseqs/resp_vseqs/i3c_short_read_resp_vseq.sv"
+`include "i3c_vseqs/resp_vseqs/i3c_ovl_resp_vseq.sv"
 
 // 4.6 Immediate Data Transfer
-`include "i3c_vseqs/imm_vseqs/i3c_smoke_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_imm_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_imm_dtt_sweep_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_imm_toc_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_imm_i2c_write_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_imm_data_nack_i2c_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_imm_abort_vseq.sv"
 
 // 4.7 Common Command Codes
 `include "i3c_vseqs/ccc_vseqs/i3c_ccc_broadcast_enec_vseq.sv"
+
+// 4.9 I2C Legacy Compatibility
+`include "i3c_vseqs/i2c_vseqs/i2c_regular_write_basic_vseq.sv"
+`include "i3c_vseqs/i2c_vseqs/i2c_regular_read_basic_vseq.sv"
+`include "i3c_vseqs/i2c_vseqs/i2c_broadcast_addr_enable_ignored_vseq.sv"
+`include "i3c_vseqs/i2c_vseqs/i2c_len_sweep_partial_rx_vseq.sv"
+`include "i3c_vseqs/i2c_vseqs/i2c_data_nack_write_vseq.sv"

@@ -1,7 +1,7 @@
 SIMULATOR   ?= xrun
 UVM_HOME    ?= CDNS-1.2
 TEST        ?= i3c_base_test
-SEQ         ?= i3c_smoke_vseq
+SEQ         ?= i3c_imm_vseq
 VERBOSITY   ?= UVM_MEDIUM
 SEED        ?= random
 DUMP_WAVES  ?= 0
@@ -9,6 +9,10 @@ WAVE_ROOT   ?= waves
 RUN_NAME    ?= $(SEQ)
 WAVE_DIR    ?= $(WAVE_ROOT)/$(RUN_NAME)
 WAVE_FILE   ?= $(WAVE_DIR)/waves.shm
+COV         ?= 0
+COV_ROOT    ?= cov_work
+COV_TEST    ?= $(SEQ)_$(SEED)
+COV_OPTS    = -coverage all -covworkdir $(COV_ROOT) -covtest $(COV_TEST)
 FIFO_005_LOG ?= fifo_non_power_of_two_elaboration.log
 FIFO_005_LIB ?= xcelium_fifo005.d
 
@@ -44,18 +48,19 @@ BUS_REGRESSION_SEQS ?= \
 	bus_tx_byte_and_bit_order_vseq \
 	bus_rx_byte_and_bit_order_vseq \
 	bus_od_pp_phase_switch_vseq \
-	bus_tb_pad_model_odpp_wiring_vseq
+	bus_tb_pad_model_odpp_wiring_vseq \
+	bus_i2c_od_only_check_vseq
 
 SDRW_REGRESSION_SEQS ?= \
 	i3c_write_vseq \
 	i3c_write_len_sweep_vseq \
 	i3c_write_data_patterns_vseq \
 	i3c_write_tbit_parity_generation_vseq \
-	i3c_write_addr_nack_vseq \
-	i3c_write_tx_fifo_underflow_ovl_vseq \
+	i3c_write_tx_fifo_underflow_vseq \
 	i3c_write_toc_zero_vseq \
 	i3c_write_back_to_back_vseq \
-	i3c_write_multi_dat_idx_vseq
+	i3c_write_multi_dat_idx_vseq \
+	i3c_write_abort_vseq
 
 SDRR_REGRESSION_SEQS ?= \
 	i3c_read_vseq \
@@ -63,10 +68,31 @@ SDRR_REGRESSION_SEQS ?= \
 	i3c_read_short_target_end_vseq \
 	i3c_read_no_parity_error_on_end_tbit_vseq \
 	i3c_read_target_more_than_requested_vseq \
-	i3c_read_addr_nack_vseq \
 	i3c_read_rx_fifo_full_overflow_vseq \
 	i3c_read_data_patterns_vseq \
-	i3c_read_toc_zero_vseq
+	i3c_read_toc_zero_vseq \
+	i3c_read_multi_dat_idx_vseq \
+	i3c_read_abort_vseq
+
+IMM_REGRESSION_SEQS ?= \
+	i3c_imm_vseq \
+	i3c_imm_dtt_sweep_vseq \
+	i3c_imm_toc_vseq \
+	i3c_imm_i2c_write_vseq \
+	i3c_imm_data_nack_i2c_vseq
+
+I2C_REGRESSION_SEQS ?= \
+	i2c_regular_write_basic_vseq \
+	i2c_regular_read_basic_vseq \
+	i2c_broadcast_addr_enable_ignored_vseq \
+	i2c_len_sweep_partial_rx_vseq \
+	i2c_data_nack_write_vseq
+
+ERR_REGRESSION_SEQS ?= \
+	i3c_addr_header_nack_resp_vseq \
+	i3c_read_tbit_no_parity_resp_vseq \
+	i3c_short_read_resp_vseq \
+	i3c_ovl_resp_vseq
 
 compile:
 	$(SIMULATOR) -compile -elaborate \
@@ -76,7 +102,8 @@ compile:
 	  -access +rwc \
 	  -define UVM \
 	  -64 \
-	  -xceligen on
+	  -xceligen on \
+	  $(if $(filter 1,$(COV)),$(COV_OPTS),)
 
 sim: compile
 	$(if $(filter 1,$(DUMP_WAVES)),@mkdir -p $(WAVE_DIR),)
@@ -85,14 +112,16 @@ sim: compile
 	  +UVM_TEST_SEQ=$(SEQ) \
 	  +UVM_VERBOSITY=$(VERBOSITY) \
 	  -svseed $(SEED) \
-	  -xceligen on $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES +WAVE_FILE=$(WAVE_FILE),) \
+	  -xceligen on \
+	  $(if $(filter 1,$(COV)),$(COV_OPTS),) \
+	  $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES +WAVE_FILE=$(WAVE_FILE),) \
 	  2>&1 | tee sim.log
 
 smoke:
-	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_smoke_vseq
+	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_imm_vseq
 
 regression:
-	$(MAKE) sim SEQ=i3c_smoke_vseq
+	$(MAKE) sim SEQ=i3c_imm_vseq
 	$(MAKE) sim SEQ=i3c_write_vseq
 	$(MAKE) sim SEQ=i3c_read_vseq
 
@@ -127,6 +156,24 @@ sdrr_regression:
 	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
 	done
 
+imm_regression:
+	@set -e; \
+	for seq in $(IMM_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+i2c_regression:
+	@set -e; \
+	for seq in $(I2C_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+err_regression:
+	@set -e; \
+	for seq in $(ERR_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
 sdr_regression: sdrw_regression sdrr_regression
 
 fifo_non_power_of_two_elaboration:
@@ -156,10 +203,13 @@ fifo_non_power_of_two_elaboration:
 waves:
 	$(MAKE) sim DUMP_WAVES=1
 
+coverage:
+	$(MAKE) sim COV=1
+
 clean:
-	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs waves.shm xrun.history .simvision \
+	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs $(COV_ROOT) waves.shm xrun.history .simvision \
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
-        sdrw_regression sdrr_regression sdr_regression \
-        fifo_non_power_of_two_elaboration waves clean
+        sdrw_regression sdrr_regression imm_regression err_regression sdr_regression \
+        fifo_non_power_of_two_elaboration waves coverage clean

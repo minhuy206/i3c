@@ -14,8 +14,6 @@ class bus_tb_pad_model_odpp_wiring_vseq extends bus_base_vseq;
     run_bus011_write_stimulus();
     run_bus011_read_stimulus();
 
-    `uvm_info(`gfn, "BUS_011 pad-model OD/PP wiring stimulus completed; SVA checks bus wiring",
-              UVM_LOW)
   endtask
 
   virtual task run_bus011_write_stimulus();

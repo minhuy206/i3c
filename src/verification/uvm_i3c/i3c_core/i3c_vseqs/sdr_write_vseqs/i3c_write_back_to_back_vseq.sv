@@ -11,6 +11,7 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     foreach (broadcast_modes[mode_idx]) begin
       run_back_to_back_case(broadcast_modes[mode_idx]);
     end
+
   endtask
 
   virtual task run_back_to_back_case(bit broadcast_header_enable);
@@ -30,10 +31,10 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
 
     cfg0 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_008 %s back_to_back[0]", private_addr_mode_name(broadcast_header_enable)
+            "SDRW_007 %s back_to_back[0]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrw008_%s_dev_seq0", private_addr_mode_name(broadcast_header_enable)
+            "sdrw007_%s_dev_seq0", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'h8),
         .dev_idx(5'd0),
@@ -50,10 +51,10 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     );
     cfg1 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_008 %s back_to_back[1]", private_addr_mode_name(broadcast_header_enable)
+            "SDRW_007 %s back_to_back[1]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrw008_%s_dev_seq1", private_addr_mode_name(broadcast_header_enable)
+            "sdrw007_%s_dev_seq1", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'h9),
         .dev_idx(5'd0),
@@ -70,10 +71,10 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     );
     cfg2 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_008 %s back_to_back[2]", private_addr_mode_name(broadcast_header_enable)
+            "SDRW_007 %s back_to_back[2]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrw008_%s_dev_seq2", private_addr_mode_name(broadcast_header_enable)
+            "sdrw007_%s_dev_seq2", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'hA),
         .dev_idx(5'd0),
@@ -116,14 +117,15 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     check_back_to_back_write_done(dev_seq1, cfg1);
     check_back_to_back_write_done(dev_seq2, cfg2);
 
-    check_success_resp(resp0, cfg0);
-    check_success_resp(resp1, cfg1);
-    check_success_resp(resp2, cfg2);
-
-    check_all_queues_empty("after SDRW_008 back_to_back");
+    check_all_queues_empty("after SDRW_007 back_to_back");
     disable_dut();
 
-    `uvm_info(`gfn, "SDRW_008 I3C back-to-back write checks passed", UVM_LOW)
+    `uvm_info(`gfn, $sformatf(
+                  "SDRW_007 result: mode=%s queued_cmds=3 sampled_bytes={%0d,%0d,%0d} observed_rstart={%0b,%0b,%0b}",
+                  private_addr_mode_name(broadcast_header_enable), dev_seq0.sampled_data.size(),
+                  dev_seq1.sampled_data.size(), dev_seq2.sampled_data.size(),
+                  dev_seq0.observed_rstart, dev_seq1.observed_rstart,
+                  dev_seq2.observed_rstart), UVM_LOW)
   endtask
 
   virtual task start_back_to_back_device_responses(

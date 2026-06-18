@@ -170,7 +170,6 @@ class csr_timing_rw_vseq extends csr_base_vseq;
                                  "reserved-bit mask", TIMING_VALUE_RESERVED_MASK);
     end
 
-    `uvm_info(`gfn, "CSR timing write and read checks passed", UVM_LOW)
   endtask
 
   task write_and_check_timing_reg(ref bit [11:0] timing_addr[21], ref string timing_reg[21],

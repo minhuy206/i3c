@@ -24,6 +24,8 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(data[31:3], 29'h0,
                  "csr_reset_defaults_vseq: HC_STATUS reserved bits should be 0 after reset")
 
+    check_reg_eq(ADDR_INTR_STATUS, 32'h0000_0000, "INTR_STATUS", "after reset");
+
     check_timing_reg(ADDR_T_R, RST_T_R, "T_R", "after reset");
     check_timing_reg(ADDR_T_F, RST_T_F, "T_F", "after reset");
     check_timing_reg(ADDR_T_LOW, RST_T_LOW, "T_LOW", "after reset");
@@ -54,7 +56,6 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
                    "csr_reset_defaults_vseq: DAT[%0d] reset value mismatch", i))
     end
 
-    `uvm_info(`gfn, "CSR reset default checks passed", UVM_LOW)
   endtask
 
 endclass

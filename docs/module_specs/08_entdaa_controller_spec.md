@@ -38,7 +38,7 @@ See `08b_entdaa_fsm_spec.md` for the per-device round FSM.
 
 | Parameter  | Type | Default | Description     |
 | ---------- | ---- | ------- | --------------- |
-| `DatDepth` | int  | 16      | DAT table depth |
+| `DatDepth` | int  | 32      | DAT table depth |
 
 ## 4. Ports / Interfaces
 

@@ -27,6 +27,9 @@ class i3c_base_vseq extends uvm_sequence;
 
   localparam int unsigned BASE_CLK_PERIOD_NS = 10;
 
+  // HDL path to flow_active FSM state register — update here if hierarchy changes.
+  localparam string FLOW_FSM_STATE_PATH = "tb_i3c_top.dut.u_ctrl.u_flow_fsm.state_q";
+
   typedef bit [7:0] byte_queue_t[$];
   typedef bit [31:0] word_queue_t[$];
 
@@ -127,10 +130,10 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual function transfer_stimulus_cfg_t make_transfer_cfg(
       string ctxt, string seq_name, bit [3:0] tid, bit [4:0] dev_idx, bit [6:0] target_addr,
-      bit is_i3c, bit ack_address = 1'b1, bit ack_data = 1'b1,
-      bit tx_before_cmd = 1'b1, bit wait_device_done = 1'b1,
-      bit start_with_broadcast_header = 1'b0, int unsigned data_length = 0,
-      int unsigned settle_before_cmd = 0, int unsigned timeout_cycles = 0);
+      bit is_i3c, bit ack_address = 1'b1, bit ack_data = 1'b1, bit tx_before_cmd = 1'b1,
+      bit wait_device_done = 1'b1, bit start_with_broadcast_header = 1'b0,
+      int unsigned data_length = 0, int unsigned settle_before_cmd = 0,
+      int unsigned timeout_cycles = 0);
     transfer_stimulus_cfg_t cfg;
 
     cfg.ctxt                        = ctxt;
@@ -217,6 +220,87 @@ class i3c_base_vseq extends uvm_sequence;
     return word;
   endfunction
 
+  virtual function void pack_payload_words(byte_queue_t exp_data, ref word_queue_t words);
+    bit [31:0] word;
+
+    words.delete();
+    for (int unsigned word_idx = 0; word_idx < ((exp_data.size() + 3) / 4); word_idx++) begin
+      word = '0;
+      for (int unsigned byte_idx = 0; byte_idx < 4; byte_idx++) begin
+        int unsigned data_idx;
+
+        data_idx = (word_idx * 4) + byte_idx;
+        if (data_idx < exp_data.size()) begin
+          word[(byte_idx*8)+:8] = exp_data[data_idx];
+        end
+      end
+      words.push_back(word);
+    end
+  endfunction
+
+  virtual function void build_sdr_data_pattern_payload(int unsigned pattern_idx,
+                                                       ref byte_queue_t data);
+    bit [7:0] fixed_random[16] = '{
+        8'h3C,
+        8'hA7,
+        8'h19,
+        8'hE2,
+        8'h5D,
+        8'h80,
+        8'h0F,
+        8'hB4,
+        8'hC1,
+        8'h26,
+        8'h7A,
+        8'h93,
+        8'h48,
+        8'hDE,
+        8'h04,
+        8'hF0
+    };
+
+    data.delete();
+
+    case (pattern_idx)
+      0: begin
+        repeat (8) data.push_back(8'h00);
+      end
+      1: begin
+        repeat (8) data.push_back(8'hFF);
+      end
+      2: begin
+        for (int unsigned i = 0; i < 8; i++) begin
+          data.push_back(8'(8'h01 << i));
+        end
+      end
+      3: begin
+        for (int unsigned i = 0; i < 8; i++) begin
+          data.push_back(i[0] ? 8'h55 : 8'hAA);
+        end
+      end
+      4: begin
+        foreach (fixed_random[i]) begin
+          data.push_back(fixed_random[i]);
+        end
+      end
+      default: begin
+        `uvm_fatal(`gfn, $sformatf("Unsupported SDR data pattern index %0d", pattern_idx))
+      end
+    endcase
+  endfunction
+
+  virtual task check_sampled_write_data(i3c_device_response_seq dev_seq, byte_queue_t exp_data,
+                                        int unsigned exp_len, string ctxt);
+    `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_len,
+                 $sformatf("%s: sampled write byte count mismatch", ctxt))
+    for (int unsigned i = 0; i < exp_len; i++) begin
+      if ((i < dev_seq.sampled_data.size()) && (i < exp_data.size())) begin
+        `DV_CHECK_EQ(dev_seq.sampled_data[i], exp_data[i],
+                     $sformatf("%s: sampled write byte[%0d] mismatch", ctxt, i))
+      end
+    end
+  endtask
+
   virtual task wait_for_device_done(i3c_device_response_seq dev_seq, string ctxt,
                                     int unsigned timeout_cycles = 1000);
     for (int i = 0; i < timeout_cycles; i++) begin
@@ -235,6 +319,19 @@ class i3c_base_vseq extends uvm_sequence;
     end
 
     `uvm_error(`gfn, $sformatf("%s: device response request was not issued", ctxt))
+  endtask
+
+  virtual task wait_for_flow_fsm_state(bit [3:0] target_state, string ctxt,
+                                       int unsigned timeout_cycles = 500);
+    uvm_hdl_data_t state_val;
+    for (int i = 0; i < timeout_cycles; i++) begin
+      @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
+      if (!uvm_hdl_read(FLOW_FSM_STATE_PATH, state_val))
+        `uvm_fatal(`gfn, $sformatf("%s: uvm_hdl_read failed for %s", ctxt, FLOW_FSM_STATE_PATH))
+      if (state_val[3:0] == target_state) return;
+    end
+    `uvm_error(`gfn, $sformatf("%s: FSM did not reach state 4'd%0d within %0d cycles", ctxt,
+                               target_state, timeout_cycles))
   endtask
 
   virtual task start_device_response(transfer_stimulus_cfg_t cfg, bit dir, byte_queue_t read_data,
@@ -274,10 +371,22 @@ class i3c_base_vseq extends uvm_sequence;
     regular_trans_desc_t wr_cmd;
 
     wr_cmd = build_regular_transfer_cmd(cfg, 1'b0, toc);
-    `uvm_info(`gfn, $sformatf("%s: write CMD dw0=0x%08h dw1=0x%08h tid=0x%0h dev_idx=%0d len=%0d toc=%0d",
-                              cfg.ctxt, wr_cmd[31:0], wr_cmd[63:32], wr_cmd.tid, wr_cmd.dev_idx,
-                              wr_cmd.data_length, wr_cmd.toc), UVM_LOW)
+    `uvm_info(`gfn, $sformatf(
+                        "%s: write CMD dw0=0x%08h dw1=0x%08h tid=0x%0h dev_idx=%0d len=%0d toc=%0d",
+                        cfg.ctxt, wr_cmd[31:0], wr_cmd[63:32], wr_cmd.tid, wr_cmd.dev_idx,
+                        wr_cmd.data_length, wr_cmd.toc), UVM_LOW)
     write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
+  endtask
+
+  virtual task write_read_cmd(input transfer_stimulus_cfg_t cfg, input bit toc = 1'b1);
+    regular_trans_desc_t rd_cmd;
+
+    rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, toc);
+    `uvm_info(`gfn, $sformatf(
+                        "%s: read CMD dw0=0x%08h dw1=0x%08h tid=0x%0h dev_idx=%0d len=%0d toc=%0d",
+                        cfg.ctxt, rd_cmd[31:0], rd_cmd[63:32], rd_cmd.tid, rd_cmd.dev_idx,
+                        rd_cmd.data_length, rd_cmd.toc), UVM_LOW)
+    write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
   endtask
 
   virtual task run_write_stimulus(transfer_stimulus_cfg_t cfg, word_queue_t tx_words,
@@ -309,7 +418,6 @@ class i3c_base_vseq extends uvm_sequence;
 
     rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
     start_device_response(cfg, 1'b1, read_data, dev_seq);
-    expect_scoreboard_read_data(cfg, read_data, cfg.data_length);
     if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
 
     write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
@@ -336,7 +444,6 @@ class i3c_base_vseq extends uvm_sequence;
 
     rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
     start_device_response(cfg, 1'b1, read_data, dev_seq);
-    expect_scoreboard_read_data(cfg, read_data, actual_data_length, final_t_bit);
     if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
 
     write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
@@ -390,6 +497,35 @@ class i3c_base_vseq extends uvm_sequence;
     read_response(resp1);
   endtask
 
+  virtual task run_toc_zero_read_stimulus(
+      transfer_stimulus_cfg_t cfg0, transfer_stimulus_cfg_t cfg1, byte_queue_t read_data0,
+      byte_queue_t read_data1, output word_queue_t rx_words0, output word_queue_t rx_words1,
+      output bit [31:0] resp0, output bit [31:0] resp1, output int rstart_count,
+      output i3c_device_response_seq dev_seq0, output i3c_device_response_seq dev_seq1);
+    regular_trans_desc_t rd_cmd0;
+    regular_trans_desc_t rd_cmd1;
+
+    rd_cmd0 = build_regular_transfer_cmd(cfg0, 1'b1, 1'b0);
+    rd_cmd1 = build_regular_transfer_cmd(cfg1, 1'b1, 1'b1);
+
+    start_ordered_device_responses(cfg0, 1'b1, read_data0, dev_seq0, cfg1, 1'b1, read_data1,
+                                   dev_seq1);
+    if (cfg0.settle_before_cmd != 0) settle_cycles(cfg0.settle_before_cmd);
+
+    write_cmd(rd_cmd0[31:0], rd_cmd0[63:32]);
+    write_cmd(rd_cmd1[31:0], rd_cmd1[63:32]);
+
+    poll_idle();
+    wait_for_device_done(dev_seq0, cfg0.ctxt, device_done_timeout_cycles(cfg0));
+    wait_for_device_done(dev_seq1, cfg1.ctxt, device_done_timeout_cycles(cfg1));
+    rstart_count = int'(dev_seq0.observed_rstart) + int'(dev_seq1.observed_rstart);
+
+    read_rx_words(cfg0.data_length, rx_words0);
+    read_rx_words(cfg1.data_length, rx_words1);
+    read_response(resp0);
+    read_response(resp1);
+  endtask
+
   virtual task run_toc_zero_read_write_stimulus(
       transfer_stimulus_cfg_t rd_cfg, transfer_stimulus_cfg_t wr_cfg, byte_queue_t read_data,
       word_queue_t tx_words, output bit [31:0] rx, output bit [31:0] resp0, output bit [31:0] resp1,
@@ -404,7 +540,6 @@ class i3c_base_vseq extends uvm_sequence;
 
     start_ordered_device_responses(rd_cfg, 1'b1, read_data, dev_seq0, wr_cfg, 1'b0, no_read_data,
                                    dev_seq1);
-    expect_scoreboard_read_data(rd_cfg, read_data, rd_cfg.data_length);
     if (rd_cfg.settle_before_cmd != 0) settle_cycles(rd_cfg.settle_before_cmd);
 
     write_cmd(rd_cmd0[31:0], rd_cmd0[63:32]);
@@ -438,39 +573,6 @@ class i3c_base_vseq extends uvm_sequence;
     check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b0, 1'b1, ctxt);
     check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b0, 1'b1, ctxt);
   endtask
-
-  virtual function void expect_scoreboard_resp_error(bit [3:0] err_status, bit [3:0] tid,
-                                                     bit [15:0] data_length, string ctxt);
-    uvm_component  comp;
-    i3c_scoreboard scb;
-
-    comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
-    if (!$cast(scb, comp)) begin
-      `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", ctxt))
-    end
-    scb.expect_resp_error(err_status, tid, data_length);
-  endfunction
-
-  virtual function void expect_scoreboard_read_data(
-      transfer_stimulus_cfg_t cfg, byte_queue_t read_data, int unsigned actual_data_length,
-      bit final_t_bit = 1'b0, bit expect_rx_fifo = 1'b1);
-    uvm_component  comp;
-    i3c_scoreboard scb;
-    byte_queue_t   exp_read_data;
-
-    comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
-    if (!$cast(scb, comp)) begin
-      `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", cfg.ctxt))
-    end
-
-    exp_read_data.delete();
-    for (int unsigned i = 0; (i < actual_data_length) && (i < read_data.size()); i++) begin
-      exp_read_data.push_back(read_data[i]);
-    end
-
-    scb.expect_read_data(cfg.target_addr, cfg.tid, cfg.data_length, actual_data_length,
-                         exp_read_data, cfg.ack_data, final_t_bit, expect_rx_fifo);
-  endfunction
 
   virtual function string fifo_mem_path(queue_hdl_paths_t paths, int unsigned index);
     return $sformatf(paths.mem_path_fmt, index);
@@ -532,6 +634,16 @@ class i3c_base_vseq extends uvm_sequence;
   virtual task backdoor_set_fifo_level(queue_hdl_paths_t paths, int unsigned count);
     hdl_deposit_checked(paths.rptr_path, '0);
     hdl_deposit_checked(paths.wptr_path, count);
+    if (paths.name == "RX") begin
+      uvm_component  comp;
+      i3c_scoreboard scb;
+
+      comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
+      if (!$cast(scb, comp)) begin
+        `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", get_type_name()))
+      end
+      scb.set_rx_fifo_level_unknown(count, get_type_name());
+    end
   endtask
 
   virtual task reg_write(bit [11:0] addr, bit [31:0] data);
@@ -627,8 +739,16 @@ class i3c_base_vseq extends uvm_sequence;
                                          input int unsigned data_length, input string ctxt);
     `DV_CHECK_EQ(resp[31:28], 4'h0, $sformatf("%s: expected Success response", ctxt))
     `DV_CHECK_EQ(resp[27:24], tid, $sformatf("%s: response TID mismatch", ctxt))
-    `DV_CHECK_EQ(resp[15:0], 16'(data_length),
-                 $sformatf("%s: response length mismatch", ctxt))
+    `DV_CHECK_EQ(resp[15:0], 16'(data_length), $sformatf("%s: response length mismatch", ctxt))
+  endtask
+
+  virtual task check_error_resp_fields(input bit [31:0] resp, input bit [3:0] err_status,
+                                       input bit [3:0] tid, input int unsigned data_length,
+                                       input string ctxt);
+    `DV_CHECK_EQ(resp[31:28], err_status, $sformatf("%s: response status mismatch", ctxt))
+    `DV_CHECK_EQ(resp[27:24], tid, $sformatf("%s: response TID mismatch", ctxt))
+    `DV_CHECK_EQ(resp[23:16], 8'h00, $sformatf("%s: response reserved field should be zero", ctxt))
+    `DV_CHECK_EQ(resp[15:0], 16'(data_length), $sformatf("%s: response length mismatch", ctxt))
   endtask
 
   virtual task check_success_resp(input bit [31:0] resp, input transfer_stimulus_cfg_t cfg);

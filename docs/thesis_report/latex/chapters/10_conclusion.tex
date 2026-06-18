@@ -1,0 +1,26 @@
+\chapter{Conclusion and Future Work}
+\label{ch:conclusion}
+
+% DRAFT BRIEF: write last; quick if Ch.9 is solid.
+% Sources: all chapters, phase1_spec_v2.md out-of-scope list, master plan Phase-2 roadmap.
+
+\section{Summary of contributions}
+\brief{Recap the four headline contributions: all 14 \texttt{flow_active} states completed;
+$\sim$92\% LoC reduction with SDR + \iic{} + ENTDAA preserved; working dual-agent UVM 1.2
+environment with scoreboard + SVA; first ENTDAA-capable master in the lab. Tie each back to
+its chapter.}
+
+\section{Lessons learned}
+\brief{Reflective notes: spec-vs-code drift (code-wins policy); educational value of a
+hand-written CSR vs auto-gen; value of directed-first bring-up; single-counter SCL timing
+tradeoff; FSM-diagram-first documentation workflow.}
+
+\section{Future work}
+\brief{Prioritised roadmap: (1) Phase-2 verification --- constrained-random + functional
+coverage, broader CCC/ENTDAA/\iic{}/error-injection vseqs toward the $\sim$105-case testplan;
+(2) protocol features --- IBI, HDR, multi-master, target mode, bus recovery;
+(3) \texttt{scl_generator} \texttt{req_restart_i}/\texttt{ack_o} cleanup;
+(4) FPGA validation on a target board is left as future work (the single FPGA line, per
+settled decision).}
+
+\tabph{Future-work roadmap}{master plan Phase-2 roadmap}

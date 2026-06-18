@@ -13,6 +13,7 @@ package i3c_csr_addr_pkg;
   // Control & Status
   localparam bit [11:0] ADDR_HC_CONTROL = 12'h000;
   localparam bit [11:0] ADDR_HC_STATUS = 12'h004;
+  localparam bit [11:0] ADDR_INTR_STATUS = 12'h008;
 
   // Timing Registers
   localparam bit [11:0] ADDR_T_R = 12'h010;
@@ -55,11 +56,25 @@ package i3c_csr_addr_pkg;
   localparam int HC_CTRL_ENABLE_BIT = 0;
   localparam int HC_CTRL_SW_RESET_BIT = 1;
   localparam int HC_CTRL_BROADCAST_HEADER_ENABLE_BIT = 2;
+  localparam int HC_CTRL_HC_ABORT_BIT = 3;  // SW rw level bit; cleared by SW writing 0 or async reset
 
   // HC_STATUS
   localparam int HC_STS_FSM_IDLE_BIT = 0;
   localparam int HC_STS_CMD_FULL_BIT = 1;
   localparam int HC_STS_RESP_EMPTY_BIT = 2;
+
+  // INTR_STATUS
+  localparam int INTR_HC_INTERNAL_ERR_STAT_BIT = 10;
+  localparam int INTR_HC_SEQ_CANCEL_STAT_BIT = 11;
+  localparam int INTR_HC_WARN_CMD_SEQ_STALL_STAT_BIT = 12;
+  localparam int INTR_HC_ERR_CMD_SEQ_TIMEOUT_STAT_BIT = 13;
+  localparam int INTR_SCHED_CMD_MISSED_TICK_STAT_BIT = 14;
+  localparam bit [31:0] INTR_STATUS_W1C_MASK =
+      (32'h1 << INTR_HC_INTERNAL_ERR_STAT_BIT) |
+      (32'h1 << INTR_HC_SEQ_CANCEL_STAT_BIT) |
+      (32'h1 << INTR_HC_WARN_CMD_SEQ_STALL_STAT_BIT) |
+      (32'h1 << INTR_HC_ERR_CMD_SEQ_TIMEOUT_STAT_BIT) |
+      (32'h1 << INTR_SCHED_CMD_MISSED_TICK_STAT_BIT);
 
   // QUEUE_STATUS
   localparam int QS_CMD_FULL_BIT = 0;

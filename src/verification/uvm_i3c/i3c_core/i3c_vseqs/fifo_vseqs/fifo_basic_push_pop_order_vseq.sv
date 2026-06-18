@@ -11,7 +11,6 @@ class fifo_basic_push_pop_order_vseq extends fifo_base_vseq;
     exercise_rx_fifo();
     exercise_resp_fifo();
 
-    `uvm_info(`gfn, "FIFO basic push/pop order checks passed", UVM_LOW)
   endtask
 
   task exercise_cmd_fifo();

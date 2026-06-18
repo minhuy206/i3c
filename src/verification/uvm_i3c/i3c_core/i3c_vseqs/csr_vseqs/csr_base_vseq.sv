@@ -49,7 +49,8 @@ class csr_base_vseq extends i3c_base_vseq;
   virtual task check_no_host_start_for_cycles(int unsigned cycles, string ctxt);
     fork : no_host_start_window
       begin
-        p_sequencer.cfg.m_i3c_agent_cfg.vif.wait_for_host_start();
+        p_sequencer.cfg.m_i3c_agent_cfg.vif.wait_for_host_start(
+            p_sequencer.cfg.m_i3c_agent_cfg.tc.i3c_tc);
         `uvm_error(`gfn, $sformatf("%s: bus START observed during disabled window", ctxt))
       end
       begin

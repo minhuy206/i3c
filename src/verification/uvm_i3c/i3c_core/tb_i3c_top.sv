@@ -83,6 +83,7 @@ module tb_i3c_top;
       .if_dut_sel_od_pp_i   (i3c_bus.dut_sel_od_pp),
       .device_sda_o_i       (i3c_bus.device_sda_o),
       .device_sda_pp_en_i   (i3c_bus.device_sda_pp_en),
+      .hc_abort_i           (dut.hc_abort),
       .sda_bus_i            (sda_bus)
   );
 

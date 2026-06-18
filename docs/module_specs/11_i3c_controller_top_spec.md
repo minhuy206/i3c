@@ -2,7 +2,7 @@
 
 > Status: Complete
 > Reference: `i3c-core/src/i3c.sv` (1,279 lines) + `i3c-core/src/i3c_wrapper.sv` (298 lines)
-> Estimated LoC: ~260 lines
+> Estimated LoC: ~315 lines
 
 ## 1. Purpose
 
@@ -35,14 +35,15 @@ It exposes two external interfaces:
 
 ### Packages
 
-- `i3c_pkg`
 - `controller_pkg`
+
+Sub-modules imported by this top level may also import `i3c_pkg`.
 
 ## 3. Parameters
 
 | Parameter       | Type | Default | Description                |
 | --------------- | ---- | ------- | -------------------------- |
-| `DatDepth`      | int  | 16      | Device Address Table depth |
+| `DatDepth`      | int  | 32      | Device Address Table depth |
 | `CmdFifoDepth`  | int  | 64      | CMD FIFO depth             |
 | `TxFifoDepth`   | int  | 64      | TX FIFO depth              |
 | `RxFifoDepth`   | int  | 64      | RX FIFO depth              |
@@ -78,6 +79,7 @@ It exposes two external interfaces:
 | `scl_o`       | Output    | 1     | SCL bus output (to pad driver)    |
 | `sda_i`       | Input     | 1     | SDA bus input (from pad)          |
 | `sda_o`       | Output    | 1     | SDA bus output (to pad driver)    |
+| `sda_oe_o`    | Output    | 1     | SDA output-enable (to pad driver) |
 | `sel_od_pp_o` | Output    | 1     | OD/PP mode select (to pad driver) |
 
 ## 5. Functional Description
@@ -108,12 +110,12 @@ graph TB
     end
 
     REG_BUS <-->|queue ports| QUEUES
-    REG_BUS -->|timing, enable| CTRL
+    REG_BUS -->|timing, control| CTRL
     REG_BUS <-->|DAT| CTRL
     QUEUES <-->|cmd/data/resp| CTRL
-    CTRL <-->|ctrl_scl/sda| PHY_BLK
+    CTRL <-->|ctrl_scl/sda, sda_oe, OD/PP| PHY_BLK
 
-    PHY_BLK -->|scl_o, sda_o| PAD((Bus Pads))
+    PHY_BLK -->|scl_o, sda_o, sda_oe_o, sel_od_pp_o| PAD((Bus Pads))
     PAD -->|scl_i, sda_i| PHY_BLK
     SW((Software)) <-->|reg bus| REG_BUS
 ```
@@ -180,24 +182,44 @@ u_queues.resp_full_o       → u_ctrl.resp_queue_full_i
 #### CSR → Controller Active (Configuration)
 
 ```systemverilog
-// Timing registers
-u_csr.t_r_o      → u_ctrl.t_r_i
-u_csr.t_f_o      → u_ctrl.t_f_i
-u_csr.t_low_o    → u_ctrl.t_low_i
-u_csr.t_high_o   → u_ctrl.t_high_i
-u_csr.t_su_sta_o → u_ctrl.t_su_sta_i
-u_csr.t_hd_sta_o → u_ctrl.t_hd_sta_i
-u_csr.t_su_sto_o → u_ctrl.t_su_sto_i
-u_csr.t_su_dat_o → u_ctrl.t_su_dat_i
-u_csr.t_hd_dat_o → u_ctrl.t_hd_dat_i
+// I3C timing registers
+u_csr.t_r_o        → u_ctrl.t_r_i
+u_csr.t_f_o        → u_ctrl.t_f_i
+u_csr.t_low_o      → u_ctrl.t_low_i
+u_csr.t_low_od_o   → u_ctrl.t_low_od_i
+u_csr.t_high_o     → u_ctrl.t_high_i
+u_csr.t_su_sta_o   → u_ctrl.t_su_sta_i
+u_csr.t_hd_sta_o   → u_ctrl.t_hd_sta_i
+u_csr.t_su_sto_o   → u_ctrl.t_su_sto_i
+u_csr.t_su_dat_o   → u_ctrl.t_su_dat_i
+u_csr.t_hd_dat_o   → u_ctrl.t_hd_dat_i
+u_csr.t_bus_free_o → u_ctrl.t_bus_free_i
 
-// Control
-u_csr.ctrl_enable_o → u_ctrl.ctrl_enable_i  // HC_CONTROL[0] → bus monitor enable
-u_csr.i3c_fsm_en_o → u_ctrl.i3c_fsm_en_i   // FSM enable
-u_csr.sw_reset_o   → u_queues.sw_reset_i    // FIFO reset
+// I2C timing registers
+u_csr.i2c_t_r_o        → u_ctrl.i2c_t_r_i
+u_csr.i2c_t_f_o        → u_ctrl.i2c_t_f_i
+u_csr.i2c_t_low_o      → u_ctrl.i2c_t_low_i
+u_csr.i2c_t_high_o     → u_ctrl.i2c_t_high_i
+u_csr.i2c_t_su_sta_o   → u_ctrl.i2c_t_su_sta_i
+u_csr.i2c_t_hd_sta_o   → u_ctrl.i2c_t_hd_sta_i
+u_csr.i2c_t_su_sto_o   → u_ctrl.i2c_t_su_sto_i
+u_csr.i2c_t_su_dat_o   → u_ctrl.i2c_t_su_dat_i
+u_csr.i2c_t_hd_dat_o   → u_ctrl.i2c_t_hd_dat_i
+u_csr.i2c_t_buf_o      → u_ctrl.i2c_t_buf_i
+
+// HC_CONTROL configuration
+u_csr.hc_control_cfg_o.ctrl_enable              → u_ctrl.ctrl_enable_i
+u_csr.hc_control_cfg_o.i3c_fsm_en               → u_ctrl.i3c_fsm_en_i
+u_csr.hc_control_cfg_o.broadcast_header_enable  → u_ctrl.broadcast_header_enable_i
+u_csr.hc_control_cfg_o.abort                    → u_ctrl.abort_i
+u_csr.hc_control_cfg_o.sw_reset                 → u_queues.sw_reset_i
 
 // Status feedback
 u_ctrl.i3c_fsm_idle_o → u_csr.i3c_fsm_idle_i
+
+// Interrupt-status events
+u_ctrl.hc_seq_cancel_event_o          → u_csr.intr_event_i.hc_seq_cancel
+u_ctrl.hc_err_cmd_seq_timeout_event_o → u_csr.intr_event_i.hc_err_cmd_seq_timeout
 ```
 
 #### Controller Active ↔ PHY
@@ -208,8 +230,9 @@ u_phy.ctrl_scl_o → u_ctrl.ctrl_scl_i
 u_phy.ctrl_sda_o → u_ctrl.ctrl_sda_i
 
 // Drive outputs (Controller → PHY)
-u_ctrl.ctrl_scl_o → u_phy.ctrl_scl_i
-u_ctrl.ctrl_sda_o → u_phy.ctrl_sda_i
+u_ctrl.ctrl_scl_o    → u_phy.ctrl_scl_i
+u_ctrl.ctrl_sda_o    → u_phy.ctrl_sda_i
+u_ctrl.ctrl_sda_oe_o → u_phy.ctrl_sda_oe_i
 
 // OD/PP mode
 u_ctrl.sel_od_pp_o → u_phy.sel_od_pp_i
@@ -219,6 +242,7 @@ scl_i → u_phy.scl_i
 u_phy.scl_o → scl_o
 sda_i → u_phy.sda_i
 u_phy.sda_o → sda_o
+u_phy.sda_oe_o → sda_oe_o
 u_phy.sel_od_pp_o → sel_od_pp_o
 ```
 
@@ -236,8 +260,10 @@ u_csr.dat_rdata_o          → u_ctrl.dat_rdata_hw_i
 // Global async reset to all modules
 rst_ni → u_phy.rst_ni, u_csr.rst_ni, u_queues.rst_ni, u_ctrl.rst_ni
 
-// Software reset (from HC_CONTROL register) only resets FIFOs
-u_csr.sw_reset_o → u_queues.sw_reset_i
+// Software reset from HC_CONTROL[1]
+// - Flushes the HCI FIFOs through hci_queues.sw_reset_i
+// - Clears CSR CMD/TX staging state inside csr_registers
+u_csr.hc_control_cfg_o.sw_reset → u_queues.sw_reset_i
 ```
 
 ## 6. Timing Requirements
@@ -245,7 +271,7 @@ u_csr.sw_reset_o → u_queues.sw_reset_i
 | Aspect               | Requirement                                 |
 | -------------------- | ------------------------------------------- |
 | System clock         | Minimum 333 MHz                             |
-| Register bus latency | 1 cycle write, combinational read           |
+| Register bus latency | 1 cycle write, registered read data; CMD/TX writes can deassert `reg_ready_o` while a staged push is pending |
 | Pin-to-internal      | 2 cycle latency (PHY 2FF sync)              |
 | Internal-to-pin      | 0 cycle latency (combinational output path) |
 
@@ -267,7 +293,13 @@ u_csr.sw_reset_o → u_queues.sw_reset_i
 
 ## 8. Error Handling
 
-No error logic at this level. All errors are handled by sub-modules and reported through the RESP FIFO.
+The top level does not create new error policy, but it routes controller events into the CSR interrupt-status path in addition to normal RESP FIFO reporting:
+
+- `hc_seq_cancel_event_o` from `controller_active` sets `INTR_STATUS[11]`
+- `hc_err_cmd_seq_timeout_event_o` from `controller_active` sets `INTR_STATUS[13]`
+- Other `intr_event_t` fields are tied low at the top level
+
+Protocol transaction outcomes are still reported through the RESP FIFO.
 
 ## 9. Test Plan
 
@@ -279,10 +311,10 @@ No error logic at this level. All errors are handled by sub-modules and reported
 4. **Full system: ENTDAA:** Software writes ENTDAA command → verify DAA protocol on bus
 5. **Register access:** Read/write all CSR registers via register bus; verify values
 6. **Timing configuration:** Write timing registers → verify SCL frequency changes
-7. **Software reset:** Assert SW_RESET → verify FIFOs cleared, controller continues
+7. **Software reset:** Assert SW_RESET → verify FIFOs and CSR CMD/TX staging state are cleared, controller continues
 8. **Multiple transactions:** Enqueue multiple commands → verify sequential execution
 9. **Pin-level verification:** Verify 2FF synchronization latency on input path
-10. **FPGA loopback:** Connect SCL_o→SCL_i, SDA_o→SDA_i (with pull-up behavior) for self-test
+10. **FPGA loopback:** Connect SCL/SDA through pad or loopback logic that honors `sda_oe_o` and pull-up behavior for self-test
 
 ### UVM Test Structure
 
@@ -333,8 +365,9 @@ For system-level testing, behavioral models of I3C and I2C targets are instantia
 ## 10. Implementation Notes
 
 - This module is entirely structural — no logic beyond `assign` statements for signal routing. All behavioral logic lives in sub-modules.
-- The register bus is intentionally simple (no handshaking complexity). For integration into an SoC with AXI or APB, a thin adapter can be placed outside this module.
-- The `sel_od_pp_o` output connects to the FPGA/ASIC pad driver configuration. On Xilinx FPGAs, this controls whether an IOBUF is configured for open-drain or push-pull.
+- The register bus is intentionally simple: `reg_ready_o` acknowledges accepted accesses and only stalls CMD/TX port writes while CSR staging holds an unaccepted FIFO push. For integration into an SoC with AXI or APB, a thin adapter can be placed outside this module.
+- The `sda_oe_o` output controls whether the external SDA pad drives or releases the bus. `sda_o` carries the drive value, and `sel_od_pp_o` exposes whether the active phase is open-drain or push-pull.
+- The `sel_od_pp_o` output connects to the FPGA/ASIC pad driver configuration. On Xilinx FPGAs, this can be used by wrapper logic around an IOBUF to select open-drain or push-pull behavior.
 - For simulation, SCL and SDA are modeled as wired-AND buses (open-drain behavior): the simulated bus value is the AND of all drivers. A pull-up resistor holds the line HIGH when no driver is active.
 - The module has no `ifdef` blocks — all configuration is done through parameters and CSR registers at runtime.
 - FIFO depth parameters (`CmdFifoDepth`, `TxFifoDepth`, `RxFifoDepth`, `RespFifoDepth`) live here at the top level and are passed down to `hci_queues`. `controller_active` does not carry FIFO depth parameters.

@@ -63,11 +63,11 @@ None.
 ### 5.1. FSM States (4 states)
 
 ```systemverilog
-typedef enum logic [1:0] {
-  Idle             = 2'd0,
-  ReadByte         = 2'd1,
-  ReadBit          = 2'd2,
-  NextTaskDecision = 2'd3
+typedef enum logic [2:0] {
+  Idle             = 3'd0,
+  ReadByte         = 3'd1,
+  ReadBit          = 3'd2,
+  NextTaskDecision = 3'd3
 } rx_state_e;
 ```
 

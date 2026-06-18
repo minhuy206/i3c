@@ -1,4 +1,11 @@
-module i3c_controller_top #(
+module i3c_controller_top
+  import controller_pkg::fifo_status_t;
+  import controller_pkg::fifo_status_t;
+  import controller_pkg::fifo_status_t;
+  import controller_pkg::fifo_status_t;
+  import controller_pkg::intr_event_t;
+  import controller_pkg::hc_control_cfg_t;
+#(
     parameter  int unsigned DatDepth      = 32,
     parameter  int unsigned CmdFifoDepth  = 64,
     parameter  int unsigned TxFifoDepth   = 64,
@@ -29,8 +36,10 @@ module i3c_controller_top #(
   // Internal signals
 
   // CSR configuration outputs
-  logic ctrl_enable, i3c_fsm_en, sw_reset;
+  logic ctrl_enable, i3c_fsm_en, sw_reset, hc_abort;
   logic broadcast_header_enable;
+  hc_control_cfg_t hc_control_cfg;
+
   logic [19:0] t_r, t_f, t_low, t_low_od, t_high;
   logic [19:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat, t_bus_free;
   logic [19:0] i2c_t_r, i2c_t_f, i2c_t_low, i2c_t_high;
@@ -54,11 +63,15 @@ module i3c_controller_top #(
   logic [31:0] resp_csr_rdata;
 
   // Queue status (shared between CSR and controller)
+  fifo_status_t cmd_status;
+  fifo_status_t resp_status;
+  fifo_status_t tx_status;
+  fifo_status_t rx_status;
+
   logic cmd_full, cmd_empty;
   logic tx_full, tx_empty;
   logic rx_full, rx_empty;
   logic resp_full, resp_empty;
-
   // HCI Queues ↔ Controller: CMD read side
   logic cmd_hw_rvalid, cmd_hw_rready;
   logic [63:0] cmd_hw_rdata;
@@ -87,6 +100,31 @@ module i3c_controller_top #(
 
   // Status
   logic i3c_fsm_idle;
+  logic hc_seq_cancel_event;
+  logic hc_err_cmd_seq_timeout_event;
+
+  intr_event_t intr_event;
+
+  assign cmd_status.full = cmd_full;
+  assign cmd_status.empty = cmd_empty;
+  assign tx_status.full = tx_full;
+  assign tx_status.empty = tx_empty;
+  assign rx_status.full = rx_full;
+  assign rx_status.empty = rx_empty;
+  assign resp_status.full = resp_full;
+  assign resp_status.empty = resp_empty;
+
+  assign intr_event.hc_internal_err = 1'b0;
+  assign intr_event.hc_seq_cancel = hc_seq_cancel_event;
+  assign intr_event.hc_warn_cmd_seq_stall = 1'b0;
+  assign intr_event.hc_err_cmd_seq_timeout = hc_err_cmd_seq_timeout_event;
+  assign intr_event.sched_cmd_missed_tick = 1'b0;
+
+  assign ctrl_enable = hc_control_cfg.ctrl_enable;
+  assign i3c_fsm_en = hc_control_cfg.i3c_fsm_en;
+  assign sw_reset = hc_control_cfg.sw_reset;
+  assign broadcast_header_enable = hc_control_cfg.broadcast_header_enable;
+  assign hc_abort = hc_control_cfg.abort;
 
   // CSR Registers
   csr_registers #(
@@ -96,61 +134,55 @@ module i3c_controller_top #(
   ) u_csr (
       .clk_i,
       .rst_ni,
-      .addr_i                   (reg_addr_i),
-      .wdata_i                  (reg_wdata_i),
-      .wen_i                    (reg_wen_i),
-      .ren_i                    (reg_ren_i),
-      .rdata_o                  (reg_rdata_o),
-      .ready_o                  (reg_ready_o),
-      .ctrl_enable_o            (ctrl_enable),
-      .i3c_fsm_en_o             (i3c_fsm_en),
-      .sw_reset_o               (sw_reset),
-      .broadcast_header_enable_o(broadcast_header_enable),
-      .t_r_o                    (t_r),
-      .t_f_o                    (t_f),
-      .t_low_o                  (t_low),
-      .t_low_od_o               (t_low_od),
-      .t_high_o                 (t_high),
-      .t_su_sta_o               (t_su_sta),
-      .t_hd_sta_o               (t_hd_sta),
-      .t_su_sto_o               (t_su_sto),
-      .t_su_dat_o               (t_su_dat),
-      .t_hd_dat_o               (t_hd_dat),
-      .t_bus_free_o             (t_bus_free),
-      .i2c_t_r_o                (i2c_t_r),
-      .i2c_t_f_o                (i2c_t_f),
-      .i2c_t_low_o              (i2c_t_low),
-      .i2c_t_high_o             (i2c_t_high),
-      .i2c_t_su_sta_o           (i2c_t_su_sta),
-      .i2c_t_hd_sta_o           (i2c_t_hd_sta),
-      .i2c_t_su_sto_o           (i2c_t_su_sto),
-      .i2c_t_su_dat_o           (i2c_t_su_dat),
-      .i2c_t_hd_dat_o           (i2c_t_hd_dat),
-      .i2c_t_buf_o              (i2c_t_buf),
-      .dat_read_valid_i         (dat_read_valid),
-      .dat_index_i              (dat_index),
-      .dat_rdata_o              (dat_rdata),
-      .cmd_wvalid_o             (cmd_csr_wvalid),
-      .cmd_wdata_o              (cmd_csr_wdata),
-      .cmd_wready_i             (cmd_csr_wready),
-      .tx_wvalid_o              (tx_csr_wvalid),
-      .tx_wdata_o               (tx_csr_wdata),
-      .tx_wready_i              (tx_csr_wready),
-      .rx_rvalid_i              (rx_csr_rvalid),
-      .rx_rdata_i               (rx_csr_rdata),
-      .rx_rready_o              (rx_csr_rready),
-      .resp_rvalid_i            (resp_csr_rvalid),
-      .resp_rdata_i             (resp_csr_rdata),
-      .resp_rready_o            (resp_csr_rready),
-      .cmd_full_i               (cmd_full),
-      .cmd_empty_i              (cmd_empty),
-      .tx_full_i                (tx_full),
-      .tx_empty_i               (tx_empty),
-      .rx_full_i                (rx_full),
-      .rx_empty_i               (rx_empty),
-      .resp_full_i              (resp_full),
-      .resp_empty_i             (resp_empty),
-      .i3c_fsm_idle_i           (i3c_fsm_idle)
+      .addr_i          (reg_addr_i),
+      .wdata_i         (reg_wdata_i),
+      .wen_i           (reg_wen_i),
+      .ren_i           (reg_ren_i),
+      .rdata_o         (reg_rdata_o),
+      .ready_o         (reg_ready_o),
+      .hc_control_cfg_o(hc_control_cfg),
+      .t_r_o           (t_r),
+      .t_f_o           (t_f),
+      .t_low_o         (t_low),
+      .t_low_od_o      (t_low_od),
+      .t_high_o        (t_high),
+      .t_su_sta_o      (t_su_sta),
+      .t_hd_sta_o      (t_hd_sta),
+      .t_su_sto_o      (t_su_sto),
+      .t_su_dat_o      (t_su_dat),
+      .t_hd_dat_o      (t_hd_dat),
+      .t_bus_free_o    (t_bus_free),
+      .i2c_t_r_o       (i2c_t_r),
+      .i2c_t_f_o       (i2c_t_f),
+      .i2c_t_low_o     (i2c_t_low),
+      .i2c_t_high_o    (i2c_t_high),
+      .i2c_t_su_sta_o  (i2c_t_su_sta),
+      .i2c_t_hd_sta_o  (i2c_t_hd_sta),
+      .i2c_t_su_sto_o  (i2c_t_su_sto),
+      .i2c_t_su_dat_o  (i2c_t_su_dat),
+      .i2c_t_hd_dat_o  (i2c_t_hd_dat),
+      .i2c_t_buf_o     (i2c_t_buf),
+      .dat_read_valid_i(dat_read_valid),
+      .dat_index_i     (dat_index),
+      .dat_rdata_o     (dat_rdata),
+      .cmd_wvalid_o    (cmd_csr_wvalid),
+      .cmd_wdata_o     (cmd_csr_wdata),
+      .cmd_wready_i    (cmd_csr_wready),
+      .tx_wvalid_o     (tx_csr_wvalid),
+      .tx_wdata_o      (tx_csr_wdata),
+      .tx_wready_i     (tx_csr_wready),
+      .rx_rvalid_i     (rx_csr_rvalid),
+      .rx_rdata_i      (rx_csr_rdata),
+      .rx_rready_o     (rx_csr_rready),
+      .resp_rvalid_i   (resp_csr_rvalid),
+      .resp_rdata_i    (resp_csr_rdata),
+      .resp_rready_o   (resp_csr_rready),
+      .cmd_status_i    (cmd_status),
+      .tx_status_i     (tx_status),
+      .rx_status_i     (rx_status),
+      .resp_status_i   (resp_status),
+      .intr_event_i    (intr_event),
+      .i3c_fsm_idle_i  (i3c_fsm_idle)
   );
 
   // HCI Queues
@@ -207,56 +239,59 @@ module i3c_controller_top #(
   ) u_ctrl (
       .clk_i,
       .rst_ni,
-      .ctrl_scl_i               (ctrl_scl_from_phy),
-      .ctrl_sda_i               (ctrl_sda_from_phy),
-      .ctrl_scl_o               (ctrl_scl_to_phy),
-      .ctrl_sda_o               (ctrl_sda_to_phy),
-      .ctrl_sda_oe_o            (ctrl_sda_oe_to_phy),
-      .sel_od_pp_o              (ctrl_sel_od_pp),
-      .cmd_queue_empty_i        (cmd_empty),
-      .cmd_queue_rvalid_i       (cmd_hw_rvalid),
-      .cmd_queue_rready_o       (cmd_hw_rready),
-      .cmd_queue_rdata_i        (cmd_hw_rdata),
-      .tx_queue_empty_i         (tx_empty),
-      .tx_queue_rvalid_i        (tx_hw_rvalid),
-      .tx_queue_rready_o        (tx_hw_rready),
-      .tx_queue_rdata_i         (tx_hw_rdata),
-      .rx_queue_full_i          (rx_full),
-      .rx_queue_wvalid_o        (rx_hw_wvalid),
-      .rx_queue_wready_i        (rx_hw_wready),
-      .rx_queue_wdata_o         (rx_hw_wdata),
-      .resp_queue_full_i        (resp_full),
-      .resp_queue_wvalid_o      (resp_hw_wvalid),
-      .resp_queue_wready_i      (resp_hw_wready),
-      .resp_queue_wdata_o       (resp_hw_wdata),
-      .dat_read_valid_hw_o      (dat_read_valid),
-      .dat_index_hw_o           (dat_index),
-      .dat_rdata_hw_i           (dat_rdata),
-      .t_r_i                    (t_r),
-      .t_f_i                    (t_f),
-      .t_low_i                  (t_low),
-      .t_low_od_i               (t_low_od),
-      .t_high_i                 (t_high),
-      .t_su_sta_i               (t_su_sta),
-      .t_hd_sta_i               (t_hd_sta),
-      .t_su_sto_i               (t_su_sto),
-      .t_su_dat_i               (t_su_dat),
-      .t_hd_dat_i               (t_hd_dat),
-      .t_bus_free_i             (t_bus_free),
-      .i2c_t_r_i                (i2c_t_r),
-      .i2c_t_f_i                (i2c_t_f),
-      .i2c_t_low_i              (i2c_t_low),
-      .i2c_t_high_i             (i2c_t_high),
-      .i2c_t_su_sta_i           (i2c_t_su_sta),
-      .i2c_t_hd_sta_i           (i2c_t_hd_sta),
-      .i2c_t_su_sto_i           (i2c_t_su_sto),
-      .i2c_t_su_dat_i           (i2c_t_su_dat),
-      .i2c_t_hd_dat_i           (i2c_t_hd_dat),
-      .i2c_t_buf_i              (i2c_t_buf),
-      .ctrl_enable_i            (ctrl_enable),
-      .broadcast_header_enable_i(broadcast_header_enable),
-      .i3c_fsm_en_i             (i3c_fsm_en),
-      .i3c_fsm_idle_o           (i3c_fsm_idle)
+      .ctrl_scl_i                    (ctrl_scl_from_phy),
+      .ctrl_sda_i                    (ctrl_sda_from_phy),
+      .ctrl_scl_o                    (ctrl_scl_to_phy),
+      .ctrl_sda_o                    (ctrl_sda_to_phy),
+      .ctrl_sda_oe_o                 (ctrl_sda_oe_to_phy),
+      .sel_od_pp_o                   (ctrl_sel_od_pp),
+      .cmd_queue_empty_i             (cmd_empty),
+      .cmd_queue_rvalid_i            (cmd_hw_rvalid),
+      .cmd_queue_rready_o            (cmd_hw_rready),
+      .cmd_queue_rdata_i             (cmd_hw_rdata),
+      .tx_queue_empty_i              (tx_empty),
+      .tx_queue_rvalid_i             (tx_hw_rvalid),
+      .tx_queue_rready_o             (tx_hw_rready),
+      .tx_queue_rdata_i              (tx_hw_rdata),
+      .rx_queue_full_i               (rx_full),
+      .rx_queue_wvalid_o             (rx_hw_wvalid),
+      .rx_queue_wready_i             (rx_hw_wready),
+      .rx_queue_wdata_o              (rx_hw_wdata),
+      .resp_queue_full_i             (resp_full),
+      .resp_queue_wvalid_o           (resp_hw_wvalid),
+      .resp_queue_wready_i           (resp_hw_wready),
+      .resp_queue_wdata_o            (resp_hw_wdata),
+      .dat_read_valid_hw_o           (dat_read_valid),
+      .dat_index_hw_o                (dat_index),
+      .dat_rdata_hw_i                (dat_rdata),
+      .t_r_i                         (t_r),
+      .t_f_i                         (t_f),
+      .t_low_i                       (t_low),
+      .t_low_od_i                    (t_low_od),
+      .t_high_i                      (t_high),
+      .t_su_sta_i                    (t_su_sta),
+      .t_hd_sta_i                    (t_hd_sta),
+      .t_su_sto_i                    (t_su_sto),
+      .t_su_dat_i                    (t_su_dat),
+      .t_hd_dat_i                    (t_hd_dat),
+      .t_bus_free_i                  (t_bus_free),
+      .i2c_t_r_i                     (i2c_t_r),
+      .i2c_t_f_i                     (i2c_t_f),
+      .i2c_t_low_i                   (i2c_t_low),
+      .i2c_t_high_i                  (i2c_t_high),
+      .i2c_t_su_sta_i                (i2c_t_su_sta),
+      .i2c_t_hd_sta_i                (i2c_t_hd_sta),
+      .i2c_t_su_sto_i                (i2c_t_su_sto),
+      .i2c_t_su_dat_i                (i2c_t_su_dat),
+      .i2c_t_hd_dat_i                (i2c_t_hd_dat),
+      .i2c_t_buf_i                   (i2c_t_buf),
+      .ctrl_enable_i                 (ctrl_enable),
+      .broadcast_header_enable_i     (broadcast_header_enable),
+      .i3c_fsm_en_i                  (i3c_fsm_en),
+      .abort_i                       (hc_abort),
+      .hc_seq_cancel_event_o         (hc_seq_cancel_event),
+      .hc_err_cmd_seq_timeout_event_o(hc_err_cmd_seq_timeout_event),
+      .i3c_fsm_idle_o                (i3c_fsm_idle)
   );
 
   // PHY (2FF synchronizer + output drivers)

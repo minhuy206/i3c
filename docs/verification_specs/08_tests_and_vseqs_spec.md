@@ -73,7 +73,7 @@ endfunction
 
 ```systemverilog
 virtual task run_phase(uvm_phase phase);
-  string test_seq_s = "i3c_smoke_vseq";  // Default
+  string test_seq_s = "i3c_imm_vseq";  // Default
   void'($value$plusargs("UVM_TEST_SEQ=%0s", test_seq_s));
 
   uvm_factory factory = uvm_factory::get();
@@ -100,7 +100,7 @@ Include file for all virtual sequences:
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_multi_dat_idx_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"
-`include "i3c_vseqs/imm_vseqs/i3c_smoke_vseq.sv"
+`include "i3c_vseqs/imm_vseqs/i3c_imm_vseq.sv"
 ```
 
 ---
@@ -228,7 +228,7 @@ endtask
 
 ---
 
-## 7. File: i3c_vseqs/imm_vseqs/i3c_smoke_vseq.sv
+## 7. File: i3c_vseqs/imm_vseqs/i3c_imm_vseq.sv
 
 ### 7.1. Purpose
 

@@ -40,7 +40,6 @@ class bus_scl_repeated_start_from_waitcmd_vseq extends bus_base_vseq;
     force_scl_generator_controls(1'b0, 1'b0, 1'b0, 1'b0, 1'b1);
     wait_sync_cycles(1);
     release_scl_generator_controls();
-    `uvm_info(`gfn, "BUS_007 repeated START from WaitCmd stimulus completed", UVM_LOW)
   endtask
 
 endclass

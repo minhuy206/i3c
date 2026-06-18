@@ -66,7 +66,6 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
     `DV_CHECK_EQ(resp[27:24], cfg.tid, "BUS_008: response TID mismatch")
     `DV_CHECK_EQ(resp[15:0], NUM_TEST_BYTES[15:0], "BUS_008: response length mismatch")
 
-    `uvm_info(`gfn, "BUS_008 full SDR write byte and bit-order checks passed", UVM_LOW)
   endtask
 
 endclass

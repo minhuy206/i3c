@@ -23,7 +23,6 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
     drain_two_entries(resp_paths, ADDR_RESP, 32'h0123_0004, 32'h0456_0008);
     exercise_empty_reads(resp_paths, ADDR_RESP);
 
-    `uvm_info(`gfn, "CSR RX/RESP read pop checks passed", UVM_LOW)
   endtask
 
   task drain_two_entries(queue_hdl_paths_t paths, bit [11:0] port_addr, bit [31:0] exp0,

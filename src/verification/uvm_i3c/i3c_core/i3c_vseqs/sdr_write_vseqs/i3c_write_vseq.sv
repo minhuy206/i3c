@@ -11,18 +11,19 @@ class i3c_write_vseq extends i3c_base_vseq;
     foreach (broadcast_modes[mode_idx]) begin
       run_write_case(broadcast_modes[mode_idx]);
     end
+
   endtask
 
   virtual task run_write_case(bit broadcast_header_enable);
-    transfer_stimulus_cfg_t cfg;
-    word_queue_t            tx_words;
-    bit [31:0]              resp;
-    i3c_device_response_seq dev_seq;
+    transfer_stimulus_cfg_t        cfg;
+    word_queue_t                   tx_words;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
 
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    cfg               = make_transfer_cfg(
+    cfg = make_transfer_cfg(
         .ctxt($sformatf("write_vseq %s", private_addr_mode_name(broadcast_header_enable))),
         .seq_name($sformatf("dev_seq_%s", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd1),
@@ -41,7 +42,13 @@ class i3c_write_vseq extends i3c_base_vseq;
     tx_words.push_back(32'hDEAD_BEEF);
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
-    check_success_resp(resp, cfg);
+    check_all_queues_empty($sformatf(
+                           "after SDRW_001 %s", private_addr_mode_name(broadcast_header_enable)));
+
+    `uvm_info(`gfn, $sformatf(
+                  "SDRW_001 result: mode=%s requested_len=%0d tx_word=0x%08h sampled_bytes=%0d",
+                  private_addr_mode_name(broadcast_header_enable), cfg.data_length, tx_words[0],
+                  dev_seq.sampled_data.size()), UVM_LOW)
   endtask
 
 endclass

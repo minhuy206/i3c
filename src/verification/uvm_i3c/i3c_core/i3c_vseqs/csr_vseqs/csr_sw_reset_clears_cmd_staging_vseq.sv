@@ -106,7 +106,6 @@ class csr_sw_reset_clears_cmd_staging_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(status[QS_TX_EMPTY_BIT], 1'b1,
                  "csr_sw_reset_clears_cmd_staging_vseq: TX FIFO should drain after fresh command")
 
-    `uvm_info(`gfn, "CSR software reset clears CMD staging checks passed", UVM_LOW)
   endtask
 
 endclass

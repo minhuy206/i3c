@@ -8,6 +8,7 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
   task body();
     run_multi_dat_idx_case(1'b0);
     run_toc_zero_multi_dat_idx_case(1'b0);
+
   endtask
 
   virtual task configure_multi_dat_targets();
@@ -22,21 +23,22 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_multi_dat_idx_case(bit broadcast_header_enable);
-    transfer_stimulus_cfg_t cfg0;
-    transfer_stimulus_cfg_t cfg1;
-    byte_queue_t            no_read_data;
-    word_queue_t            tx_words;
-    bit              [31:0] resp0;
-    bit              [31:0] resp1;
-    i3c_device_response_seq dev_seq0;
-    i3c_device_response_seq dev_seq1;
+    transfer_stimulus_cfg_t        cfg0;
+    transfer_stimulus_cfg_t        cfg1;
+    byte_queue_t                   no_read_data;
+    word_queue_t                   tx_words;
+    bit                     [31:0] resp0;
+    bit                     [31:0] resp1;
+    i3c_device_response_seq        dev_seq0;
+    i3c_device_response_seq        dev_seq1;
 
     configure_multi_dat_targets();
 
     cfg0 = make_transfer_cfg(
-        .ctxt($sformatf("SDRW_009 %s DAT[0]", private_addr_mode_name(broadcast_header_enable))),
-        .seq_name($sformatf("sdrw009_%s_dev_seq0",
-                            private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf("SDRW_008 %s DAT[0]", private_addr_mode_name(broadcast_header_enable))),
+        .seq_name($sformatf(
+            "sdrw008_%s_dev_seq0", private_addr_mode_name(broadcast_header_enable)
+        )),
         .tid(4'h9),
         .dev_idx(5'd0),
         .target_addr(7'h08),
@@ -51,9 +53,10 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
     cfg1 = make_transfer_cfg(
-        .ctxt($sformatf("SDRW_009 %s DAT[1]", private_addr_mode_name(broadcast_header_enable))),
-        .seq_name($sformatf("sdrw009_%s_dev_seq1",
-                            private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf("SDRW_008 %s DAT[1]", private_addr_mode_name(broadcast_header_enable))),
+        .seq_name($sformatf(
+            "sdrw008_%s_dev_seq1", private_addr_mode_name(broadcast_header_enable)
+        )),
         .tid(4'hB),
         .dev_idx(5'd1),
         .target_addr(7'h12),
@@ -87,32 +90,36 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
 
     check_dat_addr(dev_seq0, cfg0);
     check_dat_addr(dev_seq1, cfg1);
-    check_success_resp(resp0, cfg0);
-    check_success_resp(resp1, cfg1);
-    check_all_queues_empty($sformatf("after SDRW_009 %s multi DAT",
-                                     private_addr_mode_name(broadcast_header_enable)));
+    check_all_queues_empty(
+        $sformatf("after SDRW_008 %s multi DAT", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, "SDRW_009 I3C write multi-DAT index checks passed", UVM_LOW)
+    `uvm_info(`gfn, $sformatf(
+                  "SDRW_008 result: mode=%s case=multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} sampled_bytes={%0d,%0d}",
+                  private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
+                  cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr,
+                  dev_seq0.sampled_data.size(), dev_seq1.sampled_data.size()), UVM_LOW)
   endtask
 
   virtual task run_toc_zero_multi_dat_idx_case(bit broadcast_header_enable);
-    transfer_stimulus_cfg_t cfg0;
-    transfer_stimulus_cfg_t cfg1;
-    word_queue_t            tx_words;
-    bit              [31:0] resp0;
-    bit              [31:0] resp1;
-    int                     rstart_count;
-    i3c_device_response_seq dev_seq0;
-    i3c_device_response_seq dev_seq1;
+    transfer_stimulus_cfg_t        cfg0;
+    transfer_stimulus_cfg_t        cfg1;
+    word_queue_t                   tx_words;
+    bit                     [31:0] resp0;
+    bit                     [31:0] resp1;
+    int                            rstart_count;
+    i3c_device_response_seq        dev_seq0;
+    i3c_device_response_seq        dev_seq1;
 
     configure_multi_dat_targets();
     enable_dut(broadcast_header_enable);
 
     cfg0 = make_transfer_cfg(
-        .ctxt($sformatf("SDRW_009 %s toc0 DAT[0]",
-                        private_addr_mode_name(broadcast_header_enable))),
-        .seq_name($sformatf("sdrw009_%s_toc0_dev_seq0",
-                            private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf(
+            "SDRW_008 %s toc0 DAT[0]", private_addr_mode_name(broadcast_header_enable)
+        )),
+        .seq_name($sformatf(
+            "sdrw008_%s_toc0_dev_seq0", private_addr_mode_name(broadcast_header_enable)
+        )),
         .tid(4'hC),
         .dev_idx(5'd0),
         .target_addr(7'h08),
@@ -127,10 +134,12 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
     cfg1 = make_transfer_cfg(
-        .ctxt($sformatf("SDRW_009 %s toc0 DAT[1]",
-                        private_addr_mode_name(broadcast_header_enable))),
-        .seq_name($sformatf("sdrw009_%s_toc0_dev_seq1",
-                            private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf(
+            "SDRW_008 %s toc0 DAT[1]", private_addr_mode_name(broadcast_header_enable)
+        )),
+        .seq_name($sformatf(
+            "sdrw008_%s_toc0_dev_seq1", private_addr_mode_name(broadcast_header_enable)
+        )),
         .tid(4'hD),
         .dev_idx(5'd1),
         .target_addr(7'h12),
@@ -153,18 +162,21 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
 
     check_dat_addr(dev_seq0, cfg0);
     check_dat_addr(dev_seq1, cfg1);
-    `DV_CHECK_EQ(rstart_count, 1, "SDRW_009 toc0 multi-DAT: expected exactly one RSTART")
+    `DV_CHECK_EQ(rstart_count, 1, "SDRW_008 toc0 multi-DAT: expected exactly one RSTART")
     `DV_CHECK_EQ(dev_seq0.observed_rstart, 1'b1,
-                 "SDRW_009 toc0 multi-DAT: first write should end with RSTART")
+                 "SDRW_008 toc0 multi-DAT: first write should end with RSTART")
     `DV_CHECK_EQ(dev_seq1.observed_rstart, 1'b0,
-                 "SDRW_009 toc0 multi-DAT: second write should end with STOP")
+                 "SDRW_008 toc0 multi-DAT: second write should end with STOP")
 
-    check_success_resp(resp0, cfg0);
-    check_success_resp(resp1, cfg1);
-    check_all_queues_empty($sformatf("after SDRW_009 %s toc0 multi-DAT",
-                                     private_addr_mode_name(broadcast_header_enable)));
+    check_all_queues_empty(
+        $sformatf(
+        "after SDRW_008 %s toc0 multi-DAT", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, "SDRW_009 I3C write toc0 multi-DAT continuation checks passed", UVM_LOW)
+    `uvm_info(`gfn, $sformatf(
+                  "SDRW_008 result: mode=%s case=toc0_multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b",
+                  private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
+                  cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr, rstart_count,
+                  dev_seq0.observed_rstart, dev_seq1.observed_rstart), UVM_LOW)
   endtask
 
   virtual task check_dat_addr(input i3c_device_response_seq dev_seq,

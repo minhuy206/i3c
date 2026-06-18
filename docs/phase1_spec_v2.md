@@ -649,30 +649,31 @@ stateDiagram-v2
 Top-level FSM that orchestrates all master transactions. **Simplified from reference design**
 (removed HDR paths; I2C backward compatibility retained as mandatory).
 
-**FSM States:**
+**FSM States (14 states):**
 
 ```systemverilog
 typedef enum logic [3:0] {
     Idle,               // Waiting for software command
     WaitForCmd,         // Fetch command from Command FIFO
     FetchDAT,           // Look up target in Device Address Table
-    I3CWriteImmediate,  // Small write with inline data (up to 4 bytes)
+    WaitDAT,            // Wait for DAT read latency
+    I3CBcastHeader,     // Issue I3C broadcast header (0x7E+W)
+    I3CWriteImmediate,  // Small I3C write with inline data (up to 4 bytes)
     I2CWriteImmediate,  // I2C legacy immediate write
     FetchTxData,        // Fetch data from TX FIFO
-    FetchRxData,        // Process received data to RX FIFO
+    InitI3CWrite,       // Initialize I3C private write transaction
+    InitI3CRead,        // Initialize I3C private read transaction
     InitI2CWrite,       // Initialize I2C write transaction
     InitI2CRead,        // Initialize I2C read transaction
-    StallWrite,         // Wait for TX FIFO data
-    StallRead,          // Wait for RX FIFO space
     IssueCmd,           // Drive command on the bus
     WriteResp           // Write result to Response FIFO
 } flow_fsm_state_e;
 ```
 
-> **Simplification:** The reference design defines 13 states but only 5 are implemented (8 are
-> TODO stubs). The thesis will implement all 13 states with simplified internal logic (no HDR
-> mode paths). I2C states are retained with minimal support (hardcoded 400 kHz Fast Mode timing,
-> no CSR configurability).
+> **Implementation note:** All 14 states are implemented. HDR mode paths and IBI handling are
+> removed. I2C backward compatibility (400 kHz Fast Mode, hardcoded timing) is retained.
+> HC-abort and short-read error paths are handled as combinational priority logic within existing
+> states — no extra states required.
 
 **Command types:**
 
@@ -730,11 +731,11 @@ auto-generated RDL, focused on basic master needs.
 | Group            | Description                                          |
 | ---------------- | ---------------------------------------------------- |
 | I3CBase          | Core control, status, interrupt enable/status        |
-| DAT              | Device Address Table (up to 16 entries x 64-bit)     |
+| DAT              | Device Address Table (32 entries × 32-bit)           |
 | Timing registers | SCL timing configuration                             |
 | Queue thresholds | FIFO threshold and status registers                  |
 
-> **Simplification:** DAT reduced from 128 to 16 entries (sufficient for thesis scope). DCT
+> **Simplification:** DAT reduced from 128 to 32 entries (sufficient for thesis scope). DCT
 > (Device Characteristics Table) is optional — PID/BCR/DCR from ENTDAA can be stored in
 > software. IBI-related register fields removed.
 
@@ -791,19 +792,25 @@ block-beta
     D["data_length\nBit [15:0]"]
 ```
 
-**Error status codes (essential subset):**
+**Error status codes (TCRI 7.1.3 Table 11 / `i3c_resp_err_status_e`):**
 
-| Code | Name                 | Description                |
-| ---- | -------------------- | -------------------------- |
-| 0x0  | Success              | No error                   |
-| 0x2  | Parity Error         | T-bit parity mismatch      |
-| 0x3  | Frame Error          | Framing violation          |
-| 0x4  | Address Header Error | Address not acknowledged   |
-| 0x5  | NACK                 | Target NACKed              |
-| 0x6  | Overflow             | FIFO overflow or underflow |
+| Code | Name                         | Description                                  | Generated? |
+| ---- | ---------------------------- | -------------------------------------------- | ---------- |
+| 0x0  | `Success`                    | No error                                     | ✓          |
+| 0x1  | `Crc`                        | CRC error (HDR modes)                        | —          |
+| 0x2  | `Parity`                     | T-bit parity mismatch                        | —          |
+| 0x3  | `Frame`                      | Framing violation                            | —          |
+| 0x4  | `AddrHeader`                 | Address header NACK                          | ✓          |
+| 0x5  | `Nack`                       | Target data NACK                             | ✓          |
+| 0x6  | `Ovl`                        | FIFO overflow / underflow                    | ✓          |
+| 0x7  | `I3cShortReadErr`            | Target ends read early (T-bit=0 before len)  | ✓          |
+| 0x8  | `HcAborted`                  | Host controller abort requested              | ✓          |
+| 0x9  | `I2cDataNackOrI3cBusAborted` | I2C data-phase NACK or I3C bus abort         | —          |
+| 0xA  | `NotSupported`               | Unsupported command type                     | ✓          |
 
-> **Simplification:** Reduced from 10 error codes to 6. CRC Error (0x1) removed (no HDR),
-> Short Read Error (0x7) and HC/Bus Aborted (0x8, 0x9) can be added later.
+> The full enum is defined to match the TCRI HCI spec for compatibility. Codes marked **—**
+> (Crc, Parity, Frame, I2cDataNackOrI3cBusAborted) are declared in the enum but not generated
+> by this SDR-only design — HDR modes are out of scope.
 
 ---
 
@@ -817,12 +824,12 @@ block-beta
 | `TX_FIFO_DEPTH`   | 64      | TX data FIFO depth                 |
 | `RX_FIFO_DEPTH`   | 64      | RX data FIFO depth                 |
 | `RESP_FIFO_DEPTH` | 64      | Response FIFO depth                |
-| `DAT_DEPTH`       | 16      | Max device address table entries   |
+| `DAT_DEPTH`       | 32      | Max device address table entries   |
 | `DATA_WIDTH`      | 32      | Register bus data width            |
 | `ADDR_WIDTH`      | 12      | Register bus address width         |
 
 > **Removed:** `IBI_FIFO_DEPTH` (no IBI support), `DCT_DEPTH` (DCT optional).
-> **Changed:** `DAT_DEPTH` reduced from 128 to 16.
+> **Changed:** `DAT_DEPTH` reduced from 128 to 32.
 
 ### 10.2. Design Decisions
 

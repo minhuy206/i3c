@@ -12,8 +12,6 @@ class bus_scl_start_stop_timing_vseq extends bus_base_vseq;
     hdl_release_checked(bus_paths.scl_gen_scl_i_path);
     release_scl_generator_timing_mode();
     release_scl_generator_controls();
-    `uvm_info(`gfn, "BUS_004 generated START/STOP I3C and I2C timing stimulus completed",
-              UVM_LOW)
   endtask
 
   virtual task run_i3c_timing_profile(string profile_name, i3c_timing_t tc);
@@ -53,8 +51,6 @@ class bus_scl_start_stop_timing_vseq extends bus_base_vseq;
                                            int unsigned t_f);
     start_generator(1'b0);
     wait_sync_cycles(t_su_sta + t_hd_sta + t_low + t_f + 8);
-    `uvm_info(`gfn, $sformatf("BUS_004 START stimulus completed for %s", profile_name),
-              UVM_HIGH)
   endtask
 
   virtual task drive_stop_timing_stimulus(string profile_name, int unsigned t_su_sto,
@@ -67,8 +63,6 @@ class bus_scl_start_stop_timing_vseq extends bus_base_vseq;
     wait_sync_cycles(t_su_sto + t_bus_free + 8);
     hdl_release_checked(bus_paths.scl_gen_scl_i_path);
     wait_sync_cycles(2);
-    `uvm_info(`gfn, $sformatf("BUS_004 STOP stimulus completed for %s", profile_name),
-              UVM_HIGH)
   endtask
 
 endclass

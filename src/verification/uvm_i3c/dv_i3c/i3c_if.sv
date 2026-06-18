@@ -95,40 +95,213 @@ interface i3c_if (
   task automatic get_bit_data(input string src = "host", output bit bit_o);
     @(posedge scl_i);
     bit_o = sda_i;
-    `uvm_info(msg_id, $sformatf("get bit data %d from %s", bit_o, src), UVM_DEBUG)
+    `uvm_info(msg_id, $sformatf("get bit data %d from %s", bit_o, src), UVM_HIGH)
     @(negedge scl_i);
   endtask : get_bit_data
 
-  task automatic wait_for_host_start();
-    @(negedge sda_i iff scl_i);
-  endtask
+  task automatic wait_for_host_start(input i3c_timing_t tc);
+    bit  start_seen;
+    bit  hold_done;
+    bit  hold_violated;
+    time idle_high_time;
+    time sda_fall_time;
+    time setup_actual_time;
 
-  task automatic wait_for_host_rstart(output bit rstart);
+    forever begin
+      wait (scl_i === 1'b1 && sda_i === 1'b1);
+      idle_high_time = $time;
+
+      start_seen = 1'b0;
+      fork
+        begin
+          @(negedge sda_i iff scl_i);
+          start_seen = 1'b1;
+          sda_fall_time = $time;
+        end
+        begin
+          @(negedge scl_i);
+        end
+      join_any
+      disable fork;
+
+      if (!start_seen || scl_i !== 1'b1 || sda_i !== 1'b0) continue;
+
+      setup_actual_time = sda_fall_time - idle_high_time;
+      if (setup_actual_time < (tc.tSetupStart * 1ns)) begin
+        `uvm_info(msg_id,
+                  $sformatf(
+                      "Host START setup time check failed: expected time %0t vs actual time %0t",
+                      tc.tSetupStart * 1ns, setup_actual_time), UVM_HIGH)
+      end
+
+      hold_done = 1'b0;
+      hold_violated = 1'b0;
+      fork
+        begin
+          #(tc.tHoldStart * 1ns);
+          hold_done = 1'b1;
+        end
+        begin
+          @(negedge scl_i);
+          if (!hold_done) hold_violated = 1'b1;
+        end
+      join_any
+      disable fork;
+
+      if (hold_violated) begin
+        `uvm_info(msg_id, "Host START hold time check failed", UVM_HIGH)
+      end
+
+      break;
+    end
+  endtask : wait_for_host_start
+
+  task automatic wait_for_host_rstart(input i3c_timing_t tc, output bit rstart);
+    bit  setup_check_valid;
+    bit  sda_high_seen;
+    bit  rstart_seen;
+    bit  hold_done;
+    bit  hold_violated;
+    time scl_high_time;
+    time sda_fall_time;
+    time setup_actual_time;
+
     rstart = 1'b0;
-    @(negedge sda_i iff scl_i);
-    rstart = 1'b1;
-  endtask
 
-  task automatic wait_for_host_stop(input int wait_delay, output bit stop);
+    forever begin
+      setup_check_valid = 1'b0;
+      sda_high_seen = 1'b0;
+      rstart_seen = 1'b0;
+
+      if (scl_i !== 1'b1) begin
+        @(posedge scl_i);
+        setup_check_valid = 1'b1;
+        scl_high_time = $time;
+      end
+
+      if (sda_i !== 1'b1) begin
+        fork
+          begin
+            @(posedge sda_i);
+            sda_high_seen = 1'b1;
+          end
+          begin
+            @(negedge scl_i);
+          end
+        join_any
+        disable fork;
+        if (!sda_high_seen || scl_i !== 1'b1) continue;
+      end
+
+      fork
+        begin
+          @(negedge sda_i iff scl_i);
+          rstart_seen   = 1'b1;
+          sda_fall_time = $time;
+        end
+        begin
+          @(negedge scl_i);
+        end
+      join_any
+      disable fork;
+
+      if (!rstart_seen || scl_i !== 1'b1 || sda_i !== 1'b0) continue;
+
+      if (setup_check_valid) begin
+        setup_actual_time = sda_fall_time - scl_high_time;
+        if (setup_actual_time < (tc.tSetupStart * 1ns)) begin
+          `uvm_info(msg_id,
+                    $sformatf(
+                        "Host RSTART setup time check failed: expected time %0t vs actual time %0t",
+                        tc.tSetupStart * 1ns, setup_actual_time), UVM_HIGH)
+        end
+      end
+
+      hold_done = 1'b0;
+      hold_violated = 1'b0;
+      fork
+        begin
+          #(tc.tHoldRStart * 1ns);
+          hold_done = 1'b1;
+        end
+        begin
+          @(negedge scl_i);
+          if (!hold_done) hold_violated = 1'b1;
+        end
+      join_any
+      disable fork;
+
+      if (hold_violated) begin
+        `uvm_info(msg_id, "Host RSTART hold time check failed", UVM_HIGH)
+      end
+
+      rstart = 1'b1;
+      break;
+    end
+  endtask : wait_for_host_rstart
+
+  task automatic wait_for_host_stop(input i3c_timing_t tc, output bit stop);
+    bit stop_setup_done;
+    bit bus_free_done;
+    bit bus_free_violated;
+
     stop = 1'b0;
     forever begin
-      @(posedge sda_i iff scl_i);
-      #(wait_delay * 1ns);
-      if (scl_i === 1'b1 && sda_i === 1'b1) begin
+      wait (scl_i === 1'b0 && sda_i === 1'b0);
+      @(posedge scl_i or posedge sda_i);
+      if (!(scl_i === 1'b1 && sda_i === 1'b0)) continue;
+
+      stop_setup_done = 1'b0;
+      fork
+        begin
+          time_check(tc.tSetupStop, 1'b1, sda_i, "Host STOP setup");
+          stop_setup_done = 1'b1;
+        end
+        begin
+          @(negedge scl_i);
+        end
+      join_any
+      disable fork;
+      if (!stop_setup_done || scl_i !== 1'b1 || sda_i !== 1'b1) continue;
+
+      bus_free_done = 1'b0;
+      bus_free_violated = 1'b0;
+      fork
+        begin
+          #(tc.tHoldStop * 1ns);
+          bus_free_done = 1'b1;
+        end
+        begin
+          @(negedge scl_i or negedge sda_i);
+          if (!bus_free_done) bus_free_violated = 1'b1;
+        end
+      join_any
+      disable fork;
+
+      if (bus_free_violated) begin
+        `uvm_info(msg_id, "Host STOP bus free time check failed", UVM_HIGH)
+      end else if (scl_i === 1'b1 && sda_i === 1'b1) begin
         stop = 1'b1;
         break;
       end
     end
-  endtask
+  endtask : wait_for_host_stop
 
   task automatic wait_for_i2c_host_stop_or_rstart(input i2c_timing_t tc, output bit rstart,
                                                   output bit stop);
-    int delay = tc.tHoldStop;
+    i3c_timing_t host_tc;
+
+    host_tc.tSetupStart = tc.tSetupStart;
+    host_tc.tHoldStart  = tc.tHoldStart;
+    host_tc.tHoldRStart = tc.tHoldStart;
+    host_tc.tSetupStop  = tc.tSetupStop;
+    host_tc.tHoldStop   = tc.tHoldStop;
+
     fork
       begin : iso_fork
         fork
-          wait_for_host_stop(.wait_delay(delay), .stop(stop));
-          wait_for_host_rstart(.rstart(rstart));
+          wait_for_host_stop(.tc(host_tc), .stop(stop));
+          wait_for_host_rstart(.tc(host_tc), .rstart(rstart));
         join_any
         disable fork;
       end : iso_fork
@@ -137,38 +310,55 @@ interface i3c_if (
 
   task automatic wait_for_i3c_host_stop_or_rstart(input i3c_timing_t tc, output bit rstart,
                                                   output bit stop);
-    int delay = tc.tHoldStop;
     fork
       begin : iso_fork
         fork
-          wait_for_host_stop(.wait_delay(delay), .stop(stop));
-          wait_for_host_rstart(.rstart(rstart));
+          wait_for_host_stop(.tc(tc), .stop(stop));
+          wait_for_host_rstart(.tc(tc), .rstart(rstart));
         join_any
         disable fork;
       end : iso_fork
     join
   endtask : wait_for_i3c_host_stop_or_rstart
 
+  task automatic wait_for_i3c_host_stop_or_rstart_after_ack(input i3c_timing_t tc,
+                                                            output bit rstart, output bit stop);
+    rstart = 1'b0;
+    stop   = 1'b0;
+    fork
+      begin : iso_fork
+        fork
+          wait_for_host_rstart(.tc(tc), .rstart(rstart));
+          begin
+            if (scl_i === 1'b1) @(negedge scl_i);
+            wait_for_host_stop(.tc(tc), .stop(stop));
+          end
+        join_any
+        disable fork;
+      end : iso_fork
+    join
+  endtask : wait_for_i3c_host_stop_or_rstart_after_ack
+
   task automatic wait_for_host_ack();
-    `uvm_info(msg_id, "Wait for host ack::Begin", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host ack::Begin", UVM_HIGH)
     forever begin
       @(posedge scl_i);
       if (!sda_i) begin
         break;
       end
     end
-    `uvm_info(msg_id, "Wait for host ack::Ack received", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host ack::Ack received", UVM_HIGH)
   endtask : wait_for_host_ack
 
   task automatic wait_for_host_nack();
-    `uvm_info(msg_id, "Wait for host nack::Begin", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host nack::Begin", UVM_HIGH)
     forever begin
       @(posedge scl_i);
       if (sda_i) begin
         break;
       end
     end
-    `uvm_info(msg_id, "Wait for host nack::Nack received", UVM_DEBUG)
+    `uvm_info(msg_id, "Wait for host nack::Nack received", UVM_HIGH)
   endtask : wait_for_host_nack
 
   task automatic wait_for_host_ack_or_nack(output bit ack_r);
@@ -229,10 +419,10 @@ interface i3c_if (
     device_sda_pp_en = 0;
     device_sda_o = 1'b1;
     wait (!scl_i);
-    `uvm_info(msg_id, "device_i2c_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i2c_send_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I2C device bit setup");
-    `uvm_info(msg_id, "device_i2c_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i2c_send_bit::Value sampled", UVM_HIGH)
 
     min_high_done  = 1'b0;
     scl_fell_early = 1'b0;
@@ -265,15 +455,8 @@ interface i3c_if (
     device_sda_o = 1'b1;
   endtask : device_i2c_send_bit
 
-  task automatic device_i2c_send_ack(input i2c_timing_t tc);
-    device_i2c_send_bit(tc, 1'b0);
-  endtask : device_i2c_send_ack
-
-  task automatic device_i2c_send_nack(input i2c_timing_t tc);
-    device_i2c_send_bit(tc, 1'b1);
-  endtask : device_i2c_send_nack
-
-  task automatic wait_for_i3c_target_sda_handoff(input string phase, output bit ok);
+  task automatic wait_for_i3c_target_sda_handoff(input string phase, output bit ok,
+                                                 input bit pp_phase = 1'b0);
     bit handoff_seen;
 
     ok = 1'b0;
@@ -284,7 +467,12 @@ interface i3c_if (
     handoff_seen = 1'b0;
     fork
       begin
-        wait (dut_sda_oe === 1'b0);
+        // Valid handoff. For a push-pull read bit, also require the controller to be
+        // in PP phase (sel_od_pp==1): during a STOP/Rstart frame flow_active forces
+        // sel_od_pp=0 yet may still release the pad (sda_oe==0, e.g. SdaRise), which
+        // must NOT be mistaken for a read-data handoff.
+        if (pp_phase) wait (dut_sda_oe === 1'b0 && dut_sel_od_pp === 1'b1);
+        else wait (dut_sda_oe === 1'b0);
         handoff_seen = 1'b1;
       end
       begin
@@ -294,6 +482,16 @@ interface i3c_if (
     disable fork;
 
     if (!handoff_seen) begin
+      // SCL rose before a handoff: if the controller is in OD (sel_od_pp==0) on a PP
+      // read bit, it is framing a STOP/Rstart (controller owns SDA) -> relinquish
+      // quietly so the bus monitor observes the STOP. This is not an error.
+      if (pp_phase && dut_sel_od_pp === 1'b0) begin
+        `uvm_info(msg_id, $sformatf("Controller framing STOP/Rstart before %s; target releases SDA",
+                                    phase), UVM_HIGH)
+        device_sda_pp_en = 1'b0;
+        device_sda_o = 1'b1;
+        return;
+      end
       `uvm_error(msg_id, $sformatf("Controller did not release SDA before %s", phase))
       wait (!scl_i);
       device_sda_o = 1'b1;
@@ -306,12 +504,13 @@ interface i3c_if (
   task automatic device_i3c_raw_od_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 0;
-    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Value", UVM_HIGH)
     time_check(tc.tClockPulse, 1'b0, scl_i, "I3C device bit clock high pulse width");
     #(tc.tHoldBit * 1ns);
+    `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Released SDA", UVM_HIGH)
     device_sda_o = 1;
   endtask : device_i3c_raw_od_send_bit
 
@@ -322,17 +521,26 @@ interface i3c_if (
     if (!handoff_ok) return;
 
     `uvm_info(msg_id, $sformatf("device_i3c_send_addr_ack::Drive %s", ack ? "ACK" : "NACK"),
-              UVM_DEBUG)
-    device_i3c_raw_od_send_bit(tc, ack ? 1'b0 : 1'b1);
+              UVM_HIGH)
+
+    wait (!scl_i);
+    device_sda_pp_en = 0;
+    device_sda_o = ack ? 1'b0 : 1'b1;
+    time_check(tc.tSetupBit, 1'b1, scl_i, "I3C address ACK setup");
+    `uvm_info(msg_id, "device_i3c_send_addr_ack::ACK", UVM_HIGH)
+
+    #(tc.tSCO * 1ns);
+    device_sda_o = 1'b1;
+    `uvm_info(msg_id, "device_i3c_send_addr_ack::Released SDA after ACK handoff", UVM_HIGH)
   endtask : device_i3c_send_addr_ack
 
   task automatic device_i3c_raw_pp_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Value sampled", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_bit::Value", UVM_HIGH)
     time_check(tc.tClockPulse, 1'b0, scl_i, "I3C device bit clock high pulse width");
     #(tc.tHoldBit * 1ns);
     device_sda_pp_en = 0;
@@ -342,32 +550,55 @@ interface i3c_if (
   task automatic device_i3c_raw_pp_send_t_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
     device_sda_pp_en = 1;
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Drive bit", UVM_DEBUG)
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Value", UVM_HIGH)
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
-    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit::Value sampled", UVM_DEBUG)
-    #(12 * 1ns);
+    #(tc.tSCO * 1ns);
     device_sda_pp_en = 0;
-    time_check(tc.tClockPulse - 12, 1'b0, scl_i, "I3C device bit clock high pulse width");
+    time_check(tc.tClockPulse - tc.tSCO, 1'b0, scl_i, "I3C device bit clock high pulse width");
+    `uvm_info(msg_id, "device_i3c_raw_pp_send_t_bit", UVM_HIGH)
     device_sda_o = 1;
   endtask : device_i3c_raw_pp_send_t_bit
 
   task automatic device_i3c_send_bit(input i3c_timing_t tc, input bit bit_i);
     bit handoff_ok;
+    bit rstart;
+    bit stop;
 
-    wait_for_i3c_target_sda_handoff("I3C read data bit", handoff_ok);
+    wait_for_i3c_target_sda_handoff("I3C read data bit", handoff_ok, 1'b1);
     if (!handoff_ok) return;
 
-    device_i3c_raw_pp_send_bit(tc, bit_i);
+    fork
+      begin
+        device_i3c_raw_pp_send_bit(tc, bit_i);
+      end
+      begin
+        wait_for_i3c_host_stop_or_rstart(tc, rstart, stop);
+      end
+    join_any
+    disable fork;
+
   endtask : device_i3c_send_bit
 
   task automatic device_i3c_send_t_bit(input i3c_timing_t tc, input bit bit_i);
     bit handoff_ok;
+    bit rstart;
+    bit stop;
 
-    wait_for_i3c_target_sda_handoff("I3C read T-bit", handoff_ok);
+    wait_for_i3c_target_sda_handoff("I3C read T-bit", handoff_ok, 1'b1);
     if (!handoff_ok) return;
 
-    device_i3c_raw_pp_send_t_bit(tc, bit_i);
+    fork
+      begin
+        device_i3c_raw_pp_send_t_bit(tc, bit_i);
+      end
+      begin
+        wait_for_i3c_host_stop_or_rstart(tc, rstart, stop);
+      end
+    join_any
+    disable fork;
+
   endtask : device_i3c_send_t_bit
 
   task automatic device_i3c_send_daa_bit(input i3c_timing_t tc, input bit bit_i);

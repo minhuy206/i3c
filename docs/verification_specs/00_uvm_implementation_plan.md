@@ -50,7 +50,7 @@ graph TB
 
     subgraph TESTS["Test Layer"]
         BASE_TEST["i3c_base_test"]
-        SMOKE["i3c_smoke_vseq"]
+        SMOKE["i3c_imm_vseq"]
         WRITE_TEST["i3c_write_vseq"]
         READ_TEST["i3c_read_vseq"]
     end
@@ -113,7 +113,7 @@ src/verification/
     │   ├── i3c_test_pkg.sv
     │   └── i3c_vseqs/
     │       ├── i3c_base_vseq.sv
-    │       ├── i3c_smoke_vseq.sv
+    │       ├── i3c_imm_vseq.sv
     │       ├── i3c_write_vseq.sv
     │       ├── i3c_read_vseq.sv
     │       └── i3c_vseq_list.sv
@@ -179,7 +179,7 @@ cd src/verification
 xrun -compile -elaborate -f uvm_i3c/filelist.f -uvmhome CDNS-1.2
 
 # Run smoke test
-xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_smoke_vseq
+xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_imm_vseq
 
 # Run with verbosity
 xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_write_vseq +UVM_VERBOSITY=UVM_HIGH
