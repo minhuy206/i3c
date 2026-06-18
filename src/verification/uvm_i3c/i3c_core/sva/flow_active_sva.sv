@@ -5,6 +5,8 @@ module flow_active_sva
   import controller_pkg::Write;
   import i3c_pkg::AddressAssignment;
   import i3c_pkg::AddrHeader;
+  import i3c_pkg::HcAborted;
+  import i3c_pkg::I3C_RSVD_ADDR;
   import i3c_pkg::I3cShortReadErr;
   import i3c_pkg::NotSupported;
   import i3c_pkg::Ovl;
@@ -26,6 +28,7 @@ module flow_active_sva
     input logic                                              rst_ni,
     input logic                       [                 3:0] state_q,
     input logic                                              sel_od_pp_o,
+    input logic                                              sel_i3c_i2c_o,
     input logic                                              use_i2c_timing_o,
     input logic                                              scl_use_od_low_o,
     input logic                       [                 7:0] issue_phase_q,
@@ -40,6 +43,7 @@ module flow_active_sva
     input logic                       [                15:0] resp_data_len_q,
     input logic                                              short_read_q,
     input logic                                              addr_nack_q,
+    input logic                                              data_nack_q,
     input logic                                              addr_after_rstart_q,
     input logic                                              next_start_is_rstart_q,
     input logic                                              cont_pending_q,
@@ -75,10 +79,13 @@ module flow_active_sva
     input logic                       [                 7:0] current_tx_byte,
     input logic                       [                31:0] rx_dword_q,
     input logic                       [                 1:0] rx_byte_idx_q,
+    input logic                                              bus_tx_done_i,
     input logic                                              bus_rx_done_i,
     input logic                       [                 7:0] bus_rx_data_i,
     input logic                                              scl_stop_done_q,
     input logic                                              hc_aborted_q,
+    input logic                                              abort_i,
+    input logic                                              read_abort_term_q,
     input logic                                              resp_queue_wvalid,
     input logic                       [HciRespDataWidth-1:0] resp_queue_wdata
 );
@@ -123,11 +130,14 @@ module flow_active_sva
   endfunction
 
   function automatic logic expected_imm_sel_od_pp(input immediate_data_trans_desc_t desc,
-                                                  input logic [7:0] phase);
+                                                  input logic [7:0] phase,
+                                                  input logic addr_after_rstart);
     expected_imm_sel_od_pp = 1'b0;
 
     if (!desc.cp) begin
-      expected_imm_sel_od_pp = phase_in_data_pairs(phase, PhaseDataStart, desc.dtt);
+      expected_imm_sel_od_pp =
+          ((phase == PhaseAddr) && addr_after_rstart) ||
+          phase_in_data_pairs(phase, PhaseDataStart, desc.dtt);
     end else if (desc.cmd[7]) begin
       expected_imm_sel_od_pp = (phase == 8'd3) || (phase == 8'd4) ||
                                (phase == 8'd6) || (phase == 8'd8) ||
@@ -165,7 +175,7 @@ module flow_active_sva
     end else begin
       unique case (state)
         I3CWriteImmediate: begin
-          expected_sel_od_pp = expected_imm_sel_od_pp(desc, phase);
+          expected_sel_od_pp = expected_imm_sel_od_pp(desc, phase, addr_after_rstart);
         end
 
         InitI3CWrite: begin
@@ -237,6 +247,38 @@ module flow_active_sva
     return (cmd_attr == RegularTransfer) && (cmd_dir == Read) && !dat_entry.device;
   endfunction
 
+  function automatic logic i2c_regular_write();
+    return (cmd_attr == RegularTransfer) && (cmd_dir == Write) && dat_entry.device;
+  endfunction
+
+  function automatic logic i2c_regular_read();
+    return (cmd_attr == RegularTransfer) && (cmd_dir == Read) && dat_entry.device;
+  endfunction
+
+  function automatic logic i2c_regular_xfer();
+    return i2c_regular_write() || i2c_regular_read();
+  endfunction
+
+  function automatic logic i2c_active_state();
+    return (state_q == InitI2CWrite) ||
+           (state_q == InitI2CRead) ||
+           (state_q == FetchTxData) ||
+           (state_q == IssueCmd);
+  endfunction
+
+  function automatic logic [7:0] expected_imm_data_byte(
+      input immediate_data_trans_desc_t desc, input logic [7:0] phase);
+    logic [2:0] idx;
+    idx = ((phase - PhaseDataStart) >> 1);  // matches select_imm_data_byte
+    unique case (idx)
+      3'd0: expected_imm_data_byte = desc.def_or_data_byte1;
+      3'd1: expected_imm_data_byte = desc.data_byte2;
+      3'd2: expected_imm_data_byte = desc.data_byte3;
+      3'd3: expected_imm_data_byte = desc.data_byte4;
+      default: expected_imm_data_byte = 8'h00;
+    endcase
+  endfunction
+
   function automatic logic [1:0] expected_next_rx_byte_idx(input logic [1:0] idx);
     expected_next_rx_byte_idx = (idx == 2'd3) ? 2'd0 : (idx + 2'd1);
   endfunction
@@ -282,6 +324,14 @@ module flow_active_sva
   function automatic logic short_read_resp_matches_current_len();
     return resp_queue_wvalid &&
            (resp_queue_wdata[31:28] == I3cShortReadErr) &&
+           (resp_queue_wdata[27:24] == cmd_tid) &&
+           (resp_queue_wdata[23:16] == 8'h00) &&
+           (resp_queue_wdata[15:0] == resp_data_len_q);
+  endfunction
+
+  function automatic logic hc_aborted_resp_matches_current_len();
+    return resp_queue_wvalid &&
+           (resp_queue_wdata[31:28] == HcAborted) &&
            (resp_queue_wdata[27:24] == cmd_tid) &&
            (resp_queue_wdata[23:16] == 8'h00) &&
            (resp_queue_wdata[15:0] == resp_data_len_q);
@@ -486,7 +536,7 @@ module flow_active_sva
                                                  !bus_tx_req_byte &&
                                                  bus_tx_req_value === 8'h00);
 
-  ap_sdr_write_dat_read_uses_cmd_dev_idx :
+  ap_regular_dat_read_uses_cmd_dev_idx :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchDAT &&
                                             cmd_attr == RegularTransfer &&
@@ -509,6 +559,22 @@ module flow_active_sva
                                             sdr_regular_i3c_write() &&
                                             dat_read_valid_hw_o &&
                                             reg_desc.dev_idx == 5'd1 &&
+                                            dat_index_hw_o == reg_desc.dev_idx[DatAw-1:0]);
+
+  cp_sdr_read_dat0_read :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            sdr_regular_i3c_read() &&
+                                            dat_read_valid_hw_o &&
+                                            reg_desc.dev_idx == 5'd0 &&
+                                            dat_index_hw_o == reg_desc.dev_idx[DatAw-1:0]);
+
+  cp_sdr_read_dat7_read :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            sdr_regular_i3c_read() &&
+                                            dat_read_valid_hw_o &&
+                                            reg_desc.dev_idx == 5'd7 &&
                                             dat_index_hw_o == reg_desc.dev_idx[DatAw-1:0]);
 
   ap_sdr_write_addr_uses_dynamic_address :
@@ -696,6 +762,24 @@ module flow_active_sva
                                             sdr_regular_i3c_read() &&
                                             !bus_rx_req_byte &&
                                             !rx_queue_wvalid);
+
+  ap_sdr_read_addr_uses_dynamic_address :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI3CRead &&
+                                            sdr_regular_i3c_read() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte
+                                            |->
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Read})
+  else $error("flow_active_sva: SDR read address byte must use selected DAT dynamic address in %m");
+
+  cp_sdr_read_addr_uses_dynamic_address :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI3CRead &&
+                                            sdr_regular_i3c_read() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Read});
 
   ap_init_i3c_read_addr_ack_to_issue_cmd :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -916,6 +1000,7 @@ module flow_active_sva
                                             state_q == IssueCmd &&
                                             sdr_regular_i3c_read() &&
                                             !short_read_q &&
+                                            !abort_i &&
                                             remaining_len_q > 16'h0 &&
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0] &&
@@ -946,6 +1031,7 @@ module flow_active_sva
                                             state_q == IssueCmd &&
                                             sdr_regular_i3c_read() &&
                                             !short_read_q &&
+                                            !abort_i &&
                                             remaining_len_q > 16'h1 &&
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0] &&
@@ -1083,6 +1169,123 @@ module flow_active_sva
                                             short_read_q &&
                                             short_read_resp_matches_current_len());
 
+  // --- HC abort of an active I3C SDR read (MIPI I3C Basic v1.1.1 5.1.2.3.4) ---
+  // The controller finishes the in-flight data word and retakes SDA only at its
+  // T-Bit: a Repeated START when the Target parked the bus (T=1), or a direct
+  // STOP when the Target already ended the word (T=0). It must never tear the
+  // read down with a bare STOP into the Target's push-pull drive mid-word, and
+  // the response is HcAborted (not a short-read error).
+  ap_sdr_read_abort_tbit_takeover_rstart :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            !short_read_q &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            abort_i &&
+                                            bus_rx_data_i[0] == 1'b1
+                                            |->
+                                            gen_rstart_o && !gen_stop_o)
+  else
+    $error(
+        "flow_active_sva: HC read abort at T-Bit=1 must retake SDA via Repeated START, not a bare STOP, in %m"
+    );
+
+  ap_sdr_read_abort_tbit_stop_on_t0 :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            !short_read_q &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            abort_i &&
+                                            bus_rx_data_i[0] == 1'b0
+                                            |->
+                                            gen_stop_o)
+  else $error("flow_active_sva: HC read abort at T-Bit=0 (Target already ended) must STOP in %m");
+
+  ap_sdr_read_abort_sets_hc_aborted :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            !short_read_q &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            abort_i
+                                            |=>
+                                            hc_aborted_q && read_abort_term_q && !short_read_q)
+  else
+    $error(
+        "flow_active_sva: HC read abort must set hc_aborted/read_abort_term and must not set short_read in %m"
+    );
+
+  // End-to-end: abort early in the data phase -> first data word still clocked to
+  // its T-Bit -> Repeated START takeover -> STOP -> HcAborted response.
+  cp_sdr_read_abort_first_word_then_takeover :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            !short_read_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            abort_i &&
+                                            bus_rx_data_i[0] == 1'b1 &&
+                                            gen_rstart_o
+                                            ##[1:256]
+                                            gen_stop_o
+                                            ##[1:256]
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_read() &&
+                                            hc_aborted_q);
+
+  ap_sdr_read_abort_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_read() &&
+                                            hc_aborted_q &&
+                                            !rx_overflow_q
+                                            |->
+                                            hc_aborted_resp_matches_current_len() &&
+                                            !cmd_queue_rready_o)
+  else
+    $error(
+        "flow_active_sva: HC-aborted SDR read must write HcAborted response and must not pop a continuation command in %m"
+    );
+
+  cp_sdr_read_abort_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_read() &&
+                                            hc_aborted_q &&
+                                            !rx_overflow_q &&
+                                            hc_aborted_resp_matches_current_len() &&
+                                            !cmd_queue_rready_o);
+
+  ap_sdr_read_abort_toc0_blocks_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_read() &&
+                                            hc_aborted_q &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available
+                                            |->
+                                            !cmd_queue_rready_o)
+  else $error("flow_active_sva: HC-aborted toc=0 SDR read must not pop next command in %m");
+
   ap_sdr_read_toc1_requests_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             sdr_read_done_ready() &&
@@ -1135,6 +1338,89 @@ module flow_active_sva
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_read() &&
                                             !short_read_q &&
+                                            success_resp_matches_current_len());
+
+  ap_sdr_read_toc0_accept_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_read_done_ready() &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            resp_queue_wready_i
+                                            |->
+                                            success_resp_matches_current_len() &&
+                                            cmd_queue_rready_o &&
+                                            !gen_stop_o)
+  else $error("flow_active_sva: SDR read toc=0 must accept continuation without STOP in %m");
+
+  cp_sdr_read_toc0_accept_continuation :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_read_done_ready() &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            resp_queue_wready_i &&
+                                            success_resp_matches_current_len() &&
+                                            cmd_queue_rready_o &&
+                                            !gen_stop_o);
+
+  ap_sdr_read_rstart_instead_of_start :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI3CRead &&
+                                            sdr_regular_i3c_read() &&
+                                            issue_phase_q == PhaseStart &&
+                                            next_start_is_rstart_q
+                                            |->
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o)
+  else $error("flow_active_sva: SDR read continuation must request repeated START only in %m");
+
+  ap_toc0_private_read_continuation_skips_bcast_header :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            cont_pending_q &&
+                                            broadcast_header_enable_i &&
+                                            sdr_regular_i3c_read()
+                                            |=>
+                                            state_q != I3CBcastHeader)
+  else $error("flow_active_sva: SDR read continuation must not emit a second broadcast header in %m");
+
+  cp_toc0_private_read_continuation_skips_bcast_header :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            cont_pending_q &&
+                                            broadcast_header_enable_i &&
+                                            sdr_regular_i3c_read()
+                                            ##[1:8]
+                                            state_q == InitI3CRead &&
+                                            next_start_is_rstart_q);
+
+  cp_toc0_accept_then_rstart_then_toc1_stop_read :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_read_done_ready() &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            resp_queue_wready_i &&
+                                            success_resp_matches_current_len() &&
+                                            cmd_queue_rready_o &&
+                                            !gen_stop_o
+                                            ##[1:64]
+                                            state_q == InitI3CRead &&
+                                            sdr_regular_i3c_read() &&
+                                            issue_phase_q == PhaseStart &&
+                                            next_start_is_rstart_q &&
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o
+                                            ##[1:1024]
+                                            sdr_read_done_ready() &&
+                                            reg_desc.toc &&
+                                            gen_stop_o
+                                            ##[1:256]
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_read() &&
                                             success_resp_matches_current_len());
 
   ap_toc0_accept_continuation :
@@ -1234,6 +1520,7 @@ module flow_active_sva
                                             !reg_desc.toc &&
                                             !addr_nack_q &&
                                             !tx_underflow_q &&
+                                            !hc_aborted_q &&
                                             !next_cmd_available
                                             |->
                                             success_resp_matches_current_len())
@@ -1246,6 +1533,7 @@ module flow_active_sva
                                             !reg_desc.toc &&
                                             !addr_nack_q &&
                                             !tx_underflow_q &&
+                                            !hc_aborted_q &&
                                             !next_cmd_available &&
                                             success_resp_matches_current_len());
 
@@ -1364,6 +1652,863 @@ module flow_active_sva
                                             !gen_start_o &&
                                             !gen_stop_o);
 
+  // ----------------------------------------------------------------------
+  // I2C legacy path (DAT.device=1) — RegularTransfer (I2C_001 / I2C_002)
+  //
+  // The I3C assertions above are all gated on !dat_entry.device and so
+  // explicitly exclude the legacy I2C path. These mirror them for the
+  // I2C path: static-address+R/W framing, open-drain/I2C-timing throughout,
+  // write data integrity, the I2C read master ACK-intermediate/NACK-final
+  // policy, read byte packing, and Success/length response descriptors.
+  // ----------------------------------------------------------------------
+
+  // I2C selects open-drain + I2C timing (never push-pull / I3C) for the
+  // whole transfer — the "OD mode throughout" and "DAT.device selects the
+  // I2C path" requirements of I2C_001/I2C_002.
+  ap_i2c_xfer_uses_i2c_open_drain :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            i2c_active_state() &&
+                                            i2c_regular_xfer()
+                                            |->
+                                            !sel_i3c_i2c_o &&
+                                            use_i2c_timing_o &&
+                                            !sel_od_pp_o)
+  else $error("flow_active_sva: I2C legacy transfer must stay open-drain on the I2C path in %m");
+
+  cp_i2c_xfer_uses_i2c_open_drain :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            i2c_active_state() &&
+                                            i2c_regular_xfer() &&
+                                            !sel_i3c_i2c_o &&
+                                            use_i2c_timing_o &&
+                                            !sel_od_pp_o);
+
+  // I2C write address byte = {static_address, W}.
+  ap_i2c_write_addr_uses_static_address :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI2CWrite &&
+                                            i2c_regular_write() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte
+                                            |->
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === {dat_entry.static_address, Write})
+  else $error("flow_active_sva: I2C write address byte must be static address + W in %m");
+
+  cp_i2c_write_addr_uses_static_address :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI2CWrite &&
+                                            i2c_regular_write() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === {dat_entry.static_address, Write});
+
+  // I2C read address byte = {static_address, R}.
+  ap_i2c_read_addr_uses_static_address :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI2CRead &&
+                                            i2c_regular_read() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte
+                                            |->
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === {dat_entry.static_address, Read})
+  else $error("flow_active_sva: I2C read address byte must be static address + R in %m");
+
+  cp_i2c_read_addr_uses_static_address :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == InitI2CRead &&
+                                            i2c_regular_read() &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === {dat_entry.static_address, Read});
+
+  // I2C write data integrity: on the odd (data-byte) sub-phase the byte put
+  // on the bus is exactly the selected TX-FIFO byte for that DWORD lane.
+  ap_i2c_write_data_byte_matches_tx :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            !data_nack_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0]
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === current_tx_byte)
+  else $error("flow_active_sva: I2C write data byte must match selected TX byte in %m");
+
+  cp_i2c_write_data_byte_matches_tx :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            !data_nack_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === current_tx_byte);
+
+  // I2C write samples the target ACK bit on the even sub-phase (no byte/T-bit
+  // drive) — the controller reads each data byte's ACK.
+  ap_i2c_write_acks_data_byte :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            !data_nack_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0]
+                                            |->
+                                            bus_rx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: I2C write must sample target ACK on the even sub-phase in %m");
+
+  cp_i2c_write_acks_data_byte :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            !data_nack_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_req_bit);
+
+  // I2C read data integrity: each received byte packs into the expected RX
+  // DWORD lane (little-endian), mirroring the I3C read byte-pack check.
+  ap_i2c_read_byte_pack :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            bus_rx_done_i
+                                            |=>
+                                            rx_dword_q === expected_rx_word_with_byte(
+      $past(rx_dword_q), $past(rx_byte_idx_q), $past(bus_rx_data_i)
+  ))
+  else $error("flow_active_sva: I2C read byte did not pack into expected RX DWORD lane in %m");
+
+  cp_i2c_read_byte_pack :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            bus_rx_done_i);
+
+  // I2C read ACK/NACK policy: master ACKs (drives 0) every intermediate byte
+  // (remaining_len > 1) on the even sub-phase.
+  ap_i2c_read_master_ack_intermediate :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q > 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0]
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            !bus_rx_req_byte &&
+                                            bus_tx_req_value === 8'h00)
+  else $error("flow_active_sva: I2C read must ACK (drive 0) intermediate bytes in %m");
+
+  cp_i2c_read_master_ack_intermediate :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q > 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h00);
+
+  // I2C read ACK/NACK policy: master NACKs (drives 1) the final byte
+  // (remaining_len == 1) on the even sub-phase to end the read.
+  ap_i2c_read_master_nack_final :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q == 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0]
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            !bus_rx_req_byte &&
+                                            bus_tx_req_value === 8'h01)
+  else $error("flow_active_sva: I2C read must NACK (drive 1) the final byte in %m");
+
+  cp_i2c_read_master_nack_final :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q == 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h01);
+
+  // I2C write Success response (toc=1, no NACK/overflow/abort): descriptor is
+  // Success with data length equal to bytes written.
+  ap_i2c_write_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_write() &&
+                                            reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            !tx_underflow_q &&
+                                            !rx_overflow_q &&
+                                            !hc_aborted_q
+                                            |->
+                                            success_resp_matches_current_len())
+  else $error("flow_active_sva: I2C write success response status/length mismatch in %m");
+
+  cp_i2c_write_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_write() &&
+                                            reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            !tx_underflow_q &&
+                                            !rx_overflow_q &&
+                                            !hc_aborted_q &&
+                                            success_resp_matches_current_len());
+
+  // I2C read Success response (toc=1, no NACK/overflow/abort): descriptor is
+  // Success with data length equal to bytes read.
+  ap_i2c_read_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_read() &&
+                                            reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !rx_overflow_q &&
+                                            !short_read_q &&
+                                            !hc_aborted_q
+                                            |->
+                                            success_resp_matches_current_len())
+  else $error("flow_active_sva: I2C read success response status/length mismatch in %m");
+
+  cp_i2c_read_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_read() &&
+                                            reg_desc.toc &&
+                                            !addr_nack_q &&
+                                            !rx_overflow_q &&
+                                            !short_read_q &&
+                                            !hc_aborted_q &&
+                                            success_resp_matches_current_len());
+
+  // ----------------------------------------------------------------------
+  // I2C_003 — BROADCAST_ADDR_ENABLE ignored by legacy I2C
+  //
+  // A regular I2C transfer leaves WaitDAT straight for its I2C init state and
+  // never detours through the I3C broadcast-header state, so no 0x7e preamble
+  // is emitted even when broadcast_header_enable_i is set. Combined with the
+  // static-address framing assertions above, the first address on the bus is
+  // always the DAT static address.
+  // ----------------------------------------------------------------------
+  ap_i2c_write_skips_broadcast_header :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            i2c_regular_write() &&
+                                            !dat_read_valid_hw_o &&
+                                            !cont_pending_q
+                                            |=>
+                                            state_q == InitI2CWrite)
+  else $error("flow_active_sva: I2C write must skip the I3C broadcast header in %m");
+
+  cp_i2c_write_skips_broadcast_header :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            i2c_regular_write() &&
+                                            broadcast_header_enable_i &&
+                                            !dat_read_valid_hw_o &&
+                                            !cont_pending_q
+                                            ##1
+                                            state_q == InitI2CWrite);
+
+  ap_i2c_read_skips_broadcast_header :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            i2c_regular_read() &&
+                                            !dat_read_valid_hw_o &&
+                                            !cont_pending_q
+                                            |=>
+                                            state_q == InitI2CRead)
+  else $error("flow_active_sva: I2C read must skip the I3C broadcast header in %m");
+
+  cp_i2c_read_skips_broadcast_header :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            i2c_regular_read() &&
+                                            broadcast_header_enable_i &&
+                                            !dat_read_valid_hw_o &&
+                                            !cont_pending_q
+                                            ##1
+                                            state_q == InitI2CRead);
+
+  ap_i2c_never_enters_broadcast_header :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            i2c_regular_xfer()
+                                            |->
+                                            state_q != I3CBcastHeader)
+  else $error("flow_active_sva: I2C legacy transfer must never enter the I3C broadcast header in %m");
+
+  // ----------------------------------------------------------------------
+  // I2C_004 — length sweep / partial final RX DWORD
+  //
+  // Per-byte data integrity for every length is already covered by
+  // ap_i2c_write_data_byte_matches_tx and ap_i2c_read_byte_pack. This adds the
+  // partial-DWORD guarantee: the final received byte always commits the
+  // (possibly partially filled) RX DWORD to the FIFO — no trailing byte is
+  // dropped at non-DWORD-aligned lengths.
+  // ----------------------------------------------------------------------
+  ap_i2c_read_commits_final_word :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q == 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_tx_done_i
+                                            |->
+                                            rx_queue_wvalid &&
+                                            rx_queue_wdata === rx_dword_q)
+  else $error("flow_active_sva: I2C read must commit the final (partial) RX DWORD in %m");
+
+  cp_i2c_read_partial_final_dword :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q == 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_tx_done_i &&
+                                            rx_byte_idx_q != 2'd3 &&
+                                            rx_queue_wvalid);
+
+  cp_i2c_read_full_final_dword :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q == 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_tx_done_i &&
+                                            rx_byte_idx_q == 2'd3 &&
+                                            rx_queue_wvalid);
+
+  cp_i2c_read_dword_boundary_commit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q > 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_tx_done_i &&
+                                            rx_byte_idx_q == 2'd3 &&
+                                            rx_queue_wvalid);
+
+  // ----------------------------------------------------------------------
+  // I2C_005 — data-byte NACK stops the write
+  //
+  // A NACK sampled on a data byte's ACK sub-phase is latched, and from then on
+  // the write requests STOP and drives no further data byte: only the bytes
+  // beyond the NACKed position are dropped (I2C policy). The data-NACK RESP
+  // encoding itself is owned by ERR_003.
+  // ----------------------------------------------------------------------
+  ap_i2c_write_data_nack_latches :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            !data_nack_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            bus_rx_data_i[0]
+                                            |=>
+                                            data_nack_q)
+  else $error("flow_active_sva: I2C write data NACK must latch data_nack_q in %m");
+
+  cp_i2c_write_data_nack_latches :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            !data_nack_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            bus_rx_data_i[0]
+                                            ##1
+                                            data_nack_q);
+
+  ap_i2c_write_data_nack_stops_no_more_data :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            data_nack_q
+                                            |->
+                                            gen_stop_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: I2C write must stop with no further data byte after a data NACK in %m");
+
+  cp_i2c_write_data_nack_stops_no_more_data :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_write() &&
+                                            data_nack_q &&
+                                            gen_stop_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit);
+
+  // ----------------------------------------------------------------------
+  // I2C_006 — FM-equivalent timing selection (SVA-only, no vseq)
+  //
+  // I2C_T_* timing is selected only for legacy I2C devices; an I3C transfer
+  // never asserts I2C timing. The 400 kHz-equivalent I2C_T_* reset defaults
+  // are checked in csr_registers_sva, and the active_t_* = use_i2c_timing ?
+  // i2c_t_* : t_* mux lives in controller_active.
+  // ----------------------------------------------------------------------
+  ap_i2c_timing_only_for_i2c_device :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            use_i2c_timing_o
+                                            |->
+                                            dat_entry.device)
+  else $error("flow_active_sva: I2C timing must be selected only for legacy I2C devices in %m");
+
+  cp_timing_mode_i2c :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            i2c_regular_xfer() &&
+                                            i2c_active_state() &&
+                                            use_i2c_timing_o);
+
+  cp_timing_mode_i3c :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (sdr_regular_i3c_write() || sdr_regular_i3c_read()) &&
+                                            (state_q == InitI3CWrite ||
+                                             state_q == InitI3CRead ||
+                                             state_q == IssueCmd) &&
+                                            !use_i2c_timing_o);
+
+  // ----------------------------------------------------------------------
+  // Immediate Data Transfer (ImmediateDataTransfer, cp=0) — IMM_001..IMM_006
+  //
+  // Only the OD/PP phasing of immediate transfers is asserted today (via
+  // ap_sel_od_pp_matches_expected / expected_imm_sel_od_pp). These add inline
+  // byte integrity, dtt>4 / toc=0 NotSupported rejection, Success/length, the
+  // I2C-immediate data-NACK boundary, and the HC-abort flow. RESP encodings for
+  // data NACK and abort stay owned by ERR_003 / ERR_012 — only their data/flow
+  // boundaries are asserted here; NotSupported is owned by IMM_002/IMM_003.
+  // ----------------------------------------------------------------------
+
+  // IMM_001/002/003: I3C immediate inline bytes are driven in descriptor order.
+  ap_i3c_imm_data_byte_matches_desc :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !addr_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt})
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === expected_imm_data_byte(
+      imm_desc, issue_phase_q
+  ))
+  else $error("flow_active_sva: I3C immediate data byte must match cmd descriptor byte in %m");
+
+  cp_i3c_imm_data_byte_matches_desc :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !addr_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt}) &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === expected_imm_data_byte(
+      imm_desc, issue_phase_q
+  ));
+
+  // IMM_001/002/003: I3C immediate T-bit parity for each inline byte.
+  ap_i3c_imm_tbit_parity :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !addr_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt})
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^expected_imm_data_byte(imm_desc, issue_phase_q)})
+  else $error("flow_active_sva: I3C immediate T-bit parity mismatch in %m");
+
+  cp_i3c_imm_tbit_parity :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !addr_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt}) &&
+                                            bus_tx_req_bit &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^expected_imm_data_byte(imm_desc, issue_phase_q)});
+
+  // IMM_004: I2C immediate address byte = {static_address, W}.
+  ap_i2c_imm_addr_uses_static_address :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte
+                                            |->
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === {dat_entry.static_address, Write})
+  else $error("flow_active_sva: I2C immediate address byte must be static address + W in %m");
+
+  cp_i2c_imm_addr_uses_static_address :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === {dat_entry.static_address, Write});
+
+  // IMM_004: I2C immediate inline bytes are driven in descriptor order.
+  ap_i2c_imm_data_byte_matches_desc :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt})
+                                            |->
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === expected_imm_data_byte(
+      imm_desc, issue_phase_q
+  ))
+  else $error("flow_active_sva: I2C immediate data byte must match cmd descriptor byte in %m");
+
+  cp_i2c_imm_data_byte_matches_desc :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt}) &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === expected_imm_data_byte(
+      imm_desc, issue_phase_q
+  ));
+
+  // IMM_002 (negative): dtt>4 is rejected in WaitDAT before any bus activity.
+  ap_imm_dtt_gt4_rejected_in_waitdat :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !dat_read_valid_hw_o &&
+                                            !cont_pending_q &&
+                                            imm_desc.dtt > 3'd4
+                                            |->
+                                            (!gen_start_o &&
+                                             !bus_tx_req_byte &&
+                                             !bus_tx_req_bit)
+                                            ##1 state_q == WriteResp)
+  else $error("flow_active_sva: immediate dtt>4 must be rejected in WaitDAT without bus activity in %m");
+
+  cp_imm_dtt_gt4_rejected_in_waitdat :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !dat_read_valid_hw_o &&
+                                            !cont_pending_q &&
+                                            imm_desc.dtt > 3'd4
+                                            ##1
+                                            state_q == WriteResp);
+
+  // IMM_002 (negative): the dtt>4 response descriptor is NotSupported (len 0).
+  ap_imm_dtt_gt4_not_supported_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            imm_desc.dtt > 3'd4
+                                            |->
+                                            not_supported_resp_matches_current_len())
+  else $error("flow_active_sva: immediate dtt>4 response must be NotSupported in %m");
+
+  cp_imm_dtt_gt4_not_supported_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            imm_desc.dtt > 3'd4 &&
+                                            not_supported_resp_matches_current_len());
+
+  // IMM_003: toc=0 immediate still sends all dtt bytes, then NotSupported.
+  ap_imm_toc0_not_supported_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !imm_desc.toc &&
+                                            imm_desc.dtt <= 3'd4 &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            !hc_aborted_q
+                                            |->
+                                            not_supported_resp_matches_current_len())
+  else $error("flow_active_sva: immediate toc=0 response must be NotSupported with bytes-sent length in %m");
+
+  cp_imm_toc0_not_supported_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !imm_desc.toc &&
+                                            imm_desc.dtt <= 3'd4 &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            !hc_aborted_q &&
+                                            not_supported_resp_matches_current_len());
+
+  // IMM_003: an immediate transfer never emits a Repeated START / continuation.
+  ap_imm_no_continuation_rstart :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            (state_q == I3CWriteImmediate ||
+                                             state_q == I2CWriteImmediate)
+                                            |->
+                                            !gen_rstart_o)
+  else $error("flow_active_sva: immediate transfer must not emit a continuation Repeated START in %m");
+
+  cp_imm_no_continuation_rstart :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            (state_q == I3CWriteImmediate ||
+                                             state_q == I2CWriteImmediate) &&
+                                            !gen_rstart_o);
+
+  // IMM_001/003(toc=1)/004: successful immediate response with correct length.
+  ap_imm_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            imm_desc.toc &&
+                                            imm_desc.dtt <= 3'd4 &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            !hc_aborted_q &&
+                                            !tx_underflow_q &&
+                                            !rx_overflow_q
+                                            |->
+                                            success_resp_matches_current_len())
+  else $error("flow_active_sva: immediate success response status/length mismatch in %m");
+
+  cp_imm_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            imm_desc.toc &&
+                                            imm_desc.dtt <= 3'd4 &&
+                                            !addr_nack_q &&
+                                            !data_nack_q &&
+                                            !hc_aborted_q &&
+                                            !tx_underflow_q &&
+                                            !rx_overflow_q &&
+                                            success_resp_matches_current_len());
+
+  // IMM_005: I2C immediate data NACK is latched from the ACK sub-phase...
+  ap_i2c_imm_data_nack_latches :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !data_nack_q &&
+                                            !addr_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt}) &&
+                                            bus_rx_done_i &&
+                                            bus_rx_data_i[0]
+                                            |=>
+                                            data_nack_q)
+  else $error("flow_active_sva: I2C immediate data NACK must latch data_nack_q in %m");
+
+  cp_i2c_imm_data_nack_latches :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !data_nack_q &&
+                                            !addr_nack_q &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (((issue_phase_q - PhaseDataStart) >> 1) <
+                                             {5'h0, imm_desc.dtt}) &&
+                                            bus_rx_done_i &&
+                                            bus_rx_data_i[0]
+                                            ##1
+                                            data_nack_q);
+
+  // IMM_005: ...and then STOP is generated with no further inline byte sent.
+  ap_i2c_imm_data_nack_stops_no_more_data :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            data_nack_q
+                                            |->
+                                            gen_stop_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: I2C immediate must stop with no further byte after a data NACK in %m");
+
+  cp_i2c_imm_data_nack_stops_no_more_data :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I2CWriteImmediate &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            data_nack_q &&
+                                            gen_stop_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit);
+
+  // IMM_006: HC abort during immediate data phase sets hc_aborted...
+  ap_imm_abort_sets_hc_aborted :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            abort_i &&
+                                            (state_q == I3CWriteImmediate ||
+                                             state_q == I2CWriteImmediate)
+                                            |=>
+                                            hc_aborted_q)
+  else $error("flow_active_sva: HC abort in immediate data phase must set hc_aborted in %m");
+
+  cp_imm_abort_sets_hc_aborted :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            abort_i &&
+                                            (state_q == I3CWriteImmediate ||
+                                             state_q == I2CWriteImmediate)
+                                            ##1
+                                            hc_aborted_q);
+
+  // IMM_006: ...and forces STOP (never a continuation RSTART) with no further data.
+  ap_imm_abort_stops_no_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            abort_i &&
+                                            (state_q == I3CWriteImmediate ||
+                                             state_q == I2CWriteImmediate)
+                                            |->
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: HC abort in immediate data phase must STOP without continuation in %m");
+
+  cp_imm_abort_stops_no_continuation :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            abort_i &&
+                                            (state_q == I3CWriteImmediate ||
+                                             state_q == I2CWriteImmediate) &&
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit);
+
+  cp_imm_abort_reaches_writeresp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            abort_i &&
+                                            (state_q == I3CWriteImmediate ||
+                                             state_q == I2CWriteImmediate)
+                                            ##[1:512]
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            hc_aborted_q);
+
+  // IMM_001/002: private-start prefix selection — broadcast-header detour only
+  // when enabled, straight to I3CWriteImmediate otherwise (cp_private_start_prefix).
+  cp_imm_bcast_header_path :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !cont_pending_q &&
+                                            !dat_entry.device &&
+                                            broadcast_header_enable_i &&
+                                            imm_desc.dtt <= 3'd4 &&
+                                            !dat_read_valid_hw_o
+                                            ##1
+                                            state_q == I3CBcastHeader);
+
+  cp_imm_private_no_bcast :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitDAT &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            !cont_pending_q &&
+                                            !dat_entry.device &&
+                                            !broadcast_header_enable_i &&
+                                            imm_desc.dtt <= 3'd4 &&
+                                            !dat_read_valid_hw_o
+                                            ##1
+                                            state_q == I3CWriteImmediate);
+
+  // IMM_001/002: the broadcast header (when taken) drives the 0x7E reserved
+  // address, not a target address — confirms the 7E+W preamble.
+  ap_bcast_header_drives_7e :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CBcastHeader &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte
+                                            |->
+                                            bus_tx_req_value === {I3C_RSVD_ADDR, Write})
+  else $error("flow_active_sva: broadcast header must drive the 0x7E reserved address in %m");
+
+  cp_bcast_header_drives_7e :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CBcastHeader &&
+                                            issue_phase_q == PhaseAddr &&
+                                            bus_tx_req_byte &&
+                                            bus_tx_req_value === {I3C_RSVD_ADDR, Write});
+
 endmodule
 
 bind flow_active flow_active_sva #(
@@ -1377,6 +2522,7 @@ bind flow_active flow_active_sva #(
     .rst_ni,
     .state_q,
     .sel_od_pp_o,
+    .sel_i3c_i2c_o,
     .use_i2c_timing_o,
     .scl_use_od_low_o,
     .issue_phase_q,
@@ -1391,6 +2537,7 @@ bind flow_active flow_active_sva #(
     .resp_data_len_q,
     .short_read_q,
     .addr_nack_q,
+    .data_nack_q,
     .addr_after_rstart_q,
     .next_start_is_rstart_q,
     .cont_pending_q,
@@ -1426,10 +2573,13 @@ bind flow_active flow_active_sva #(
     .current_tx_byte,
     .rx_dword_q,
     .rx_byte_idx_q,
+    .bus_tx_done_i,
     .bus_rx_done_i,
     .bus_rx_data_i,
     .scl_stop_done_q,
     .hc_aborted_q,
+    .abort_i,
+    .read_abort_term_q,
     .resp_queue_wvalid,
     .resp_queue_wdata
 );

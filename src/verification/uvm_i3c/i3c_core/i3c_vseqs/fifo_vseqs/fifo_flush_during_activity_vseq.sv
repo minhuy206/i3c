@@ -11,7 +11,6 @@ class fifo_flush_during_activity_vseq extends fifo_base_vseq;
     exercise_queue(rx_paths);
     exercise_queue(resp_paths);
 
-    `uvm_info(`gfn, "FIFO flush during activity checks passed", UVM_LOW)
   endtask
 
   virtual task push_and_pop_fresh_entry(queue_hdl_paths_t paths, uvm_hdl_data_t fresh_entry,

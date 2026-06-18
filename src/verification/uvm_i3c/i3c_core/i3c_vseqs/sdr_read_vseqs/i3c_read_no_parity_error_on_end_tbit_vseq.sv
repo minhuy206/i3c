@@ -14,9 +14,6 @@ class i3c_read_no_parity_error_on_end_tbit_vseq extends i3c_base_vseq;
       run_final_tbit_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRR_008 conclusion: final read T-bit=0 at the requested length is handled as normal end-of-data in both private-address modes",
-              UVM_LOW)
   endtask
 
   virtual task run_final_tbit_case(bit broadcast_header_enable);
@@ -58,9 +55,6 @@ class i3c_read_no_parity_error_on_end_tbit_vseq extends i3c_base_vseq;
                   "SDRR_008 result: mode=%s requested_len=%0d final_t_bit=0 rx_words_drained=%0d",
                   private_addr_mode_name(broadcast_header_enable), DATA_LENGTH, rx_words.size()),
               UVM_LOW)
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_008 conclusion: mode=%s final read T-bit=0 at requested length is treated as end-of-data; no extra RX byte is consumed",
-                  private_addr_mode_name(broadcast_header_enable)), UVM_LOW)
   endtask
 
   virtual function void build_payload(ref byte_queue_t read_data);

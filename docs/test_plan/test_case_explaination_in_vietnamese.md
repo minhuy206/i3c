@@ -975,19 +975,7 @@ Các length không chia hết cho 4 phải xử lý partial DWORD đúng, đặc
 
 Test này quan trọng vì I2C path vẫn dùng HCI queues giống các path khác. Lỗi packing ở boundary DWORD có thể xuất hiện riêng ở I2C read/write dù I3C path đã pass.
 
-### I2C_005 - `i2c_addr_nack`
-
-Test này kiểm tra address NACK trong I2C legacy transaction.
-
-Target được cấu hình để NACK static address. Testbench issue cả I2C read và I2C write command.
-
-Kết quả mong đợi là controller không được đi vào data phase sau address NACK. Với write, không được truyền data byte. Với read, không được ghi data vào RX FIFO.
-
-RESP phải báo error `AddrHeader`, và bus phải quay về idle hoặc recovery state hợp lệ.
-
-Test này quan trọng vì address NACK là lỗi phổ biến khi target I2C không tồn tại, sai static address, hoặc device đang bận.
-
-### I2C_006 - `i2c_data_nack_write`
+### I2C_005 - `i2c_data_nack_write`
 
 Test này kiểm tra data-byte NACK trong I2C write.
 
@@ -999,29 +987,17 @@ Controller không được tiếp tục truyền các byte còn lại như thể
 
 Test này quan trọng vì I2C target có thể NACK data để báo không nhận thêm được. Controller phải xử lý đây là lỗi data phase, không nhầm với address error.
 
-### I2C_007 - `i2c_od_only_check`
+### I2C_006 - `covered_by_sva_no_vseq`
 
-Test này kiểm tra rằng I2C legacy transfer luôn dùng open-drain mode.
+Mục này không dùng virtual sequence riêng.
 
-Testbench chạy cả I2C read và I2C write, đồng thời quan sát `sel_od_pp_o` và SDA drive behavior trong các phase address, data, ACK, START, và STOP.
+Lý do là I2C legacy read/write đã được kích thích bởi I2C_001 và I2C_002. Nếu thêm một vseq chỉ chạy lại read/write để kiểm tra timing mặc định 400 kHz thì phần stimulus bị trùng và không chứng minh thêm nhiều.
 
-Kết quả mong đợi là `sel_od_pp_o` giữ ở OD trong toàn bộ I2C transaction. Controller không được chuyển sang push-pull trong data phase như I3C SDR.
+Coverage cho I2C_006 nên nằm ở SVA và reset/default checks: `I2C_T_*` reset về các giá trị tương đương I2C Fast-mode 400 kHz, và khi controller chạy I2C legacy transfer thì timing mux phải chọn `I2C_T_*` thay vì nhóm timing chung `T_*`.
 
-SDA drive/release cũng phải phù hợp với open-drain semantics: chỉ kéo xuống khi cần drive 0 và release khi cần high hoặc khi target phải drive ACK/data.
+Kết quả mong đợi là default `I2C_T_LOW`, `I2C_T_HIGH`, START/STOP/data timing I2C được giữ đúng ở CSR/SVA level, còn functional transaction được cover bởi các I2C vseq còn lại.
 
-Test này quan trọng vì push-pull trong I2C legacy bus có thể gây contention điện và không tương thích với target I2C.
-
-### I2C_008 - `i2c_timing_400k_equivalent`
-
-Test này kiểm tra timing path khi controller chạy I2C legacy transfer.
-
-Timing register được program với các giá trị tương đương I2C Fast-mode 400 kHz theo clock của testbench. Sau đó testbench chạy một số I2C read/write đại diện.
-
-Kết quả mong đợi là thời gian low/high của `SCL`, START timing, và STOP timing bám theo các counter đã program. Transaction vẫn phải hoàn tất đúng với target ACK/data bình thường.
-
-Test này không nhất thiết chứng minh full compliance mọi thông số I2C ngoài scope, nhưng phải xác nhận rằng I2C path thật sự dùng timing configuration và không bị hard-code theo I3C path.
-
-Test này quan trọng vì legacy I2C thường chạy chậm hơn I3C. Nếu timing không program được đúng, controller có thể chỉ pass simulation nhanh nhưng không phù hợp với target I2C thực tế.
+Mục này quan trọng để tránh hiểu nhầm rằng cần một vseq riêng để program timing. Trong current design, I2C dùng 400 kHz-equivalent timing theo default `I2C_T_*`; nếu sau này cần verify software-programmed I2C timing, nên tạo test riêng ghi `I2C_T_*` trực tiếp.
 
 ## 4.10 Error Handling, Status, and Recovery
 

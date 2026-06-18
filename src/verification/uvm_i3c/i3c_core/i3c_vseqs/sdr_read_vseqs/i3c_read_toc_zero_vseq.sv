@@ -12,9 +12,6 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
       run_read_toc_zero_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRR_008 conclusion: toc=0 keeps the SDR private transaction active with one repeated START before the following command",
-              UVM_LOW)
   endtask
 
   virtual task run_read_toc_zero_case(bit broadcast_header_enable);

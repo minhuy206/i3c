@@ -12,9 +12,6 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
       run_back_to_back_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRW_007 conclusion: queued SDR private writes execute back-to-back and each target transaction completes with STOP",
-              UVM_LOW)
   endtask
 
   virtual task run_back_to_back_case(bit broadcast_header_enable);

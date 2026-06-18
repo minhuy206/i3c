@@ -21,9 +21,6 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
       run_late_refill_after_underflow_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRW_006 conclusion: TX FIFO underflow stops the write after available data and late refill data is flushed by recovery reset",
-              UVM_LOW)
   endtask
 
   virtual task run_tx_fifo_underflow_ovl_case(bit broadcast_header_enable, bit toc);

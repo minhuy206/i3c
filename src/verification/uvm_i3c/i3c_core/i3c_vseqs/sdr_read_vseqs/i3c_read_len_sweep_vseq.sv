@@ -20,9 +20,6 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
       end
     end
 
-    `uvm_info(`gfn,
-              "SDRR_002 conclusion: SDR private reads preserve requested byte counts and RX DWORD packing across the length sweep",
-              UVM_LOW)
   endtask
 
   virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length,

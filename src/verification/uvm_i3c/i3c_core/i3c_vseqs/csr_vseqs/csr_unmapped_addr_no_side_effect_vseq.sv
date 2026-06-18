@@ -70,7 +70,6 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
                  "csr_unmapped_addr_no_side_effect_vseq: RESP queue data changed")
 
     request_sw_reset();
-    `uvm_info(`gfn, "CSR unmapped address no-side-effect checks passed", UVM_LOW)
   endtask
 
   task setup_known_state();

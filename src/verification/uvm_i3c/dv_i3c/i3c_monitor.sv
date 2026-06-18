@@ -75,7 +75,7 @@ class i3c_monitor extends uvm_monitor;
     end else if (!start || stop) begin
       rstart = 1'b0;
       full_item.rstart = 1'b0;
-      cfg.vif.wait_for_host_start();
+      cfg.vif.wait_for_host_start(cfg.tc.i3c_tc);
       `uvm_info(`gfn, "monitor, detect HOST START", UVM_HIGH)
     end else if (rstart) begin
       full_item.rstart = 1'b1;
@@ -85,7 +85,7 @@ class i3c_monitor extends uvm_monitor;
           "monitor reached active bus state without STOP/RSTART; waiting for HOST START to resync",
           UVM_DEBUG)
       rstart = 1'b0;
-      cfg.vif.wait_for_host_start();
+      cfg.vif.wait_for_host_start(cfg.tc.i3c_tc);
       full_item.rstart = 1'b0;
     end
 
@@ -150,20 +150,6 @@ class i3c_monitor extends uvm_monitor;
     bit      header_ack;
 
     header_ack = transaction.addr_ack;
-    transaction.addr = '0;
-    transaction.addr_ack = 1'b0;
-    transaction.i3c_empty_broadcast = 1'b0;
-    transaction.i3c_broadcast = 1'b0;
-    transaction.i3c_direct = 1'b0;
-    transaction.CCC_valid = 1'b0;
-    transaction.CCC_def.delete();
-    transaction.CCC_direct.delete();
-    transaction.data_q.delete();
-    transaction.data_ack_q.delete();
-    transaction.num_data = 0;
-    transaction.stop = 1'b0;
-    transaction.rstart = 1'b1;
-    transaction.aborted = 1'b0;
     transaction.start_with_broadcast_header = 1'b1;
     transaction.broadcast_header_ack = header_ack;
 
@@ -225,8 +211,8 @@ class i3c_monitor extends uvm_monitor;
     join
     if (!transaction.aborted) begin
       cfg.vif.wait_for_device_ack_or_nack(transaction.addr_ack);
-      `uvm_info(`gfn, $sformatf("monitor, address: %s", transaction.addr_ack ? "ACK" : "NACK"
-                ), UVM_DEBUG)
+      `uvm_info(`gfn, $sformatf("monitor, address: %s", transaction.addr_ack ? "ACK" : "NACK"),
+                UVM_DEBUG)
       `uvm_info(`gfn, "monitor, address, detect TARGET ACK", UVM_HIGH)
     end
     updated_transaction = transaction;
@@ -521,102 +507,86 @@ class i3c_monitor extends uvm_monitor;
   virtual protected task i3c_data(input i3c_item transaction, output i3c_item updated_transaction,
                                   input bit device_to_host, int count = -1,
                                   string msg = "Data byte");
+    if (device_to_host) i3c_read_thread(transaction, updated_transaction, count, msg);
+    else i3c_write_thread(transaction, updated_transaction, count, msg);
+  endtask : i3c_data
+
+  virtual protected task i3c_read_thread(input i3c_item transaction,
+                                         output i3c_item updated_transaction, input int count = -1,
+                                         string msg = "Data byte");
     int i;
+    bit byte_in_progress;
+    bit final_t_bit;
     int remaining_count;
     bit read_rstart;
     bit read_stop;
-    bit t_bit_sampled;
-    bit scl_fell_after_t_bit;
 
-    if (device_to_host) begin
-      remaining_count = count;
-      fork : read_stop_or_rstart_watch
-        begin
-          cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, read_rstart, read_stop);
-        end
-      join_none
+    read_rstart      = 1'b0;
+    read_stop        = 1'b0;
+    remaining_count  = count;
+    byte_in_progress = 1'b0;
 
-      forever begin
-        for (i = 8; i > 0; i--) begin
-          fork : read_data_bit_or_end
-            begin
-              cfg.vif.get_bit_data("device", mon_data[i]);
+    fork
+      begin : iso_fork
+        fork
+          begin
+            forever begin
+              byte_in_progress = 1'b1;
+              for (i = 8; i > 0; i--) begin
+                cfg.vif.get_bit_data("device", mon_data[i]);
+                `uvm_info(`gfn, $sformatf(
+                          "monitor, %s, trans %0d, byte %0d, bit[%0d] %0b",
+                          msg,
+                          transaction.tran_id,
+                          transaction.num_data + 1,
+                          i,
+                          mon_data[i]
+                          ), UVM_DEBUG)
+              end
+              @(posedge cfg.vif.scl_i);
+              mon_data[0] = cfg.vif.sda_i;
               `uvm_info(`gfn, $sformatf(
-                        "monitor, %s, trans %0d, byte %0d, bit[%0d] %0b",
+                        "monitor, %s, trans %0d, byte %0d, bit[0] %0b",
                         msg,
                         transaction.tran_id,
                         transaction.num_data + 1,
-                        i,
-                        mon_data[i]
+                        mon_data[0]
                         ), UVM_DEBUG)
-            end
-            begin
-              wait (read_stop || read_rstart);
-            end
-          join_any
-          disable read_data_bit_or_end;
-          if (read_stop || read_rstart) break;
-        end
 
-        t_bit_sampled = 1'b0;
-        fork : read_t_bit_or_end
-          begin
-            @(posedge cfg.vif.scl_i);
-            mon_data[0]   = cfg.vif.sda_i;
-            t_bit_sampled = 1'b1;
+              transaction.data_q.push_back(mon_data[8:1]);
+              transaction.data_ack_q.push_back(mon_data[0]);
+              transaction.num_data++;
+              byte_in_progress = 1'b0;
+              `uvm_info(`gfn, $sformatf(
+                        "monitor, %s, trans %0d, 0x%0h", msg, transaction.tran_id, mon_data[8:1]),
+                        UVM_HIGH)
+
+              if (remaining_count > 0) remaining_count--;
+              if (!mon_data[0] || (count > 0 && remaining_count == 0)) break;
+
+              @(negedge cfg.vif.scl_i);
+            end
           end
           begin
-            wait (read_stop || read_rstart);
+            cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, read_rstart, read_stop);
           end
         join_any
-        disable read_t_bit_or_end;
-        if ((read_stop || read_rstart) && !t_bit_sampled) begin
-          handle_read_end(.transaction(transaction), .final_t_bit(1'b0),
-                          .observed_bytes(transaction.num_data), .read_rstart(read_rstart),
-                          .read_stop(read_stop));
-          break;
-        end
-        `uvm_info(`gfn, $sformatf(
-                  "monitor, %s, trans %0d, byte %0d, bit[0] %0b",
-                  msg,
-                  transaction.tran_id,
-                  transaction.num_data + 1,
-                  mon_data[0]
-                  ), UVM_DEBUG)
-        transaction.data_q.push_back(mon_data[8:1]);
-        transaction.data_ack_q.push_back(mon_data[0]);
-        transaction.num_data++;
-        `uvm_info(`gfn, $sformatf(
-                  "monitor, %s, trans %0d, 0x%0h", msg, transaction.tran_id, mon_data[8:1]),
-                  UVM_HIGH)
+        disable fork;
+      end : iso_fork
+    join
 
-        if (remaining_count > 0) remaining_count--;
-        if (read_stop || read_rstart || !mon_data[0] || (count > 0 && remaining_count == 0)) begin
-          handle_read_end(.transaction(transaction), .final_t_bit(mon_data[0]),
-                          .observed_bytes(transaction.num_data), .read_rstart(read_rstart),
-                          .read_stop(read_stop));
-          break;
-        end
+    `DV_CHECK_NE_FATAL({read_rstart, read_stop}, 2'b11)
+    final_t_bit = byte_in_progress ? 1'b0 : mon_data[0];
+    handle_read_end(.transaction(transaction), .final_t_bit(final_t_bit),
+                    .observed_bytes(transaction.num_data), .read_rstart(read_rstart),
+                    .read_stop(read_stop));
+    updated_transaction = transaction;
+  endtask : i3c_read_thread
 
-        scl_fell_after_t_bit = 1'b0;
-        fork : read_end_or_next_data_bit
-          begin
-            wait (read_stop || read_rstart);
-            handle_read_end(.transaction(transaction), .final_t_bit(mon_data[0]),
-                            .observed_bytes(transaction.num_data), .read_rstart(read_rstart),
-                            .read_stop(read_stop));
-          end
-          begin
-            @(negedge cfg.vif.scl_i);
-            scl_fell_after_t_bit = 1'b1;
-          end
-        join_any
-        disable read_end_or_next_data_bit;
-      end
-      disable read_stop_or_rstart_watch;
-      updated_transaction = transaction;
-      return;
-    end
+  virtual protected task i3c_write_thread(input i3c_item transaction,
+                                          output i3c_item updated_transaction, input int count = -1,
+                                          string msg = "Data byte");
+    int i;
 
     fork
       begin : iso_fork
@@ -624,7 +594,7 @@ class i3c_monitor extends uvm_monitor;
           begin
             for (int j = count; j != 0; j--) begin
               for (i = 8; i >= 0; i--) begin
-                cfg.vif.get_bit_data("device", mon_data[i]);
+                cfg.vif.get_bit_data("host", mon_data[i]);
                 `uvm_info(`gfn, $sformatf(
                           "monitor, %s, trans %0d, byte %0d, bit[%0d] %0b",
                           msg,
@@ -640,9 +610,6 @@ class i3c_monitor extends uvm_monitor;
               `uvm_info(`gfn, $sformatf(
                         "monitor, %s, trans %0d, 0x%0h", msg, transaction.tran_id, mon_data[8:1]),
                         UVM_HIGH)
-              if (device_to_host && !mon_data[0]) begin
-                break;
-              end
             end
           end
           begin
@@ -670,17 +637,17 @@ class i3c_monitor extends uvm_monitor;
         disable fork;
       end : iso_fork
     join
+    `DV_CHECK_NE_FATAL({transaction.rstart, transaction.stop}, 2'b11)
     if (!transaction.rstart && !transaction.stop)
       cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, transaction.rstart, transaction.stop);
     updated_transaction = transaction;
-  endtask : i3c_data
+  endtask : i3c_write_thread
 
   virtual protected task i2c_read_thread(ref i3c_item transaction);
     transaction.stop   = 1'b0;
     transaction.rstart = 1'b0;
     transaction.ack    = 1'b0;
     while (!transaction.stop && !transaction.rstart) begin
-      // sample read data
       for (int i = 7; i >= 0; i--) begin
         cfg.vif.get_bit_data("device", mon_data[i]);
         `uvm_info(`gfn, $sformatf(
@@ -699,12 +666,10 @@ class i3c_monitor extends uvm_monitor;
                 transaction.num_data,
                 mon_data
                 ), UVM_HIGH)
-      // sample host ack/nack (in the last byte, nack can be issue if rcont is set)
       cfg.vif.wait_for_host_ack_or_nack(transaction.ack);
       transaction.data_ack_q.push_back(transaction.ack);
       `uvm_info(`gfn, $sformatf("monitor, detect HOST %s", (transaction.ack) ? "ACK" : "NO_ACK"),
                 UVM_HIGH)
-      // if nack is issued, next bit must be stop or rstart
       if (!transaction.ack) begin
         cfg.vif.wait_for_i2c_host_stop_or_rstart(cfg.tc.i2c_tc, transaction.rstart,
                                                  transaction.stop);
@@ -737,7 +702,6 @@ class i3c_monitor extends uvm_monitor;
               `uvm_info(`gfn, $sformatf(
                         "host_write_thread data %2x num_data:%0d", mon_data, transaction.num_data),
                         UVM_HIGH)
-              // sample ack/nack
               cfg.vif.wait_for_device_ack_or_nack(ack_nack);
               transaction.data_ack_q.push_back(ack_nack);
             end

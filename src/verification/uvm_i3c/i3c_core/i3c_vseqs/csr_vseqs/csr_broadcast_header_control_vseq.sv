@@ -13,7 +13,6 @@ class csr_broadcast_header_control_vseq extends csr_base_vseq;
     check_functional_write_effect(1'b0);
     check_functional_write_effect(1'b1);
 
-    `uvm_info(`gfn, "CSR broadcast header control checks passed", UVM_LOW)
   endtask
 
   virtual task check_control_bit_behavior();

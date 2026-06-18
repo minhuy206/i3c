@@ -18,11 +18,9 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     foreach (broadcast_modes[mode_idx]) begin
       run_write_abort_case(broadcast_modes[mode_idx]);
       run_write_abort_deep_case(broadcast_modes[mode_idx]);
+      run_write_abort_toc_zero_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRW_009 conclusion: HC abort during SDR private write reaches idle and SW reset flushes leftover TX data in both private-address modes",
-              UVM_LOW)
   endtask
 
   virtual task run_write_abort_case(bit broadcast_header_enable);
@@ -161,6 +159,83 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
                   "SDRW_009 result: mode=%s case=deep_abort sampled_bytes=%0d requested_len=%0d sw_reset_flushed_queues=1",
                   private_addr_mode_name(broadcast_header_enable), dev_seq.sampled_data.size(),
                   DATA_LENGTH_DEEP), UVM_LOW)
+  endtask
+
+  // toc=0 abort: the write is programmed with toc=0 (continuation requested), but HC abort during
+  // the data phase must override the continuation -- the controller still terminates with STOP and
+  // reports HcAborted, never a Repeated-START continuation. Bytes sent before abort are intact.
+  virtual task run_write_abort_toc_zero_case(bit broadcast_header_enable);
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   no_read_data;
+    byte_queue_t                   exp_bytes;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+
+    word_queue_t                   tx_words;
+    tx_words.push_back(32'h4433_2211);
+    tx_words.push_back(32'h8877_6655);
+
+    enable_dut(broadcast_header_enable);
+    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+
+    cfg = make_transfer_cfg(
+        .ctxt($sformatf("SDRW_009 %s write_abort_toc0",
+                        private_addr_mode_name(broadcast_header_enable))),
+        .seq_name($sformatf("sdrw009_%s_toc0_dev_seq",
+                            private_addr_mode_name(broadcast_header_enable))),
+        .tid(4'd9),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b0),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(DATA_LENGTH),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
+
+    start_device_response(cfg, 1'b0, no_read_data, dev_seq);
+
+    write_tx_words(tx_words);
+    write_write_cmd(cfg, .toc(1'b0));
+
+    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+
+    reg_write(ADDR_HC_CONTROL, {
+              28'h0, 1'b1  /*HC_ABORT*/, broadcast_header_enable, 1'b0  /*SW_RST*/, 1'b1  /*EN*/});
+
+    poll_idle();
+    wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+    read_response(resp);
+
+    // Abort overrides the toc=0 continuation: HcAborted + STOP, never a continuation RSTART.
+    `DV_CHECK_EQ(resp[31:28], 4'h8,
+                 "SDRW_009 toc0 abort: response status must be HcAborted")
+    `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b0,
+                 "SDRW_009 toc0 abort: aborted write must end with STOP, not a continuation RSTART")
+    // Every byte the device sampled before abort must match the TX FIFO bytes at those positions.
+    exp_bytes.push_back(8'h11); exp_bytes.push_back(8'h22);
+    exp_bytes.push_back(8'h33); exp_bytes.push_back(8'h44);
+    exp_bytes.push_back(8'h55); exp_bytes.push_back(8'h66);
+    exp_bytes.push_back(8'h77); exp_bytes.push_back(8'h88);
+    foreach (dev_seq.sampled_data[i]) begin
+      `DV_CHECK_EQ(dev_seq.sampled_data[i], exp_bytes[i],
+                   $sformatf("SDRW_009 toc0 abort: pre-abort byte[%0d] mismatch", i))
+    end
+
+    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, broadcast_header_enable, 1'b0, 1'b1});
+    request_sw_reset(.keep_enabled(1'b1));
+    check_all_queues_empty(
+        $sformatf("SDRW_009 %s toc0: after recovery SW reset",
+                  private_addr_mode_name(broadcast_header_enable)));
+
+    `uvm_info(`gfn, $sformatf(
+                  "SDRW_009 result: mode=%s case=toc0_abort sampled_bytes=%0d observed_rstart=%0b resp_status=0x%0h sw_reset_flushed_queues=1",
+                  private_addr_mode_name(broadcast_header_enable), dev_seq.sampled_data.size(),
+                  dev_seq.observed_rstart, resp[31:28]), UVM_LOW)
   endtask
 
 endclass

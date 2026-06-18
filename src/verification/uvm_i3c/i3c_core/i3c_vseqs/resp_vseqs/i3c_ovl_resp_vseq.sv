@@ -17,7 +17,6 @@ class i3c_ovl_resp_vseq extends i3c_base_vseq;
     run_tx_underflow_resp_case(0);
     run_rx_fifo_full_resp_case();
 
-    `uvm_info(`gfn, "ERR_005 Ovl RESP checks passed", UVM_LOW)
   endtask
 
   virtual task run_tx_underflow_resp_case(int unsigned actual_length);

@@ -30,7 +30,6 @@ class bus_start_stop_detect_vseq extends bus_base_vseq;
     wait_sync_cycles(6);
 
     release_phy_inputs();
-    `uvm_info(`gfn, "BUS_002 START/STOP detection checks passed", UVM_LOW)
   endtask
 
 endclass

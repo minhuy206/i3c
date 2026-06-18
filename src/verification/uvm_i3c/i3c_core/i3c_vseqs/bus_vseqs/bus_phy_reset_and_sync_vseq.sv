@@ -25,7 +25,6 @@ class bus_phy_reset_and_sync_vseq extends bus_base_vseq;
 
     release_phy_inputs();
     wait_sync_cycles(4);
-    `uvm_info(`gfn, "BUS_001 PHY reset and 2FF synchronization stimulus completed", UVM_LOW)
   endtask
 
 endclass

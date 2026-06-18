@@ -9,9 +9,6 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
     run_multi_dat_idx_case(1'b0);
     run_toc_zero_multi_dat_idx_case(1'b0);
 
-    `uvm_info(`gfn,
-              "SDRW_008 conclusion: SDR private writes select the programmed DAT index and preserve that selection across toc=0 continuation",
-              UVM_LOW)
   endtask
 
   virtual task configure_multi_dat_targets();

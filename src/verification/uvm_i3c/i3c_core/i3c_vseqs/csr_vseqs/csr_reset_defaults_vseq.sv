@@ -56,7 +56,6 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
                    "csr_reset_defaults_vseq: DAT[%0d] reset value mismatch", i))
     end
 
-    `uvm_info(`gfn, "CSR reset default checks passed", UVM_LOW)
   endtask
 
 endclass

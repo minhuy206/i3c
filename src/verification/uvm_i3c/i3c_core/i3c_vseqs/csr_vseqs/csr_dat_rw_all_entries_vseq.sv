@@ -32,7 +32,6 @@ class csr_dat_rw_all_entries_vseq extends csr_base_vseq;
       end
     end
 
-    `uvm_info(`gfn, "CSR DAT read/write all entries checks passed", UVM_LOW)
   endtask
 
   function bit [31:0] build_dat_entry(bit [6:0] static_addr, bit [6:0] dynamic_addr, bit device);

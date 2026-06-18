@@ -61,7 +61,6 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
 
     check_all_queues_empty("after CSR DAT hardware read selection");
 
-    `uvm_info(`gfn, "CSR DAT hardware read selection checks passed", UVM_LOW)
   endtask
 
   virtual task run_dat_index_write_case(int unsigned case_idx, bit [4:0] dev_idx,

@@ -107,7 +107,6 @@ class csr_cmd_partial_then_other_write_vseq extends csr_base_vseq;
         status[QS_TX_EMPTY_BIT], 1'b1,
         "csr_cmd_partial_then_other_write_vseq: TX FIFO should be empty after write consumes data")
 
-    `uvm_info(`gfn, "CSR partial CMD with interleaved CSR write checks passed", UVM_LOW)
   endtask
 
   task check_cmd_staging_preserved(string ctxt, bit [31:0] exp_dword0);

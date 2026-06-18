@@ -91,7 +91,6 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(status[QS_CMD_EMPTY_BIT], 1'b1,
                  "csr_cmd_queue_2dw_staging_vseq: CMD FIFO should be empty after command consumes")
 
-    `uvm_info(`gfn, "CSR CMD two-DWORD staging checks passed", UVM_LOW)
   endtask
 
 endclass

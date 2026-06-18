@@ -19,9 +19,6 @@ class i3c_read_data_patterns_vseq extends i3c_base_vseq;
       run_pattern_case(4, "fixed_random", broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRR_007 conclusion: SDR private reads preserve all exercised data patterns in both private-address modes",
-              UVM_LOW)
   endtask
 
   virtual task run_pattern_case(int unsigned pattern_idx, string pattern_name,

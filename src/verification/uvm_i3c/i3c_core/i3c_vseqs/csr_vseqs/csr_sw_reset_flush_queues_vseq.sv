@@ -76,7 +76,6 @@ class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
     reg_read(ADDR_RESP, data);
     `DV_CHECK_EQ(data, 32'h0, "csr_sw_reset_flush_queues_vseq: empty RESP read should return 0")
 
-    `uvm_info(`gfn, "CSR software reset queue flush checks passed", UVM_LOW)
   endtask
 
   task check_queue_occupancy(queue_hdl_paths_t paths, int unsigned exp_depth, string ctxt);

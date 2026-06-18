@@ -39,7 +39,6 @@ class bus_scl_waitcmd_stall_resume_vseq extends bus_base_vseq;
     force_scl_generator_controls(1'b0, 1'b0, 1'b0, 1'b0, 1'b1);
     wait_sync_cycles(1);
     release_scl_generator_controls();
-    `uvm_info(`gfn, "BUS_006 WaitCmd SCL stall/resume stimulus completed", UVM_LOW)
   endtask
 
   virtual task drive_stall_before_first_high(string profile_name, int unsigned t_su_sta,
@@ -64,8 +63,6 @@ class bus_scl_waitcmd_stall_resume_vseq extends bus_base_vseq;
   virtual task resume_clock(string profile_name, int unsigned t_low, int unsigned t_high);
     set_scl_generator_controls_now(1'b0, 1'b0, 1'b0, 1'b1, 1'b0);
     wait_sync_cycles(t_low + FALL_CYCLES + t_high + RISE_CYCLES + 8);
-    `uvm_info(`gfn, $sformatf("BUS_006 resume stimulus completed for %s", profile_name),
-              UVM_HIGH)
   endtask
 
 endclass

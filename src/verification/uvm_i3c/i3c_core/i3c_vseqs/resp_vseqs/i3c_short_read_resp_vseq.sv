@@ -13,7 +13,6 @@ class i3c_short_read_resp_vseq extends i3c_base_vseq;
     run_short_read_resp_case(1'b0);
     run_short_read_resp_case(1'b1);
 
-    `uvm_info(`gfn, "ERR_004 short read RESP checks passed", UVM_LOW)
   endtask
 
   virtual task run_short_read_resp_case(bit broadcast_header_enable);

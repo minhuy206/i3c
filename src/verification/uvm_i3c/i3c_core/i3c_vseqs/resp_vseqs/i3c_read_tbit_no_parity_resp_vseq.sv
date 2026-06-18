@@ -16,9 +16,6 @@ class i3c_read_tbit_no_parity_resp_vseq extends i3c_base_vseq;
       run_final_tbit_resp_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "ERR_013 conclusion: legal final read T-bit=0 is not classified as Parity; RESP is Success with correct TID, reserved bits, and length",
-              UVM_LOW)
   endtask
 
   virtual task run_final_tbit_resp_case(bit broadcast_header_enable);

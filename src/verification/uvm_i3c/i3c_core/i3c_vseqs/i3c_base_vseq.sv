@@ -289,6 +289,18 @@ class i3c_base_vseq extends uvm_sequence;
     endcase
   endfunction
 
+  virtual task check_sampled_write_data(i3c_device_response_seq dev_seq, byte_queue_t exp_data,
+                                        int unsigned exp_len, string ctxt);
+    `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_len,
+                 $sformatf("%s: sampled write byte count mismatch", ctxt))
+    for (int unsigned i = 0; i < exp_len; i++) begin
+      if ((i < dev_seq.sampled_data.size()) && (i < exp_data.size())) begin
+        `DV_CHECK_EQ(dev_seq.sampled_data[i], exp_data[i],
+                     $sformatf("%s: sampled write byte[%0d] mismatch", ctxt, i))
+      end
+    end
+  endtask
+
   virtual task wait_for_device_done(i3c_device_response_seq dev_seq, string ctxt,
                                     int unsigned timeout_cycles = 1000);
     for (int i = 0; i < timeout_cycles; i++) begin

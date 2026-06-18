@@ -36,7 +36,6 @@ class bus_repeated_start_detect_vseq extends bus_base_vseq;
     wait_sync_cycles(6);
 
     release_phy_inputs();
-    `uvm_info(`gfn, "BUS_003 repeated START detection checks passed", UVM_LOW)
   endtask
 
 endclass

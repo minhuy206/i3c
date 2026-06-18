@@ -48,7 +48,8 @@ BUS_REGRESSION_SEQS ?= \
 	bus_tx_byte_and_bit_order_vseq \
 	bus_rx_byte_and_bit_order_vseq \
 	bus_od_pp_phase_switch_vseq \
-	bus_tb_pad_model_odpp_wiring_vseq
+	bus_tb_pad_model_odpp_wiring_vseq \
+	bus_i2c_od_only_check_vseq
 
 SDRW_REGRESSION_SEQS ?= \
 	i3c_write_vseq \
@@ -72,6 +73,20 @@ SDRR_REGRESSION_SEQS ?= \
 	i3c_read_toc_zero_vseq \
 	i3c_read_multi_dat_idx_vseq \
 	i3c_read_abort_vseq
+
+IMM_REGRESSION_SEQS ?= \
+	i3c_imm_vseq \
+	i3c_imm_dtt_sweep_vseq \
+	i3c_imm_toc_vseq \
+	i3c_imm_i2c_write_vseq \
+	i3c_imm_data_nack_i2c_vseq
+
+I2C_REGRESSION_SEQS ?= \
+	i2c_regular_write_basic_vseq \
+	i2c_regular_read_basic_vseq \
+	i2c_broadcast_addr_enable_ignored_vseq \
+	i2c_len_sweep_partial_rx_vseq \
+	i2c_data_nack_write_vseq
 
 ERR_REGRESSION_SEQS ?= \
 	i3c_addr_header_nack_resp_vseq \
@@ -141,6 +156,18 @@ sdrr_regression:
 	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
 	done
 
+imm_regression:
+	@set -e; \
+	for seq in $(IMM_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+i2c_regression:
+	@set -e; \
+	for seq in $(I2C_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
 err_regression:
 	@set -e; \
 	for seq in $(ERR_REGRESSION_SEQS); do \
@@ -184,5 +211,5 @@ clean:
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
-        sdrw_regression sdrr_regression err_regression sdr_regression \
+        sdrw_regression sdrr_regression imm_regression err_regression sdr_regression \
         fifo_non_power_of_two_elaboration waves coverage clean

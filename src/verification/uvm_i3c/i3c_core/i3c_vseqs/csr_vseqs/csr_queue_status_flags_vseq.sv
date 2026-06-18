@@ -29,7 +29,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     check_queue_state(tx_paths, 0, "TX at end of CSR_010");
     check_queue_state(rx_paths, 0, "RX at end of CSR_010");
     check_queue_state(resp_paths, 0, "RESP at end of CSR_010");
-    `uvm_info(`gfn, "CSR queue status flag checks passed", UVM_LOW)
   endtask
 
   task check_queue_state(queue_hdl_paths_t paths, int unsigned exp_depth, string ctxt);

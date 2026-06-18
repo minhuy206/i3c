@@ -12,9 +12,6 @@ class i3c_read_vseq extends i3c_base_vseq;
       run_read_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRR_001 conclusion: baseline SDR private read returns the requested 4-byte word in both private-address modes",
-              UVM_LOW)
   endtask
 
   virtual task run_read_case(bit broadcast_header_enable);

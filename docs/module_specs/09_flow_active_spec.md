@@ -410,6 +410,21 @@ stateDiagram-v2
   - Accumulate into 32-bit DWORD, push to RX FIFO when full
   - If RX FIFO cannot accept a committed DWORD, latch `rx_overflow` and terminate with `Ovl`
   - When `data_length` reached or target signals end (T-bit=0): → `WriteResp` with `I3cShortReadErr` if fewer bytes than requested
+  - **Controller read takeover / abort (MIPI I3C Basic v1.1.1 §5.1.2.3.4):** once the
+    target has ACKed a read address it drives SDA push-pull, so the controller may only
+    retake the bus at a **T-Bit** (9th bit), where the target parks SDA to High-Z. The
+    controller never tears a read down with a bare STOP mid-word.
+    - **Early termination at requested length:** when `remaining_len` reaches 0 and the
+      target returns T-Bit=1 (parked, would continue), assert `gen_rstart_o`
+      (`request_read_takeover`) — a Repeated START — then STOP (or a new address for a
+      `toc=0` continuation).
+    - **HC abort (`abort_i`) of an active I3C read:** the blanket abort STOP is **deferred**
+      (`abort_immediate_stop_safe` returns 0 for this phase). The controller finishes the in-flight data word — or,
+      if abort lands right after the ACK, the **first** data word — to its T-Bit, latches
+      `read_abort_term_q`/`hc_aborted_q`, then retakes SDA: **T-Bit=1 → Repeated START
+      then STOP**; **T-Bit=0 → direct STOP** (target already released SDA). Response is
+      `HcAborted` (not `I3cShortReadErr`), with `data_length` = bytes actually received.
+      Scope is I3C SDR reads only; I2C reads keep the direct-STOP abort path.
 - **Actions (ENTDAA):**
   - Set `sel_i3c_i2c_o = 1` (I3C mode)
   - Generate START (Open-Drain)
@@ -545,6 +560,7 @@ end
 | TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
 | RX overflow      | RX FIFO cannot accept received data                    | `Ovl`            |
 | Short read       | Target drives T-bit=0 before all requested bytes sent  | `I3cShortReadErr`|
+| HC abort (read)  | `abort_i` during an I3C read; terminate at next T-Bit via Repeated START (T=1) or STOP (T=0) | `HcAborted` |
 | ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses    | `Nack`           |
 
 ## 9. Test Plan

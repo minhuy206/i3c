@@ -18,7 +18,6 @@ class bus_scl_clock_low_high_timing_vseq extends bus_base_vseq;
     wait_sync_cycles(1);
     release_scl_generator_timing_mode();
     release_scl_generator_controls();
-    `uvm_info(`gfn, "BUS_005 SCL low/high I3C and I2C timing stimulus completed", UVM_LOW)
   endtask
 
   virtual task run_i3c_pp_timing_profile(string profile_name, i3c_timing_t tc,
@@ -65,8 +64,6 @@ class bus_scl_clock_low_high_timing_vseq extends bus_base_vseq;
     selected_t_low = use_od_low ? t_low_od : t_low;
     clock_period_cycles = selected_t_low + t_f + t_high + t_r + 2;
     wait_sync_cycles(t_su_sta + t_hd_sta + (3 * clock_period_cycles) + 12);
-    `uvm_info(`gfn, $sformatf("BUS_005 clock stimulus completed for %s", profile_name),
-              UVM_HIGH)
   endtask
 
   virtual task start_scl_clocking();

@@ -8,6 +8,7 @@ class i3c_device_response_seq extends uvm_sequence #(
   bit [7:0] read_data[$];
   bit ack_address = 1;
   bit ack_data = 1;
+  bit data_ack_pattern[$];
   bit start_with_broadcast_header;
   int read_data_cnt = 4;
   bit observed_rstart;
@@ -60,7 +61,9 @@ class i3c_device_response_seq extends uvm_sequence #(
 
     req.T_bit.delete();
     for (int i = 0; i < req.data_cnt; i++) begin
-      if (!is_i3c && !dir) begin
+      if (i < data_ack_pattern.size()) begin
+        req.T_bit.push_back(data_ack_pattern[i]);
+      end else if (!is_i3c && !dir) begin
         req.T_bit.push_back(ack_data);
       end else if (i < req.data_cnt - 1) begin
         req.T_bit.push_back(ack_data);

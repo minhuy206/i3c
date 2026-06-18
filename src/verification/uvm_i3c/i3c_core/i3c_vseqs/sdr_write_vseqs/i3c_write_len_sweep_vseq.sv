@@ -20,9 +20,6 @@ class i3c_write_len_sweep_vseq extends i3c_base_vseq;
       end
     end
 
-    `uvm_info(`gfn,
-              "SDRW_002 conclusion: SDR private writes deliver each requested byte count across the length sweep",
-              UVM_LOW)
   endtask
 
   virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length,

@@ -112,7 +112,6 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0,
                  "csr_enable_disable_vseq: transfer direction should be write after re-enable")
 
-    `uvm_info(`gfn, "CSR enable/disable checks passed", UVM_LOW)
   endtask
 
 endclass

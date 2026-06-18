@@ -13,9 +13,6 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
       run_toc_zero_missing_next_cmd_case(broadcast_modes[mode_idx]);
     end
 
-    `uvm_info(`gfn,
-              "SDRW_005 conclusion: toc=0 either continues with exactly one repeated START or reports the missing-continuation interrupt",
-              UVM_LOW)
   endtask
 
   virtual task run_toc_zero_case(bit broadcast_header_enable);

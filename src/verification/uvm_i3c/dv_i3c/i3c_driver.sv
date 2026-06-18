@@ -155,7 +155,7 @@ class i3c_driver extends uvm_driver #(
     forever begin
       case (bus_state)
         DrvIdle: begin
-          cfg.vif.wait_for_host_start();
+          cfg.vif.wait_for_host_start(cfg.tc.i3c_tc);
           set_drive_device_state(DrvAddrArbit);
         end
 
@@ -197,12 +197,9 @@ class i3c_driver extends uvm_driver #(
 
         DrvAck: begin
           bit ack;
-          bit wait_low_after_handoff;
           ack = get_addr_ack(req, rsp.addr);
-          wait_low_after_handoff =
-              !(req.start_with_broadcast_header && is_broadcast_header(rsp.addr));
           if (req.i3c) begin
-            cfg.vif.device_i3c_send_addr_ack(cfg.tc.i3c_tc, ack, wait_low_after_handoff);
+            cfg.vif.device_i3c_send_addr_ack(cfg.tc.i3c_tc, ack);
           end else begin
             cfg.vif.device_i2c_send_bit(cfg.tc.i2c_tc, !ack);
           end
@@ -236,31 +233,6 @@ class i3c_driver extends uvm_driver #(
           end else begin
             set_drive_device_state(DrvStop);
           end
-        end
-
-        DrvWaitStopOrRStart: begin
-          release_bus();
-          stop   = 1'b0;
-          rstart = 1'b0;
-          cfg.vif.wait_for_i3c_host_stop_or_rstart_after_ack(cfg.tc.i3c_tc, rstart, stop);
-
-          if (rstart) begin
-            `uvm_info(`gfn, "Device got RStart after broadcast header", UVM_MEDIUM)
-            rsp.start_with_broadcast_header = 1'b1;
-            rsp.observed_broadcast_rstart = 1'b1;
-            rsp.end_with_rstart = 1'b1;
-            set_drive_device_state(DrvAddrPushPull);
-          end else begin
-            `uvm_info(`gfn, "Device got Stop after broadcast header", UVM_MEDIUM)
-            rsp.end_with_rstart = 1'b0;
-            set_drive_device_state(DrvIdle);
-            return;
-          end
-        end
-
-        DrvStop: begin
-          release_bus();
-          wait (0);
         end
 
         DrvDAA: begin
@@ -298,26 +270,13 @@ class i3c_driver extends uvm_driver #(
         end
 
         DrvRdPushPull: begin
-          bit sent;
-          bit read_ended;
-
-          read_ended = 1'b0;
           for (int i = 0; i < req.data_cnt; i++) begin
             for (int j = 7; j >= 0; j--) begin
-              cfg.vif.device_i3c_send_bit(cfg.tc.i3c_tc, req.data[i][j], sent);
-              if (!sent) begin
-                read_ended = 1'b1;
-                break;
-              end
+              cfg.vif.device_i3c_send_bit(cfg.tc.i3c_tc, req.data[i][j]);
               `uvm_info(`gfn, $sformatf("Device drive data[%0d]=%b", i, req.data[i][j]), UVM_HIGH)
             end
-            if (read_ended) break;
 
-            cfg.vif.device_i3c_send_t_bit(cfg.tc.i3c_tc, req.T_bit[i], sent);
-            if (!sent) begin
-              read_ended = 1'b1;
-              break;
-            end
+            cfg.vif.device_i3c_send_t_bit(cfg.tc.i3c_tc, req.T_bit[i]);
             `uvm_info(`gfn, $sformatf(
                       "Device drive data[%0d]=0x%h, T_bit=%b", i, req.data[i], req.T_bit[i]),
                       UVM_MEDIUM)
@@ -331,9 +290,13 @@ class i3c_driver extends uvm_driver #(
           for (int i = 0; i < req.data_cnt; i++) begin
             for (int j = 7; j >= 0; j--) begin
               cfg.vif.sample_target_data(data[j]);
+              `uvm_info(`gfn, $sformatf("Device sampled data[%0d][%0d]=%b", i, j, data[j]),
+                        UVM_HIGH)
             end
             rsp.data.push_back(data);
             cfg.vif.device_i2c_send_bit(cfg.tc.i2c_tc, !req.T_bit[i]);
+            `uvm_info(`gfn, $sformatf("Device sampled data[%0d]=0x%h, ACK=%b", i, data, req.T_bit[i]
+                      ), UVM_MEDIUM)
             if (!req.T_bit[i]) begin
               break;
             end
@@ -348,12 +311,13 @@ class i3c_driver extends uvm_driver #(
           for (int i = 0; i < req.data_cnt; i++) begin
             for (int j = 7; j >= 0; j--) begin
               cfg.vif.sample_target_data(data[j]);
+              `uvm_info(`gfn, $sformatf("Device sampled data[%0d][%0d]=%b", i, j, data[j]),
+                        UVM_HIGH)
             end
             rsp.data.push_back(data);
             cfg.vif.sample_target_data(t_bit);
             rsp.T_bit.push_back(t_bit);
-            `uvm_info(`gfn, $sformatf(
-                      "Device sampled data[%0d]=0x%h, T_bit=%b", i, rsp.data[i], rsp.T_bit[i]),
+            `uvm_info(`gfn, $sformatf("Device sampled data[%0d]=0x%h, T_bit=%b", i, data, t_bit),
                       UVM_MEDIUM)
             if (((^data) ^ t_bit) == 0) begin
               `uvm_warning(`gfn, $sformatf("Device sampled data is incorrect!"))
@@ -362,6 +326,32 @@ class i3c_driver extends uvm_driver #(
           end
           set_drive_device_state(DrvStop);
         end
+
+        DrvWaitStopOrRStart: begin
+          release_bus();
+          stop   = 1'b0;
+          rstart = 1'b0;
+          cfg.vif.wait_for_i3c_host_stop_or_rstart(cfg.tc.i3c_tc, rstart, stop);
+
+          if (rstart) begin
+            `uvm_info(`gfn, "Device got RStart after broadcast header", UVM_MEDIUM)
+            rsp.start_with_broadcast_header = 1'b1;
+            rsp.observed_broadcast_rstart = 1'b1;
+            rsp.end_with_rstart = 1'b1;
+            set_drive_device_state(DrvAddrPushPull);
+          end else begin
+            `uvm_info(`gfn, "Device got Stop after broadcast header", UVM_MEDIUM)
+            rsp.end_with_rstart = 1'b0;
+            set_drive_device_state(DrvIdle);
+            return;
+          end
+        end
+
+        DrvStop: begin
+          release_bus();
+          wait (0);
+        end
+
         default: begin
           `uvm_fatal(`gfn, $sformatf("\n device_driver, received invalid request"))
         end

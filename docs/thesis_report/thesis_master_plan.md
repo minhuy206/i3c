@@ -2,7 +2,7 @@
 
 **Author**: Vo Minh Huy (22207042) · **Supervisor**: Nguyen Duy Manh Thi · HCMUS · 10 credits
 **Prepared**: 2026-05-13 (Phase 3, UVM verification window)
-**Repository**: `/Users/minhuy/Workspaces/i3c`
+**Repository**: `/home/minhuy/Workspaces/i3c`
 
 ---
 

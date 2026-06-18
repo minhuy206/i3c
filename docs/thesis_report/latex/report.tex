@@ -41,7 +41,7 @@
 
 % ---- code listings -------------------------------------------------
 \usepackage{listings}
-\lstdefinestyle{sv}{language={[2017]Verilog},basicstyle=\ttfamily\footnotesize,
+\lstdefinestyle{sv}{language=Verilog,basicstyle=\ttfamily\footnotesize,
   keywordstyle=\bfseries,numbers=left,numberstyle=\tiny,frame=single,
   breaklines=true,tabsize=2,
   morekeywords={logic,always_ff,always_comb,typedef,struct,packed,enum,
@@ -77,7 +77,8 @@
   \end{table}}
 
 % Brief banner shown at the top of each (sub)section while drafting
-\newcommand{\brief}[1]{\par\noindent\textit{\small\textcolor{gray}{Brief: #1}}\par\medskip}
+\definecolor{briefcolor}{gray}{0.15} % dark gray, readable on white
+\newcommand{\brief}[1]{\par\noindent\textit{\small\textcolor{briefcolor}{Brief: #1}}\par\medskip}
 
 % =====================================================================
 \title{Design of an I3C Communication Controller}

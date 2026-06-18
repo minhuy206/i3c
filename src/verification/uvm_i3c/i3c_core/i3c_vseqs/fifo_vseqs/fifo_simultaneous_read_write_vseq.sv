@@ -11,7 +11,6 @@ class fifo_simultaneous_read_write_vseq extends fifo_base_vseq;
     exercise_queue(rx_paths);
     exercise_queue(resp_paths);
 
-    `uvm_info(`gfn, "FIFO simultaneous read/write checks passed", UVM_LOW)
   endtask
 
   virtual task drain_queue(queue_hdl_paths_t paths, int unsigned count);

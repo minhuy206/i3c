@@ -19,10 +19,62 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
       run_rx_fifo_full_overflow_case(broadcast_modes[mode_idx]);
     end
     run_rx_fifo_partial_overflow_case();
+    run_rx_fifo_overflow_toc_zero_case();
 
-    `uvm_info(`gfn,
-              "SDRR_006 conclusion: RX FIFO overflow preserves existing FIFO data, accepts only available space, and drains cleanly after recovery",
-              UVM_LOW)
+  endtask
+
+  // toc=0 overflow: the read is programmed with toc=0 (continuation requested), but RX overflow is
+  // an error that must force STOP and override the continuation. Prefill RX one short of full so the
+  // read commits exactly one word and then overflows; the controller takes over, STOPs (no
+  // continuation RSTART), and reports Ovl. Prefill plus the one accepted word are preserved.
+  virtual task run_rx_fifo_overflow_toc_zero_case();
+    transfer_stimulus_cfg_t cfg;
+    regular_trans_desc_t    rd_cmd;
+    byte_queue_t            read_data;
+    bit [31:0]              rx_word;
+    bit [31:0]              resp;
+    i3c_device_response_seq dev_seq;
+
+    enable_dut(1'b0);
+    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+
+    build_read_payload(read_data);
+    prefill_rx_fifo_count(PARTIAL_PREFILL_WORDS, "after SDRR_006 toc0 RX prefill");
+
+    cfg = make_transfer_cfg(
+        .ctxt("SDRR_006 toc0 rx_fifo_overflow"),
+        .seq_name("sdrr006_toc0_overflow_dev_seq"),
+        .tid(4'd8), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
+        .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0), .data_length(DATA_LENGTH), .settle_before_cmd(0),
+        .timeout_cycles(0));
+
+    // toc=0 here is the point of the test: overflow must override the requested continuation.
+    rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b0);
+    start_device_response(cfg, 1'b1, read_data, dev_seq);
+    write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
+
+    poll_idle();
+    wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+    read_response(resp);
+
+    // Overflow overrides toc=0: response is Ovl and the read ended (takeover) rather than chaining.
+    check_error_resp_fields(resp, RESP_OVL, cfg.tid, DATA_LENGTH, cfg.ctxt);
+
+    for (int unsigned i = 0; i < PARTIAL_PREFILL_WORDS; i++) begin
+      read_rx_data(rx_word);
+      `DV_CHECK_EQ(rx_word, make_prefill_word(i),
+                   $sformatf("SDRR_006 toc0: drained RX prefill word[%0d] mismatch", i))
+    end
+    read_rx_data(rx_word);
+    `DV_CHECK_EQ(rx_word, make_read_word(read_data, 0),
+                 "SDRR_006 toc0: accepted read word mismatch")
+
+    check_all_queues_empty("after SDRR_006 toc0 rx_fifo_overflow");
+
+    `uvm_info(`gfn, $sformatf(
+                  "SDRR_006 result: case=toc0_overflow resp_status=0x%0h resp_len=%0d observed_rstart=%0b accepted_read_words=1",
+                  resp[31:28], resp[15:0], dev_seq.observed_rstart), UVM_LOW)
   endtask
 
   virtual task run_rx_fifo_full_overflow_case(bit broadcast_header_enable);
