@@ -26,6 +26,7 @@ class i3c_base_vseq extends uvm_sequence;
   queue_hdl_paths_t resp_paths;
 
   localparam int unsigned BASE_CLK_PERIOD_NS = 10;
+  localparam int unsigned FIFO_DEPTH_W = 7;
 
   // HDL path to flow_active FSM state register — update here if hierarchy changes.
   localparam string FLOW_FSM_STATE_PATH = "tb_i3c_top.dut.u_ctrl.u_flow_fsm.state_q";
@@ -605,6 +606,27 @@ class i3c_base_vseq extends uvm_sequence;
 
     value = hdl_read_checked(path);
     return value[31:0];
+  endfunction
+
+  virtual function int unsigned hdl_read_uint_lsb(string path, int unsigned width);
+    uvm_hdl_data_t raw;
+    int unsigned   value;
+
+    if ((width == 0) || (width > $bits(value))) begin
+      `uvm_fatal(`gfn, $sformatf("%s: invalid hdl_read_uint_lsb width %0d for %s",
+                                 get_type_name(), width, path))
+    end
+
+    raw   = hdl_read_checked(path);
+    value = '0;
+    for (int unsigned i = 0; i < width; i++) begin
+      value[i] = raw[i];
+    end
+    return value;
+  endfunction
+
+  virtual function int unsigned hdl_read_fifo_depth(string path);
+    return hdl_read_uint_lsb(path, FIFO_DEPTH_W);
   endfunction
 
   virtual function bit [63:0] hdl_read_qword(string path);

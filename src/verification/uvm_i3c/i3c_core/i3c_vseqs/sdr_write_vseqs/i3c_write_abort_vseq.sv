@@ -90,7 +90,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     byte_queue_t                   no_read_data;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
-    uvm_hdl_data_t                 tx_depth;
+    int unsigned                   tx_depth;
 
     word_queue_t                   tx_words;
     tx_words.push_back(32'h4433_2211);
@@ -131,8 +131,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
       int timeout = device_done_timeout_cycles(cfg);
       for (int i = 0; i < timeout; i++) begin
         @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-        if (!uvm_hdl_read(tx_paths.depth_path, tx_depth))
-          `uvm_fatal(`gfn, "SDRW_009 deep: uvm_hdl_read failed for tx_paths.depth_path")
+        tx_depth = hdl_read_fifo_depth(tx_paths.depth_path);
         if (tx_depth < DATA_LENGTH_DEEP / 4) break;
       end
       if (tx_depth >= DATA_LENGTH_DEEP / 4)

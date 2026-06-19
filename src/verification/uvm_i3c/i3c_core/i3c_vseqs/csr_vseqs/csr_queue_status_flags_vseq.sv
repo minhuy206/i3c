@@ -41,7 +41,7 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     exp_full  = (exp_depth == QueueDepth);
     exp_empty = (exp_depth == 0);
 
-    `DV_CHECK_EQ(hdl_read_word(paths.depth_path), 32'(exp_depth), $sformatf(
+    `DV_CHECK_EQ(hdl_read_fifo_depth(paths.depth_path), exp_depth, $sformatf(
                  "csr_queue_status_flags_vseq: %s depth mismatch %s", paths.name, ctxt))
     `DV_CHECK_EQ(status[paths.full_bit], exp_full, $sformatf(
                  "csr_queue_status_flags_vseq: %s full flag mismatch %s", paths.name, ctxt))

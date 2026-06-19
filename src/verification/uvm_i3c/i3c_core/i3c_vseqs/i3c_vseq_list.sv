@@ -75,7 +75,11 @@
 `include "i3c_vseqs/imm_vseqs/i3c_imm_abort_vseq.sv"
 
 // 4.7 Common Command Codes
+`include "i3c_vseqs/ccc_vseqs/i3c_ccc_entdaa_opening_frame_vseq.sv"
 `include "i3c_vseqs/ccc_vseqs/i3c_ccc_broadcast_enec_vseq.sv"
+`include "i3c_vseqs/ccc_vseqs/i3c_ccc_broadcast_disec_vseq.sv"
+`include "i3c_vseqs/ccc_vseqs/i3c_ccc_direct_enec_vseq.sv"
+`include "i3c_vseqs/ccc_vseqs/i3c_ccc_direct_disec_vseq.sv"
 
 // 4.9 I2C Legacy Compatibility
 `include "i3c_vseqs/i2c_vseqs/i2c_regular_write_basic_vseq.sv"
@@ -83,3 +87,4 @@
 `include "i3c_vseqs/i2c_vseqs/i2c_broadcast_addr_enable_ignored_vseq.sv"
 `include "i3c_vseqs/i2c_vseqs/i2c_len_sweep_partial_rx_vseq.sv"
 `include "i3c_vseqs/i2c_vseqs/i2c_data_nack_write_vseq.sv"
+`include "i3c_vseqs/i2c_vseqs/i2c_regular_abort_vseq.sv"

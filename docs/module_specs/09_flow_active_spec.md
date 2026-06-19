@@ -312,25 +312,26 @@ stateDiagram-v2
 1. Generate START (Open-Drain)
 2. Send `{7'h7E, 1'b0}` broadcast address
 3. Read ACK
-4. Send CCC code byte (`cmd` field); read ACK
-5. Send defining byte (`def_or_data_byte1`) if `dtt >= 5`; read ACK
+4. Switch to Push-Pull; send CCC code byte (`cmd` field) followed by controller T-bit (`~^cmd`)
+5. For ENEC/DISEC, send Target Events byte from `def_or_data_byte1` followed by controller T-bit (`~^def_or_data_byte1`)
 6. Generate STOP (if `toc`)
 
-- **No Repeated START or device address — the entire frame stays Open-Drain**
+- **No Repeated START or device address.** Only the broadcast address and ACK are Open-Drain; CCC payload bytes and their T-bits are Push-Pull.
+- **DTT policy:** The current implementation accepts only `dtt <= 4` for all Immediate Data Transfer descriptors. For ENEC/DISEC, legal `dtt` values do not select the event-byte count; exactly one Target Events byte is sent from `def_or_data_byte1`. `dtt > 4` is rejected before bus activity with a `NotSupported` response.
 
 **Sub-case C — Direct CCC (`cp = 1`, `cmd[7] = 1`, e.g. ENEC 0x80, DISEC 0x81):**
 
 1. Generate START (Open-Drain)
 2. Send `{7'h7E, 1'b0}` broadcast address; read ACK
-3. Send CCC code byte; read ACK
+3. Send CCC code byte followed by controller T-bit
 4. Generate Repeated START (switch to Push-Pull)
 5. Send `{dynamic_address, 1'b0}` (target address + write from DAT entry); read ACK (Open-Drain)
 6. Send defining byte with T-bit parity; generate STOP (if `toc`)
 
 - **Counter:** `transfer_cnt` tracks current byte position within inline data
 - **OD/PP switching:**
-  - Sub-cases A, B: Open-Drain for address/ACK phases; Push-Pull for data bytes (A only)
-  - Sub-case C: Open-Drain through the broadcast header + CCC code; Push-Pull from Sr onward (data only)
+  - Sub-cases A, B: Open-Drain for address/ACK phases; Push-Pull for I3C data/CCC payload bytes and controller T-bits
+  - Sub-case C: Open-Drain for broadcast/target ACK sampling; Push-Pull for CCC opcode, controller T-bits, target address byte, and defining/event byte
 - **Transition:** → `WriteResp` when complete
 
 #### FetchTxData (State 7) — **NEW (was TODO)**
@@ -424,12 +425,17 @@ stateDiagram-v2
       `read_abort_term_q`/`hc_aborted_q`, then retakes SDA: **T-Bit=1 → Repeated START
       then STOP**; **T-Bit=0 → direct STOP** (target already released SDA). Response is
       `HcAborted` (not `I3cShortReadErr`), with `data_length` = bytes actually received.
-      Scope is I3C SDR reads only; I2C reads keep the direct-STOP abort path.
+    - **HC abort (`abort_i`) of an active I2C read:** the blanket abort STOP is
+      deferred until the current byte reaches the I2C ACK/NACK bit. The controller
+      receives and commits the in-flight byte, drives NACK as the controller-owned
+      9th bit, then generates STOP. No Repeated START or continuation is generated
+      for an I2C read abort, even when `toc=0`. Response is `HcAborted`, with
+      `data_length` = committed bytes including the abort-terminated byte.
 - **Actions (ENTDAA):**
   - Set `sel_i3c_i2c_o = 1` (I3C mode)
   - Generate START (Open-Drain)
   - Send `{7'h7E, 1'b0}` broadcast header; read ACK
-  - Send ENTDAA code `8'h07`; read ACK
+  - Send ENTDAA code `8'h07` followed by controller T-bit
   - Activate entdaa_controller: assert `ccc_valid_o = 1`, provide `ccc_dev_count_o` and `daa_dev_idx_o` from command descriptor
   - Wait for `ccc_done_i`; deassert `ccc_valid_o` (the `daa_restart_pending_q` latch in `controller_active` routes each restart pulse from `entdaa_controller` to `scl_generator` automatically — `flow_active` does not service restart requests)
   - On each `daa_address_valid_i` pulse: forward `daa_address_i`, `daa_pid_i`, `daa_bcr_i`, `daa_dcr_i` to RX FIFO for SW readback
@@ -465,7 +471,8 @@ assign cmd_dir  = cmd_desc[29] ? Read : Write;
 
 **Immediate Data Transfer (`attr = 3'b001`):**
 
-- `dtt` field (bits [25:23]): 0-4 = data bytes, 5-7 = defining byte + (dtt-5) data bytes
+- `dtt` field (bits [25:23]): 0-4 = number of immediate data bytes for private immediate writes; 5-7 are unsupported in the current implementation and produce `NotSupported` before bus activity.
+- For ENEC/DISEC CCCs, `dtt` does not determine the Target Events byte count. The controller sends exactly one Target Events byte from `def_or_data_byte1` when the descriptor is otherwise legal (`dtt <= 4`).
 - Data bytes packed in DWORD1: `{data_byte4, data_byte3, data_byte2, def_or_data_byte1}`
 
 **Regular Transfer (`attr = 3'b000`):**
@@ -560,7 +567,8 @@ end
 | TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
 | RX overflow      | RX FIFO cannot accept received data                    | `Ovl`            |
 | Short read       | Target drives T-bit=0 before all requested bytes sent  | `I3cShortReadErr`|
-| HC abort (read)  | `abort_i` during an I3C read; terminate at next T-Bit via Repeated START (T=1) or STOP (T=0) | `HcAborted` |
+| HC abort (I3C read) | `abort_i` during an I3C read; terminate at next T-Bit via Repeated START (T=1) or STOP (T=0) | `HcAborted` |
+| HC abort (I2C read) | `abort_i` during an I2C read; finish current byte, drive controller NACK on the ACK/NACK bit, then STOP | `HcAborted` |
 | ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses    | `Nack`           |
 
 ## 9. Test Plan
@@ -575,15 +583,16 @@ end
 6. **I2C Write (regular):** Regular write via TX FIFO to I2C device
 7. **I2C Read:** Read from I2C device; verify data in RX FIFO
 8. **ENTDAA:** Execute ENTDAA via AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx
-9. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5; verify [S][0x7E+W][ACK][0x00][ACK][DefByte][P] frame
-10. **CCC DISEC direct:** ImmediateDataTransfer with cp=1, cmd=0x81; verify [S][0x7E+W][ACK][0x81][ACK][Sr][DA+W][ACK][DefByte][P] frame
-11. **TX FIFO underflow:** Large write with insufficient TX FIFO data; verify STOP and response `Ovl`
-12. **RX FIFO overflow:** Large read with full RX FIFO; verify response `Ovl`
-13. **Address NACK:** Target NACKs address; verify `AddrHeader` error in response
-14. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` in response
-15. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
-16. **Multiple commands:** Enqueue 3 commands; verify all execute sequentially with correct responses
-17. **Back-to-back transfers:** No idle gap between commands; verify performance
+9. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, legal dtt<=4; verify [S][0x7E+W][ACK][0x00][T][TargetEvents][T][P] frame
+10. **CCC ENEC dtt>4 rejection:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5..7; verify no bus frame and response `NotSupported` with length 0
+11. **CCC DISEC direct:** ImmediateDataTransfer with cp=1, cmd=0x81; verify [S][0x7E+W][ACK][0x81][T][Sr][DA+W][ACK][DefByte][T][P] frame
+12. **TX FIFO underflow:** Large write with insufficient TX FIFO data; verify STOP and response `Ovl`
+13. **RX FIFO overflow:** Large read with full RX FIFO; verify response `Ovl`
+14. **Address NACK:** Target NACKs address; verify `AddrHeader` error in response
+15. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` in response
+16. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
+17. **Multiple commands:** Enqueue 3 commands; verify all execute sequentially with correct responses
+18. **Back-to-back transfers:** No idle gap between commands; verify performance
 
 ### Corner Cases
 

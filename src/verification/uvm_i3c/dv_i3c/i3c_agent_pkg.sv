@@ -15,6 +15,12 @@ package i3c_agent_pkg;
     BusOpRead  = 1'b1
   } bus_op_e;
 
+  // Semantic ACK/NACK value stored in i3c_seq_item.T_bit for legacy I2C reads.
+  typedef enum bit {
+    SampledNack = 1'b0,
+    SampledAck  = 1'b1
+  } sampled_ack_nack_e;
+
   typedef enum int {
     DrvIdle,
     DrvAddr,

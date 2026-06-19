@@ -155,7 +155,7 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
     for (int unsigned i = 0; i < data_length; i++) begin
       if (i > 0) s = {s, " "};
       if (i < dev_seq.sampled_t_bit.size()) begin
-        s = {s, dev_seq.sampled_t_bit[i] ? "ACK" : "NACK"};
+        s = {s, (dev_seq.sampled_t_bit[i] == SampledAck) ? "ACK" : "NACK"};
       end else begin
         s = {s, "MISSING"};
       end
@@ -169,9 +169,9 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
                  $sformatf("%s: sampled master ACK/NACK count mismatch", ctxt))
     for (int unsigned i = 0; i < data_length; i++) begin
       if (i < dev_seq.sampled_t_bit.size()) begin
-        bit exp_ack;
+        sampled_ack_nack_e exp_ack;
 
-        exp_ack = (i < (data_length - 1));
+        exp_ack = (i < (data_length - 1)) ? SampledAck : SampledNack;
         `DV_CHECK_EQ(dev_seq.sampled_t_bit[i], exp_ack,
                      $sformatf("%s: sampled master ACK/NACK byte[%0d] mismatch", ctxt, i))
       end

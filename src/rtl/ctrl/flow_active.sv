@@ -1,6 +1,8 @@
 module flow_active
   import controller_pkg::cmd_transfer_dir_e;
   import controller_pkg::dat_entry_t;
+  import controller_pkg::ACK;
+  import controller_pkg::NACK;
   import controller_pkg::Read;
   import controller_pkg::Write;
   import i3c_pkg::*;
@@ -252,28 +254,34 @@ module flow_active
     abort_stop_required = (state != FetchDAT) && !((state == WaitDAT) && !cont_pending);
   endfunction
 
-  function automatic logic abort_immediate_stop_safe(
-      input flow_fsm_state_e state, input logic target_i3c, input cmd_transfer_dir_e dir,
-      input i3c_cmd_attr_e attr);
-    abort_immediate_stop_safe = !((state == IssueCmd) && target_i3c && (dir == Read) &&
+  function automatic logic abort_stop_now(input flow_fsm_state_e state, input logic target_i3c,
+                                          input cmd_transfer_dir_e dir, input i3c_cmd_attr_e attr);
+    abort_stop_now = !((state == IssueCmd) && target_i3c && (dir == Read) &&
         ((attr == RegularTransfer) || (attr == ComboTransfer)));
   endfunction
 
-  function automatic i3c_resp_err_status_e current_resp_err_status();
+  function automatic logic i2c_read_abort();
+    i2c_read_abort = (state_q == IssueCmd) && !target_is_i3c &&
+        (cmd_attr == RegularTransfer) && (cmd_dir == Read) &&
+        (issue_phase_q > PhaseAddrAck) && (remaining_len_q > 16'h0) &&
+        !rx_overflow_q && !read_abort_term_q;
+  endfunction
+
+  function automatic i3c_resp_err_status_e map_resp_err_status();
     if (addr_nack_q) begin
-      current_resp_err_status = AddrHeader;
+      return AddrHeader;
     end else if (data_nack_q) begin
-      current_resp_err_status = I2cDataNackOrI3cBusAborted;
+      return I2cDataNackOrI3cBusAborted;
     end else if (rx_overflow_q || tx_underflow_q) begin
-      current_resp_err_status = Ovl;
+      return Ovl;
     end else if (short_read_q) begin
-      current_resp_err_status = I3cShortReadErr;
+      return I3cShortReadErr;
     end else if (not_supported_q) begin
-      current_resp_err_status = NotSupported;
+      return NotSupported;
     end else if (hc_aborted_q) begin
-      current_resp_err_status = HcAborted;
+      return HcAborted;
     end else begin
-      current_resp_err_status = Success;
+      return Success;
     end
   endfunction
 
@@ -349,7 +357,7 @@ module flow_active
 
   task automatic accept_continuation_cmd(input logic rstart_already_generated);
     resp_queue_wvalid = 1'b1;
-    resp_queue_wdata  = make_resp_word(current_resp_err_status(), cmd_tid, resp_data_len_q);
+    resp_queue_wdata  = make_resp_word(map_resp_err_status(), cmd_tid, resp_data_len_q);
     cmd_queue_rready  = 1'b1;
     clear_transfer_context();
     next_start_is_rstart_d = !rstart_already_generated;
@@ -733,9 +741,9 @@ module flow_active
   always_comb begin : update_fsm_state_d
     state_d = state_q;
 
-    if (abort_i && abort_active_state(
+    if (abort_i && !i2c_read_abort() && abort_active_state(
             state_q
-        ) && abort_immediate_stop_safe(
+        ) && abort_stop_now(
             state_q, target_is_i3c, cmd_dir, cmd_attr
         )) begin
       if (abort_stop_required(state_q, cont_pending_q)) begin
@@ -1058,9 +1066,9 @@ module flow_active
     hc_seq_cancel_event          = 1'b0;
     hc_err_cmd_seq_timeout_event = 1'b0;
 
-    if (abort_i && abort_active_state(
+    if (abort_i && !i2c_read_abort() && abort_active_state(
             state_q
-        ) && abort_immediate_stop_safe(
+        ) && abort_stop_now(
             state_q, target_is_i3c, cmd_dir, cmd_attr
         )) begin
       hc_aborted_d = 1'b1;
@@ -1137,13 +1145,9 @@ module flow_active
             request_stop(1'b0);
           end else if (issue_phase_q < PhaseDataStart) begin
             drive_i3c_bcast_header();
-          end else begin
-            unique case (bcast_header_next_q)
-              BcastHeaderPrivate: begin
-                issue_phase_d          = PhaseStart;
-                next_start_is_rstart_d = 1'b1;
-              end
-            endcase
+          end else if (bcast_header_next_q == BcastHeaderPrivate) begin
+            issue_phase_d          = PhaseStart;
+            next_start_is_rstart_d = 1'b1;
           end
         end
 
@@ -1651,29 +1655,39 @@ module flow_active
               end
             end else begin
               sel_od_pp = 1'b0;
-              if (rx_overflow_q) begin
+              if (rx_overflow_q || read_abort_term_q) begin
                 request_stop(1'b0);
               end else if (remaining_len_q > 16'h0) begin
                 if (issue_phase_q[0]) begin
                   bus_rx_req_byte = 1'b1;
+                  if (abort_i) begin
+                    hc_aborted_d = 1'b1;
+                  end
                   if (bus_rx_done_i) begin
                     rx_dword_d    = rx_word_with_byte(rx_dword_q, rx_byte_idx_q, bus_rx_data_i);
                     issue_phase_d = issue_phase_q + 8'h1;
                   end
                 end else begin
-                  if (remaining_len_q > 16'h1) begin
+                  if (abort_i || hc_aborted_q) begin
                     bus_tx_req_bit   = 1'b1;
-                    bus_tx_req_value = 8'h00;
+                    bus_tx_req_value = NACK;
+                  end else if (remaining_len_q > 16'h1) begin
+                    bus_tx_req_bit   = 1'b1;
+                    bus_tx_req_value = ACK;
                   end else begin
                     bus_tx_req_bit   = 1'b1;
-                    bus_tx_req_value = 8'h01;
+                    bus_tx_req_value = NACK;
                   end
                   if (bus_tx_done_i) begin
                     issue_phase_d   = issue_phase_q + 8'h1;
                     rx_byte_idx_d   = next_byte_idx(rx_byte_idx_q);
                     remaining_len_d = remaining_len_q - 16'h1;
                     resp_data_len_d = resp_data_len_q + 16'h1;
-                    if (rx_byte_idx_q == 2'd3) begin
+                    if (abort_i || hc_aborted_q) begin
+                      request_rx_commit(rx_dword_q);
+                      read_abort_term_d = 1'b1;
+                      hc_aborted_d      = 1'b1;
+                    end else if (rx_byte_idx_q == 2'd3) begin
                       request_rx_commit(rx_dword_q);
                     end else if (remaining_len_d == 16'h0) begin
                       request_rx_commit(rx_dword_q);
@@ -1695,7 +1709,7 @@ module flow_active
 
         WriteResp: begin
           resp_queue_wvalid = 1'b1;
-          resp_queue_wdata  = make_resp_word(current_resp_err_status(), cmd_tid, resp_data_len_q);
+          resp_queue_wdata  = make_resp_word(map_resp_err_status(), cmd_tid, resp_data_len_q);
         end
 
         default: begin

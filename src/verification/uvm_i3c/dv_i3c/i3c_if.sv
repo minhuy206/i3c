@@ -92,12 +92,18 @@ interface i3c_if (
     data = sda_i;
   endtask
 
-  task automatic get_bit_data(input string src = "host", output bit bit_o);
+  task automatic sample_bit_data(input string src = "host", output bit bit_o);
     @(posedge scl_i);
     bit_o = sda_i;
-    `uvm_info(msg_id, $sformatf("get bit data %d from %s", bit_o, src), UVM_HIGH)
+    `uvm_info(msg_id, $sformatf("sample bit data %d from %s", bit_o, src), UVM_HIGH)
     @(negedge scl_i);
-  endtask : get_bit_data
+  endtask : sample_bit_data
+
+  task automatic sample_t_bit_data(input string src = "host", output bit bit_o);
+    @(posedge scl_i);
+    bit_o = sda_i;
+    `uvm_info(msg_id, $sformatf("sample T-bit data %d from %s", bit_o, src), UVM_HIGH)
+  endtask : sample_t_bit_data
 
   task automatic wait_for_host_start(input i3c_timing_t tc);
     bit  start_seen;
@@ -321,24 +327,6 @@ interface i3c_if (
     join
   endtask : wait_for_i3c_host_stop_or_rstart
 
-  task automatic wait_for_i3c_host_stop_or_rstart_after_ack(input i3c_timing_t tc,
-                                                            output bit rstart, output bit stop);
-    rstart = 1'b0;
-    stop   = 1'b0;
-    fork
-      begin : iso_fork
-        fork
-          wait_for_host_rstart(.tc(tc), .rstart(rstart));
-          begin
-            if (scl_i === 1'b1) @(negedge scl_i);
-            wait_for_host_stop(.tc(tc), .stop(stop));
-          end
-        join_any
-        disable fork;
-      end : iso_fork
-    join
-  endtask : wait_for_i3c_host_stop_or_rstart_after_ack
-
   task automatic wait_for_host_ack();
     `uvm_info(msg_id, "Wait for host ack::Begin", UVM_HIGH)
     forever begin
@@ -379,14 +367,15 @@ interface i3c_if (
         disable fork;
       end : iso_fork
     join
-    wait (scl_io == 0);
     ack_r = ack && !nack;
   endtask : wait_for_host_ack_or_nack
 
   task automatic wait_for_device_ack_or_nack(output bit ack_r);
     bit data;
-    get_bit_data("device", data);
+    @(posedge scl_i);
+    data  = sda_i;
     ack_r = !data;
+    `uvm_info(msg_id, $sformatf("sample device %s", ack_r ? "ACK" : "NACK"), UVM_HIGH)
   endtask : wait_for_device_ack_or_nack
 
   task automatic time_check(input int delay, input bit exp_value, ref logic check_wire,
