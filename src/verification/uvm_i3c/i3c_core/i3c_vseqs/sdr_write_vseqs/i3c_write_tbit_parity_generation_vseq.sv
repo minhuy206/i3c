@@ -18,17 +18,29 @@ class i3c_write_tbit_parity_generation_vseq extends i3c_base_vseq;
 
   virtual task run_tbit_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                     [31:0] resp;
+    bit                            saw_tbit_zero;
+    bit                            saw_tbit_one;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
-    tx_words.delete();
-
-    tx_words.push_back(32'h0703_0100);
-    tx_words.push_back(32'hFE55_1F0F);
+    build_random_payload(NUM_TEST_BYTES, exp_data);
+    saw_tbit_zero = 1'b0;
+    saw_tbit_one = 1'b0;
+    foreach (exp_data[i]) begin
+      if (~^exp_data[i]) saw_tbit_one = 1'b1;
+      else saw_tbit_zero = 1'b1;
+    end
+    if (!(saw_tbit_zero && saw_tbit_one) && (exp_data.size() > 1)) begin
+      exp_data[exp_data.size()-1] = exp_data[0] ^ 8'h01;
+    end
+    pack_payload_words(exp_data, tx_words);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -37,7 +49,7 @@ class i3c_write_tbit_parity_generation_vseq extends i3c_base_vseq;
         .seq_name($sformatf("sdrw004_%s_dev_seq", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd4),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),

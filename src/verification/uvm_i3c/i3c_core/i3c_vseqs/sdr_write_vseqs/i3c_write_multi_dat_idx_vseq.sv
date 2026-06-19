@@ -11,28 +11,31 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
 
   endtask
 
-  virtual task configure_multi_dat_targets();
-    p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.dynamic_addr = 7'h08;
-    p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.dynamic_addr_valid = 1'b1;
-    p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.dynamic_addr = 7'h12;
-    p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.dynamic_addr_valid = 1'b1;
-
+  virtual task configure_multi_dat_targets(output bit [6:0] static_addr0,
+                                           output bit [6:0] dynamic_addr0,
+                                           output bit [6:0] static_addr1,
+                                           output bit [6:0] dynamic_addr1);
     disable_dut();
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
-    write_dat_entry(1, 7'h51, 7'h12, 1'b0);
+    randomize_i3c_dat_target(0, static_addr0, dynamic_addr0);
+    randomize_i3c_dat_target(1, static_addr1, dynamic_addr1, static_addr0, dynamic_addr0);
   endtask
 
   virtual task run_multi_dat_idx_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg0;
     transfer_stimulus_cfg_t        cfg1;
     byte_queue_t                   no_read_data;
+    byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
+    bit                      [6:0] static_addr0;
+    bit                      [6:0] dynamic_addr0;
+    bit                      [6:0] static_addr1;
+    bit                      [6:0] dynamic_addr1;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
 
-    configure_multi_dat_targets();
+    configure_multi_dat_targets(static_addr0, dynamic_addr0, static_addr1, dynamic_addr1);
 
     cfg0 = make_transfer_cfg(
         .ctxt($sformatf("SDRW_008 %s DAT[0]", private_addr_mode_name(broadcast_header_enable))),
@@ -41,7 +44,7 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         )),
         .tid(4'h9),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr0),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -59,7 +62,7 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         )),
         .tid(4'hB),
         .dev_idx(5'd1),
-        .target_addr(7'h12),
+        .target_addr(dynamic_addr1),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -71,9 +74,7 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    tx_words.push_back(32'h00C3_B2A1);
-    tx_words.push_back(32'h4030_2010);
-    tx_words.push_back(32'h0000_0050);
+    build_random_tx_words(cfg0.data_length + cfg1.data_length, exp_data, tx_words);
 
     start_ordered_device_responses(cfg0, 1'b0, no_read_data, dev_seq0, cfg1, 1'b0, no_read_data,
                                    dev_seq1);
@@ -103,14 +104,19 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
   virtual task run_toc_zero_multi_dat_idx_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg0;
     transfer_stimulus_cfg_t        cfg1;
+    byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
     int                            rstart_count;
+    bit                      [6:0] static_addr0;
+    bit                      [6:0] dynamic_addr0;
+    bit                      [6:0] static_addr1;
+    bit                      [6:0] dynamic_addr1;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
 
-    configure_multi_dat_targets();
+    configure_multi_dat_targets(static_addr0, dynamic_addr0, static_addr1, dynamic_addr1);
     enable_dut(broadcast_header_enable);
 
     cfg0 = make_transfer_cfg(
@@ -122,7 +128,7 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         )),
         .tid(4'hC),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr0),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -142,7 +148,7 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         )),
         .tid(4'hD),
         .dev_idx(5'd1),
-        .target_addr(7'h12),
+        .target_addr(dynamic_addr1),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -154,8 +160,7 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    tx_words.push_back(32'h0000_BBAA);
-    tx_words.push_back(32'h0000_DDCC);
+    build_random_tx_words(cfg0.data_length + cfg1.data_length, exp_data, tx_words);
 
     run_toc_zero_write_stimulus(cfg0, cfg1, tx_words, resp0, resp1, rstart_count, dev_seq0,
                                 dev_seq1);

@@ -26,15 +26,17 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
   virtual task run_write_abort_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg;
     byte_queue_t                   no_read_data;
+    byte_queue_t                   exp_data;
     bit                     [31:0] resp;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     word_queue_t                   tx_words;
-    tx_words.push_back(32'h4433_2211);
-    tx_words.push_back(32'h8877_6655);
+    build_random_tx_words(DATA_LENGTH, exp_data, tx_words);
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -43,7 +45,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
         .seq_name($sformatf("sdrw009_%s_dev_seq", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd9),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -88,18 +90,18 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
   virtual task run_write_abort_deep_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg;
     byte_queue_t                   no_read_data;
+    byte_queue_t                   exp_data;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
     int unsigned                   tx_depth;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
 
     word_queue_t                   tx_words;
-    tx_words.push_back(32'h4433_2211);
-    tx_words.push_back(32'h8877_6655);
-    tx_words.push_back(32'hCCBB_AA99);
-    tx_words.push_back(32'hFFEE_DDCC);
+    build_random_tx_words(DATA_LENGTH_DEEP, exp_data, tx_words);
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("SDRW_009 %s write_abort_deep",
@@ -108,7 +110,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
                             private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd9),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -168,14 +170,15 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     byte_queue_t                   no_read_data;
     byte_queue_t                   exp_bytes;
     bit                     [31:0] resp;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     word_queue_t                   tx_words;
-    tx_words.push_back(32'h4433_2211);
-    tx_words.push_back(32'h8877_6655);
+    build_random_tx_words(DATA_LENGTH, exp_bytes, tx_words);
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("SDRW_009 %s write_abort_toc0",
@@ -184,7 +187,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
                             private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd9),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -216,10 +219,6 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b0,
                  "SDRW_009 toc0 abort: aborted write must end with STOP, not a continuation RSTART")
     // Every byte the device sampled before abort must match the TX FIFO bytes at those positions.
-    exp_bytes.push_back(8'h11); exp_bytes.push_back(8'h22);
-    exp_bytes.push_back(8'h33); exp_bytes.push_back(8'h44);
-    exp_bytes.push_back(8'h55); exp_bytes.push_back(8'h66);
-    exp_bytes.push_back(8'h77); exp_bytes.push_back(8'h88);
     foreach (dev_seq.sampled_data[i]) begin
       `DV_CHECK_EQ(dev_seq.sampled_data[i], exp_bytes[i],
                    $sformatf("SDRW_009 toc0 abort: pre-abort byte[%0d] mismatch", i))

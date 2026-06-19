@@ -16,7 +16,7 @@ Top-level SystemVerilog module that instantiates the DUT, connects interfaces, g
 
 ## 3. Clock & Reset
 
-- **Clock**: 10ns period (100 MHz), `logic clk`, toggled in initial block
+- **Clock**: 3 ns period (333.333 MHz), `logic clk`, toggled in initial block
 - **Reset**: Assert low for 100 cycles, then release high
 
 ## 4. Register Interface

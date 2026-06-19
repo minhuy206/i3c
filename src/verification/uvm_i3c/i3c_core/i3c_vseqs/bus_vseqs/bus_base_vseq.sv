@@ -1,7 +1,7 @@
 class bus_base_vseq extends i3c_base_vseq;
   `uvm_object_utils(bus_base_vseq)
 
-  localparam int unsigned CLK_PERIOD_NS = 10;
+  localparam int unsigned CLK_PERIOD_NS = 3;
 
   typedef struct {
     string rst_n_path;

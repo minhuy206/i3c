@@ -25,7 +25,7 @@ class i3c_base_vseq extends uvm_sequence;
   queue_hdl_paths_t rx_paths;
   queue_hdl_paths_t resp_paths;
 
-  localparam int unsigned BASE_CLK_PERIOD_NS = 10;
+  localparam int unsigned BASE_CLK_PERIOD_NS = 3;
   localparam int unsigned FIFO_DEPTH_W = 7;
 
   // HDL path to flow_active FSM state register — update here if hierarchy changes.
@@ -236,6 +236,80 @@ class i3c_base_vseq extends uvm_sequence;
         end
       end
       words.push_back(word);
+    end
+  endfunction
+
+  virtual task configure_i3c_dat_target(int index, bit [6:0] static_addr,
+                                        bit [6:0] dynamic_addr);
+    if (index == 0) begin
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.static_addr = static_addr;
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.static_addr_valid = 1'b1;
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.dynamic_addr = dynamic_addr;
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.dynamic_addr_valid = 1'b1;
+    end else if (index == 1) begin
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.static_addr = static_addr;
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.static_addr_valid = 1'b1;
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.dynamic_addr = dynamic_addr;
+      p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.dynamic_addr_valid = 1'b1;
+    end
+    write_dat_entry(index, static_addr, dynamic_addr, 1'b0);
+  endtask
+
+  virtual function i3c_seq_item randomize_sdrw_item(
+      string name = "sdrw_item", int unsigned payload_len = 0,
+      bit [6:0] avoid_static_addr = 7'h7e, bit [6:0] avoid_dynamic_addr = 7'h7e);
+    i3c_seq_item item;
+
+    item = i3c_seq_item::type_id::create(name);
+    item.static_addr_constraint_en = 1'b1;
+    item.dynamic_addr_constraint_en = 1'b1;
+    item.payload_constraint_en = 1'b1;
+    item.payload_len = payload_len;
+    item.avoid_static_addr = avoid_static_addr;
+    item.avoid_dynamic_addr = avoid_dynamic_addr;
+    `DV_CHECK_RANDOMIZE_FATAL(item, $sformatf("%s randomization failed", name))
+    return item;
+  endfunction
+
+  virtual task randomize_i3c_dat_target(int index, output bit [6:0] static_addr,
+                                        output bit [6:0] dynamic_addr,
+                                        input bit [6:0] avoid_static_addr = 7'h7e,
+                                        input bit [6:0] avoid_dynamic_addr = 7'h7e);
+    i3c_seq_item item;
+
+    item = randomize_sdrw_item($sformatf("sdrw_dat_target_%0d_item", index), 0,
+                               avoid_static_addr, avoid_dynamic_addr);
+    static_addr  = item.static_addr;
+    dynamic_addr = item.addr;
+    configure_i3c_dat_target(index, static_addr, dynamic_addr);
+  endtask
+
+  virtual function void build_random_payload(int unsigned data_length, ref byte_queue_t data);
+    i3c_seq_item item;
+
+    item = randomize_sdrw_item("sdrw_payload_item", data_length);
+    data = item.data;
+  endfunction
+
+  virtual function void build_random_tx_words(int unsigned data_length, ref byte_queue_t exp_data,
+                                              ref word_queue_t tx_words);
+    i3c_seq_item item;
+
+    item = randomize_sdrw_item("sdrw_tx_words_item", data_length);
+    exp_data = item.data;
+    pack_payload_words(exp_data, tx_words);
+  endfunction
+
+  virtual function void unpack_payload_words(word_queue_t words, int unsigned data_length,
+                                             ref byte_queue_t data);
+    data.delete();
+    for (int unsigned i = 0; (i < data_length) && (i < words.size() * 4); i++) begin
+      int unsigned word_idx;
+      int unsigned byte_idx;
+
+      word_idx = i / 4;
+      byte_idx = i % 4;
+      data.push_back(words[word_idx][(byte_idx*8)+:8]);
     end
   endfunction
 

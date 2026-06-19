@@ -18,16 +18,19 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t        cfg0;
     transfer_stimulus_cfg_t        cfg1;
     transfer_stimulus_cfg_t        cfg2;
+    byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
     bit                     [31:0] resp2;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
     i3c_device_response_seq        dev_seq2;
 
     disable_dut();
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg0 = make_transfer_cfg(
         .ctxt($sformatf(
@@ -38,7 +41,7 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
         )),
         .tid(4'h8),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -58,7 +61,7 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
         )),
         .tid(4'h9),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -78,7 +81,7 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
         )),
         .tid(4'hA),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -90,12 +93,8 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    tx_words.delete();
-
-    tx_words.push_back(32'hE712_1110);
-    tx_words.push_back(32'h2322_2120);
-    tx_words.push_back(32'hD6C5_B424);
-    tx_words.push_back(32'h3332_3130);
+    build_random_tx_words(cfg0.data_length + cfg1.data_length + cfg2.data_length, exp_data,
+                          tx_words);
     start_back_to_back_device_responses(cfg0, cfg1, cfg2, dev_seq0, dev_seq1, dev_seq2);
 
     write_tx_words(tx_words);

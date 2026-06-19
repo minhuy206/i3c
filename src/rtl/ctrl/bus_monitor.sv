@@ -1,4 +1,3 @@
-
 module bus_monitor
   import i3c_pkg::bus_state_t;
   import i3c_pkg::signal_state_t;

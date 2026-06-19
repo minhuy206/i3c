@@ -9,7 +9,7 @@ module tb_i3c_top;
   logic rst_n;
 
   initial clk = 1'b0;
-  always #5 clk = ~clk;  // 10 ns period → 100 MHz
+  always #1.5 clk = ~clk;  // 3 ns period -> 333.333 MHz
 
   initial begin
     rst_n = 1'b0;

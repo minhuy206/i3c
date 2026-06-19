@@ -27,11 +27,15 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t        cfg;
     transfer_stimulus_cfg_t        dev_cfg;
     byte_queue_t                   no_read_data;
+    byte_queue_t                   exp_data;
+    word_queue_t                   tx_words;
     bit                     [31:0] resp;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -46,7 +50,7 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
         )),
         .tid(4'd6),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -62,7 +66,8 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     dev_cfg.data_length = ACTUAL_LENGTH;
     start_device_response(dev_cfg, 1'b0, no_read_data, dev_seq);
 
-    write_tx_data(32'h4433_2211);
+    build_random_tx_words(ACTUAL_LENGTH, exp_data, tx_words);
+    write_tx_words(tx_words);
     write_write_cmd(cfg, toc);
 
     poll_idle();
@@ -84,10 +89,12 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t        dev_cfg;
     byte_queue_t                   no_read_data;
     bit                     [31:0] resp;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -108,7 +115,7 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
         )),
         .tid(4'd6),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -144,11 +151,17 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t        cfg;
     transfer_stimulus_cfg_t        dev_cfg;
     byte_queue_t                   no_read_data;
+    byte_queue_t                   exp_data;
+    byte_queue_t                   late_exp_data;
+    word_queue_t                   tx_words;
+    word_queue_t                   late_tx_words;
     bit                     [31:0] resp;
+    bit                      [6:0] static_addr;
+    bit                      [6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -162,7 +175,7 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
         )),
         .tid(4'd6),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -178,7 +191,8 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     dev_cfg.data_length = ACTUAL_LENGTH;
     start_device_response(dev_cfg, 1'b0, no_read_data, dev_seq);
 
-    write_tx_data(32'h4433_2211);
+    build_random_tx_words(ACTUAL_LENGTH, exp_data, tx_words);
+    write_tx_words(tx_words);
     write_write_cmd(cfg);
 
     poll_idle();
@@ -186,7 +200,8 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    write_tx_data(32'h8877_6655);
+    build_random_tx_words(4, late_exp_data, late_tx_words);
+    write_tx_words(late_tx_words);
     check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit, 1'b0, 1'b0,
                       "after SDRW_006 late refill");
     request_sw_reset(1'b1);

@@ -88,6 +88,13 @@ I2C_REGRESSION_SEQS ?= \
 	i2c_len_sweep_partial_rx_vseq \
 	i2c_data_nack_write_vseq
 
+CCC_REGRESSION_SEQS ?= \
+	i3c_ccc_entdaa_opening_frame_vseq \
+	i3c_ccc_broadcast_enec_vseq \
+	i3c_ccc_broadcast_disec_vseq \
+	i3c_ccc_direct_enec_vseq \
+	i3c_ccc_direct_disec_vseq
+
 ERR_REGRESSION_SEQS ?= \
 	i3c_addr_header_nack_resp_vseq \
 	i3c_read_tbit_no_parity_resp_vseq \
@@ -168,6 +175,12 @@ i2c_regression:
 	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
 	done
 
+ccc_regression:
+	@set -e; \
+	for seq in $(CCC_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
 err_regression:
 	@set -e; \
 	for seq in $(ERR_REGRESSION_SEQS); do \
@@ -211,5 +224,6 @@ clean:
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
-        sdrw_regression sdrr_regression imm_regression err_regression sdr_regression \
+        sdrw_regression sdrr_regression imm_regression i2c_regression ccc_regression \
+        err_regression sdr_regression \
         fifo_non_power_of_two_elaboration waves coverage clean

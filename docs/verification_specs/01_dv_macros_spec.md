@@ -127,7 +127,7 @@ When `UVM` is defined, these map to `uvm_report_*` functions. Otherwise, they ma
 |--------|-----------|-------------|
 | `DV_ASSERT_CTRL` | Included for DUT assertion control | Include (useful for disabling assertions during reset) |
 | `DV_CREATE_SIGNAL_PROBE_FUNCTION` | Included for internal signal probing | Include (useful for debug) |
-| `DV_COMMON_CLK_CONSTRAINT` | Clock frequency randomization | Include but not used in Phase 1 (fixed 100 MHz) |
+| `DV_COMMON_CLK_CONSTRAINT` | Clock frequency randomization | Include but not used in Phase 1 (fixed 333.333 MHz) |
 | `BUILD_SEED` | Build-time randomization seed | Include |
 
 ## 5. Guard Conditions

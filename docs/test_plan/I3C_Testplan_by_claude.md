@@ -57,13 +57,15 @@ This test plan covers functional, performance, and coverage verification of the 
 | 0x004 | HC_STATUS | `[0]=i3c_fsm_idle`, `[1]=cmd_full`, `[2]=resp_empty` |
 | 0x010 | T_R | Rise time cycles (reset 4) |
 | 0x014 | T_F | Fall time cycles (reset 4) |
-| 0x018 | T_LOW | SCL low period (reset 13) |
-| 0x01C | T_HIGH | SCL high period (reset 13) |
-| 0x020 | T_SU_STA | START setup (reset 13) |
-| 0x024 | T_HD_STA | START hold (reset 13) |
-| 0x028 | T_SU_STO | STOP setup (reset 13) |
-| 0x02C | T_SU_DAT | Data setup (reset 1) |
-| 0x030 | T_HD_DAT | Data hold (reset 4) |
+| 0x018 | T_LOW | SCL low period (reset 16) |
+| 0x01C | T_LOW_OD | Open-drain SCL low period (reset 67) |
+| 0x020 | T_HIGH | SCL high period (reset 11) |
+| 0x024 | T_SU_STA | START setup (reset 7) |
+| 0x028 | T_HD_STA | START hold (reset 13) |
+| 0x02C | T_SU_STO | STOP setup (reset 7) |
+| 0x030 | T_SU_DAT | Data setup (reset 1) |
+| 0x034 | T_HD_DAT | Data hold (reset 0) |
+| 0x038 | T_BUS_FREE | Bus free time (reset 13) |
 | 0x100 | CMD_QUEUE | Two consecutive 32-bit writes = one 64-bit CMD descriptor |
 | 0x104 | TX_DATA | 32-bit TX payload write |
 | 0x108 | RX_DATA | 32-bit RX payload read |
@@ -145,7 +147,7 @@ The following additions are implied by the new test categories but are not yet i
 
 > **Table columns:** No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags
 >
-> **TB constraints:** TB clock = 100 MHz (10 ns cycle); FIFO depths = 8; DatDepth = 32. Adjust test counts accordingly.
+> **TB constraints:** TB clock = 333.333 MHz (3 ns cycle); FIFO depths = 8; DatDepth = 32. Adjust test counts accordingly.
 >
 > **Bug annotations:** Tests marked `[BUG-NNN required]` need the referenced bug fix before they can pass. See Section 9 for the full bug list.
 
@@ -180,8 +182,8 @@ The following additions are implied by the new test categories but are not yet i
 | 2.3 | STOP cond | bus_stop_condition_detect | Verify bus_monitor detects STOP condition correctly | Issue command with toc=1; observe SDA-rises-SCL-HIGH after last bit | bus_monitor asserts stop_det; DUT returns to Idle; HC_STATUS[0]=1 | High | bus_monitor.sv, flow_active.sv | cp_toc.STOP |
 | 2.4 | Bus idle | bus_idle_after_stop | Verify DUT reports bus idle after STOP | Issue command with toc=1; poll HC_STATUS after STOP | HC_STATUS[0]=1 (i3c_fsm_idle=1) within bounded cycles | High | flow_active.sv, csr_register.sv | — |
 | 2.5 | OD/PP switch | bus_od_pp_switch | Verify sel_od_pp_o transitions 0→1 at correct phase boundary | Issue SDR write; sample sel_od_pp_o at address phase and data phase | sel_od_pp_o=0 during address/ACK; sel_od_pp_o=1 during data bytes | High | flow_active.sv, bus_tx.sv | — |
-| 2.6 | SCL timing | bus_scl_low_period | Verify SCL LOW period ≥ 24 ns at 12.5 MHz with default T_LOW=13 at 333 MHz | Issue SDR transfer with default timing regs; measure SCL LOW duration | t_LOW ≥ 24 ns (≥ 8 cycles at 333 MHz; 13 cycles gives ~39 ns) | High | scl_generator.sv | cp_timing_reg.typ |
-| 2.7 | SCL timing | bus_scl_high_period | Verify SCL HIGH period ≥ 24 ns with default T_HIGH=13 | Issue SDR transfer with default timing; measure SCL HIGH duration | t_HIGH ≥ 24 ns | High | scl_generator.sv | cp_timing_reg.typ |
+| 2.6 | SCL timing | bus_scl_low_period | Verify SCL LOW period meets the conservative 48 ns target with default T_LOW=16 at 333.333 MHz | Issue SDR transfer with default timing regs; measure SCL LOW duration | t_LOW >= 48 ns (16 cycles at 333.333 MHz) | High | scl_generator.sv | cp_timing_reg.typ |
+| 2.7 | SCL timing | bus_scl_high_period | Verify SCL HIGH pulse meets the 32 ns target with default T_HIGH=11 | Issue SDR transfer with default timing; measure SCL HIGH duration | t_HIGH >= 32 ns (11 cycles gives 33 ns) | High | scl_generator.sv | cp_timing_reg.typ |
 | 2.8 | START timing | bus_start_hold_setup | Verify t_SU_STA and t_HD_STA timing with default register values | Issue transfer; measure time from SCL-HIGH to SDA-fall (t_HD_STA) and SDA-fall to SCL-fall (t_SU_STA) | Both intervals ≥ programmed register values in clock cycles | Medium | scl_generator.sv | cp_timing_reg.typ |
 
 ---
@@ -295,7 +297,7 @@ The following additions are implied by the new test categories but are not yet i
 | 8.6 | I2C error | i2c_fm_write_data_nack | Verify I2C write when device NACKs a data byte mid-transfer [BUG-004 required] | 4-byte I2C write; device ACKs address but NACKs byte 2 | RESP err_status=Nack (5); transfer aborted at NACK byte | High | flow_active.sv | cp_resp_err.Nack, cp_speed_mode.I2C_FM_400kHz |
 | 8.7 | I2C error | i2c_fm_read_last_byte_nack | Verify master sends NACK on last I2C read byte to terminate read [BUG-005 required] | I2C read data_length=4; observe master ACK/NACK sequence | Bytes 0-2: master drives ACK; byte 3: master drives NACK; STOP follows | High | flow_active.sv, bus_tx.sv | cp_speed_mode.I2C_FM_400kHz, cp_dir.Read |
 | 8.8 | I2C seq | i2c_fm_repeated_start_rw | Verify I2C Repeated START for read-after-write (direction change) | Issue I2C write with toc=0 followed by read CMD; expect Sr between them | Bus shows write frame + Sr + address+R + read frame; both RESPs Success | Medium | flow_active.sv, scl_generator.sv | cp_speed_mode.I2C_FM_400kHz, cp_toc.no_STOP |
-| 8.9 | I2C timing | i2c_fm_400khz_timing | Verify I2C 400 kHz timing constraints (t_LOW≥1300ns, t_HIGH≥600ns) | Issue I2C write; measure SCL period at 100 MHz TB clock with I2C timing regs | SCL period ~2500 ns (400 kHz); t_LOW ≥ 130 cycles; t_HIGH ≥ 60 cycles at 100 MHz | High | scl_generator.sv, csr_register.sv | cp_speed_mode.I2C_FM_400kHz |
+| 8.9 | I2C timing | i2c_fm_400khz_timing | Verify I2C 400 kHz timing constraints (t_LOW >= 1600 ns, t_HIGH >= 900 ns) | Issue I2C write; measure SCL period at 333.333 MHz TB clock with I2C timing regs | SCL period ~2500 ns (400 kHz); t_LOW >= 534 cycles; t_HIGH >= 300 cycles at 333.333 MHz | High | scl_generator.sv, csr_register.sv | cp_speed_mode.I2C_FM_400kHz |
 | 8.10 | I2C vs I3C | i2c_vs_i3c_dat_flag | Verify DAT.device flag correctly routes I2C vs I3C paths | Write two CMDs: one with DAT[0].device=0 (I3C), one with DAT[1].device=1 (I2C) | I3C cmd uses open-drain→push-pull; I2C cmd stays open-drain throughout | High | flow_active.sv, csr_register.sv | cp_speed_mode.I3C_SDR_12p5MHz, cp_speed_mode.I2C_FM_400kHz |
 | 8.11 | I2C addr | i2c_fm_static_addr_in_frame | Verify 7-bit static address from DAT entry appears in I2C address phase | DAT[0].device=1, static_addr=0x50; issue I2C write | Bus address byte = {0x50, W} = 0xA0; NACK/ACK from device at correct position | High | flow_active.sv, csr_register.sv | cp_speed_mode.I2C_FM_400kHz |
 
@@ -353,11 +355,11 @@ The following additions are implied by the new test categories but are not yet i
 | 12.1 | T_R | timing_tr_min | Verify T_R=1 (minimum, 1 cycle) loads correctly and SCL rise measured | Write T_R=1 to 0x010; issue SDR transfer | scl_generator counts t_r=1 cycle on rising edge; no timing violation | Medium | scl_generator.sv, csr_register.sv | cp_timing_reg.min |
 | 12.2 | T_R | timing_tr_max | Verify T_R=15 cycles (practical max) slows rise time correctly | Write T_R=15; issue SDR transfer; measure SCL cycle | SCL rise phase takes 15+13=28 cycles (DriveHigh state count) | Medium | scl_generator.sv | cp_timing_reg.max |
 | 12.3 | T_F | timing_tf_range | Verify T_F register affects scl_generator DriveLow countdown | Write T_F=2 then T_F=8; measure SCL LOW phase | t_LOW effective = T_LOW + T_F cycles; changes proportionally | Medium | scl_generator.sv | cp_timing_reg.min, cp_timing_reg.max |
-| 12.4 | T_LOW | timing_tlow_spec_min | Verify default T_LOW=13 meets I3C SDR ≥24ns at 333 MHz (≥8 cycles) | Use default T_LOW=13; issue SDR transfer; measure SCL LOW period | t_LOW = (13+T_F) cycles ≥ 8 at 333 MHz (~50 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
-| 12.5 | T_HIGH | timing_thigh_spec_min | Verify default T_HIGH=13 meets I3C SDR ≥24ns at 333 MHz | Use default T_HIGH=13; issue SDR transfer; measure SCL HIGH period | t_HIGH = (13+T_R) cycles ≥ 8; meets spec | High | scl_generator.sv | cp_timing_reg.typ |
+| 12.4 | T_LOW | timing_tlow_spec_min | Verify default T_LOW=16 meets the conservative I3C SDR 48 ns target at 333.333 MHz | Use default T_LOW=16; issue SDR transfer; measure SCL LOW period | t_LOW >= 16 cycles at 333.333 MHz (48 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
+| 12.5 | T_HIGH | timing_thigh_spec_min | Verify default T_HIGH=11 meets the I3C SDR 32 ns clock pulse target at 333.333 MHz | Use default T_HIGH=11; issue SDR transfer; measure SCL HIGH period | t_HIGH >= 11 cycles at 333.333 MHz (33 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
 | 12.6 | T_SU_STA | timing_tsu_sta | Verify T_SU_STA programmed value reflected in START setup time | Write T_SU_STA=20; issue command; measure time from SCL-HIGH to SDA-fall | Measured interval = T_SU_STA cycles ± 1 (BUG-012 off-by-one) | Medium | scl_generator.sv, edge_detector.sv | cp_timing_reg.typ |
 | 12.7 | T_HD_STA | timing_thd_sta | Verify T_HD_STA programmed value reflected in START hold time | Write T_HD_STA=15; issue command; measure SDA-fall to SCL-fall interval | Measured interval ≥ T_HD_STA cycles | Medium | scl_generator.sv | cp_timing_reg.typ |
-| 12.8 | T_SU_STO | timing_tsu_sto | Verify T_SU_STO meets I3C ≥12ns (≥4 cycles at 333 MHz) with default=13 | Use default T_SU_STO=13; measure SCL-HIGH to SDA-rise interval | ≥ 13 cycles; meets ≥12ns spec | High | scl_generator.sv | cp_timing_reg.typ |
+| 12.8 | T_SU_STO | timing_tsu_sto | Verify T_SU_STO meets I3C >= 20 ns with default=7 at 333.333 MHz | Use default T_SU_STO=7; measure SCL-HIGH to SDA-rise interval | >= 7 cycles (21 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
 | 12.9 | T_SU_DAT | timing_tsu_dat | Verify T_SU_DAT controls data setup before SCL rising edge | Write T_SU_DAT=3; issue SDR write; measure SDA-stable to SCL-HIGH | SDA stable ≥ T_SU_DAT cycles before SCL rises | High | bus_tx.sv | cp_timing_reg.typ |
 | 12.10 | T_HD_DAT | timing_thd_dat | Verify T_HD_DAT controls data hold after SCL falling edge | Write T_HD_DAT=4; issue SDR write; measure SDA change after SCL falls | SDA holds ≥ T_HD_DAT cycles after SCL negedge | High | bus_tx.sv | cp_timing_reg.typ |
 

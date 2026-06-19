@@ -335,26 +335,26 @@ end
 
 | Parameter    | Min Spec | Register Value | Actual Time |
 | ------------ | -------- | -------------- | ----------- |
-| `t_low_i`    | 24 ns    | 8              | 24 ns       |
+| `t_low_i`    | 48 ns    | 16             | 48 ns       |
 | `t_low_od_i` | 200 ns   | 67             | 201 ns      |
-| `t_high_i`   | 24 ns    | 8              | 24 ns       |
-| `t_su_sta_i` | -        | 8              | 24 ns       |
-| `t_hd_sta_i` | -        | 8              | 24 ns       |
-| `t_su_sto_i` | 12 ns    | 4              | 12 ns       |
+| `t_high_i`   | 32 ns    | 11             | 33 ns       |
+| `t_su_sta_i` | 20 ns    | 7              | 21 ns       |
+| `t_hd_sta_i` | 39 ns    | 13             | 39 ns       |
+| `t_su_sto_i` | 20 ns    | 7              | 21 ns       |
 | `t_r_i`      | 12 ns    | 4              | 12 ns       |
 | `t_f_i`      | 12 ns    | 4              | 12 ns       |
-| `t_bus_free_i` | -      | 0              | 0 ns        |
+| `t_bus_free_i` | 39 ns  | 13             | 39 ns       |
 
 ### I2C FM Mode (at 333 MHz, T_clk = 3 ns)
 
 | Parameter    | Min Spec | Register Value | Actual Time |
 | ------------ | -------- | -------------- | ----------- |
-| `t_low_i`    | 1300 ns  | 434            | 1302 ns     |
+| `t_low_i`    | 1600 ns  | 534            | 1602 ns     |
 | `t_low_od_i` | N/A      | Unused         | N/A         |
-| `t_high_i`   | 600 ns   | 200            | 600 ns      |
+| `t_high_i`   | 900 ns   | 300            | 900 ns      |
 | `t_su_sta_i` | 600 ns   | 200            | 600 ns      |
 | `t_hd_sta_i` | 600 ns   | 200            | 600 ns      |
-| `t_su_sto_i` | 600 ns   | 200            | 600 ns      |
+| `t_su_sto_i` | 1300 ns  | 434            | 1302 ns     |
 | `t_r_i`      | 300 ns   | 100            | 300 ns      |
 | `t_f_i`      | 300 ns   | 100            | 300 ns      |
 | `t_bus_free_i` | 1300 ns | 434           | 1302 ns     |

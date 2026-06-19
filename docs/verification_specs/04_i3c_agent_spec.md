@@ -151,7 +151,7 @@ i3c_if i3c_bus(.clk_i(clk), .rst_ni(rst_n), .scl_io(scl_bus), .sda_io(sda_bus));
 
 - The `time_check` task uses `#(delay * 1ns)` — timing is in nanoseconds, not clock cycles
 - Since our DUT uses clock-cycle-count timing internally, there is a domain translation: the I3C interface uses real timing for bus protocol while the DUT counts system clocks
-- ns-to-cycle formula: with the testbench timescale `1ns/1ps` (spec 07 §3) and a 10 ns clock period, *N* cycles in the CSR timing registers (e.g., `T_LOW=13`) correspond to `N × 10 ns` of real time. The agent's `i3c_tc` / `i2c_tc` constants are populated in ns, so they can be compared directly against bus events sampled by `time_check`.
+- ns-to-cycle formula: with the testbench timescale `1ns/1ps` (spec 07 §3) and a 3 ns clock period, *N* cycles in the CSR timing registers (e.g., `T_LOW=16`) correspond to `N * 3 ns` of real time. The agent's `i3c_tc` / `i2c_tc` constants are populated in ns, so they can be compared directly against bus events sampled by `time_check`.
 - The `scl_spinwait_timeout_ns` should be set large enough for the DUT's default timing (e.g., 10ms)
 
 ---
