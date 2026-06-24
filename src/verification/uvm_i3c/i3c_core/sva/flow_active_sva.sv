@@ -1,9 +1,12 @@
 module flow_active_sva
   import controller_pkg::cmd_transfer_dir_e;
   import controller_pkg::dat_entry_t;
+  import controller_pkg::ACK;
+  import controller_pkg::NACK;
   import controller_pkg::Read;
   import controller_pkg::Write;
   import i3c_pkg::AddressAssignment;
+  import i3c_pkg::addr_assign_desc_t;
   import i3c_pkg::AddrHeader;
   import i3c_pkg::HcAborted;
   import i3c_pkg::I3C_RSVD_ADDR;
@@ -36,6 +39,7 @@ module flow_active_sva
     input cmd_transfer_dir_e                                 cmd_dir,
     input immediate_data_trans_desc_t                        imm_desc,
     input regular_trans_desc_t                               reg_desc,
+    input addr_assign_desc_t                                 aa_desc,
     input dat_entry_t                                        dat_entry,
     input logic                                              dat_read_valid_hw_o,
     input logic                       [            DatAw-1:0] dat_index_hw_o,
@@ -129,6 +133,50 @@ module flow_active_sva
     bcast_has_event_byte = bcast_enec_disec || (desc.dtt >= 3'd5);
   endfunction
 
+  function automatic logic ccc_broadcast_disec_active();
+    return cmd_attr == ImmediateDataTransfer &&
+           imm_desc.cp &&
+           !imm_desc.cmd[7] &&
+           imm_desc.cmd == 8'h01 &&
+           imm_desc.toc &&
+           !addr_nack_q &&
+           !data_nack_q &&
+           !hc_aborted_q;
+  endfunction
+
+  function automatic logic ccc_broadcast_enec_active();
+    return cmd_attr == ImmediateDataTransfer &&
+           imm_desc.cp &&
+           !imm_desc.cmd[7] &&
+           imm_desc.cmd == 8'h00 &&
+           imm_desc.toc &&
+           !addr_nack_q &&
+           !data_nack_q &&
+           !hc_aborted_q;
+  endfunction
+
+  function automatic logic ccc_direct_enec_active();
+    return cmd_attr == ImmediateDataTransfer &&
+           imm_desc.cp &&
+           imm_desc.cmd[7] &&
+           imm_desc.cmd == 8'h80 &&
+           imm_desc.toc &&
+           !addr_nack_q &&
+           !data_nack_q &&
+           !hc_aborted_q;
+  endfunction
+
+  function automatic logic ccc_direct_disec_active();
+    return cmd_attr == ImmediateDataTransfer &&
+           imm_desc.cp &&
+           imm_desc.cmd[7] &&
+           imm_desc.cmd == 8'h81 &&
+           imm_desc.toc &&
+           !addr_nack_q &&
+           !data_nack_q &&
+           !hc_aborted_q;
+  endfunction
+
   function automatic logic expected_imm_sel_od_pp(input immediate_data_trans_desc_t desc,
                                                   input logic [7:0] phase,
                                                   input logic addr_after_rstart);
@@ -154,7 +202,9 @@ module flow_active_sva
       input logic addr_after_rstart);
     expected_regular_sel_od_pp = 1'b0;
 
-    if (attr == AddressAssignment || dat.device) begin
+    if (attr == AddressAssignment) begin
+      expected_regular_sel_od_pp = (phase == 8'd3) || (phase == 8'd4);
+    end else if (dat.device) begin
       expected_regular_sel_od_pp = 1'b0;
     end else if (dir == Write) begin
       expected_regular_sel_od_pp = (remaining_len > 16'h0);
@@ -351,6 +401,14 @@ module flow_active_sva
            (resp_queue_wdata[27:24] == cmd_tid) &&
            (resp_queue_wdata[23:16] == 8'h00) &&
            (resp_queue_wdata[15:0] == resp_data_len_q);
+  endfunction
+
+  function automatic logic invalid_addr_assign_desc();
+    logic [5:0] dat_end;
+
+    dat_end = {1'b0, aa_desc.dev_idx} + {2'b00, aa_desc.dev_count};
+    return !aa_desc.toc || !aa_desc.wroc || (aa_desc.dev_count == 4'd0) ||
+           (dat_end > DatDepth);
   endfunction
 
   function automatic logic sdr_write_active_state();
@@ -1434,7 +1492,7 @@ module flow_active_sva
                                             success_resp_matches_current_len() &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o)
-  else $error("flow_active_sva: SDRW_007 toc=0 must accept continuation without STOP in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 must accept continuation without STOP in %m");
 
   cp_toc0_accept_continuation :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1480,7 +1538,7 @@ module flow_active_sva
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !cmd_queue_rready_o)
-  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation must STOP without CMD pop in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation must STOP without CMD pop in %m");
 
   cp_toc0_missing_continuation_requests_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1501,7 +1559,7 @@ module flow_active_sva
                                             |->
                                             hc_seq_cancel_event_o &&
                                             hc_err_cmd_seq_timeout_event_o)
-  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation must raise interrupt events in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation must raise interrupt events in %m");
 
   cp_toc0_missing_continuation_sets_intr_events :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1524,7 +1582,7 @@ module flow_active_sva
                                             !next_cmd_available
                                             |->
                                             success_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation response must be Success in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation response must be Success in %m");
 
   cp_toc0_missing_continuation_success_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1548,7 +1606,7 @@ module flow_active_sva
                                             !next_cmd_supported
                                             |->
                                             not_supported_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_007 toc=0 unsupported continuation response must be NotSupported in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 unsupported continuation response must be NotSupported in %m");
 
   cp_toc0_unsupported_continuation_not_supported_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1571,7 +1629,7 @@ module flow_active_sva
                                             gen_rstart_o &&
                                             !gen_start_o &&
                                             !gen_stop_o)
-  else $error("flow_active_sva: SDRW_007 continuation must request repeated START only in %m");
+  else $error("flow_active_sva: SDRW_005 continuation must request repeated START only in %m");
 
   ap_toc0_private_write_continuation_skips_bcast_header :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1581,7 +1639,7 @@ module flow_active_sva
                                             sdr_regular_i3c_write()
                                             |=>
                                             state_q != I3CBcastHeader)
-  else $error("flow_active_sva: SDRW_007 continuation must not emit a second broadcast header in %m");
+  else $error("flow_active_sva: SDRW_005 continuation must not emit a second broadcast header in %m");
 
   cp_toc0_private_write_continuation_skips_bcast_header :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1668,6 +1726,7 @@ module flow_active_sva
   ap_i2c_xfer_uses_i2c_open_drain :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             i2c_active_state() &&
+                                            !abort_i &&
                                             i2c_regular_xfer()
                                             |->
                                             !sel_i3c_i2c_o &&
@@ -1678,6 +1737,7 @@ module flow_active_sva
   cp_i2c_xfer_uses_i2c_open_drain :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             i2c_active_state() &&
+                                            !abort_i &&
                                             i2c_regular_xfer() &&
                                             !sel_i3c_i2c_o &&
                                             use_i2c_timing_o &&
@@ -1729,6 +1789,7 @@ module flow_active_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == IssueCmd &&
                                             i2c_regular_write() &&
+                                            !abort_i &&
                                             !data_nack_q &&
                                             remaining_len_q > 16'h0 &&
                                             issue_phase_q > PhaseAddrAck &&
@@ -1743,6 +1804,7 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == IssueCmd &&
                                             i2c_regular_write() &&
+                                            !abort_i &&
                                             !data_nack_q &&
                                             remaining_len_q > 16'h0 &&
                                             issue_phase_q > PhaseAddrAck &&
@@ -1810,6 +1872,8 @@ module flow_active_sva
                                             state_q == IssueCmd &&
                                             i2c_regular_read() &&
                                             !rx_overflow_q &&
+                                            !abort_i &&
+                                            !hc_aborted_q &&
                                             remaining_len_q > 16'h1 &&
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0]
@@ -1817,7 +1881,7 @@ module flow_active_sva
                                             bus_tx_req_bit &&
                                             !bus_tx_req_byte &&
                                             !bus_rx_req_byte &&
-                                            bus_tx_req_value === 8'h00)
+                                            bus_tx_req_value === ACK)
   else $error("flow_active_sva: I2C read must ACK (drive 0) intermediate bytes in %m");
 
   cp_i2c_read_master_ack_intermediate :
@@ -1825,11 +1889,13 @@ module flow_active_sva
                                             state_q == IssueCmd &&
                                             i2c_regular_read() &&
                                             !rx_overflow_q &&
+                                            !abort_i &&
+                                            !hc_aborted_q &&
                                             remaining_len_q > 16'h1 &&
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0] &&
                                             bus_tx_req_bit &&
-                                            bus_tx_req_value === 8'h00);
+                                            bus_tx_req_value === ACK);
 
   // I2C read ACK/NACK policy: master NACKs (drives 1) the final byte
   // (remaining_len == 1) on the even sub-phase to end the read.
@@ -1845,7 +1911,7 @@ module flow_active_sva
                                             bus_tx_req_bit &&
                                             !bus_tx_req_byte &&
                                             !bus_rx_req_byte &&
-                                            bus_tx_req_value === 8'h01)
+                                            bus_tx_req_value === NACK)
   else $error("flow_active_sva: I2C read must NACK (drive 1) the final byte in %m");
 
   cp_i2c_read_master_nack_final :
@@ -1857,7 +1923,149 @@ module flow_active_sva
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0] &&
                                             bus_tx_req_bit &&
-                                            bus_tx_req_value === 8'h01);
+                                            bus_tx_req_value === NACK);
+
+  // I2C read abort follows the Legacy I2C read termination boundary: finish
+  // the current data byte, drive controller NACK on the 9th bit, then STOP.
+  ap_i2c_read_abort_defers_during_data :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            abort_i
+                                            |->
+                                            bus_rx_req_byte &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            !gen_stop_o &&
+                                            !gen_rstart_o)
+  else $error("flow_active_sva: I2C read abort must finish data byte before STOP in %m");
+
+  cp_i2c_read_abort_defers_during_data :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            issue_phase_q[0] &&
+                                            abort_i &&
+                                            bus_rx_req_byte &&
+                                            !gen_stop_o &&
+                                            !gen_rstart_o);
+
+  ap_i2c_read_abort_nacks_boundary :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (abort_i || hc_aborted_q)
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            !bus_rx_req_byte &&
+                                            bus_tx_req_value === NACK &&
+                                            !gen_stop_o &&
+                                            !gen_rstart_o)
+  else $error("flow_active_sva: I2C read abort must drive controller NACK before STOP in %m");
+
+  cp_i2c_read_abort_nacks_boundary :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (abort_i || hc_aborted_q) &&
+                                            bus_tx_req_bit &&
+                                            bus_tx_req_value === NACK &&
+                                            !gen_stop_o &&
+                                            !gen_rstart_o);
+
+  ap_i2c_read_abort_nack_sets_abort_term :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (abort_i || hc_aborted_q) &&
+                                            bus_tx_done_i
+                                            |=>
+                                            hc_aborted_q &&
+                                            read_abort_term_q &&
+                                            !short_read_q &&
+                                            resp_data_len_q == $past(resp_data_len_q) + 16'h1)
+  else $error("flow_active_sva: I2C read abort NACK must set HcAborted termination in %m");
+
+  cp_i2c_read_abort_nack_sets_abort_term :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            !read_abort_term_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            (abort_i || hc_aborted_q) &&
+                                            bus_tx_done_i
+                                            ##1
+                                            hc_aborted_q &&
+                                            read_abort_term_q &&
+                                            !short_read_q);
+
+  ap_i2c_read_abort_term_stops :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            read_abort_term_q
+                                            |->
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !bus_tx_req_bit &&
+                                            !bus_rx_req_byte)
+  else $error("flow_active_sva: I2C read abort termination must STOP without RSTART in %m");
+
+  cp_i2c_read_abort_term_stops :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            read_abort_term_q &&
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !bus_tx_req_bit &&
+                                            !bus_rx_req_byte);
+
+  ap_i2c_read_abort_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_read() &&
+                                            hc_aborted_q &&
+                                            !rx_overflow_q
+                                            |->
+                                            hc_aborted_resp_matches_current_len())
+  else $error("flow_active_sva: I2C read abort response status/length mismatch in %m");
+
+  cp_i2c_read_abort_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_read() &&
+                                            hc_aborted_q &&
+                                            !rx_overflow_q &&
+                                            hc_aborted_resp_matches_current_len());
 
   // I2C write Success response (toc=1, no NACK/overflow/abort): descriptor is
   // Success with data length equal to bytes written.
@@ -2282,6 +2490,46 @@ module flow_active_sva
                                             imm_desc.dtt > 3'd4 &&
                                             not_supported_resp_matches_current_len());
 
+  // DAA_007 / ERR_016: reject invalid AddressAssignment descriptors before DAT or bus access.
+  ap_addr_assign_invalid_rejected_before_access :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc()
+                                            |->
+                                            (!dat_read_valid_hw_o &&
+                                             !gen_start_o &&
+                                             !gen_rstart_o &&
+                                             !gen_stop_o &&
+                                             !bus_tx_req_byte &&
+                                             !bus_tx_req_bit)
+                                            ##1 state_q == WriteResp)
+  else $error("flow_active_sva: invalid AddressAssignment must be rejected before DAT or bus access in %m");
+
+  cp_addr_assign_invalid_rejected_before_access :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc() &&
+                                            !dat_read_valid_hw_o
+                                            ##1 state_q == WriteResp);
+
+  ap_addr_assign_invalid_not_supported_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc()
+                                            |->
+                                            not_supported_resp_matches_current_len())
+  else $error("flow_active_sva: invalid AddressAssignment response must be NotSupported with length 0 in %m");
+
+  cp_addr_assign_invalid_not_supported_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc() &&
+                                            not_supported_resp_matches_current_len());
+
   // IMM_003: toc=0 immediate still sends all dtt bytes, then NotSupported.
   ap_imm_toc0_not_supported_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2509,6 +2757,624 @@ module flow_active_sva
                                             bus_tx_req_byte &&
                                             bus_tx_req_value === {I3C_RSVD_ADDR, Write});
 
+  // CCC_002: broadcast ENEC drives opcode 0x00, one Target Events byte, no
+  // repeated START, and reports the event byte count on success.
+  ap_ccc002_enec_opcode :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd3
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h00)
+  else $error("flow_active_sva: CCC_002 ENEC opcode byte mismatch in %m");
+
+  cp_ccc002_enec_opcode :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd3 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h00);
+
+  ap_ccc002_enec_opcode_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd4
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h00})
+  else $error("flow_active_sva: CCC_002 ENEC opcode T-bit mismatch in %m");
+
+  cp_ccc002_enec_opcode_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd4 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h00});
+
+  ap_ccc002_enec_event_byte :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd5
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1)
+  else $error("flow_active_sva: CCC_002 ENEC Target Events byte mismatch in %m");
+
+  cp_ccc002_enec_event_byte :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd5 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1);
+
+  ap_ccc002_enec_event_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd6
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1})
+  else $error("flow_active_sva: CCC_002 ENEC Target Events T-bit mismatch in %m");
+
+  cp_ccc002_enec_event_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            issue_phase_q == 8'd6 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1});
+
+  ap_ccc002_enec_no_rstart :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active()
+                                            |->
+                                            !gen_rstart_o)
+  else $error("flow_active_sva: CCC_002 broadcast ENEC must not issue repeated START in %m");
+
+  cp_ccc002_enec_no_rstart :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_enec_active() &&
+                                            !gen_rstart_o);
+
+  ap_ccc002_enec_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_broadcast_enec_active()
+                                            |->
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1)
+  else $error("flow_active_sva: CCC_002 ENEC success response mismatch in %m");
+
+  cp_ccc002_enec_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_broadcast_enec_active() &&
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1);
+
+  // CCC_003: broadcast DISEC drives opcode 0x01, one Target Events byte, no
+  // repeated START, and reports the event byte count on success.
+  ap_ccc003_disec_opcode :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd3
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h01)
+  else $error("flow_active_sva: CCC_003 DISEC opcode byte mismatch in %m");
+
+  cp_ccc003_disec_opcode :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd3 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h01);
+
+  ap_ccc003_disec_opcode_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd4
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h01})
+  else $error("flow_active_sva: CCC_003 DISEC opcode T-bit mismatch in %m");
+
+  cp_ccc003_disec_opcode_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd4 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h01});
+
+  ap_ccc003_disec_event_byte :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd5
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1)
+  else $error("flow_active_sva: CCC_003 DISEC Target Events byte mismatch in %m");
+
+  cp_ccc003_disec_event_byte :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd5 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1);
+
+  ap_ccc003_disec_event_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd6
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1})
+  else $error("flow_active_sva: CCC_003 DISEC Target Events T-bit mismatch in %m");
+
+  cp_ccc003_disec_event_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            issue_phase_q == 8'd6 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1});
+
+  ap_ccc003_disec_no_rstart :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active()
+                                            |->
+                                            !gen_rstart_o)
+  else $error("flow_active_sva: CCC_003 broadcast DISEC must not issue repeated START in %m");
+
+  cp_ccc003_disec_no_rstart :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_broadcast_disec_active() &&
+                                            !gen_rstart_o);
+
+  ap_ccc003_disec_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_broadcast_disec_active()
+                                            |->
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1)
+  else $error("flow_active_sva: CCC_003 DISEC success response mismatch in %m");
+
+  cp_ccc003_disec_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_broadcast_disec_active() &&
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1);
+
+  // CCC_004: direct ENEC drives opcode 0x80 after the 0x7E broadcast header,
+  // emits a repeated START, addresses the selected target, sends one Target
+  // Events byte, then STOPs and reports the event byte count on success.
+  ap_ccc004_direct_enec_opcode :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd3
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h80)
+  else $error("flow_active_sva: CCC_004 direct ENEC opcode byte mismatch in %m");
+
+  cp_ccc004_direct_enec_opcode :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd3 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h80);
+
+  ap_ccc004_direct_enec_opcode_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd4
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h80})
+  else $error("flow_active_sva: CCC_004 direct ENEC opcode T-bit mismatch in %m");
+
+  cp_ccc004_direct_enec_opcode_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd4 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h80});
+
+  ap_ccc004_direct_enec_rstart :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd5
+                                            |->
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o)
+  else $error("flow_active_sva: CCC_004 direct ENEC must issue repeated START in %m");
+
+  cp_ccc004_direct_enec_rstart :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd5 &&
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o);
+
+  ap_ccc004_direct_enec_target_addr :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd6
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Write})
+  else $error("flow_active_sva: CCC_004 direct ENEC target address mismatch in %m");
+
+  cp_ccc004_direct_enec_target_addr :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd6 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Write});
+
+  ap_ccc004_direct_enec_target_ack_sample :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd7
+                                            |->
+                                            bus_rx_req_bit &&
+                                            !bus_rx_req_byte &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: CCC_004 direct ENEC target ACK phase mismatch in %m");
+
+  cp_ccc004_direct_enec_target_ack_sample :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd7 &&
+                                            bus_rx_req_bit &&
+                                            !bus_rx_req_byte &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit);
+
+  ap_ccc004_direct_enec_event_byte :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd8
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1)
+  else $error("flow_active_sva: CCC_004 direct ENEC Target Events byte mismatch in %m");
+
+  cp_ccc004_direct_enec_event_byte :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd8 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1);
+
+  ap_ccc004_direct_enec_event_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd9
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1})
+  else $error("flow_active_sva: CCC_004 direct ENEC Target Events T-bit mismatch in %m");
+
+  cp_ccc004_direct_enec_event_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd9 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1});
+
+  ap_ccc004_direct_enec_stop :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd10
+                                            |->
+                                            gen_stop_o &&
+                                            !gen_start_o &&
+                                            !gen_rstart_o)
+  else $error("flow_active_sva: CCC_004 direct ENEC must end with STOP in %m");
+
+  cp_ccc004_direct_enec_stop :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_enec_active() &&
+                                            issue_phase_q == 8'd10 &&
+                                            gen_stop_o &&
+                                            !gen_start_o &&
+                                            !gen_rstart_o);
+
+  ap_ccc004_direct_enec_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_direct_enec_active()
+                                            |->
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1)
+  else $error("flow_active_sva: CCC_004 direct ENEC success response mismatch in %m");
+
+  cp_ccc004_direct_enec_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_direct_enec_active() &&
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1);
+
+  // CCC_005: direct DISEC drives opcode 0x81 after the 0x7E broadcast header,
+  // emits a repeated START, addresses the selected target, sends one Target
+  // Events byte, then STOPs and reports the event byte count on success.
+  ap_ccc005_direct_disec_opcode :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd3
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h81)
+  else $error("flow_active_sva: CCC_005 direct DISEC opcode byte mismatch in %m");
+
+  cp_ccc005_direct_disec_opcode :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd3 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === 8'h81);
+
+  ap_ccc005_direct_disec_opcode_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd4
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h81})
+  else $error("flow_active_sva: CCC_005 direct DISEC opcode T-bit mismatch in %m");
+
+  cp_ccc005_direct_disec_opcode_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd4 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value === {7'b0, ~^8'h81});
+
+  ap_ccc005_direct_disec_rstart :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd5
+                                            |->
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o)
+  else $error("flow_active_sva: CCC_005 direct DISEC must issue repeated START in %m");
+
+  cp_ccc005_direct_disec_rstart :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd5 &&
+                                            gen_rstart_o &&
+                                            !gen_start_o &&
+                                            !gen_stop_o);
+
+  ap_ccc005_direct_disec_target_addr :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd6
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Write})
+  else $error("flow_active_sva: CCC_005 direct DISEC target address mismatch in %m");
+
+  cp_ccc005_direct_disec_target_addr :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd6 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === {dat_entry.dynamic_address, Write});
+
+  ap_ccc005_direct_disec_target_ack_sample :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd7
+                                            |->
+                                            bus_rx_req_bit &&
+                                            !bus_rx_req_byte &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit)
+  else $error("flow_active_sva: CCC_005 direct DISEC target ACK phase mismatch in %m");
+
+  cp_ccc005_direct_disec_target_ack_sample :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd7 &&
+                                            bus_rx_req_bit &&
+                                            !bus_rx_req_byte &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit);
+
+  ap_ccc005_direct_disec_event_byte :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd8
+                                            |->
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1)
+  else $error("flow_active_sva: CCC_005 direct DISEC Target Events byte mismatch in %m");
+
+  cp_ccc005_direct_disec_event_byte :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd8 &&
+                                            bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            bus_tx_req_value === imm_desc.def_or_data_byte1);
+
+  ap_ccc005_direct_disec_event_tbit :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd9
+                                            |->
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1})
+  else $error("flow_active_sva: CCC_005 direct DISEC Target Events T-bit mismatch in %m");
+
+  cp_ccc005_direct_disec_event_tbit :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd9 &&
+                                            bus_tx_req_bit &&
+                                            !bus_tx_req_byte &&
+                                            bus_tx_req_value ===
+                                            {7'b0, ~^imm_desc.def_or_data_byte1});
+
+  ap_ccc005_direct_disec_stop :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd10
+                                            |->
+                                            gen_stop_o &&
+                                            !gen_start_o &&
+                                            !gen_rstart_o)
+  else $error("flow_active_sva: CCC_005 direct DISEC must end with STOP in %m");
+
+  cp_ccc005_direct_disec_stop :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CWriteImmediate &&
+                                            ccc_direct_disec_active() &&
+                                            issue_phase_q == 8'd10 &&
+                                            gen_stop_o &&
+                                            !gen_start_o &&
+                                            !gen_rstart_o);
+
+  ap_ccc005_direct_disec_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_direct_disec_active()
+                                            |->
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1)
+  else $error("flow_active_sva: CCC_005 direct DISEC success response mismatch in %m");
+
+  cp_ccc005_direct_disec_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            ccc_direct_disec_active() &&
+                                            resp_queue_wvalid &&
+                                            resp_queue_wdata[31:28] == Success &&
+                                            resp_queue_wdata[27:24] == cmd_tid &&
+                                            resp_queue_wdata[23:16] == 8'h00 &&
+                                            resp_queue_wdata[15:0] == 16'd1);
+
 endmodule
 
 bind flow_active flow_active_sva #(
@@ -2530,6 +3396,7 @@ bind flow_active flow_active_sva #(
     .cmd_dir,
     .imm_desc,
     .reg_desc,
+    .aa_desc,
     .dat_entry,
     .dat_read_valid_hw_o,
     .dat_index_hw_o,

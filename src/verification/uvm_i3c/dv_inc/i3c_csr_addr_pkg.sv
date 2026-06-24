@@ -87,30 +87,30 @@ package i3c_csr_addr_pkg;
   localparam int QS_RESP_EMPTY_BIT = 7;
 
   // 3. Timing Register Reset Values
-  // All values in system clock cycles @ 100 MHz simulation clock
+  // All values in system clock cycles @ 333.333 MHz simulation clock
   // Match reset values in src/rtl/csr/csr_registers.sv
 
   localparam bit [19:0] RST_T_R = 20'd4;
   localparam bit [19:0] RST_T_F = 20'd4;
-  localparam bit [19:0] RST_T_LOW = 20'd8;
-  localparam bit [19:0] RST_T_HIGH = 20'd8;
-  localparam bit [19:0] RST_T_SU_STA = 20'd8;
-  localparam bit [19:0] RST_T_HD_STA = 20'd8;
-  localparam bit [19:0] RST_T_SU_STO = 20'd4;
+  localparam bit [19:0] RST_T_LOW = 20'd16;
+  localparam bit [19:0] RST_T_HIGH = 20'd11;
+  localparam bit [19:0] RST_T_SU_STA = 20'd7;
+  localparam bit [19:0] RST_T_HD_STA = 20'd13;
+  localparam bit [19:0] RST_T_SU_STO = 20'd7;
   localparam bit [19:0] RST_T_SU_DAT = 20'd1;
-  localparam bit [19:0] RST_T_HD_DAT = 20'd4;
-  localparam bit [19:0] RST_T_BUS_FREE = 20'd4;
-  localparam bit [19:0] RST_T_LOW_OD = 20'd20;
-  localparam bit [19:0] RST_I2C_T_R = 20'd4;
-  localparam bit [19:0] RST_I2C_T_F = 20'd4;
-  localparam bit [19:0] RST_I2C_T_LOW = 20'd160;
-  localparam bit [19:0] RST_I2C_T_HIGH = 20'd90;
-  localparam bit [19:0] RST_I2C_T_SU_STA = 20'd60;
-  localparam bit [19:0] RST_I2C_T_HD_STA = 20'd60;
-  localparam bit [19:0] RST_I2C_T_SU_STO = 20'd130;
-  localparam bit [19:0] RST_I2C_T_SU_DAT = 20'd10;
+  localparam bit [19:0] RST_T_HD_DAT = 20'd0;
+  localparam bit [19:0] RST_T_BUS_FREE = 20'd13;
+  localparam bit [19:0] RST_T_LOW_OD = 20'd67;
+  localparam bit [19:0] RST_I2C_T_R = 20'd100;
+  localparam bit [19:0] RST_I2C_T_F = 20'd100;
+  localparam bit [19:0] RST_I2C_T_LOW = 20'd534;
+  localparam bit [19:0] RST_I2C_T_HIGH = 20'd300;
+  localparam bit [19:0] RST_I2C_T_SU_STA = 20'd200;
+  localparam bit [19:0] RST_I2C_T_HD_STA = 20'd200;
+  localparam bit [19:0] RST_I2C_T_SU_STO = 20'd434;
+  localparam bit [19:0] RST_I2C_T_SU_DAT = 20'd34;
   localparam bit [19:0] RST_I2C_T_HD_DAT = 20'd0;
-  localparam bit [19:0] RST_I2C_T_BUF = 20'd130;
+  localparam bit [19:0] RST_I2C_T_BUF = 20'd434;
 
   // 4. Helper Functions
 

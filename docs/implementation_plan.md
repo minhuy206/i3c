@@ -112,7 +112,7 @@ Instantiates `bus_tx`.
 
 ```text
 Idle → GenerateStart → SdaFall → HoldStart → DriveLow → DriveHigh → WaitCmd
-     → GenerateRstart → SclHigh → RstartSdaFall
+     → GenerateRstart → SclHighForRstart → RstartSdaFall
      → GenerateStop → SclHighForStop → SdaRise → Idle
 ```
 

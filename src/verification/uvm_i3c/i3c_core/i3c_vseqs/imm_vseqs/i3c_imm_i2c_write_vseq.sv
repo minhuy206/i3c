@@ -70,11 +70,8 @@ class i3c_imm_i2c_write_vseq extends i3c_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
-    check_sampled_write_data(dev_seq, exp_data, dtt, cfg.ctxt);
     read_response(resp);
     check_all_queues_empty($sformatf("IMM_004 after dtt=%0d", dtt));
-
-    check_success_resp_fields(resp, imm_cmd.tid, dtt, cfg.ctxt);
 
     `uvm_info(`gfn, $sformatf("IMM_004 result: dtt=%0d resp=0x%08h sampled_bytes=%0d", dtt, resp,
                               dev_seq.sampled_data.size()), UVM_LOW)

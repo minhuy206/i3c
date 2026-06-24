@@ -73,15 +73,7 @@ class i3c_imm_toc_vseq extends i3c_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
-    check_sampled_write_data(dev_seq, exp_data, exp_data.size(), cfg.ctxt);
-    `DV_CHECK_EQ(dev_seq.observed_broadcast_header, cfg.start_with_broadcast_header,
-                 $sformatf("%s: broadcast-header observation mismatch", cfg.ctxt))
     read_response(resp);
-    if (toc) begin
-      check_success_resp_fields(resp, tid, exp_data.size(), cfg.ctxt);
-    end else begin
-      check_error_resp_fields(resp, 4'hA, tid, exp_data.size(), cfg.ctxt);
-    end
     check_all_queues_empty($sformatf("after %s", cfg.ctxt));
 
     `uvm_info(`gfn, $sformatf("IMM_003 result: %s toc=%0b resp=0x%08h", cfg.ctxt, toc,

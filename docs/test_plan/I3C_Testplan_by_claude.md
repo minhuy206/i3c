@@ -24,7 +24,6 @@ This test plan covers functional, performance, and coverage verification of the 
 | Document | Path |
 |---|---|
 | Phase-1 architecture spec | `docs/phase1_spec_v2.md` |
-| Bug analysis report | `docs/bug_analysis_report.md` |
 | flow_active module spec | `docs/module_specs/09_flow_active_spec.md` |
 | UVM implementation plan | `docs/verification_specs/00_uvm_implementation_plan.md` |
 | I2C reference test plan | `docs/test_plan/I2C_Testplan.xlsx` |
@@ -57,13 +56,15 @@ This test plan covers functional, performance, and coverage verification of the 
 | 0x004 | HC_STATUS | `[0]=i3c_fsm_idle`, `[1]=cmd_full`, `[2]=resp_empty` |
 | 0x010 | T_R | Rise time cycles (reset 4) |
 | 0x014 | T_F | Fall time cycles (reset 4) |
-| 0x018 | T_LOW | SCL low period (reset 13) |
-| 0x01C | T_HIGH | SCL high period (reset 13) |
-| 0x020 | T_SU_STA | START setup (reset 13) |
-| 0x024 | T_HD_STA | START hold (reset 13) |
-| 0x028 | T_SU_STO | STOP setup (reset 13) |
-| 0x02C | T_SU_DAT | Data setup (reset 1) |
-| 0x030 | T_HD_DAT | Data hold (reset 4) |
+| 0x018 | T_LOW | SCL low period (reset 16) |
+| 0x01C | T_LOW_OD | Open-drain SCL low period (reset 67) |
+| 0x020 | T_HIGH | SCL high period (reset 11) |
+| 0x024 | T_SU_STA | START setup (reset 7) |
+| 0x028 | T_HD_STA | START hold (reset 13) |
+| 0x02C | T_SU_STO | STOP setup (reset 7) |
+| 0x030 | T_SU_DAT | Data setup (reset 1) |
+| 0x034 | T_HD_DAT | Data hold (reset 0) |
+| 0x038 | T_BUS_FREE | Bus free time (reset 13) |
 | 0x100 | CMD_QUEUE | Two consecutive 32-bit writes = one 64-bit CMD descriptor |
 | 0x104 | TX_DATA | 32-bit TX payload write |
 | 0x108 | RX_DATA | 32-bit RX payload read |
@@ -75,13 +76,13 @@ This test plan covers functional, performance, and coverage verification of the 
 
 | Feature | Status | Notes |
 |---|---|---|
-| SDR private write (RegularTransfer) | Implemented | BUG-007: missing START; requires fix |
-| SDR private read (RegularTransfer) | Implemented | BUG-007 + BUG-003 + BUG-006/010; require fixes |
-| Immediate data transfer | Implemented | BUG-002: missing gen_clock; requires fix |
+| SDR private write (RegularTransfer) | Implemented | — |
+| SDR private read (RegularTransfer) | Implemented | — |
+| Immediate data transfer | Implemented | — |
 | ENTDAA dynamic address assignment | Implemented | entdaa_controller + entdaa_fsm |
 | Broadcast CCC (ENEC 0x00, DISEC 0x01, ENTDAA 0x07) | Implemented | via ImmediateDataTransfer with cp=1 |
 | Direct CCC (DIR_ENEC 0x80, DIR_DISEC 0x81) | Implemented | via ImmediateDataTransfer with cp=1, cmd[7]=1 |
-| I2C FM backward compat (400 kHz) | Implemented | BUG-004/005: ACK never received; require fixes |
+| I2C FM backward compat (400 kHz) | Implemented | — |
 | SCL timing programmability | Implemented | T_R, T_F, T_LOW, T_HIGH, T_SU_STA, T_HD_STA, T_SU_STO, T_SU_DAT, T_HD_DAT |
 | HCI CMD/TX/RX/RESP FIFOs | Implemented | depth=8 in TB (depth=64 in RTL default) |
 | 32-entry DAT | Implemented | 32-bit simplified entry; HW-readonly dynamic-addr update |
@@ -102,7 +103,7 @@ This test plan covers functional, performance, and coverage verification of the 
 | IRQ output pin | Not present on top-level |
 | Error codes: Crc, Frame, Ovl, ShortRead, HcAborted, NotSupported | Unreachable in current RTL |
 | bus_error_o | Hard-tied to 0 (TODO in bus_tx_flow.sv) |
-| gen_idle recovery | BUG-009: never asserted |
+| gen_idle recovery | gen_idle_o never asserted; no bus recovery path |
 
 ---
 
@@ -145,9 +146,7 @@ The following additions are implied by the new test categories but are not yet i
 
 > **Table columns:** No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags
 >
-> **TB constraints:** TB clock = 100 MHz (10 ns cycle); FIFO depths = 8; DatDepth = 32. Adjust test counts accordingly.
->
-> **Bug annotations:** Tests marked `[BUG-NNN required]` need the referenced bug fix before they can pass. See Section 9 for the full bug list.
+> **TB constraints:** TB clock = 333.333 MHz (3 ns cycle); FIFO depths = 8; DatDepth = 32. Adjust test counts accordingly.
 
 ---
 
@@ -167,7 +166,7 @@ The following additions are implied by the new test categories but are not yet i
 | 1.10 | DAT | csr_dat_entry0_rw | Verify DAT entry 0 (0x200) write and read back | Write DAT[0] with I3C device (device=0, dyn_addr=0x0A, static_addr=0x00); read back | Readback matches written value | High | csr_register.sv | cp_dat_index.0 |
 | 1.11 | DAT | csr_dat_entry31_rw | Verify DAT entry 31 (last, 0x27C) write and read back | Write DAT[31] with I3C device (dyn_addr=0x7F); read back | Readback matches; no overflow into unmapped space | High | csr_register.sv | cp_dat_index.31 |
 | 1.12 | DAT | csr_dat_all_entries_rw | Verify all 32 DAT entries write/read independently | Write distinct values to DAT[0..31]; read all back | All 32 entries correct; no aliasing | Medium | csr_register.sv | cp_dat_index.0, cp_dat_index.31, cp_dat_index.mid |
-| 1.13 | HC_CONTROL | csr_sw_reset_clears_staging | Verify sw_reset clears CMD staging register (BUG-008 regression) | Write DWORD0 to CMD_QUEUE; assert sw_reset; write new DWORD0 + DWORD1; issue enable | New CMD dispatches correctly; no mix with stale DWORD0 | High | csr_register.sv | cp_reset_point.Idle |
+| 1.13 | HC_CONTROL | csr_sw_reset_clears_staging | Verify sw_reset clears CMD staging register | Write DWORD0 to CMD_QUEUE; assert sw_reset; write new DWORD0 + DWORD1; issue enable | New CMD dispatches correctly; no mix with stale DWORD0 | High | csr_register.sv | cp_reset_point.Idle |
 
 ---
 
@@ -180,68 +179,62 @@ The following additions are implied by the new test categories but are not yet i
 | 2.3 | STOP cond | bus_stop_condition_detect | Verify bus_monitor detects STOP condition correctly | Issue command with toc=1; observe SDA-rises-SCL-HIGH after last bit | bus_monitor asserts stop_det; DUT returns to Idle; HC_STATUS[0]=1 | High | bus_monitor.sv, flow_active.sv | cp_toc.STOP |
 | 2.4 | Bus idle | bus_idle_after_stop | Verify DUT reports bus idle after STOP | Issue command with toc=1; poll HC_STATUS after STOP | HC_STATUS[0]=1 (i3c_fsm_idle=1) within bounded cycles | High | flow_active.sv, csr_register.sv | — |
 | 2.5 | OD/PP switch | bus_od_pp_switch | Verify sel_od_pp_o transitions 0→1 at correct phase boundary | Issue SDR write; sample sel_od_pp_o at address phase and data phase | sel_od_pp_o=0 during address/ACK; sel_od_pp_o=1 during data bytes | High | flow_active.sv, bus_tx.sv | — |
-| 2.6 | SCL timing | bus_scl_low_period | Verify SCL LOW period ≥ 24 ns at 12.5 MHz with default T_LOW=13 at 333 MHz | Issue SDR transfer with default timing regs; measure SCL LOW duration | t_LOW ≥ 24 ns (≥ 8 cycles at 333 MHz; 13 cycles gives ~39 ns) | High | scl_generator.sv | cp_timing_reg.typ |
-| 2.7 | SCL timing | bus_scl_high_period | Verify SCL HIGH period ≥ 24 ns with default T_HIGH=13 | Issue SDR transfer with default timing; measure SCL HIGH duration | t_HIGH ≥ 24 ns | High | scl_generator.sv | cp_timing_reg.typ |
+| 2.6 | SCL timing | bus_scl_low_period | Verify SCL LOW period meets the conservative 48 ns target with default T_LOW=16 at 333.333 MHz | Issue SDR transfer with default timing regs; measure SCL LOW duration | t_LOW >= 48 ns (16 cycles at 333.333 MHz) | High | scl_generator.sv | cp_timing_reg.typ |
+| 2.7 | SCL timing | bus_scl_high_period | Verify SCL HIGH pulse meets the 32 ns target with default T_HIGH=11 | Issue SDR transfer with default timing; measure SCL HIGH duration | t_HIGH >= 32 ns (11 cycles gives 33 ns) | High | scl_generator.sv | cp_timing_reg.typ |
 | 2.8 | START timing | bus_start_hold_setup | Verify t_SU_STA and t_HD_STA timing with default register values | Issue transfer; measure time from SCL-HIGH to SDA-fall (t_HD_STA) and SDA-fall to SCL-fall (t_SU_STA) | Both intervals ≥ programmed register values in clock cycles | Medium | scl_generator.sv | cp_timing_reg.typ |
 
 ---
 
 ### 4.3 Category 3 — SDR Private Write
 
-> **Note:** All RegularTransfer SDR write tests require BUG-007 fix (missing START+address phase in IssueCmd). Tests are authored against expected post-fix behavior.
-
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 3.1 | SDR write | i3c_sdr_write_1byte | Verify SDR write of 1 byte to I3C target completes successfully [BUG-007 required] | Set DAT[0] to I3C device dyn_addr=0x08; write RegularTransfer cmd (rnw=0, data_length=1, toc=1); write 1 TX byte; poll RESP | RESP err_status=Success; bus shows START+address(OD)+1 data byte+T-bit+STOP | High | flow_active.sv, bus_tx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write, cp_data_length.[1], cp_toc.STOP, cp_resp_err.Success |
-| 3.2 | SDR write | i3c_sdr_write_4bytes | Verify SDR write of 4 bytes (one DWORD) [BUG-007 required] | RegularTransfer rnw=0, data_length=4, toc=1; write 1 TX DWORD | RESP err_status=Success, data_length=4; bus shows 4 data bytes each with correct T-bit | High | flow_active.sv, bus_tx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write, cp_data_length.[2:4], cp_resp_err.Success |
-| 3.3 | SDR write | i3c_sdr_write_16bytes | Verify SDR write of 16 bytes (4 DWORDs) [BUG-007 required] | RegularTransfer rnw=0, data_length=16; write 4 TX DWORDs; device ACKs each addr; device samples T-bit | RESP err_status=Success, data_length=16; all 16 bytes delivered in order | High | flow_active.sv, bus_tx_flow.sv | cp_data_length.[5:16], cp_dir.Write, cp_resp_err.Success |
-| 3.4 | SDR write | i3c_sdr_write_64bytes | Verify SDR write of 64 bytes at FIFO depth limit [BUG-007 required] | RegularTransfer data_length=64; fill TX FIFO with 16 DWORDs; process until done | RESP Success, data_length=64; no StallWrite timeout during transfer | Medium | flow_active.sv, hci_queues.sv | cp_data_length.[17:64] |
-| 3.5 | SDR write | i3c_sdr_write_non4aligned | Verify SDR write of 5 bytes (non-DWORD-aligned length) [BUG-007 required] | RegularTransfer data_length=5; write 2 TX DWORDs (padded) | RESP Success, data_length=5; bus shows exactly 5 data bytes (not 8) | High | flow_active.sv | cp_data_length.[2:4] |
-| 3.6 | SDR write | i3c_sdr_write_backtoback | Verify back-to-back SDR writes to same device [BUG-007 required] | Queue 2 RegularTransfer write CMDs; process both sequentially | Both RESPs show Success; no bus corruption between transfers | High | flow_active.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write |
-| 3.7 | SDR write | i3c_sdr_write_diff_devs | Verify SDR writes to two different DAT entries (different dynamic addresses) [BUG-007 required] | DAT[0]=0x08, DAT[1]=0x12; queue write to dev_idx=0 then dev_idx=1 | Each bus frame shows correct dynamic address; both RESPs Success | High | flow_active.sv, csr_register.sv | cp_dat_index.0, cp_dat_index.mid |
+| 3.1 | SDR write | i3c_sdr_write_1byte | Verify SDR write of 1 byte to I3C target completes successfully | Set DAT[0] to I3C device dyn_addr=0x08; write RegularTransfer cmd (rnw=0, data_length=1, toc=1); write 1 TX byte; poll RESP | RESP err_status=Success; bus shows START+address(OD)+1 data byte+T-bit+STOP | High | flow_active.sv, bus_tx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write, cp_data_length.[1], cp_toc.STOP, cp_resp_err.Success |
+| 3.2 | SDR write | i3c_sdr_write_4bytes | Verify SDR write of 4 bytes (one DWORD) | RegularTransfer rnw=0, data_length=4, toc=1; write 1 TX DWORD | RESP err_status=Success, data_length=4; bus shows 4 data bytes each with correct T-bit | High | flow_active.sv, bus_tx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write, cp_data_length.[2:4], cp_resp_err.Success |
+| 3.3 | SDR write | i3c_sdr_write_16bytes | Verify SDR write of 16 bytes (4 DWORDs) | RegularTransfer rnw=0, data_length=16; write 4 TX DWORDs; device ACKs each addr; device samples T-bit | RESP err_status=Success, data_length=16; all 16 bytes delivered in order | High | flow_active.sv, bus_tx_flow.sv | cp_data_length.[5:16], cp_dir.Write, cp_resp_err.Success |
+| 3.4 | SDR write | i3c_sdr_write_64bytes | Verify SDR write of 64 bytes at FIFO depth limit | RegularTransfer data_length=64; fill TX FIFO with 16 DWORDs; process until done | RESP Success, data_length=64; no StallWrite timeout during transfer | Medium | flow_active.sv, hci_queues.sv | cp_data_length.[17:64] |
+| 3.5 | SDR write | i3c_sdr_write_non4aligned | Verify SDR write of 5 bytes (non-DWORD-aligned length) | RegularTransfer data_length=5; write 2 TX DWORDs (padded) | RESP Success, data_length=5; bus shows exactly 5 data bytes (not 8) | High | flow_active.sv | cp_data_length.[2:4] |
+| 3.6 | SDR write | i3c_sdr_write_backtoback | Verify back-to-back SDR writes to same device | Queue 2 RegularTransfer write CMDs; process both sequentially | Both RESPs show Success; no bus corruption between transfers | High | flow_active.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write |
+| 3.7 | SDR write | i3c_sdr_write_diff_devs | Verify SDR writes to two different DAT entries (different dynamic addresses) | DAT[0]=0x08, DAT[1]=0x12; queue write to dev_idx=0 then dev_idx=1 | Each bus frame shows correct dynamic address; both RESPs Success | High | flow_active.sv, csr_register.sv | cp_dat_index.0, cp_dat_index.mid |
 | 3.8 | SDR write | i3c_sdr_write_toc1_stop | Verify STOP is generated at end of write when toc=1 | RegularTransfer rnw=0, toc=1, data_length=2 | Bus shows STOP condition after last T-bit; bus_monitor stop_det asserted | High | scl_generator.sv, flow_active.sv | cp_toc.STOP |
-| 3.9 | SDR write | i3c_sdr_write_toc0_nostop | Verify no STOP is generated when toc=0 (Repeated START for chaining) [BUG-007 required] | RegularTransfer rnw=0, toc=0, data_length=2; follow with second CMD | Bus shows no STOP after first frame; Sr before second frame | Medium | scl_generator.sv, flow_active.sv | cp_toc.no_STOP |
+| 3.9 | SDR write | i3c_sdr_write_toc0_nostop | Verify no STOP is generated when toc=0 (Repeated START for chaining) | RegularTransfer rnw=0, toc=0, data_length=2; follow with second CMD | Bus shows no STOP after first frame; Sr before second frame | Medium | scl_generator.sv, flow_active.sv | cp_toc.no_STOP |
 | 3.10 | SDR write | i3c_sdr_write_tbit_parity | Verify T-bit is odd parity of each write data byte | RegularTransfer write with known data pattern (e.g., 0x55, 0xAA, 0xFF, 0x00) | T-bit sampled by monitor matches odd parity of each preceding byte | High | bus_tx.sv, bus_tx_flow.sv | cp_dir.Write |
-| 3.11 | SDR write | i3c_sdr_write_fifo_stall | Verify StallWrite state when TX FIFO is empty mid-transfer [BUG-007 required] | Start RegularTransfer data_length=4; pre-load only 1 TX DWORD; observe stall then refill | flow_active enters StallWrite; resumes IssueCmd when TX data arrives; RESP Success | High | flow_active.sv, hci_queues.sv | cp_fifo_state.tx_empty, cp_flow_state.StallWrite |
-| 3.12 | SDR write | i3c_sdr_write_addr_nack | Verify AddrHeader error when target NACKs the address byte [BUG-007 required] | Device driver configured to NACK address; issue RegularTransfer write | RESP err_status=AddrHeader (4); bus shows address byte + NACK; no data bytes clocked | High | flow_active.sv | cp_resp_err.AddrHeader, cp_dir.Write, cp_cmd_attr×cp_resp_err |
-| 3.13 | SDR write | i3c_imm_write_1byte | Verify ImmediateDataTransfer write of 1 byte [BUG-002 required] | ImmediateDataTransfer cmd_attr=1, rnw=0, data in DWORD1[7:0], data_length=1 | RESP Success; bus shows 1 data byte; no TX FIFO access | High | flow_active.sv, csr_register.sv | cp_cmd_attr.ImmediateDataTransfer, cp_dir.Write, cp_data_length.[1] |
-| 3.14 | SDR write | i3c_imm_write_4bytes | Verify ImmediateDataTransfer write of 4 bytes [BUG-002 required] | ImmediateDataTransfer cmd_attr=1, data_length=4, data in CMD DWORD1 | RESP Success; 4 bytes match CMD DWORD1 payload; TX FIFO unused | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_data_length.[2:4] |
+| 3.11 | SDR write | i3c_sdr_write_fifo_stall | Verify StallWrite state when TX FIFO is empty mid-transfer | Start RegularTransfer data_length=4; pre-load only 1 TX DWORD; observe stall then refill | flow_active enters StallWrite; resumes IssueCmd when TX data arrives; RESP Success | High | flow_active.sv, hci_queues.sv | cp_fifo_state.tx_empty, cp_flow_state.StallWrite |
+| 3.12 | SDR write | i3c_sdr_write_addr_nack | Verify AddrHeader error when target NACKs the address byte | Device driver configured to NACK address; issue RegularTransfer write | RESP err_status=AddrHeader (4); bus shows address byte + NACK; no data bytes clocked | High | flow_active.sv | cp_resp_err.AddrHeader, cp_dir.Write, cp_cmd_attr×cp_resp_err |
+| 3.13 | SDR write | i3c_imm_write_1byte | Verify ImmediateDataTransfer write of 1 byte | ImmediateDataTransfer cmd_attr=1, rnw=0, data in DWORD1[7:0], data_length=1 | RESP Success; bus shows 1 data byte; no TX FIFO access | High | flow_active.sv, csr_register.sv | cp_cmd_attr.ImmediateDataTransfer, cp_dir.Write, cp_data_length.[1] |
+| 3.14 | SDR write | i3c_imm_write_4bytes | Verify ImmediateDataTransfer write of 4 bytes | ImmediateDataTransfer cmd_attr=1, data_length=4, data in CMD DWORD1 | RESP Success; 4 bytes match CMD DWORD1 payload; TX FIFO unused | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_data_length.[2:4] |
 
 ---
 
 ### 4.4 Category 4 — SDR Private Read
 
-> **Note:** All RegularTransfer SDR read tests require BUG-007 (missing START), BUG-003 (partial DWORD data loss for non-4n lengths), BUG-006 (I3C read T-bit not transmitted), and BUG-010 (RX shift register data race) fixes.
-
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 4.1 | SDR read | i3c_sdr_read_1byte | Verify SDR read of 1 byte from I3C target [BUG-007, BUG-006, BUG-010 required] | Set DAT[0] I3C device; RegularTransfer cmd rnw=1, data_length=1; device drives 1 data byte + T-bit=0 | RESP Success, data_length=1; RX FIFO contains the device-driven byte | High | flow_active.sv, bus_rx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Read, cp_data_length.[1], cp_resp_err.Success |
-| 4.2 | SDR read | i3c_sdr_read_4bytes | Verify SDR read of 4 bytes [BUG-007, BUG-006 required] | RegularTransfer rnw=1, data_length=4; device drives 4 bytes {0xCA, 0xFE, 0xBA, 0xBE} + T-bits | RESP Success, data_length=4; RX DWORD = 0xBEBAFECA (little-endian packing) | High | flow_active.sv, bus_rx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Read, cp_data_length.[2:4] |
-| 4.3 | SDR read | i3c_sdr_read_16bytes | Verify SDR read of 16 bytes [BUG-007, BUG-006 required] | RegularTransfer rnw=1, data_length=16; device drives 16 bytes with T-bits | RESP Success, data_length=16; RX FIFO has 4 DWORDs with correct data | High | flow_active.sv | cp_data_length.[5:16], cp_dir.Read |
-| 4.4 | SDR read | i3c_sdr_read_non4aligned | Verify SDR read of 5 bytes (partial DWORD flush) [BUG-003 regression + BUG-007 required] | RegularTransfer rnw=1, data_length=5; device drives 5 bytes | RESP Success, data_length=5; RX FIFO contains all 5 bytes (no trailing data loss) | High | flow_active.sv | cp_data_length.[2:4] |
-| 4.5 | SDR read | i3c_sdr_read_backtoback | Verify back-to-back reads from same device [BUG-007 required] | Queue 2 RegularTransfer read CMDs back to back | Both RESPs Success; data matches in order; no RX FIFO corruption | High | flow_active.sv | cp_dir.Read |
+| 4.1 | SDR read | i3c_sdr_read_1byte | Verify SDR read of 1 byte from I3C target | Set DAT[0] I3C device; RegularTransfer cmd rnw=1, data_length=1; device drives 1 data byte + T-bit=0 | RESP Success, data_length=1; RX FIFO contains the device-driven byte | High | flow_active.sv, bus_rx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Read, cp_data_length.[1], cp_resp_err.Success |
+| 4.2 | SDR read | i3c_sdr_read_4bytes | Verify SDR read of 4 bytes | RegularTransfer rnw=1, data_length=4; device drives 4 bytes {0xCA, 0xFE, 0xBA, 0xBE} + T-bits | RESP Success, data_length=4; RX DWORD = 0xBEBAFECA (little-endian packing) | High | flow_active.sv, bus_rx_flow.sv | cp_cmd_attr.RegularTransfer, cp_dir.Read, cp_data_length.[2:4] |
+| 4.3 | SDR read | i3c_sdr_read_16bytes | Verify SDR read of 16 bytes | RegularTransfer rnw=1, data_length=16; device drives 16 bytes with T-bits | RESP Success, data_length=16; RX FIFO has 4 DWORDs with correct data | High | flow_active.sv | cp_data_length.[5:16], cp_dir.Read |
+| 4.4 | SDR read | i3c_sdr_read_non4aligned | Verify SDR read of 5 bytes (partial DWORD flush) | RegularTransfer rnw=1, data_length=5; device drives 5 bytes | RESP Success, data_length=5; RX FIFO contains all 5 bytes (no trailing data loss) | High | flow_active.sv | cp_data_length.[2:4] |
+| 4.5 | SDR read | i3c_sdr_read_backtoback | Verify back-to-back reads from same device | Queue 2 RegularTransfer read CMDs back to back | Both RESPs Success; data matches in order; no RX FIFO corruption | High | flow_active.sv | cp_dir.Read |
 | 4.6 | SDR read | i3c_sdr_read_toc1 | Verify STOP generated after last byte on read with toc=1 | RegularTransfer rnw=1, toc=1, data_length=4 | Bus shows STOP after T-bit of last byte; bus_monitor stop_det asserted | High | scl_generator.sv | cp_toc.STOP, cp_dir.Read |
-| 4.7 | SDR read | i3c_sdr_read_tbit_semantics | Verify master observes T-bit=0 (end) and T-bit=1 (more data) correctly [BUG-006 required] | Device drives data with T-bit=1 for first N-1 bytes, T-bit=0 for last byte | Master reads exactly N bytes without timeout; last T-bit=0 terminates read | High | bus_rx_flow.sv, flow_active.sv | cp_dir.Read |
-| 4.8 | SDR read | i3c_sdr_read_master_nack_last | Verify master drives T-bit (NACK/end indicator) after final byte [BUG-006 required] | RegularTransfer rnw=1 with known data_length; observe master T-bit output after last byte | Master drives T-bit=1 (end) on 9th clock of last byte cycle in push-pull | High | bus_tx.sv, flow_active.sv | cp_dir.Read |
-| 4.9 | SDR read | i3c_sdr_read_parity_error | Verify Parity error reported when T-bit does not match expected parity [BUG-006, BUG-016 required] | Device drives data byte then deliberately drives wrong T-bit | RESP err_status=Parity (2); no additional bytes consumed | High | flow_active.sv | cp_resp_err.Parity, cp_dir×cp_resp_err |
-| 4.10 | SDR read | i3c_sdr_read_rx_full_stall | Verify StallRead when RX FIFO is full [BUG-007 required] | Initiate read of 16 bytes into depth-8 RX FIFO without software draining | flow_active enters StallRead; resumes when software reads RX_DATA; RESP Success | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
-| 4.11 | SDR read | i3c_sdr_read_addr_nack | Verify AddrHeader error on read when target NACKs address [BUG-007 required] | Device driver configured to NACK address on read CMD | RESP err_status=AddrHeader (4); no RX data written; data_length=0 | High | flow_active.sv | cp_resp_err.AddrHeader, cp_dir.Read |
+| 4.7 | SDR read | i3c_sdr_read_tbit_semantics | Verify master observes T-bit=0 (end) and T-bit=1 (more data) correctly | Device drives data with T-bit=1 for first N-1 bytes, T-bit=0 for last byte | Master reads exactly N bytes without timeout; last T-bit=0 terminates read | High | bus_rx_flow.sv, flow_active.sv | cp_dir.Read |
+| 4.8 | SDR read | i3c_sdr_read_master_nack_last | Verify master drives T-bit (NACK/end indicator) after final byte | RegularTransfer rnw=1 with known data_length; observe master T-bit output after last byte | Master drives T-bit=1 (end) on 9th clock of last byte cycle in push-pull | High | bus_tx.sv, flow_active.sv | cp_dir.Read |
+| 4.9 | SDR read | i3c_sdr_read_parity_error | Verify Parity error reported when T-bit does not match expected parity | Device drives data byte then deliberately drives wrong T-bit | RESP err_status=Parity (2); no additional bytes consumed | High | flow_active.sv | cp_resp_err.Parity, cp_dir×cp_resp_err |
+| 4.10 | SDR read | i3c_sdr_read_rx_full_stall | Verify StallRead when RX FIFO is full | Initiate read of 16 bytes into depth-8 RX FIFO without software draining | flow_active enters StallRead; resumes when software reads RX_DATA; RESP Success | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
+| 4.11 | SDR read | i3c_sdr_read_addr_nack | Verify AddrHeader error on read when target NACKs address | Device driver configured to NACK address on read CMD | RESP err_status=AddrHeader (4); no RX data written; data_length=0 | High | flow_active.sv | cp_resp_err.AddrHeader, cp_dir.Read |
 
 ---
 
 ### 4.5 Category 5 — Immediate Data Transfer
 
-> **Note:** All Immediate transfer tests require BUG-002 fix (gen_clock not set in I3CWriteImmediate / I2CWriteImmediate states).
-
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 5.1 | Immediate write | i3c_imm_write_cp0 | Verify ImmediateDataTransfer with cp=0 (private write, data in CMD DWORD1) [BUG-002 required] | ImmediateDataTransfer, cp=0, rnw=0, data_length=2, data bytes in DWORD1[15:0] | RESP Success; bus shows device addr + 2 data bytes; no TX FIFO access | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cp_bit.Regular, cp_dir.Write |
-| 5.2 | Immediate write | i3c_imm_bcast_ccc | Verify ImmediateDataTransfer with cp=1, !cmd[7] generates broadcast CCC [BUG-002 required] | ImmediateDataTransfer, cp=1, cmd=0x01 (DISEC), data_length=1, defining byte in DWORD1 | Bus shows [S]+0x7E+W+ACK+0x01+ACK+defining_byte+ACK+[P]; RESP Success | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cp_bit.BroadcastCCC |
-| 5.3 | Immediate write | i3c_imm_direct_ccc | Verify ImmediateDataTransfer with cp=1, cmd[7]=1 generates directed CCC [BUG-002 required] | ImmediateDataTransfer, cp=1, cmd=0x81 (DIR_DISEC), dev_idx=0 (target addr in DAT) | Bus shows 0x7E+W+0x81+[Sr]+target_addr+W+ACK+data+[P]; RESP Success | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cp_bit.DirectedCCC |
-| 5.4 | Immediate write | i3c_imm_write_max4bytes | Verify 4-byte immediate payload fits fully in DWORD1 [BUG-002 required] | ImmediateDataTransfer, data_length=4, DWORD1=0xAABBCCDD | RESP Success; 4 bytes on bus match DWORD1 byte order | High | flow_active.sv | cp_data_length.[2:4], cp_cmd_attr.ImmediateDataTransfer |
-| 5.5 | Immediate write | i3c_imm_vs_regular_short | Compare Immediate and Regular transfer for 1-byte payload [BUG-002 + BUG-007 required] | Issue ImmediateDataTransfer, then issue RegularTransfer both for 1 byte same device | Both generate identical bus frames; ImmediateDataTransfer skips TX FIFO access | Medium | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cmd_attr.RegularTransfer |
-| 5.6 | Immediate write | i3c_imm_i2c_path | Verify ImmediateDataTransfer routes to I2CWriteImmediate when DAT.device=1 [BUG-002 required] | Set DAT[0].device=1 (I2C); issue ImmediateDataTransfer cmd with dev_idx=0 | FSM enters I2CWriteImmediate; bus uses open-drain, ACK polling per I2C; RESP Success | Medium | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer |
-| 5.7 | Immediate write | i3c_imm_data_length_zero | Verify ImmediateDataTransfer with data_length=0 (command only, no payload) [BUG-002 required] | ImmediateDataTransfer, cp=1, data_length=0 | Bus shows CCC code with no data bytes; RESP Success, data_length=0 | Medium | flow_active.sv | cp_data_length.[1], cp_cmd_attr.ImmediateDataTransfer |
+| 5.1 | Immediate write | i3c_imm_write_cp0 | Verify ImmediateDataTransfer with cp=0 (private write, data in CMD DWORD1) | ImmediateDataTransfer, cp=0, rnw=0, data_length=2, data bytes in DWORD1[15:0] | RESP Success; bus shows device addr + 2 data bytes; no TX FIFO access | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cp_bit.Regular, cp_dir.Write |
+| 5.2 | Immediate write | i3c_imm_bcast_ccc | Verify ImmediateDataTransfer with cp=1, !cmd[7] generates broadcast CCC | ImmediateDataTransfer, cp=1, cmd=0x01 (DISEC), data_length=1, defining byte in DWORD1 | Bus shows [S]+0x7E+W+ACK+0x01+ACK+defining_byte+ACK+[P]; RESP Success | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cp_bit.BroadcastCCC |
+| 5.3 | Immediate write | i3c_imm_direct_ccc | Verify ImmediateDataTransfer with cp=1, cmd[7]=1 generates directed CCC | ImmediateDataTransfer, cp=1, cmd=0x81 (DIR_DISEC), dev_idx=0 (target addr in DAT) | Bus shows 0x7E+W+0x81+[Sr]+target_addr+W+ACK+data+[P]; RESP Success | High | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cp_bit.DirectedCCC |
+| 5.4 | Immediate write | i3c_imm_write_max4bytes | Verify 4-byte immediate payload fits fully in DWORD1 | ImmediateDataTransfer, data_length=4, DWORD1=0xAABBCCDD | RESP Success; 4 bytes on bus match DWORD1 byte order | High | flow_active.sv | cp_data_length.[2:4], cp_cmd_attr.ImmediateDataTransfer |
+| 5.5 | Immediate write | i3c_imm_vs_regular_short | Compare Immediate and Regular transfer for 1-byte payload | Issue ImmediateDataTransfer, then issue RegularTransfer both for 1 byte same device | Both generate identical bus frames; ImmediateDataTransfer skips TX FIFO access | Medium | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer, cp_cmd_attr.RegularTransfer |
+| 5.6 | Immediate write | i3c_imm_i2c_path | Verify ImmediateDataTransfer routes to I2CWriteImmediate when DAT.device=1 | Set DAT[0].device=1 (I2C); issue ImmediateDataTransfer cmd with dev_idx=0 | FSM enters I2CWriteImmediate; bus uses open-drain, ACK polling per I2C; RESP Success | Medium | flow_active.sv | cp_cmd_attr.ImmediateDataTransfer |
+| 5.7 | Immediate write | i3c_imm_data_length_zero | Verify ImmediateDataTransfer with data_length=0 (command only, no payload) | ImmediateDataTransfer, cp=1, data_length=0 | Bus shows CCC code with no data bytes; RESP Success, data_length=0 | Medium | flow_active.sv | cp_data_length.[1], cp_cmd_attr.ImmediateDataTransfer |
 
 ---
 
@@ -249,16 +242,16 @@ The following additions are implied by the new test categories but are not yet i
 
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 6.1 | Broadcast CCC | ccc_enec_broadcast | Verify broadcast ENEC (0x00) issued correctly to 0x7E [BUG-002 required] | ImmediateDataTransfer, cp=1, cmd=0x00 (ENEC), !cmd[7], defining_byte=0x01 | Bus shows [S]+0x7E+W+ACK+0x00+ACK+0x01+ACK+[P]; all targets respond | High | flow_active.sv | cp_ccc_code.ENEC, cp_cp_bit.BroadcastCCC |
-| 6.2 | Broadcast CCC | ccc_disec_broadcast | Verify broadcast DISEC (0x01) issued correctly [BUG-002 required] | ImmediateDataTransfer, cp=1, cmd=0x01 (DISEC), defining_byte=0x00 | Bus shows 0x7E+W+0x01+defining_byte+P; RESP Success | High | flow_active.sv | cp_ccc_code.DISEC, cp_cp_bit.BroadcastCCC |
+| 6.1 | Broadcast CCC | ccc_enec_broadcast | Verify broadcast ENEC (0x00) issued correctly to 0x7E | ImmediateDataTransfer, cp=1, cmd=0x00 (ENEC), !cmd[7], defining_byte=0x01 | Bus shows [S]+0x7E+W+ACK+0x00+ACK+0x01+ACK+[P]; all targets respond | High | flow_active.sv | cp_ccc_code.ENEC, cp_cp_bit.BroadcastCCC |
+| 6.2 | Broadcast CCC | ccc_disec_broadcast | Verify broadcast DISEC (0x01) issued correctly | ImmediateDataTransfer, cp=1, cmd=0x01 (DISEC), defining_byte=0x00 | Bus shows 0x7E+W+0x01+defining_byte+P; RESP Success | High | flow_active.sv | cp_ccc_code.DISEC, cp_cp_bit.BroadcastCCC |
 | 6.3 | Broadcast CCC | ccc_entdaa_dispatch | Verify ENTDAA (0x07) triggers ENTDAA engine via AddressAssignment cmd_attr | AddressAssignment cmd_attr=2, dev_idx=0, dev_count=1 | flow_active ccc_valid_q goes high; ENTDAA controller takes over bus; RESP issued after DAA completes | High | flow_active.sv, entdaa_controller.sv | cp_ccc_code.ENTDAA, cp_cmd_attr.AddressAssignment |
-| 6.4 | Direct CCC | ccc_dir_enec | Verify directed ENEC (0x80) to specific target with Repeated START [BUG-002 required] | ImmediateDataTransfer, cp=1, cmd=0x80 (DIR_ENEC), cmd[7]=1, dev_idx=0 | Bus shows [S]+0x7E+W+0x80+[Sr]+target_addr+W+ACK+data; RESP Success | High | flow_active.sv, scl_generator.sv | cp_ccc_code.DIR_ENEC, cp_cp_bit.DirectedCCC |
-| 6.5 | Direct CCC | ccc_dir_disec | Verify directed DISEC (0x81) to specific target [BUG-002 required] | ImmediateDataTransfer, cp=1, cmd=0x81 (DIR_DISEC), cmd[7]=1, dev_idx=0 | Bus shows 0x7E+W+0x81+Sr+target_addr; RESP Success | High | flow_active.sv | cp_ccc_code.DIR_DISEC, cp_cp_bit.DirectedCCC |
-| 6.6 | CCC sequence | ccc_enec_disec_enec | Verify ENEC–DISEC–ENEC sequence does not leave FSM in bad state [BUG-002 required] | Issue broadcast ENEC, then DISEC, then ENEC sequentially | Each RESP shows Success; FSM returns to Idle between each; third ENEC bus frame correct | Medium | flow_active.sv | cp_ccc_code.ENEC, cp_ccc_code.DISEC, cp_cp_bit.BroadcastCCC |
-| 6.7 | CCC | ccc_broadcast_no_defining_byte | Verify broadcast CCC with data_length=0 (no defining byte) [BUG-002 required] | ImmediateDataTransfer cp=1, cmd=0x00, data_length=0 | Bus shows only [S]+0x7E+W+0x00+[P]; RESP Success, no extra byte | Medium | flow_active.sv | cp_ccc_code.ENEC, cp_cp_bit.BroadcastCCC |
-| 6.8 | CCC | ccc_direct_restart_gen | Verify scl_generator produces Repeated START for directed CCC [BUG-002 + BUG-014 required] | Directed CCC cmd (cmd[7]=1); observe gen_rstart_q pulse and scl_generator entering GenerateRstart | scl_generator state = GenerateRstart between CCC-byte and target-address; no stall | High | scl_generator.sv, flow_active.sv | cp_cp_bit.DirectedCCC |
+| 6.4 | Direct CCC | ccc_dir_enec | Verify directed ENEC (0x80) to specific target with Repeated START | ImmediateDataTransfer, cp=1, cmd=0x80 (DIR_ENEC), cmd[7]=1, dev_idx=0 | Bus shows [S]+0x7E+W+0x80+[Sr]+target_addr+W+ACK+data; RESP Success | High | flow_active.sv, scl_generator.sv | cp_ccc_code.DIR_ENEC, cp_cp_bit.DirectedCCC |
+| 6.5 | Direct CCC | ccc_dir_disec | Verify directed DISEC (0x81) to specific target | ImmediateDataTransfer, cp=1, cmd=0x81 (DIR_DISEC), cmd[7]=1, dev_idx=0 | Bus shows 0x7E+W+0x81+Sr+target_addr; RESP Success | High | flow_active.sv | cp_ccc_code.DIR_DISEC, cp_cp_bit.DirectedCCC |
+| 6.6 | CCC sequence | ccc_enec_disec_enec | Verify ENEC–DISEC–ENEC sequence does not leave FSM in bad state | Issue broadcast ENEC, then DISEC, then ENEC sequentially | Each RESP shows Success; FSM returns to Idle between each; third ENEC bus frame correct | Medium | flow_active.sv | cp_ccc_code.ENEC, cp_ccc_code.DISEC, cp_cp_bit.BroadcastCCC |
+| 6.7 | CCC | ccc_broadcast_no_defining_byte | Verify broadcast CCC with data_length=0 (no defining byte) | ImmediateDataTransfer cp=1, cmd=0x00, data_length=0 | Bus shows only [S]+0x7E+W+0x00+[P]; RESP Success, no extra byte | Medium | flow_active.sv | cp_ccc_code.ENEC, cp_cp_bit.BroadcastCCC |
+| 6.8 | CCC | ccc_direct_restart_gen | Verify scl_generator produces Repeated START for directed CCC | Directed CCC cmd (cmd[7]=1); observe gen_rstart_q pulse and scl_generator entering GenerateRstart | scl_generator state = GenerateRstart between CCC-byte and target-address; no stall | High | scl_generator.sv, flow_active.sv | cp_cp_bit.DirectedCCC |
 | 6.9 | CCC | ccc_entdaa_code_on_bus | Verify ENTDAA CCC code 0x07 appears on the bus in the broadcast frame | AddressAssignment cmd_attr=2; observe bus byte after 0x7E+W | 0x07 byte visible on SDA after reserved-byte ACK | High | flow_active.sv, entdaa_fsm.sv | cp_ccc_code.ENTDAA |
-| 6.10 | CCC | ccc_illegal_code_stability | Verify FSM does not lock up when unknown CCC code is issued [BUG-002 required] | ImmediateDataTransfer, cp=1, cmd=0xFF (unrecognized) | DUT completes transfer without hang; RESP issued (Success or error); FSM returns Idle | Medium | flow_active.sv | cp_ccc_code.illegal |
+| 6.10 | CCC | ccc_illegal_code_stability | Verify FSM does not lock up when unknown CCC code is issued | ImmediateDataTransfer, cp=1, cmd=0xFF (unrecognized) | DUT completes transfer without hang; RESP issued (Success or error); FSM returns Idle | Medium | flow_active.sv | cp_ccc_code.illegal |
 
 ---
 
@@ -283,19 +276,17 @@ The following additions are implied by the new test categories but are not yet i
 
 ### 4.8 Category 8 — I2C Legacy Compatibility
 
-> **Note:** All I2C tests require BUG-004 fix (I2C write ACK never received) and BUG-005 fix (I2C read master ACK never sent).
-
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 8.1 | I2C write | i2c_fm_write_1byte | Verify I2C 400 kHz write of 1 byte to legacy device [BUG-004 required] | Set DAT[0].device=1, static_addr=0x50; RegularTransfer rnw=0, data_length=1; I2C device ACKs | RESP Success; bus shows [S]+0x50+W+ACK+0xNN+ACK+[P] in open-drain; I2C timing | High | flow_active.sv, bus_tx_flow.sv | cp_speed_mode.I2C_FM_400kHz, cp_dir.Write, cp_resp_err.Success |
-| 8.2 | I2C write | i2c_fm_write_4bytes | Verify I2C write of 4 bytes with per-byte ACK [BUG-004 required] | DAT[0].device=1; RegularTransfer data_length=4; device ACKs each byte | RESP Success, data_length=4; 4 ACK bits observed on bus (one per byte) | High | flow_active.sv | cp_speed_mode.I2C_FM_400kHz, cp_data_length.[2:4] |
-| 8.3 | I2C read | i2c_fm_read_1byte | Verify I2C 400 kHz read of 1 byte from legacy device [BUG-005 required] | DAT[0].device=1; RegularTransfer rnw=1, data_length=1; device drives byte; master sends NACK | RESP Success, data_length=1; correct byte in RX FIFO; master NACK terminates read | High | flow_active.sv, bus_rx_flow.sv | cp_speed_mode.I2C_FM_400kHz, cp_dir.Read |
-| 8.4 | I2C read | i2c_fm_read_4bytes | Verify I2C read of 4 bytes (master ACKs first 3, NACKs last) [BUG-005 required] | DAT[0].device=1; RegularTransfer rnw=1, data_length=4; device drives 4 bytes | RESP Success, data_length=4; 3 ACKs then 1 NACK from master; all 4 bytes in RX FIFO | High | flow_active.sv | cp_data_length.[2:4], cp_speed_mode.I2C_FM_400kHz |
-| 8.5 | I2C error | i2c_fm_write_addr_nack | Verify I2C write when device NACKs address [BUG-004 required] | DAT[0].device=1; device driver configured to NACK address on write | RESP err_status=AddrHeader (4); no data bytes transmitted | High | flow_active.sv | cp_resp_err.AddrHeader, cp_speed_mode.I2C_FM_400kHz |
-| 8.6 | I2C error | i2c_fm_write_data_nack | Verify I2C write when device NACKs a data byte mid-transfer [BUG-004 required] | 4-byte I2C write; device ACKs address but NACKs byte 2 | RESP err_status=Nack (5); transfer aborted at NACK byte | High | flow_active.sv | cp_resp_err.Nack, cp_speed_mode.I2C_FM_400kHz |
-| 8.7 | I2C error | i2c_fm_read_last_byte_nack | Verify master sends NACK on last I2C read byte to terminate read [BUG-005 required] | I2C read data_length=4; observe master ACK/NACK sequence | Bytes 0-2: master drives ACK; byte 3: master drives NACK; STOP follows | High | flow_active.sv, bus_tx.sv | cp_speed_mode.I2C_FM_400kHz, cp_dir.Read |
+| 8.1 | I2C write | i2c_fm_write_1byte | Verify I2C 400 kHz write of 1 byte to legacy device | Set DAT[0].device=1, static_addr=0x50; RegularTransfer rnw=0, data_length=1; I2C device ACKs | RESP Success; bus shows [S]+0x50+W+ACK+0xNN+ACK+[P] in open-drain; I2C timing | High | flow_active.sv, bus_tx_flow.sv | cp_speed_mode.I2C_FM_400kHz, cp_dir.Write, cp_resp_err.Success |
+| 8.2 | I2C write | i2c_fm_write_4bytes | Verify I2C write of 4 bytes with per-byte ACK | DAT[0].device=1; RegularTransfer data_length=4; device ACKs each byte | RESP Success, data_length=4; 4 ACK bits observed on bus (one per byte) | High | flow_active.sv | cp_speed_mode.I2C_FM_400kHz, cp_data_length.[2:4] |
+| 8.3 | I2C read | i2c_fm_read_1byte | Verify I2C 400 kHz read of 1 byte from legacy device | DAT[0].device=1; RegularTransfer rnw=1, data_length=1; device drives byte; master sends NACK | RESP Success, data_length=1; correct byte in RX FIFO; master NACK terminates read | High | flow_active.sv, bus_rx_flow.sv | cp_speed_mode.I2C_FM_400kHz, cp_dir.Read |
+| 8.4 | I2C read | i2c_fm_read_4bytes | Verify I2C read of 4 bytes (master ACKs first 3, NACKs last) | DAT[0].device=1; RegularTransfer rnw=1, data_length=4; device drives 4 bytes | RESP Success, data_length=4; 3 ACKs then 1 NACK from master; all 4 bytes in RX FIFO | High | flow_active.sv | cp_data_length.[2:4], cp_speed_mode.I2C_FM_400kHz |
+| 8.5 | I2C error | i2c_fm_write_addr_nack | Verify I2C write when device NACKs address | DAT[0].device=1; device driver configured to NACK address on write | RESP err_status=AddrHeader (4); no data bytes transmitted | High | flow_active.sv | cp_resp_err.AddrHeader, cp_speed_mode.I2C_FM_400kHz |
+| 8.6 | I2C error | i2c_fm_write_data_nack | Verify I2C write when device NACKs a data byte mid-transfer | 4-byte I2C write; device ACKs address but NACKs byte 2 | RESP err_status=Nack (5); transfer aborted at NACK byte | High | flow_active.sv | cp_resp_err.Nack, cp_speed_mode.I2C_FM_400kHz |
+| 8.7 | I2C error | i2c_fm_read_last_byte_nack | Verify master sends NACK on last I2C read byte to terminate read | I2C read data_length=4; observe master ACK/NACK sequence | Bytes 0-2: master drives ACK; byte 3: master drives NACK; STOP follows | High | flow_active.sv, bus_tx.sv | cp_speed_mode.I2C_FM_400kHz, cp_dir.Read |
 | 8.8 | I2C seq | i2c_fm_repeated_start_rw | Verify I2C Repeated START for read-after-write (direction change) | Issue I2C write with toc=0 followed by read CMD; expect Sr between them | Bus shows write frame + Sr + address+R + read frame; both RESPs Success | Medium | flow_active.sv, scl_generator.sv | cp_speed_mode.I2C_FM_400kHz, cp_toc.no_STOP |
-| 8.9 | I2C timing | i2c_fm_400khz_timing | Verify I2C 400 kHz timing constraints (t_LOW≥1300ns, t_HIGH≥600ns) | Issue I2C write; measure SCL period at 100 MHz TB clock with I2C timing regs | SCL period ~2500 ns (400 kHz); t_LOW ≥ 130 cycles; t_HIGH ≥ 60 cycles at 100 MHz | High | scl_generator.sv, csr_register.sv | cp_speed_mode.I2C_FM_400kHz |
+| 8.9 | I2C timing | i2c_fm_400khz_timing | Verify I2C 400 kHz timing constraints (t_LOW >= 1600 ns, t_HIGH >= 900 ns) | Issue I2C write; measure SCL period at 333.333 MHz TB clock with I2C timing regs | SCL period ~2500 ns (400 kHz); t_LOW >= 534 cycles; t_HIGH >= 300 cycles at 333.333 MHz | High | scl_generator.sv, csr_register.sv | cp_speed_mode.I2C_FM_400kHz |
 | 8.10 | I2C vs I3C | i2c_vs_i3c_dat_flag | Verify DAT.device flag correctly routes I2C vs I3C paths | Write two CMDs: one with DAT[0].device=0 (I3C), one with DAT[1].device=1 (I2C) | I3C cmd uses open-drain→push-pull; I2C cmd stays open-drain throughout | High | flow_active.sv, csr_register.sv | cp_speed_mode.I3C_SDR_12p5MHz, cp_speed_mode.I2C_FM_400kHz |
 | 8.11 | I2C addr | i2c_fm_static_addr_in_frame | Verify 7-bit static address from DAT entry appears in I2C address phase | DAT[0].device=1, static_addr=0x50; issue I2C write | Bus address byte = {0x50, W} = 0xA0; NACK/ACK from device at correct position | High | flow_active.sv, csr_register.sv | cp_speed_mode.I2C_FM_400kHz |
 
@@ -319,9 +310,9 @@ The following additions are implied by the new test categories but are not yet i
 |---|---|---|---|---|---|---|---|---|
 | 10.1 | CMD FIFO | fifo_cmd_full | Verify CMD FIFO full condition (depth=8 in TB) | Write 8 complete CMDs (16 DWORD writes) without processing | QUEUE_STATUS.cmd_full=1; HC_STATUS.cmd_full=1; further writes ignored | High | hci_queues.sv, csr_register.sv | cp_fifo_state.cmd_full |
 | 10.2 | CMD FIFO | fifo_cmd_empty | Verify CMD FIFO empty initially after reset | Reset DUT; enable; read QUEUE_STATUS | QUEUE_STATUS.cmd_empty=1 | High | hci_queues.sv | cp_fifo_state.all_empty |
-| 10.3 | TX FIFO | fifo_tx_empty_stall | Verify StallWrite state entered when TX FIFO drains mid-write [BUG-007 required] | Start RegularTransfer data_length=8; load only 4 bytes in TX FIFO before CMD issued | Flow FSM enters StallWrite; gen_clock deasserted; StallWrite exits when TX refilled | High | flow_active.sv, hci_queues.sv | cp_fifo_state.tx_empty, cp_flow_state.StallWrite |
-| 10.4 | TX FIFO | fifo_tx_stall_then_resume | Verify transfer resumes correctly after StallWrite exits [BUG-007 required] | Trigger StallWrite; then write remaining TX data; wait for RESP | RESP Success; all bytes in correct order on bus; no byte gap other than SCL stretch | High | flow_active.sv | cp_flow_state.StallWrite, cp_resp_err.Success |
-| 10.5 | RX FIFO | fifo_rx_full_stall | Verify StallRead state entered when RX FIFO full [BUG-007 required] | Read 8+ bytes without software draining RX FIFO (depth=8) | FSM enters StallRead; SCL held low; resumes when software reads RX_DATA | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
+| 10.3 | TX FIFO | fifo_tx_empty_stall | Verify StallWrite state entered when TX FIFO drains mid-write | Start RegularTransfer data_length=8; load only 4 bytes in TX FIFO before CMD issued | Flow FSM enters StallWrite; gen_clock deasserted; StallWrite exits when TX refilled | High | flow_active.sv, hci_queues.sv | cp_fifo_state.tx_empty, cp_flow_state.StallWrite |
+| 10.4 | TX FIFO | fifo_tx_stall_then_resume | Verify transfer resumes correctly after StallWrite exits | Trigger StallWrite; then write remaining TX data; wait for RESP | RESP Success; all bytes in correct order on bus; no byte gap other than SCL stretch | High | flow_active.sv | cp_flow_state.StallWrite, cp_resp_err.Success |
+| 10.5 | RX FIFO | fifo_rx_full_stall | Verify StallRead state entered when RX FIFO full | Read 8+ bytes without software draining RX FIFO (depth=8) | FSM enters StallRead; SCL held low; resumes when software reads RX_DATA | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
 | 10.6 | RESP FIFO | fifo_resp_full | Verify RESP FIFO full condition (depth=8 in TB) | Issue 8 commands without reading RESP; check QUEUE_STATUS | QUEUE_STATUS.resp_full=1 after 8 completions; subsequent CMD stalls | Medium | hci_queues.sv, csr_register.sv | cp_fifo_state.resp_full |
 | 10.7 | QUEUE_STATUS | fifo_queue_status_accuracy | Verify all 8 QUEUE_STATUS bits reflect accurate FIFO states | Systematically fill/drain each FIFO; check QUEUE_STATUS after each step | Each bit transitions at the correct threshold (full at 8, empty at 0) | High | csr_register.sv, hci_queues.sv | cp_fifo_state.cmd_full, cp_fifo_state.tx_empty, cp_fifo_state.rx_full, cp_fifo_state.resp_full |
 | 10.8 | SW reset | fifo_sw_reset_clears_all | Verify sw_reset flushes all 4 FIFOs simultaneously | Partially fill CMD, TX, RX, RESP FIFOs; pulse sw_reset | All FIFOs empty after reset; QUEUE_STATUS shows all-empty | High | csr_register.sv, hci_queues.sv | cp_reset_point.Idle |
@@ -334,13 +325,13 @@ The following additions are implied by the new test categories but are not yet i
 
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 11.1 | RESP success | resp_success_write | Verify err_status=Success (0) on valid SDR write [BUG-007 required] | Issue valid RegularTransfer write; device ACKs address | RESP[31:28]=4'h0 (Success); RESP valid in RESP FIFO | High | flow_active.sv | cp_resp_err.Success, cp_dir.Write |
-| 11.2 | RESP success | resp_success_read | Verify err_status=Success on valid SDR read [BUG-007 required] | Issue valid RegularTransfer read; device drives data | RESP[31:28]=4'h0; data_length field = bytes actually received | High | flow_active.sv | cp_resp_err.Success, cp_dir.Read |
+| 11.1 | RESP success | resp_success_write | Verify err_status=Success (0) on valid SDR write | Issue valid RegularTransfer write; device ACKs address | RESP[31:28]=4'h0 (Success); RESP valid in RESP FIFO | High | flow_active.sv | cp_resp_err.Success, cp_dir.Write |
+| 11.2 | RESP success | resp_success_read | Verify err_status=Success on valid SDR read | Issue valid RegularTransfer read; device drives data | RESP[31:28]=4'h0; data_length field = bytes actually received | High | flow_active.sv | cp_resp_err.Success, cp_dir.Read |
 | 11.3 | RESP error | resp_addr_header_err | Verify err_status=AddrHeader (4) when address is NACKed | Device NACKs address byte on write or read | RESP[31:28]=4'h4 (AddrHeader); no data bytes in TX/RX processed | High | flow_active.sv | cp_resp_err.AddrHeader, cp_cmd_attr×cp_resp_err |
-| 11.4 | RESP error | resp_nack_i2c_data | Verify err_status=Nack (5) when I2C device NACKs a data byte [BUG-004 required] | I2C write; device ACKs address but NACKs data byte 2 | RESP[31:28]=4'h5 (Nack); transfer aborted | High | flow_active.sv | cp_resp_err.Nack, cp_dir×cp_resp_err |
-| 11.5 | RESP error | resp_parity_error | Verify err_status=Parity (2) on T-bit mismatch [BUG-006 + BUG-016 required] | I3C read; device drives data with intentionally wrong T-bit | RESP[31:28]=4'h2 (Parity); error detected at 9th bit of affected byte | High | flow_active.sv | cp_resp_err.Parity |
+| 11.4 | RESP error | resp_nack_i2c_data | Verify err_status=Nack (5) when I2C device NACKs a data byte | I2C write; device ACKs address but NACKs data byte 2 | RESP[31:28]=4'h5 (Nack); transfer aborted | High | flow_active.sv | cp_resp_err.Nack, cp_dir×cp_resp_err |
+| 11.5 | RESP error | resp_parity_error | Verify err_status=Parity (2) on T-bit mismatch | I3C read; device drives data with intentionally wrong T-bit | RESP[31:28]=4'h2 (Parity); error detected at 9th bit of affected byte | High | flow_active.sv | cp_resp_err.Parity |
 | 11.6 | RESP field | resp_tid_echo | Verify tid field in RESP matches tid in command descriptor | Issue write with tid=0x5 in CMD DWORD0[6:3] | RESP[27:24]=4'h5; tid echoed back correctly | High | flow_active.sv, csr_register.sv | — |
-| 11.7 | RESP field | resp_data_length_read | Verify data_length in RESP equals bytes actually received on read [BUG-007 + BUG-003 required] | RegularTransfer rnw=1, data_length=5; device drives 5 bytes | RESP[15:0]=16'd5; matches actual bytes received | High | flow_active.sv | cp_dir.Read |
+| 11.7 | RESP field | resp_data_length_read | Verify data_length in RESP equals bytes actually received on read | RegularTransfer rnw=1, data_length=5; device drives 5 bytes | RESP[15:0]=16'd5; matches actual bytes received | High | flow_active.sv | cp_dir.Read |
 | 11.8 | RESP field | resp_data_length_error | Verify data_length=0 in RESP on AddrHeader error | Issue CMD; device NACKs address | RESP[15:0]=16'd0; no data transferred | Medium | flow_active.sv | cp_resp_err.AddrHeader |
 | 11.9 | RESP NA codes | resp_unreachable_codes_na | Document unreachable error codes as N/A in current RTL | Code review only (no UVM test required) | Codes Crc(1), Frame(3), Ovl(6), ShortRead(7), HcAborted(8), NotSupported(10) have no production path; verified by inspection | Low | flow_active.sv (code paths not present) | — |
 
@@ -353,11 +344,11 @@ The following additions are implied by the new test categories but are not yet i
 | 12.1 | T_R | timing_tr_min | Verify T_R=1 (minimum, 1 cycle) loads correctly and SCL rise measured | Write T_R=1 to 0x010; issue SDR transfer | scl_generator counts t_r=1 cycle on rising edge; no timing violation | Medium | scl_generator.sv, csr_register.sv | cp_timing_reg.min |
 | 12.2 | T_R | timing_tr_max | Verify T_R=15 cycles (practical max) slows rise time correctly | Write T_R=15; issue SDR transfer; measure SCL cycle | SCL rise phase takes 15+13=28 cycles (DriveHigh state count) | Medium | scl_generator.sv | cp_timing_reg.max |
 | 12.3 | T_F | timing_tf_range | Verify T_F register affects scl_generator DriveLow countdown | Write T_F=2 then T_F=8; measure SCL LOW phase | t_LOW effective = T_LOW + T_F cycles; changes proportionally | Medium | scl_generator.sv | cp_timing_reg.min, cp_timing_reg.max |
-| 12.4 | T_LOW | timing_tlow_spec_min | Verify default T_LOW=13 meets I3C SDR ≥24ns at 333 MHz (≥8 cycles) | Use default T_LOW=13; issue SDR transfer; measure SCL LOW period | t_LOW = (13+T_F) cycles ≥ 8 at 333 MHz (~50 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
-| 12.5 | T_HIGH | timing_thigh_spec_min | Verify default T_HIGH=13 meets I3C SDR ≥24ns at 333 MHz | Use default T_HIGH=13; issue SDR transfer; measure SCL HIGH period | t_HIGH = (13+T_R) cycles ≥ 8; meets spec | High | scl_generator.sv | cp_timing_reg.typ |
-| 12.6 | T_SU_STA | timing_tsu_sta | Verify T_SU_STA programmed value reflected in START setup time | Write T_SU_STA=20; issue command; measure time from SCL-HIGH to SDA-fall | Measured interval = T_SU_STA cycles ± 1 (BUG-012 off-by-one) | Medium | scl_generator.sv, edge_detector.sv | cp_timing_reg.typ |
+| 12.4 | T_LOW | timing_tlow_spec_min | Verify default T_LOW=16 meets the conservative I3C SDR 48 ns target at 333.333 MHz | Use default T_LOW=16; issue SDR transfer; measure SCL LOW period | t_LOW >= 16 cycles at 333.333 MHz (48 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
+| 12.5 | T_HIGH | timing_thigh_spec_min | Verify default T_HIGH=11 meets the I3C SDR 32 ns clock pulse target at 333.333 MHz | Use default T_HIGH=11; issue SDR transfer; measure SCL HIGH period | t_HIGH >= 11 cycles at 333.333 MHz (33 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
+| 12.6 | T_SU_STA | timing_tsu_sta | Verify T_SU_STA programmed value reflected in START setup time | Write T_SU_STA=20; issue command; measure time from SCL-HIGH to SDA-fall | Measured interval = T_SU_STA cycles ± 1 | Medium | scl_generator.sv, edge_detector.sv | cp_timing_reg.typ |
 | 12.7 | T_HD_STA | timing_thd_sta | Verify T_HD_STA programmed value reflected in START hold time | Write T_HD_STA=15; issue command; measure SDA-fall to SCL-fall interval | Measured interval ≥ T_HD_STA cycles | Medium | scl_generator.sv | cp_timing_reg.typ |
-| 12.8 | T_SU_STO | timing_tsu_sto | Verify T_SU_STO meets I3C ≥12ns (≥4 cycles at 333 MHz) with default=13 | Use default T_SU_STO=13; measure SCL-HIGH to SDA-rise interval | ≥ 13 cycles; meets ≥12ns spec | High | scl_generator.sv | cp_timing_reg.typ |
+| 12.8 | T_SU_STO | timing_tsu_sto | Verify T_SU_STO meets I3C >= 20 ns with default=7 at 333.333 MHz | Use default T_SU_STO=7; measure SCL-HIGH to SDA-rise interval | >= 7 cycles (21 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
 | 12.9 | T_SU_DAT | timing_tsu_dat | Verify T_SU_DAT controls data setup before SCL rising edge | Write T_SU_DAT=3; issue SDR write; measure SDA-stable to SCL-HIGH | SDA stable ≥ T_SU_DAT cycles before SCL rises | High | bus_tx.sv | cp_timing_reg.typ |
 | 12.10 | T_HD_DAT | timing_thd_dat | Verify T_HD_DAT controls data hold after SCL falling edge | Write T_HD_DAT=4; issue SDR write; measure SDA change after SCL falls | SDA holds ≥ T_HD_DAT cycles after SCL negedge | High | bus_tx.sv | cp_timing_reg.typ |
 
@@ -372,14 +363,14 @@ The following additions are implied by the new test categories but are not yet i
 | 13.3 | Async reset | rst_ni_in_fetchdat | Verify async rst_ni during FetchDAT | Queue CMD; deassert rst_ni during DAT lookup cycle | FSM resets; no invalid bus activity; DUT recovers | High | flow_active.sv, csr_register.sv | cp_reset_point.FetchDAT, cp_flow_state.FetchDAT |
 | 13.4 | Async reset | rst_ni_in_i3c_imm | Verify async rst_ni during I3CWriteImmediate bus activity | Issue Immediate CMD; deassert rst_ni mid-address-phase | Bus STOP or float; FSM returns to Idle; no data corruption | High | flow_active.sv | cp_reset_point.Imm_or_Regular |
 | 13.5 | Async reset | rst_ni_in_i2c_imm | Verify async rst_ni during I2CWriteImmediate | Issue I2C Immediate CMD; deassert rst_ni mid-transmission | Clean abort; FSM Idle; no spurious ACK on bus | High | flow_active.sv | cp_reset_point.Imm_or_Regular |
-| 13.6 | Async reset | rst_ni_in_fetch_fifo | Verify rst_ni during FetchTxData or FetchRxData [BUG-007 required] | Initiate RegularTransfer; deassert rst_ni during FIFO fetch | FIFOs flushed; FSM Idle; no partial FIFO transaction committed | Medium | flow_active.sv, hci_queues.sv | cp_reset_point.Imm_or_Regular |
+| 13.6 | Async reset | rst_ni_in_fetch_fifo | Verify rst_ni during FetchTxData or FetchRxData | Initiate RegularTransfer; deassert rst_ni during FIFO fetch | FIFOs flushed; FSM Idle; no partial FIFO transaction committed | Medium | flow_active.sv, hci_queues.sv | cp_reset_point.Imm_or_Regular |
 | 13.7 | Async reset | rst_ni_in_init_i2c | Verify rst_ni during InitI2CWrite or InitI2CRead | Issue I2C write/read; deassert rst_ni during address phase | FSM resets; no partial address byte on bus; DUT recovers | Medium | flow_active.sv | cp_reset_point.IssueCmd_addr |
-| 13.8 | Async reset | rst_ni_in_stallwrite | Verify rst_ni during StallWrite [BUG-007 required] | Trigger StallWrite; deassert rst_ni | FSM exits immediately; no indefinite SCL hold; FIFOs cleared | High | flow_active.sv | cp_reset_point.Stall, cp_flow_state.StallWrite |
-| 13.9 | Async reset | rst_ni_in_stallread | Verify rst_ni during StallRead [BUG-007 required] | Trigger StallRead; deassert rst_ni | FSM exits; SCL released; FIFOs cleared | High | flow_active.sv | cp_reset_point.Stall, cp_flow_state.StallRead |
-| 13.10 | Async reset | rst_ni_in_issuecmd_data | Verify rst_ni during data byte transmission in IssueCmd [BUG-007 required] | Mid-data-phase reset (after address, before last byte) | SCL halts; bus floats; FSM Idle after reset release | High | flow_active.sv | cp_reset_point.IssueCmd_data |
+| 13.8 | Async reset | rst_ni_in_stallwrite | Verify rst_ni during StallWrite | Trigger StallWrite; deassert rst_ni | FSM exits immediately; no indefinite SCL hold; FIFOs cleared | High | flow_active.sv | cp_reset_point.Stall, cp_flow_state.StallWrite |
+| 13.9 | Async reset | rst_ni_in_stallread | Verify rst_ni during StallRead | Trigger StallRead; deassert rst_ni | FSM exits; SCL released; FIFOs cleared | High | flow_active.sv | cp_reset_point.Stall, cp_flow_state.StallRead |
+| 13.10 | Async reset | rst_ni_in_issuecmd_data | Verify rst_ni during data byte transmission in IssueCmd | Mid-data-phase reset (after address, before last byte) | SCL halts; bus floats; FSM Idle after reset release | High | flow_active.sv | cp_reset_point.IssueCmd_data |
 | 13.11 | Async reset | rst_ni_in_writeresp | Verify rst_ni during WriteResp (RESP FIFO write) | Deassert rst_ni at cycle when resp_wvalid goes high | RESP FIFO flushed; partial RESP not committed; FSM Idle | High | flow_active.sv | cp_reset_point.Imm_or_Regular, cp_flow_state.WriteResp |
 | 13.12 | SW reset | sw_reset_mid_cmd | Verify sw_reset during active command sequence | Issue RegularTransfer; assert sw_reset while IssueCmd active | FIFOs cleared; FSM returns to Idle; subsequent CMD works normally | High | csr_register.sv, flow_active.sv | cp_reset_point.IssueCmd_data |
-| 13.13 | SW reset | sw_reset_staging_clear | Verify sw_reset clears cmd_staging_valid_q (BUG-008 regression) | Write DWORD0 to CMD_QUEUE; issue sw_reset; write new CMD pair (DWORD0+DWORD1) | New CMD dispatches correctly; no pairing with stale DWORD0 | High | csr_register.sv | cp_reset_point.WaitForCmd |
+| 13.13 | SW reset | sw_reset_staging_clear | Verify sw_reset clears cmd_staging_valid_q | Write DWORD0 to CMD_QUEUE; issue sw_reset; write new CMD pair (DWORD0+DWORD1) | New CMD dispatches correctly; no pairing with stale DWORD0 | High | csr_register.sv | cp_reset_point.WaitForCmd |
 | 13.14 | Recovery | rst_post_reset_transfer | Verify legal transfer completes after async reset | Assert rst_ni; release; re-enable hc_enable; issue valid SDR write | RESP Success; no hangs or stale state from pre-reset | High | flow_active.sv | cp_reset_point.Idle, cp_resp_err.Success |
 
 ---
@@ -417,15 +408,15 @@ The following additions are implied by the new test categories but are not yet i
 
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 16.1 | Stress | stress_100_random_writes | Verify 100 randomized SDR writes complete without scoreboard errors [BUG-007 required] | Random dev_idx (0–3), random data_length (1–8), random data for 100 CMDs | All 100 RESPs Success; scoreboard fail_cnt=0; no bus lockup | High | flow_active.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write |
-| 16.2 | Stress | stress_100_random_reads | Verify 100 randomized SDR reads [BUG-007 required] | Random dev_idx, random data_length (1–8), device provides known data for 100 reads | All 100 RESPs Success; all RX data correct; scoreboard clean | High | flow_active.sv | cp_dir.Read |
-| 16.3 | Stress | stress_mixed_rw_500 | Mixed write/read sequence of 500 transactions [BUG-007 required] | Randomly interleave write and read CMDs; random dev_idx and lengths | No scoreboard mismatch; no deadlock; pass_cnt=500 | High | flow_active.sv | cp_dir.Write, cp_dir.Read, cp_cmd_attr×cp_dir |
+| 16.1 | Stress | stress_100_random_writes | Verify 100 randomized SDR writes complete without scoreboard errors | Random dev_idx (0–3), random data_length (1–8), random data for 100 CMDs | All 100 RESPs Success; scoreboard fail_cnt=0; no bus lockup | High | flow_active.sv | cp_cmd_attr.RegularTransfer, cp_dir.Write |
+| 16.2 | Stress | stress_100_random_reads | Verify 100 randomized SDR reads | Random dev_idx, random data_length (1–8), device provides known data for 100 reads | All 100 RESPs Success; all RX data correct; scoreboard clean | High | flow_active.sv | cp_dir.Read |
+| 16.3 | Stress | stress_mixed_rw_500 | Mixed write/read sequence of 500 transactions | Randomly interleave write and read CMDs; random dev_idx and lengths | No scoreboard mismatch; no deadlock; pass_cnt=500 | High | flow_active.sv | cp_dir.Write, cp_dir.Read, cp_cmd_attr×cp_dir |
 | 16.4 | Stress | stress_random_dat_entries | Random access to all 32 DAT entries | Configure DAT[0..31]; randomly issue CMDs with dev_idx 0..31 | Correct dynamic/static address used per dev_idx; no address collision | Medium | flow_active.sv, csr_register.sv | cp_dat_index.0, cp_dat_index.mid, cp_dat_index.31 |
-| 16.5 | Stress | stress_random_data_length | Randomize data_length from 1 to 64 for write/read [BUG-007 + BUG-003 required] | Issue CMDs with random data_length 1–64; mix aligned and non-aligned | All RESP Success; data_length in RESP matches commanded length; no data loss | High | flow_active.sv | cp_data_length.[1], cp_data_length.[2:4], cp_data_length.[5:16], cp_data_length.[17:64] |
-| 16.6 | Stress | stress_random_toc | Random toc=0 and toc=1 per transaction [BUG-007 required] | Alternate toc=0 (chain) and toc=1 (stop) across 50 CMDs | Chained frames generate no spurious STOP; independent frames generate STOP; no lockup | High | flow_active.sv, scl_generator.sv | cp_toc.STOP, cp_toc.no_STOP |
+| 16.5 | Stress | stress_random_data_length | Randomize data_length from 1 to 64 for write/read | Issue CMDs with random data_length 1–64; mix aligned and non-aligned | All RESP Success; data_length in RESP matches commanded length; no data loss | High | flow_active.sv | cp_data_length.[1], cp_data_length.[2:4], cp_data_length.[5:16], cp_data_length.[17:64] |
+| 16.6 | Stress | stress_random_toc | Random toc=0 and toc=1 per transaction | Alternate toc=0 (chain) and toc=1 (stop) across 50 CMDs | Chained frames generate no spurious STOP; independent frames generate STOP; no lockup | High | flow_active.sv, scl_generator.sv | cp_toc.STOP, cp_toc.no_STOP |
 | 16.7 | Stress | stress_sw_reset_injection | Periodic sw_reset between random transactions | Issue CMD; randomly inject sw_reset; issue next CMD | Post-reset CMDs complete normally; staging register cleared; no stale CMD | High | csr_register.sv, flow_active.sv | cp_reset_point.Idle, cp_reset_point.IssueCmd_data |
-| 16.8 | Long run | stress_longrun_1k | Run 1000 transactions with random parameters [BUG-007 required] | 1000 random CMDs (write/read/imm/CCC mix); random seeds | No scoreboard errors across 1000 transactions; no FSM deadlock; consistent throughput | High | flow_active.sv | cp_cmd_attr.RegularTransfer, cp_cmd_attr.ImmediateDataTransfer |
-| 16.9 | Long run | stress_longrun_10k | 10,000-transaction stability run [BUG-007 required] | 10k random CMDs; monitor for avg/max latency degradation | No scoreboard mismatch; no latency degradation (max ≤ 2x average); no hang | Medium | flow_active.sv | cp_resp_err.Success |
+| 16.8 | Long run | stress_longrun_1k | Run 1000 transactions with random parameters | 1000 random CMDs (write/read/imm/CCC mix); random seeds | No scoreboard errors across 1000 transactions; no FSM deadlock; consistent throughput | High | flow_active.sv | cp_cmd_attr.RegularTransfer, cp_cmd_attr.ImmediateDataTransfer |
+| 16.9 | Long run | stress_longrun_10k | 10,000-transaction stability run | 10k random CMDs; monitor for avg/max latency degradation | No scoreboard mismatch; no latency degradation (max ≤ 2x average); no hang | Medium | flow_active.sv | cp_resp_err.Success |
 
 ---
 
@@ -553,7 +544,7 @@ The following features are **not implemented** in the current RTL and have **no 
 | Multi-master / secondary controller | No arbitration-loss detection. Active-controller-only design. |
 | Target (I3C slave) mode | No target FSM, no CCC decode for incoming commands. |
 | Target (I2C slave) mode | Same. |
-| Bus recovery protocol | No `recovery_handler`, no `gen_idle` assertion path (BUG-009). |
+| Bus recovery protocol | No `recovery_handler`, no `gen_idle` assertion path. |
 | SETDASA (0x87) | CCC not in i3c_agent_pkg.sv enum; no RTL handling. |
 | GETPID (0x8D) | Not implemented. |
 | GETBCR (0x8E) / GETDCR (0x8F) | Not implemented. |
@@ -576,45 +567,7 @@ The following features are **not implemented** in the current RTL and have **no 
 
 ---
 
-## 9. Known Gaps and Bug Awareness
-
-The following bugs from `docs/bug_analysis_report.md` affect specific test categories. Tests are authored against expected post-fix behavior; they will fail on the unfixed RTL.
-
-| Bug ID | Severity | Affected Tests | Impact |
-|---|---|---|---|
-| BUG-001 | CRITICAL | All (compile blocker) | Stray `/` in csr_register.sv parameter list prevents compilation |
-| BUG-002 | CRITICAL | Cat. 5 (all), Cat. 6 (CCC via Immediate) | `gen_clock_q` never set in I3CWriteImmediate / I2CWriteImmediate → all Immediate transfers hang after START |
-| BUG-003 | CRITICAL | 4.4, 16.5 | Partial DWORD data loss for non-4n-byte read lengths (byte N % 4 != 0 dropped) |
-| BUG-004 | HIGH | Cat. 8 write tests | Same-cycle TX/RX dependency in I2C write path; ACK/NACK never received |
-| BUG-005 | HIGH | Cat. 8 read tests | Same-cycle TX/RX dependency in I2C read path; master ACK/NACK never transmitted |
-| BUG-006 | HIGH | 4.7, 4.8, 4.9 | Same-cycle TX/RX dependency in I3C read T-bit path; T-bit never sent |
-| BUG-007 | HIGH | All Cat. 3 + Cat. 4 RegularTransfer tests | Missing START condition and address byte for I3C regular write/read |
-| BUG-008 | HIGH | 1.13, 13.13 | sw_reset does not clear cmd_staging_valid_q / cmd_dword0_q |
-| BUG-009 | HIGH | 13.8, 13.9, error recovery | gen_idle_o never asserted; no bus abort mechanism |
-| BUG-010 | HIGH | 4.1–4.11 | bus_rx_flow uses stale sda_i instead of registered rx_bit; data race on shift register |
-| BUG-011 | HIGH | 10.1–10.10 (if depth≠power-of-2) | sync_fifo full/empty only correct for power-of-2 depths (current depths=8/64 are safe) |
-| BUG-012 | MEDIUM | 12.6 | edge_detector off-by-one: actual delay = delay_count+1 cycles |
-| BUG-013 | MEDIUM | 12.6 | stable_high_detector off-by-one inconsistency with edge_detector |
-| BUG-014 | MEDIUM | 6.8, 13.x during DAA | scl_generator WaitCmd does not handle gen_rstart_i; Repeated START from WaitCmd ignored |
-| BUG-015 | MEDIUM | 6.9 (ccc_code_o verification) | ccc_code_o always driven 0; external modules cannot read CCC code |
-| BUG-016 | MEDIUM | 4.9, 11.5 | T-bit parity check is static (`!= 1'b1`) instead of computing odd parity over data byte |
-| BUG-017 | MEDIUM | 2.6, 2.7 | bus_tx.sv uses bitwise `&` instead of `&&` (no functional impact for 1-bit operands) |
-| BUG-018 | MEDIUM | 4.x read T-bit path | bus_rx_flow.sv rx_req_bit registration vs unregistered abort timing asymmetry |
-| BUG-019 | LOW | 7.x (ENTDAA) | entdaa_fsm bit_cnt underflows to 63 when bit_cnt==0; benign in current FSM topology |
-| BUG-020–022 | LOW | Style | Naming convention, wire keyword, hardcoded CCC constant; no functional test impact |
-
-### Recommended Fix Priority Before Running Test Plan
-
-1. **BUG-001** — Fix immediately (compile blocker).
-2. **BUG-007** — Fix before running any Category 3 / 4 tests.
-3. **BUG-002** — Fix before running any Category 5 / 6 CCC tests.
-4. **BUG-004, BUG-005** — Fix before Category 8 I2C tests.
-5. **BUG-003, BUG-006, BUG-010** — Fix before non-aligned reads and T-bit tests.
-6. **BUG-008** — Fix before Category 13 sw_reset tests.
-
----
-
-## 10. Future Verification Expansion
+## 9. Future Verification Expansion
 
 | Area | Suggestion |
 |---|---|

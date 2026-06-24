@@ -10,6 +10,8 @@ class i3c_item extends uvm_sequence_item;
   bit i3c_direct;
   i3c_ccc_e CCC;
   bit CCC_valid;
+  bit ccc_t_bit_valid;
+  bit ccc_t_bit;
   bit [7:0] CCC_def[$];
   i3c_item CCC_direct[$];
   int tran_id;
@@ -23,6 +25,7 @@ class i3c_item extends uvm_sequence_item;
   bit i3c;
   bit nack;
   bit ack;
+  bit start_from_rstart;
   bit rstart;
   bit start;
   bit stop;
@@ -40,10 +43,13 @@ class i3c_item extends uvm_sequence_item;
     `uvm_field_int(i3c_broadcast, UVM_DEFAULT)
     `uvm_field_int(i3c_direct, UVM_DEFAULT)
     `uvm_field_enum(i3c_ccc_e, CCC, UVM_DEFAULT)
+    `uvm_field_int(ccc_t_bit_valid, UVM_DEFAULT)
+    `uvm_field_int(ccc_t_bit, UVM_DEFAULT)
     `uvm_field_queue_int(CCC_def, UVM_DEFAULT)
     `uvm_field_queue_object(CCC_direct, UVM_DEFAULT)
     `uvm_field_int(num_data, UVM_DEFAULT)
     `uvm_field_int(start, UVM_DEFAULT)
+    `uvm_field_int(start_from_rstart, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(rstart, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(stop, UVM_DEFAULT)
     `uvm_field_int(interrupted, UVM_DEFAULT)
@@ -71,14 +77,17 @@ class i3c_item extends uvm_sequence_item;
     CCC_def.delete();
     CCC_direct.delete();
     CCC_valid = 0;
+    ccc_t_bit_valid = 0;
+    ccc_t_bit = 0;
     i3c_broadcast = 0;
     i3c_direct = 0;
   endfunction : clear_data
 
   function void clear_flag();
-    start  = 1'b0;
-    stop   = 1'b0;
-    rstart = 1'b0;
+    start             = 1'b0;
+    start_from_rstart = 1'b0;
+    stop              = 1'b0;
+    rstart            = 1'b0;
   endfunction : clear_flag
 
   function void clear_all();
@@ -86,22 +95,29 @@ class i3c_item extends uvm_sequence_item;
     clear_flag();
   endfunction : clear_all
 
+  function string ack_to_string(bit ack);
+    return ack ? "ACK" : "NACK";
+  endfunction
+
   virtual function string convert2string();
     string str = "";
     str = {str, $sformatf("%s:tran_id   = %0d\n", pname, tran_id)};
     str = {str, $sformatf("%s:bus_op    = %s\n", pname, bus_op.name)};
     str = {str, $sformatf("%s:addr      = 0x%2x\n", pname, addr)};
     str = {str, $sformatf("%s:bcast_hdr = %1b\n", pname, start_with_broadcast_header)};
-    str = {str, $sformatf("%s:bcast_ack = %1b\n", pname, broadcast_header_ack)};
+    str = {str, $sformatf("%s:bcast_ack = %s\n", pname, ack_to_string(broadcast_header_ack))};
     str = {str, $sformatf("%s:direct    = 0x%2x\n", pname, i3c_direct)};
     if (i3c_broadcast || i3c_direct) begin
       str = {str, $sformatf("%s:CCC       = %s\n", pname, CCC.name())};
+      str = {str, $sformatf("%s:CCC T-bit = %s\n", pname,
+                            ccc_t_bit_valid ? $sformatf("%0b", ccc_t_bit) : "--")};
       foreach (CCC_def[i]) begin
         str = {str, $sformatf("%s:CCC Def Byte [%0d]=0x%2x\n", pname, i, CCC_def[i])};
       end
     end
     str = {str, $sformatf("%s:num_data  = %0d\n", pname, num_data)};
     str = {str, $sformatf("%s:start     = %1b\n", pname, start)};
+    str = {str, $sformatf("%s:start_sr  = %1b\n", pname, start_from_rstart)};
     str = {str, $sformatf("%s:stop      = %1b\n", pname, stop)};
     str = {str, $sformatf("%s:rstart    = %1b\n", pname, rstart)};
     foreach (data_q[i]) begin

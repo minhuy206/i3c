@@ -160,25 +160,25 @@ typedef struct packed {
 | 0x008       | `INTR_STATUS`    | R/W1C | 0x0   | Sticky interrupt status              |
 | 0x010       | `T_R_REG`        | RW    | 0x4   | Rise time (system clock cycles)      |
 | 0x014       | `T_F_REG`        | RW    | 0x4   | Fall time                            |
-| 0x018       | `T_LOW_REG`      | RW    | 0x8   | SCL LOW period                       |
-| 0x01C       | `T_LOW_OD_REG`   | RW    | 0x14  | Open-drain SCL LOW period            |
-| 0x020       | `T_HIGH_REG`     | RW    | 0x8   | SCL HIGH period                      |
-| 0x024       | `T_SU_STA_REG`   | RW    | 0x8   | START setup time                     |
-| 0x028       | `T_HD_STA_REG`   | RW    | 0x8   | START hold time                      |
-| 0x02C       | `T_SU_STO_REG`   | RW    | 0x4   | STOP setup time                      |
+| 0x018       | `T_LOW_REG`      | RW    | 0x10  | SCL LOW period                       |
+| 0x01C       | `T_LOW_OD_REG`   | RW    | 0x43  | Open-drain SCL LOW period            |
+| 0x020       | `T_HIGH_REG`     | RW    | 0xB   | SCL HIGH period                      |
+| 0x024       | `T_SU_STA_REG`   | RW    | 0x7   | START setup time                     |
+| 0x028       | `T_HD_STA_REG`   | RW    | 0xD   | START hold time                      |
+| 0x02C       | `T_SU_STO_REG`   | RW    | 0x7   | STOP setup time                      |
 | 0x030       | `T_SU_DAT_REG`   | RW    | 0x1   | Data setup time                      |
-| 0x034       | `T_HD_DAT_REG`   | RW    | 0x4   | Data hold time                       |
-| 0x038       | `T_BUS_FREE_REG` | RW    | 0x4   | Bus free time                        |
-| 0x040       | `I2C_T_R_REG`    | RW    | 0x4   | I2C rise time                        |
-| 0x044       | `I2C_T_F_REG`    | RW    | 0x4   | I2C fall time                        |
-| 0x048       | `I2C_T_LOW_REG`  | RW    | 0xA0  | I2C SCL LOW period                   |
-| 0x04C       | `I2C_T_HIGH_REG` | RW    | 0x5A  | I2C SCL HIGH period                  |
-| 0x050       | `I2C_T_SU_STA_REG` | RW  | 0x3C  | I2C START setup time                 |
-| 0x054       | `I2C_T_HD_STA_REG` | RW  | 0x3C  | I2C START hold time                  |
-| 0x058       | `I2C_T_SU_STO_REG` | RW  | 0x82  | I2C STOP setup time                  |
-| 0x05C       | `I2C_T_SU_DAT_REG` | RW  | 0xA   | I2C data setup time                  |
+| 0x034       | `T_HD_DAT_REG`   | RW    | 0x0   | Data hold time                       |
+| 0x038       | `T_BUS_FREE_REG` | RW    | 0xD   | Bus free time                        |
+| 0x040       | `I2C_T_R_REG`    | RW    | 0x64  | I2C rise time                        |
+| 0x044       | `I2C_T_F_REG`    | RW    | 0x64  | I2C fall time                        |
+| 0x048       | `I2C_T_LOW_REG`  | RW    | 0x216 | I2C SCL LOW period                   |
+| 0x04C       | `I2C_T_HIGH_REG` | RW    | 0x12C | I2C SCL HIGH period                  |
+| 0x050       | `I2C_T_SU_STA_REG` | RW  | 0xC8  | I2C START setup time                 |
+| 0x054       | `I2C_T_HD_STA_REG` | RW  | 0xC8  | I2C START hold time                  |
+| 0x058       | `I2C_T_SU_STO_REG` | RW  | 0x1B2 | I2C STOP setup time                  |
+| 0x05C       | `I2C_T_SU_DAT_REG` | RW  | 0x22  | I2C data setup time                  |
 | 0x060       | `I2C_T_HD_DAT_REG` | RW  | 0x0   | I2C data hold time                   |
-| 0x064       | `I2C_T_BUF_REG`  | RW    | 0x82  | I2C bus free time                    |
+| 0x064       | `I2C_T_BUF_REG`  | RW    | 0x1B2 | I2C bus free time                    |
 | 0x100       | `CMD_QUEUE_PORT` | W     | -     | Write command descriptor (2x writes) |
 | 0x104       | `TX_DATA_PORT`   | W     | -     | Write TX data                        |
 | 0x108       | `RX_DATA_PORT`   | R     | -     | Read RX data                         |
@@ -235,7 +235,7 @@ Sticky interrupt-status register. Bits are set by `intr_event_i` and cleared by 
 | [CounterWidth-1:0]| `VALUE` | Timing value in system clock cycles |
 | [31:CounterWidth] | Reserved| -                                   |
 
-Default values assume 333 MHz system clock targeting I3C SDR mode.
+Default values assume a 333.333 MHz system clock. I3C defaults target SDR timing, and the separate I2C timing defaults target FM 400 kHz timing.
 
 #### CMD_QUEUE_PORT (0x100) — Write Only
 
@@ -443,5 +443,5 @@ src/verification/uvm_i3c/
 - The `ready_o` output is normally HIGH. It deasserts for `CMD_QUEUE_PORT` or `TX_DATA_PORT` writes while the corresponding pending valid is still waiting for FIFO acceptance, or for those writes during the one-cycle `SW_RESET` pulse, so software/reg-agent writes are held instead of silently dropped.
 - The CMD staging register introduces state — if only DWORD0 is written before a reset, the staging state is lost (by design). Software always writes both DWORDs in sequence.
 - DAT entries use 32-bit width (not 64-bit as in reference). The reference's upper 32 bits contained DCR/BCR/PID fields which are stored in software after ENTDAA.
-- Timing register defaults target I3C SDR at 333 MHz. For I2C FM mode, software must write the appropriate timing values before initiating I2C transfers.
+- Timing register defaults assume a 333.333 MHz system clock. I3C defaults target SDR timing, and I2C defaults target FM 400 kHz timing.
 - The write-side FF processes (`reg_write`, `cmd_write`, `tx_write`) are kept separate for clarity; registered CSR readback and DAT hardware readback use their own FF blocks.

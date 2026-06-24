@@ -16,11 +16,16 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [3:0] tid;
     bit       is_ccc;
     bit [7:0] ccc;
+    bit [6:0] ccc_target_addr;
     bit [7:0] event_byte;
+    bit [4:0] daa_dev_idx;
+    bit [3:0] daa_dev_count;
+    bit [15:0] daa_addr_valid;
+    bit [15:0][6:0] daa_assigned_addr;
     bit [7:0] imm_data_byte[4];
     bit       target_is_i3c;
     bit       broadcast_header_eligible;
-    bit       updates_private_continuation;
+    bit       updates_private_transfer;
     bit       start_with_broadcast_header;
   } exp_txn_t;
 
@@ -42,10 +47,10 @@ class i3c_scoreboard extends uvm_scoreboard;
   } exp_rx_data_t;
 
   typedef struct {
-    bit       rnw;
-    bit [3:0] tid;
-    int       data_length;
-    int       read_id;
+    bit                   rnw;
+    bit [3:0]             tid;
+    int                   data_length;
+    int                   read_id;
     i3c_resp_err_status_e resp_status;
   } pending_resp_t;
 
@@ -61,7 +66,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   bit [31:0] cmd_dw0;
   bit broadcast_header_enable;
   bit hc_abort_active;
-  bit pending_private_continuation;
+  bit pending_private_transfer;
   int next_read_id;
 
   function new(string name = "", uvm_component parent = null);
@@ -96,7 +101,11 @@ class i3c_scoreboard extends uvm_scoreboard;
     return present ? ack_to_string(ack) : "NONE";
   endfunction
 
-  function void print_i3c_address_evidence(i3c_item item, exp_txn_t exp);
+  function string start_source_to_string(bit start_from_rstart);
+    return start_from_rstart ? "Sr" : "S";
+  endfunction
+
+  function void print_i3c_address(i3c_item item, exp_txn_t exp);
     `uvm_info(`gfn, $sformatf(
               "I3C ADDRESS: tid=0x%0h expected_broadcast_header=%0b observed_broadcast_header=%0b expected_broadcast_header_ack=%s observed_broadcast_header_ack=%s expected_addr=0x%02h observed_addr=0x%02h expected_ack=%s observed_ack=%s",
               exp.tid,
@@ -119,10 +128,20 @@ class i3c_scoreboard extends uvm_scoreboard;
               ), UVM_LOW)
   endfunction
 
-  function void print_i3c_end_evidence(i3c_item item, exp_txn_t exp, bit expected_rstart,
-                                       bit expected_stop);
+  function void print_i3c_end(i3c_item item, exp_txn_t exp, bit expected_rstart, bit expected_stop);
     `uvm_info(`gfn, $sformatf(
               "I3C END: tid=0x%0h expected_rstart=%0b observed_rstart=%0b expected_stop=%0b observed_stop=%0b",
+              exp.tid,
+              expected_rstart,
+              item.rstart,
+              expected_stop,
+              item.stop
+              ), UVM_LOW)
+  endfunction
+
+  function void print_ccc_end(i3c_item item, exp_txn_t exp, bit expected_rstart, bit expected_stop);
+    `uvm_info(`gfn, $sformatf(
+              "CCC END: tid=0x%0h expected_final_rstart=%0b observed_final_rstart=%0b expected_stop=%0b observed_stop=%0b",
               exp.tid,
               expected_rstart,
               item.rstart,
@@ -162,6 +181,19 @@ class i3c_scoreboard extends uvm_scoreboard;
       tokens.push_back($sformatf("%0b", bits[i]));
     end
     return format_token_list(tokens, data_length, "?");
+  endfunction
+
+  function string format_ack_list(bit acks[$], int data_length);
+    string tokens[$];
+
+    for (int i = 0; (i < data_length) && (i < acks.size()); i++) begin
+      tokens.push_back(ack_to_string(acks[i]));
+    end
+    return format_token_list(tokens, data_length, "?");
+  endfunction
+
+  function string format_ack_or_t_bit_list(bit target_is_i3c, bit bits[$], int data_length);
+    return target_is_i3c ? format_bit_list(bits, data_length) : format_ack_list(bits, data_length);
   endfunction
 
   function bit get_expected_tx_byte(int byte_idx, output bit [7:0] data_byte);
@@ -207,8 +239,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     foreach (bytes[i]) begin
       bit i2c_data_nack_byte;
 
-      i2c_data_nack_byte = allow_i2c_final_data_nack && !target_is_i3c &&
-                           (i == (data_length - 1));
+      i2c_data_nack_byte = allow_i2c_final_data_nack && !target_is_i3c && (i == (data_length - 1));
       t_bits.push_back(expected_tx_ack_or_t_bit(target_is_i3c, bytes[i], i2c_data_nack_byte));
     end
   endfunction
@@ -228,13 +259,29 @@ class i3c_scoreboard extends uvm_scoreboard;
     return format_bit_list(t_bits, data_length);
   endfunction
 
+  function string format_observed_ack_or_t_bits(bit target_is_i3c, bit t_bits[$], int data_length);
+    return format_ack_or_t_bit_list(target_is_i3c, t_bits, data_length);
+  endfunction
+
+  function string format_optional_byte(bit present, bit [7:0] value);
+    return present ? $sformatf("0x%02h", value) : "--";
+  endfunction
+
+  function string format_optional_addr(bit present, bit [6:0] value);
+    return present ? $sformatf("0x%02h", value) : "--";
+  endfunction
+
+  function string format_optional_bit(bit present, bit value);
+    return present ? $sformatf("%0b", value) : "--";
+  endfunction
+
   function string format_expected_tx_ack_or_t_bits(int data_length, bit target_is_i3c,
                                                    bit allow_i2c_final_data_nack = 1'b0);
     bit t_bits[$];
 
     collect_expected_tx_ack_or_t_bits(data_length, target_is_i3c, t_bits,
                                       allow_i2c_final_data_nack);
-    return format_bit_list(t_bits, data_length);
+    return format_ack_or_t_bit_list(target_is_i3c, t_bits, data_length);
   endfunction
 
   function bit expected_rx_ack_or_t_bit(bit target_is_i3c, i3c_item item, int byte_idx);
@@ -253,7 +300,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     for (int i = 0; i < item.num_data; i++) begin
       t_bits.push_back(expected_rx_ack_or_t_bit(exp.target_is_i3c, item, i));
     end
-    return format_bit_list(t_bits, item.num_data);
+    return format_ack_or_t_bit_list(exp.target_is_i3c, t_bits, item.num_data);
   endfunction
 
   function string format_expected_imm_bytes(exp_txn_t exp, int data_length);
@@ -267,10 +314,36 @@ class i3c_scoreboard extends uvm_scoreboard;
     for (int i = 0; (i < data_length) && (i < 4); i++) begin
       t_bits.push_back(exp.target_is_i3c ? ~^exp.imm_data_byte[i] : 1'b1);
     end
-    return format_bit_list(t_bits, data_length);
+    return format_ack_or_t_bit_list(exp.target_is_i3c, t_bits, data_length);
   endfunction
 
-  // Register-side: track CMD writes, TX data, RESP reads
+  function bit enqueue_rx_word_expectation(bit [3:0] tid, int data_length, int word_idx,
+                                           bit [31:0] data, string ctxt);
+    exp_rx_data_t rx_exp;
+
+    rx_exp.known       = 1'b1;
+    rx_exp.read_id     = -1;
+    rx_exp.tid         = tid;
+    rx_exp.data_length = data_length;
+    rx_exp.word_idx    = word_idx;
+    rx_exp.valid_bytes = 4;
+    rx_exp.data        = data;
+
+    if (exp_rx_data_queue.size() < RxFifoDepth) begin
+      exp_rx_data_queue.push_back(rx_exp);
+      return 1'b0;
+    end
+
+    `uvm_info(`gfn, $sformatf(
+              "%s RX FIFO overflow inferred: tid=0x%0h word_idx=%0d data=0x%08h",
+              ctxt,
+              tid,
+              word_idx,
+              data
+              ), UVM_MEDIUM)
+    return 1'b1;
+  endfunction
+
   task process_req_items();
     reg_seq_item item;
     forever begin
@@ -311,7 +384,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     pending_resp_queue.delete();
     got_dw0 = 1'b0;
     cmd_dw0 = '0;
-    pending_private_continuation = 1'b0;
+    pending_private_transfer = 1'b0;
     next_read_id = 0;
     `uvm_info(`gfn, "SW_RESET observed: scoreboard queues flushed", UVM_MEDIUM)
   endfunction
@@ -343,6 +416,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   function void handle_cmd_dword(bit [31:0] wdata);
     regular_trans_desc_t        reg_desc;
     immediate_data_trans_desc_t imm_desc;
+    addr_assign_desc_t          daa_desc;
     exp_txn_t                   exp;
     bit                         target_is_i3c;
 
@@ -351,41 +425,38 @@ class i3c_scoreboard extends uvm_scoreboard;
       got_dw0 = 1'b1;
       return;
     end
-    got_dw0                          = 1'b0;
+    got_dw0                         = 1'b0;
 
-    // cmd_dw0 is DWORD0, wdata is DWORD1. The RTL command descriptors are packed
-    // as {DWORD1, DWORD0}, so casting that concatenation lets the fields be read by
-    // name instead of by hand-coded bit slices (single source of truth = i3c_pkg).
-    reg_desc                         = regular_trans_desc_t'({wdata, cmd_dw0});
-    imm_desc                         = immediate_data_trans_desc_t'({wdata, cmd_dw0});
-    target_is_i3c                    = is_i3c_device(reg_desc.dev_idx);
+    reg_desc                        = regular_trans_desc_t'({wdata, cmd_dw0});
+    imm_desc                        = immediate_data_trans_desc_t'({wdata, cmd_dw0});
+    daa_desc                        = addr_assign_desc_t'({wdata, cmd_dw0});
+    target_is_i3c                   = is_i3c_device(reg_desc.dev_idx);
 
-    exp.tid                          = reg_desc.tid;
-    exp.toc                          = reg_desc.toc;
-    exp.addr                         = get_device_addr(reg_desc.dev_idx);
-    exp.is_ccc                       = 1'b0;
-    exp.uses_tx_queue                = 1'b0;
-    exp.is_immediate                 = 1'b0;
-    exp.ccc                          = reg_desc.cmd;
-    exp.event_byte                   = imm_desc.def_or_data_byte1;
-    exp.target_is_i3c                = target_is_i3c;
-    exp.broadcast_header_eligible    = 1'b0;
-    exp.updates_private_continuation = 1'b0;
-    exp.start_with_broadcast_header  = 1'b0;
+    exp.tid                         = reg_desc.tid;
+    exp.toc                         = reg_desc.toc;
+    exp.addr                        = get_device_addr(reg_desc.dev_idx);
+    exp.is_ccc                      = 1'b0;
+    exp.uses_tx_queue               = 1'b0;
+    exp.is_immediate                = 1'b0;
+    exp.ccc                         = reg_desc.cmd;
+    exp.ccc_target_addr             = exp.addr;
+    exp.event_byte                  = imm_desc.def_or_data_byte1;
+    exp.target_is_i3c               = target_is_i3c;
+    exp.broadcast_header_eligible   = 1'b0;
+    exp.updates_private_transfer    = 1'b0;
+    exp.start_with_broadcast_header = 1'b0;
 
     case (reg_desc.attr)
       RegularTransfer: begin
-        exp.rnw                          = reg_desc.rnw;
-        exp.data_length                  = int'(reg_desc.data_length);
-        exp.uses_tx_queue                = !reg_desc.rnw;
-        exp.broadcast_header_eligible    = target_is_i3c;
-        exp.updates_private_continuation = target_is_i3c;
+        exp.rnw                       = reg_desc.rnw;
+        exp.data_length               = int'(reg_desc.data_length);
+        exp.uses_tx_queue             = !reg_desc.rnw;
+        exp.broadcast_header_eligible = target_is_i3c;
+        exp.updates_private_transfer  = target_is_i3c;
       end
       ImmediateDataTransfer: begin
         exp.is_immediate = 1'b1;
         if (imm_desc.dtt > 3'd4) begin
-          // RTL rejects in WaitDAT with NotSupported and no bus activity (flow_active.sv).
-          // Model the RESP here and skip the exp_txn push: no bus transaction will occur.
           record_pending_resp(imm_desc.rnw, reg_desc.tid, 0, -1, NotSupported);
           `uvm_info(
               `gfn,
@@ -394,7 +465,7 @@ class i3c_scoreboard extends uvm_scoreboard;
                   imm_desc.dtt, reg_desc.tid), UVM_MEDIUM)
           return;
         end
-        if (imm_desc.cp && is_broadcast_enec_disec(imm_desc.cmd)) begin
+        if (imm_desc.cp && is_enec_disec_ccc(imm_desc.cmd)) begin
           exp.addr        = 7'h7e;
           exp.rnw         = 1'b0;
           exp.data_length = 1;
@@ -410,8 +481,33 @@ class i3c_scoreboard extends uvm_scoreboard;
         end
       end
       AddressAssignment: begin
-        exp.rnw         = 1'b0;
-        exp.data_length = 0;
+        if (!daa_desc.toc || !daa_desc.wroc || (daa_desc.dev_count == 4'd0) ||
+            ((int'(daa_desc.dev_idx) + int'(daa_desc.dev_count)) > DAT_DEPTH)) begin
+          record_pending_resp(1'b0, daa_desc.tid, 0, -1, NotSupported);
+          `uvm_info(
+              `gfn,
+              $sformatf(
+                  "CMD queued: AddressAssignment rejected before bus activity (dev_idx=%0d dev_count=%0d toc=%0b wroc=%0b tid=0x%0h)",
+                  daa_desc.dev_idx, daa_desc.dev_count, daa_desc.toc, daa_desc.wroc,
+                  daa_desc.tid), UVM_MEDIUM)
+          return;
+        end
+        // ENTDAA always broadcasts to 0x7E; exp.ccc is already set from reg_desc.cmd.
+        exp.addr          = 7'h7e;
+        exp.rnw           = 1'b0;
+        exp.data_length   = 0;
+        exp.is_ccc        = 1'b1;
+        exp.daa_dev_idx   = daa_desc.dev_idx;
+        exp.daa_dev_count = daa_desc.dev_count;
+        for (int round = 0; round < daa_desc.dev_count; round++) begin
+          int unsigned dat_idx;
+
+          dat_idx = daa_desc.dev_idx + round;
+          if ((dat_idx < DAT_DEPTH) && dat_model[dat_idx].valid) begin
+            exp.daa_addr_valid[round]    = 1'b1;
+            exp.daa_assigned_addr[round] = dat_model[dat_idx].dynamic_address;
+          end
+        end
       end
       default: begin
         exp.rnw         = reg_desc.rnw;
@@ -421,10 +517,11 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     exp_txn_queue.push_back(exp);
     if (exp.is_ccc) begin
-      `uvm_info(`gfn, $sformatf(
-                          "CMD queued: attr=%s CCC=0x%02h addr=0x%02h event=0x%02h len=%0d toc=%0b",
-                          reg_desc.attr.name(), exp.ccc, exp.addr, exp.event_byte, exp.data_length,
-                          exp.toc), UVM_MEDIUM)
+      `uvm_info(`gfn,
+                $sformatf(
+                    "CMD queued: attr=%s CCC=%s(0x%02h) addr=0x%02h event=0x%02h len=%0d toc=%0b",
+                    reg_desc.attr.name(), ccc_to_string(exp.ccc), exp.ccc, exp.addr,
+                    exp.event_byte, exp.data_length, exp.toc), UVM_MEDIUM)
     end else begin
       `uvm_info(`gfn, $sformatf(
                 "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d toc=%0b target_i3c=%0b",
@@ -474,6 +571,14 @@ class i3c_scoreboard extends uvm_scoreboard;
                      ))
       end
     end
+    `uvm_info(`gfn, $sformatf(
+              "RX FIFO DATA: tid=0x%0h word_idx=%0d valid_bytes=%0d expected_from_bus=0x%08h observed_from_controller=0x%08h",
+              exp.tid,
+              exp.word_idx,
+              exp.valid_bytes,
+              exp.data,
+              rdata
+              ), UVM_LOW)
   endfunction
 
   function void check_resp(bit [31:0] rdata);
@@ -489,40 +594,15 @@ class i3c_scoreboard extends uvm_scoreboard;
       `uvm_info(`gfn, $sformatf("RESP OK: tid=0x%0h data_length=%0d", resp.tid, resp.data_length),
                 UVM_MEDIUM)
     end else begin
-      `uvm_error(`gfn, $sformatf("RESP error: err_status=%s (0x%0h) rdata=0x%08h",
-                                 resp_status_to_string(resp.err_status), resp.err_status, rdata))
-    end
-  endfunction
-
-  function void set_rx_fifo_level_unknown(int unsigned count, string ctxt = "");
-    exp_rx_data_t unknown_entry;
-    int unsigned  model_count;
-
-    exp_rx_data_queue.delete();
-    model_count = count;
-    unknown_entry.known = 1'b0;
-    unknown_entry.read_id = -1;
-    unknown_entry.tid = '0;
-    unknown_entry.data_length = 0;
-    unknown_entry.word_idx = 0;
-    unknown_entry.valid_bytes = 4;
-    unknown_entry.data = '0;
-
-    if (count > RxFifoDepth) begin
       `uvm_error(`gfn, $sformatf(
-                           "%s: RX FIFO backdoor level %0d exceeds scoreboard model depth %0d",
-                           ctxt, count, RxFifoDepth))
-      model_count = RxFifoDepth;
+                 "RESP error: err_status=%s (0x%0h) rdata=0x%08h",
+                 resp_status_to_string(
+                     resp.err_status
+                 ),
+                 resp.err_status,
+                 rdata
+                 ))
     end
-
-    for (int unsigned i = 0; i < model_count; i++) begin
-      unknown_entry.word_idx = int'(i);
-      exp_rx_data_queue.push_back(unknown_entry);
-    end
-
-    `uvm_info(`gfn, $sformatf(
-              "%s: RX FIFO scoreboard model set to %0d unknown word(s)", ctxt, model_count),
-              UVM_MEDIUM)
   endfunction
 
   function void record_pending_resp(bit rnw, bit [3:0] tid, int data_length, int read_id = -1,
@@ -535,6 +615,16 @@ class i3c_scoreboard extends uvm_scoreboard;
     pending.read_id = read_id;
     pending.resp_status = resp_status;
 
+    `uvm_info(`gfn, $sformatf(
+              "RESP queued: tid=0x%0h rnw=%0b data_length=%0d read_id=%0d status=%s",
+              pending.tid,
+              pending.rnw,
+              pending.data_length,
+              pending.read_id,
+              resp_status_to_string(
+                  pending.resp_status
+              )
+              ), UVM_MEDIUM)
     pending_resp_queue.push_back(pending);
   endfunction
 
@@ -617,13 +707,13 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     if (exp.is_ccc) begin
       check_ccc_txn(item, exp);
-      print_i3c_end_evidence(item, exp, 1'b0, 1'b1);
-      update_private_continuation(exp);
+      print_ccc_end(item, exp, 1'b0, 1'b1);
+      advance_private_transfer(exp);
       return;
     end
 
     exp.start_with_broadcast_header =
-        exp.broadcast_header_eligible && broadcast_header_enable && !pending_private_continuation;
+        exp.broadcast_header_eligible && broadcast_header_enable && !pending_private_transfer;
     `DV_CHECK_EQ(item.addr, exp.addr, "Target address mismatch")
     `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite, "Transfer direction mismatch")
     `DV_CHECK_EQ(item.start_with_broadcast_header, exp.start_with_broadcast_header,
@@ -631,7 +721,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     if (item.start_with_broadcast_header || exp.start_with_broadcast_header) begin
       `DV_CHECK_EQ(item.broadcast_header_ack, 1'b1, "Broadcast header preamble was not ACKed")
     end
-    print_i3c_address_evidence(item, exp);
+    print_i3c_address(item, exp);
 
     if (!item.addr_ack) begin
       `DV_CHECK_EQ(item.num_data, 0, "Address NACK should not enter data phase")
@@ -639,27 +729,27 @@ class i3c_scoreboard extends uvm_scoreboard;
       `DV_CHECK_EQ(item.data_ack_q.size(), 0, "Address NACK should not collect data T-bits")
       if (!exp.rnw && exp.uses_tx_queue && exp.data_length > 0) consume_tx_data_words(1);
       record_pending_resp(exp.rnw, exp.tid, 0, -1, AddrHeader);
-      update_private_continuation(exp, 1'b1);
-      print_i3c_end_evidence(item, exp, 1'b0, 1'b1);
+      advance_private_transfer(exp, 1'b1);
+      print_i3c_end(item, exp, 1'b0, 1'b1);
       `uvm_info(`gfn, $sformatf("AddrHeader RESP inferred: tid=0x%0h rnw=%0b requested_len=%0d",
                                 exp.tid, exp.rnw, exp.data_length), UVM_MEDIUM)
       return;
     end
 
     if (exp.rnw) begin
-      check_read_data(item, exp, expected_rstart, expected_stop, txn_aborted);
+      check_read_txn(item, exp, expected_rstart, expected_stop, txn_aborted);
     end else if (exp.is_immediate) begin
-      txn_aborted = check_immediate_write_data(item, exp);
+      txn_aborted = check_immediate_write_txn(item, exp);
       expected_rstart = txn_aborted ? 1'b0 : !exp.toc;
       expected_stop = txn_aborted ? 1'b1 : exp.toc;
     end else begin
-      txn_aborted = check_write_data(item, exp);
+      txn_aborted = check_write_txn(item, exp);
       expected_rstart = txn_aborted ? 1'b0 : !exp.toc;
       expected_stop = txn_aborted ? 1'b1 : exp.toc;
     end
 
-    print_i3c_end_evidence(item, exp, expected_rstart, expected_stop);
-    update_private_continuation(exp, txn_aborted);
+    print_i3c_end(item, exp, expected_rstart, expected_stop);
+    advance_private_transfer(exp, txn_aborted);
   endfunction
 
   function bit exp_matches_item(exp_txn_t exp, i3c_item item, int word_offset);
@@ -709,29 +799,436 @@ class i3c_scoreboard extends uvm_scoreboard;
   endfunction
 
   function void check_ccc_txn(i3c_item item, exp_txn_t exp);
+    bit                   is_direct_ccc;
+    bit                   is_entdaa;
+    int                   direct_idx;
+    i3c_item              direct_item;
+    i3c_resp_err_status_e resp_status;
+    int                   resp_len;
+
+    is_direct_ccc = exp.ccc[7];
+    is_entdaa     = (i3c_ccc_e'(exp.ccc) == ENTDAA);
+    direct_idx    = -1;
+    resp_status   = Success;
+    resp_len      = exp.data_length;
+
     `DV_CHECK_EQ(item.addr, exp.addr, "CCC broadcast address mismatch")
     `DV_CHECK_EQ(item.bus_op, BusOpWrite, "CCC broadcast direction mismatch")
-    `DV_CHECK_EQ(item.addr_ack, 1'b1, "CCC broadcast header was not ACKed")
+
+    // Broadcast-header NACK: RTL suppresses opcode + payload and reports AddrHeader.
+    // Monitor emits a plain item with addr_ack=0, CCC_valid=0, num_data=0.
+    if (!item.addr_ack) begin
+      `DV_CHECK_EQ(item.CCC_valid, 1'b0, "Broadcast header NACK should suppress CCC opcode")
+      `DV_CHECK_EQ(item.num_data, 0, "Broadcast header NACK should not enter data phase")
+      `DV_CHECK_EQ(item.CCC_direct.size(), 0, "Broadcast header NACK should have no direct phase")
+      `DV_CHECK_EQ(item.stop, 1'b1, "NACKed CCC should end with STOP")
+      record_pending_resp(1'b0, exp.tid, 0, -1, AddrHeader);
+      `uvm_info(
+          `gfn,
+          $sformatf(
+              "CCC DATA: tid=0x%0h expected_ccc=%s(0x%02h) observed_ccc=-- expected_bcast_addr=0x%02h observed_bcast_addr=0x%02h expected_bcast_ack=%s observed_bcast_ack=%s expected_payload_len=0 observed_payload_len=%0d expected_direct_phases=0 observed_direct_phases=%0d expected_resp_status=%s expected_resp_len=0",
+              exp.tid, ccc_to_string(exp.ccc), 8'(exp.ccc), exp.addr, item.addr, ack_to_string(1'b0
+              ), ack_to_string(item.addr_ack), item.num_data, item.CCC_direct.size(),
+              resp_status_to_string(AddrHeader)), UVM_LOW)
+      return;
+    end
+
     `DV_CHECK_EQ(item.CCC_valid, 1'b1, "CCC opcode was not decoded")
     `DV_CHECK_EQ(item.CCC, i3c_ccc_e'(exp.ccc), "CCC opcode mismatch")
-    `DV_CHECK_EQ(item.num_data, exp.data_length, "CCC event byte count mismatch")
-    if (item.data_q.size() > 0) begin
-      `DV_CHECK_EQ(item.data_q[0], exp.event_byte, "CCC event byte mismatch")
-    end else begin
-      `uvm_error(`gfn, "CCC event byte missing")
+    `DV_CHECK_EQ(item.ccc_t_bit_valid, 1'b1, "CCC opcode T-bit was not captured")
+    if (item.ccc_t_bit_valid) begin
+      `DV_CHECK_EQ(item.ccc_t_bit, ~^exp.ccc, "CCC opcode T-bit mismatch")
     end
-    if (item.data_ack_q.size() > 0) begin
-      `DV_CHECK_EQ(item.data_ack_q[0], ~^exp.event_byte, "CCC event byte T-bit mismatch")
+    `uvm_info(`gfn, $sformatf(
+              "CCC OPCODE: tid=0x%0h expected_ccc=%s(0x%02h) observed_ccc=%s(0x%02h) expected_t_bit=%0b observed_t_bit=%s",
+              exp.tid,
+              ccc_to_string(
+                  exp.ccc
+              ),
+              8'(exp.ccc),
+              item.CCC.name(),
+              8'(item.CCC),
+              ~^exp.ccc,
+              format_optional_bit(
+                  item.ccc_t_bit_valid, item.ccc_t_bit
+              )
+              ), UVM_LOW)
+
+    if (is_direct_ccc) begin
+      `DV_CHECK_EQ(item.num_data, 0, "Direct CCC broadcast leg should not carry event bytes")
+      foreach (item.CCC_direct[i]) begin
+        if ((direct_idx < 0) && (item.CCC_direct[i].addr == exp.ccc_target_addr) &&
+            !item.CCC_direct[i].aborted) begin
+          direct_idx = int'(i);
+        end
+      end
+      if (direct_idx < 0) begin
+        `uvm_error(`gfn, "Direct CCC target phase missing")
+      end else begin
+        direct_item = item.CCC_direct[direct_idx];
+        `DV_CHECK_EQ(direct_item.start_from_rstart, 1'b1,
+                     "Direct CCC target phase should start after RSTART")
+        `DV_CHECK_EQ(direct_item.addr, exp.ccc_target_addr, "Direct CCC target address mismatch")
+        `DV_CHECK_EQ(direct_item.bus_op, BusOpWrite, "Direct CCC target direction mismatch")
+        if (!direct_item.addr_ack) begin
+          // RTL suppresses trailing data byte on target NACK and reports AddrHeader/len0.
+          `DV_CHECK_EQ(direct_item.num_data, 0, "Direct target NACK should suppress data byte")
+          `DV_CHECK_EQ(direct_item.stop, 1'b1, "Direct target NACK should end with STOP")
+          resp_status = AddrHeader;
+          resp_len    = 0;
+        end else begin
+          `DV_CHECK_EQ(direct_item.num_data, exp.data_length,
+                       "Direct CCC event byte count mismatch")
+          if (direct_item.data_q.size() > 0) begin
+            `DV_CHECK_EQ(direct_item.data_q[0], exp.event_byte, "Direct CCC event byte mismatch")
+          end else begin
+            `uvm_error(`gfn, "Direct CCC event byte missing")
+          end
+          if (direct_item.data_ack_q.size() > 0) begin
+            `DV_CHECK_EQ(direct_item.data_ack_q[0], ~^exp.event_byte,
+                         "Direct CCC event byte T-bit mismatch")
+          end else begin
+            `uvm_error(`gfn, "Direct CCC event byte T-bit missing")
+          end
+          `DV_CHECK_EQ(direct_item.stop, 1'b1, "Direct CCC target phase should end with STOP")
+        end
+      end
+    end else if (is_entdaa) begin
+      // ENTDAA opening frame: broadcast leg carries only the opcode (no payload bytes).
+      // CCC_direct holds each 7E+R DAA round: one per device slot + the terminating NACK round.
+      `DV_CHECK_EQ(item.num_data, 0, "ENTDAA opening frame should carry no payload bytes")
+      `DV_CHECK_GT(item.CCC_direct.size(), 0, "ENTDAA should have at least one 7E+R round")
+      begin
+        int devices_joined_local;
+        bit terminating_nack_seen;
+        bit address_rejected_once;
+        bit address_reject_error;
+        bit hc_abort_seen;
+        bit [47:0] rejected_pid;
+        bit [ 7:0] rejected_bcr;
+        bit [ 7:0] rejected_dcr;
+        bit [ 6:0] rejected_addr;
+
+        devices_joined_local = 0;
+        terminating_nack_seen = 1'b0;
+        address_rejected_once = 1'b0;
+        address_reject_error = 1'b0;
+        hc_abort_seen = 1'b0;
+        `DV_CHECK_LE(item.CCC_direct.size(), exp.daa_dev_count + 1,
+                     "ENTDAA emitted more rounds than dev_count permits")
+        foreach (item.CCC_direct[i]) begin
+          `DV_CHECK_EQ(item.CCC_direct[i].start_from_rstart, 1'b1,
+                       "ENTDAA DAA round should start after RSTART")
+          `DV_CHECK_EQ(item.CCC_direct[i].addr, 7'h7e, "ENTDAA DAA round address should be 0x7E")
+          `DV_CHECK_EQ(item.CCC_direct[i].bus_op, BusOpRead, "ENTDAA DAA round should be a read")
+          if (item.CCC_direct[i].addr_ack) begin
+            // A device joined this round.
+            // Layout (monitor daa_data after the fix): data_q[0..7] = UID bytes (PID/BCR/DCR),
+            //   data_q[8] = {addr[6:0], parity}, data_ack_q[0] = device accept/reject (0=ACK).
+            // Parity convention: parity = ~^addr (odd-parity XNOR over the 7 address bits).
+            bit [47:0] pid;
+            bit [ 7:0] bcr;
+            bit [ 7:0] dcr;
+            bit [ 6:0] joined_addr;
+            bit [31:0] rx_word0;
+            bit [31:0] rx_word1;
+            bit [31:0] rx_word2;
+            bit        device_ack_present;
+            bit        device_ack;
+            if (item.CCC_direct[i].stop && item.CCC_direct[i].data_q.size() == 8 &&
+                item.CCC_direct[i].data_ack_q.size() == 0) begin
+              `DV_CHECK_EQ(hc_abort_active, 1'b1,
+                           "ENTDAA ID-only round may terminate with STOP only for HC abort")
+              `DV_CHECK_EQ(item.CCC_direct[i].num_data, 8,
+                           "HC-aborted ENTDAA round should contain exactly 8 ID bytes")
+              `DV_CHECK_EQ(i, item.CCC_direct.size() - 1,
+                           "HC-aborted ENTDAA round must be the final round")
+              `DV_CHECK_EQ(terminating_nack_seen, 1'b0,
+                           "HC-aborted ENTDAA round observed after terminating no-device NACK")
+              `DV_CHECK_EQ(address_reject_error, 1'b0,
+                           "HC-aborted ENTDAA round observed after assigned-address failure")
+              hc_abort_seen = 1'b1;
+              resp_status = HcAborted;
+              `uvm_info(
+                  `gfn,
+                  $sformatf(
+                      "CCC ENTDAA ROUND[%0d]: tid=0x%0h HC abort after 8 ID bytes, observed_stop=1",
+                      i, exp.tid), UVM_LOW)
+              continue;
+            end
+            `DV_CHECK_EQ(terminating_nack_seen, 1'b0,
+                         "ENTDAA round observed after terminating no-device NACK")
+            `DV_CHECK_EQ(address_reject_error, 1'b0,
+                         "ENTDAA round observed after the second assigned-address NACK")
+            `DV_CHECK_LT(devices_joined_local, exp.daa_dev_count,
+                         "ENTDAA assigned more devices than requested")
+            `DV_CHECK_EQ(item.CCC_direct[i].num_data, 9,
+                         "ENTDAA joined round should carry 8 UID bytes + 1 address byte")
+            `DV_CHECK_EQ(item.CCC_direct[i].data_q.size(), 9,
+                         "ENTDAA joined round data_q size mismatch")
+            `DV_CHECK_EQ(item.CCC_direct[i].data_ack_q.size(), 1,
+                         "ENTDAA joined round should have exactly one device-ACK entry")
+            pid = {
+              item.CCC_direct[i].data_q[0],
+              item.CCC_direct[i].data_q[1],
+              item.CCC_direct[i].data_q[2],
+              item.CCC_direct[i].data_q[3],
+              item.CCC_direct[i].data_q[4],
+              item.CCC_direct[i].data_q[5]
+            };
+            bcr = item.CCC_direct[i].data_q[6];
+            dcr = item.CCC_direct[i].data_q[7];
+            joined_addr = item.CCC_direct[i].data_q[8][7:1];
+            if (devices_joined_local < 16) begin
+              `DV_CHECK_EQ(exp.daa_addr_valid[devices_joined_local], 1'b1,
+                           $sformatf("ENTDAA DAT entry unavailable for device slot %0d",
+                                     devices_joined_local))
+              if (exp.daa_addr_valid[devices_joined_local]) begin
+                `DV_CHECK_EQ(joined_addr, exp.daa_assigned_addr[devices_joined_local],
+                             $sformatf("ENTDAA assigned address mismatch at device slot %0d",
+                                       devices_joined_local))
+              end
+            end
+            rx_word0 = {
+              item.CCC_direct[i].data_q[0],
+              item.CCC_direct[i].data_q[1],
+              item.CCC_direct[i].data_q[2],
+              item.CCC_direct[i].data_q[3]
+            };
+            rx_word1 = {
+              item.CCC_direct[i].data_q[4],
+              item.CCC_direct[i].data_q[5],
+              item.CCC_direct[i].data_q[6],
+              item.CCC_direct[i].data_q[7]
+            };
+            rx_word2 = {25'h0, joined_addr};
+            `DV_CHECK_EQ(item.CCC_direct[i].data_q[8][0], ~^joined_addr,
+                         "ENTDAA assigned-address parity mismatch")
+            device_ack_present = item.CCC_direct[i].data_ack_q.size() > 0;
+            device_ack = device_ack_present ? item.CCC_direct[i].data_ack_q[0] : 1'b0;
+            `DV_CHECK_EQ(device_ack_present, 1'b1,
+                         "ENTDAA joined round should include assigned-address ACK/NACK")
+            if (device_ack_present && !device_ack) begin
+              if (address_rejected_once) begin
+                `DV_CHECK_EQ(pid, rejected_pid,
+                             "ENTDAA retry should be won by the target that rejected the address")
+                `DV_CHECK_EQ(bcr, rejected_bcr, "ENTDAA retry BCR mismatch")
+                `DV_CHECK_EQ(dcr, rejected_dcr, "ENTDAA retry DCR mismatch")
+                `DV_CHECK_EQ(joined_addr, rejected_addr,
+                             "ENTDAA retry should reuse the same assigned address")
+              end
+              if (enqueue_rx_word_expectation(
+                      exp.tid,
+                      (devices_joined_local + 1) * 12,
+                      devices_joined_local * 3 + 0,
+                      rx_word0,
+                      "ENTDAA"
+                  ))
+                resp_status = Ovl;
+              else resp_len += 4;
+              if (enqueue_rx_word_expectation(
+                      exp.tid,
+                      (devices_joined_local + 1) * 12,
+                      devices_joined_local * 3 + 1,
+                      rx_word1,
+                      "ENTDAA"
+                  ))
+                resp_status = Ovl;
+              else resp_len += 4;
+              if (enqueue_rx_word_expectation(
+                      exp.tid,
+                      (devices_joined_local + 1) * 12,
+                      devices_joined_local * 3 + 2,
+                      rx_word2,
+                      "ENTDAA"
+                  ))
+                resp_status = Ovl;
+              else resp_len += 4;
+              devices_joined_local++;
+              address_rejected_once = 1'b0;
+            end else if (device_ack_present) begin
+              if (address_rejected_once) begin
+                `DV_CHECK_EQ(pid, rejected_pid,
+                             "ENTDAA retry should be won by the target that rejected the address")
+                `DV_CHECK_EQ(bcr, rejected_bcr, "ENTDAA retry BCR mismatch")
+                `DV_CHECK_EQ(dcr, rejected_dcr, "ENTDAA retry DCR mismatch")
+                `DV_CHECK_EQ(joined_addr, rejected_addr,
+                             "ENTDAA retry should reuse the same assigned address")
+                `DV_CHECK_EQ(i, item.CCC_direct.size() - 1,
+                             "Second assigned-address NACK must terminate ENTDAA")
+                address_reject_error = 1'b1;
+                resp_status = Nack;
+              end else begin
+                rejected_pid = pid;
+                rejected_bcr = bcr;
+                rejected_dcr = dcr;
+                rejected_addr = joined_addr;
+                address_rejected_once = 1'b1;
+                `DV_CHECK_LT(i, item.CCC_direct.size() - 1,
+                             "First assigned-address NACK should be followed by a retry round")
+              end
+            end
+            `uvm_info(
+                `gfn,
+                $sformatf(
+                    "CCC ENTDAA ROUND[%0d]: tid=0x%0h expected_start=Sr observed_start=%s expected_addr=0x7e observed_addr=0x%02h expected_op=Read observed_op=%s addr_ack=ACK observed_pid=0x%012h observed_bcr=0x%02h observed_dcr=0x%02h assigned_addr=0x%02h expected_parity=%0b observed_parity=%0b device_ack=%s observed_stop=%0b observed_rstart=%0b",
+                    i, exp.tid, start_source_to_string(item.CCC_direct[i].start_from_rstart),
+                    item.CCC_direct[i].addr, item.CCC_direct[i].bus_op.name(), pid, bcr, dcr,
+                    joined_addr, ~^joined_addr, item.CCC_direct[i].data_q[8][0],
+                    optional_ack_to_string(device_ack_present, !device_ack),
+                    item.CCC_direct[i].stop, item.CCC_direct[i].rstart), UVM_LOW)
+          end else begin
+            `uvm_info(`gfn, $sformatf(
+                      "CCC ENTDAA ROUND[%0d]: tid=0x%0h expected_start=Sr observed_start=%s expected_addr=0x7e observed_addr=0x%02h expected_op=Read observed_op=%s addr_ack=NACK observed_stop=%0b observed_rstart=%0b",
+                      i,
+                      exp.tid,
+                      start_source_to_string(
+                          item.CCC_direct[i].start_from_rstart
+                      ),
+                      item.CCC_direct[i].addr,
+                      item.CCC_direct[i].bus_op.name(),
+                      item.CCC_direct[i].stop,
+                      item.CCC_direct[i].rstart
+                      ), UVM_LOW)
+            terminating_nack_seen = 1'b1;
+            `DV_CHECK_EQ(address_rejected_once, 1'b0,
+                         "Target that rejected an address should participate in the retry")
+            `DV_CHECK_EQ(i, item.CCC_direct.size() - 1,
+                         "ENTDAA no-device NACK must terminate the loop")
+            `DV_CHECK_LT(i, exp.daa_dev_count,
+                         "ENTDAA emitted an unnecessary no-device round after dev_count")
+          end
+        end
+        `DV_CHECK_LE(devices_joined_local, exp.daa_dev_count,
+                     "ENTDAA joined-device count exceeds dev_count")
+        if (hc_abort_active && item.stop) begin
+          hc_abort_seen = 1'b1;
+          resp_status   = HcAborted;
+        end
+        if (devices_joined_local < exp.daa_dev_count) begin
+          `DV_CHECK_EQ(terminating_nack_seen || address_reject_error || hc_abort_seen, 1'b1,
+                       "ENTDAA stopped before dev_count without a terminating condition")
+        end else begin
+          `DV_CHECK_EQ(terminating_nack_seen, 1'b0,
+                       "ENTDAA issued a no-device round after satisfying dev_count")
+        end
+        // RTL reports the number of DAA result bytes actually committed into RX FIFO:
+        // 3 RX dwords per joined device unless RX FIFO overflows first.
+      end
     end else begin
-      `uvm_error(`gfn, "CCC event byte T-bit missing")
+      `DV_CHECK_EQ(item.num_data, exp.data_length, "CCC event byte count mismatch")
+      if (item.data_q.size() > 0) begin
+        `DV_CHECK_EQ(item.data_q[0], exp.event_byte, "CCC event byte mismatch")
+      end else begin
+        `uvm_error(`gfn, "CCC event byte missing")
+      end
+      if (item.data_ack_q.size() > 0) begin
+        `DV_CHECK_EQ(item.data_ack_q[0], ~^exp.event_byte, "CCC event byte T-bit mismatch")
+      end else begin
+        `uvm_error(`gfn, "CCC event byte T-bit missing")
+      end
+      `DV_CHECK_EQ(item.CCC_direct.size(), 0, "Broadcast CCC should not include a direct phase")
     end
-    `DV_CHECK_EQ(item.CCC_direct.size(), 0, "Broadcast CCC should not include a direct phase")
-    `DV_CHECK_EQ(item.stop, 1'b1, "Broadcast CCC should end with STOP")
+    `DV_CHECK_EQ(item.stop, 1'b1, "CCC should end with STOP")
+
+    // NACK (AddrHeader) wins over toc=0 (NotSupported); toc=0 without NACK is rejected by RTL.
+    if (resp_status == Success && !exp.toc) begin
+      resp_status = NotSupported;
+    end
+    record_pending_resp(1'b0, exp.tid, resp_len, -1, resp_status);
+
+    begin
+      string expected_ccc_name;
+      string observed_ccc_name;
+
+      expected_ccc_name = ccc_to_string(exp.ccc);
+      observed_ccc_name = item.CCC_valid ? item.CCC.name() : "?";
+      if (is_direct_ccc && direct_idx >= 0) begin
+        bit       target_data_present;
+        bit       target_t_bit_present;
+        bit [7:0] observed_event_byte;
+        bit       observed_t_bit;
+
+        target_data_present  = direct_item.addr_ack && (direct_item.data_q.size() > 0);
+        target_t_bit_present = direct_item.addr_ack && (direct_item.data_ack_q.size() > 0);
+        observed_event_byte  = target_data_present ? direct_item.data_q[0] : '0;
+        observed_t_bit       = target_t_bit_present ? direct_item.data_ack_q[0] : 1'b0;
+        `uvm_info(
+            `gfn,
+            $sformatf(
+                "CCC DIRECT PHASE[%0d]: tid=0x%0h expected_start=Sr observed_start=%s expected_target=0x%02h observed_target=0x%02h expected_op=Write observed_op=%s target_ack=%s observed_stop=%0b observed_rstart=%0b",
+                direct_idx, exp.tid, start_source_to_string(direct_item.start_from_rstart),
+                exp.ccc_target_addr, direct_item.addr, direct_item.bus_op.name(), ack_to_string(
+                direct_item.addr_ack), direct_item.stop, direct_item.rstart), UVM_LOW)
+        `uvm_info(
+            `gfn,
+            $sformatf(
+                "CCC DATA: tid=0x%0h expected_ccc=%s(0x%02h) observed_ccc=%s expected_bcast_addr=0x%02h observed_bcast_addr=0x%02h expected_target=0x%02h observed_target=0x%02h expected_target_ack=%s observed_target_ack=%s expected_event=%s observed_event=%s expected_t_bit=%s observed_t_bit=%s expected_resp_status=%s expected_resp_len=%0d",
+                exp.tid, expected_ccc_name, 8'(exp.ccc), observed_ccc_name, exp.addr, item.addr,
+                exp.ccc_target_addr, direct_item.addr, ack_to_string(direct_item.addr_ack),
+                ack_to_string(direct_item.addr_ack), format_optional_byte(direct_item.addr_ack,
+                                                                          exp.event_byte),
+                format_optional_byte(target_data_present, observed_event_byte),
+                format_optional_bit(direct_item.addr_ack, ~^exp.event_byte), format_optional_bit(
+                target_t_bit_present, observed_t_bit), resp_status_to_string(resp_status),
+                resp_len), UVM_LOW)
+      end else if (is_entdaa) begin
+        begin
+          int devices_joined;
+          devices_joined = 0;
+          foreach (item.CCC_direct[i]) begin
+            if (item.CCC_direct[i].addr_ack && item.CCC_direct[i].data_ack_q.size() > 0 &&
+                !item.CCC_direct[i].data_ack_q[0])
+              devices_joined++;
+          end
+          `uvm_info(`gfn, $sformatf(
+                    "CCC DATA: tid=0x%0h expected_ccc=ENTDAA(0x07) observed_ccc=%s expected_bcast_addr=0x%02h observed_bcast_addr=0x%02h expected_bcast_ack=%s observed_bcast_ack=%s expected_min_daa_rounds=1 observed_daa_rounds=%0d expected_joined_round_bytes=9 devices_joined=%0d expected_resp_status=%s expected_resp_len=%0d",
+                    exp.tid,
+                    observed_ccc_name,
+                    exp.addr,
+                    item.addr,
+                    ack_to_string(
+                        1'b1
+                    ),
+                    ack_to_string(
+                        item.addr_ack
+                    ),
+                    item.CCC_direct.size(),
+                    devices_joined,
+                    resp_status_to_string(
+                        resp_status
+                    ),
+                    resp_len
+                    ), UVM_LOW)
+        end
+      end else if (!is_direct_ccc) begin
+        bit       payload_present;
+        bit       t_bit_present;
+        bit [7:0] observed_event_byte;
+        bit       observed_t_bit;
+
+        payload_present     = item.addr_ack && (item.data_q.size() > 0);
+        t_bit_present       = item.addr_ack && (item.data_ack_q.size() > 0);
+        observed_event_byte = payload_present ? item.data_q[0] : '0;
+        observed_t_bit      = t_bit_present ? item.data_ack_q[0] : 1'b0;
+        `uvm_info(
+            `gfn,
+            $sformatf(
+                "CCC DATA: tid=0x%0h expected_ccc=%s(0x%02h) observed_ccc=%s expected_bcast_addr=0x%02h observed_bcast_addr=0x%02h expected_bcast_ack=%s observed_bcast_ack=%s expected_event=%s observed_event=%s expected_t_bit=%s observed_t_bit=%s expected_direct_phases=0 observed_direct_phases=%0d expected_resp_status=%s expected_resp_len=%0d",
+                exp.tid, expected_ccc_name, 8'(exp.ccc), observed_ccc_name, exp.addr, item.addr,
+                ack_to_string(item.addr_ack), ack_to_string(item.addr_ack), format_optional_byte(
+                item.addr_ack && exp.data_length > 0, exp.event_byte), format_optional_byte(
+                payload_present, observed_event_byte), format_optional_bit(
+                item.addr_ack && exp.data_length > 0, ~^exp.event_byte), format_optional_bit(
+                t_bit_present, observed_t_bit), item.CCC_direct.size(), resp_status_to_string(
+                resp_status), resp_len), UVM_LOW)
+      end
+    end
   endfunction
 
-  function void check_read_data(i3c_item item, exp_txn_t exp, output bit expected_rstart,
-                                output bit expected_stop, output bit txn_aborted);
-    int       read_id;
+  function void check_read_txn(i3c_item item, exp_txn_t exp, output bit expected_rstart,
+                               output bit expected_stop, output bit txn_aborted);
+    int                   read_id;
     i3c_resp_err_status_e resp_status;
 
     read_id = next_read_id++;
@@ -747,6 +1244,7 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     check_read_ack_or_t_bits(item, exp);
 
+    `uvm_info(`gfn, $sformatf("CHECK READ DATA"), UVM_MEDIUM)
     if (enqueue_rx_word_expectations(item, exp, read_id)) resp_status = Ovl;
     handle_read_end(item, exp, resp_status, expected_rstart, expected_stop, txn_aborted);
     record_pending_resp(1'b1, exp.tid, item.num_data, read_id, resp_status);
@@ -773,8 +1271,8 @@ class i3c_scoreboard extends uvm_scoreboard;
               format_expected_rx_ack_or_t_bits(
                   item, exp
               ),
-              format_observed_t_bits(
-                  item.data_ack_q, item.num_data
+              format_observed_ack_or_t_bits(
+                  exp.target_is_i3c, item.data_ack_q, item.num_data
               )
               ), UVM_LOW)
   endfunction
@@ -785,9 +1283,9 @@ class i3c_scoreboard extends uvm_scoreboard;
         bit exp_bit;
 
         exp_bit = expected_rx_ack_or_t_bit(exp.target_is_i3c, item, i);
-        `DV_CHECK_EQ(item.data_ack_q[i], exp_bit,
-                     $sformatf("Read bus %s[%0d] mismatch",
-                               rx_ack_or_t_bit_label(exp.target_is_i3c), i))
+        `DV_CHECK_EQ(item.data_ack_q[i], exp_bit, $sformatf("Read bus %s[%0d] mismatch",
+                                                            rx_ack_or_t_bit_label(exp.target_is_i3c
+                                                            ), i))
       end
     end
   endfunction
@@ -837,6 +1335,38 @@ class i3c_scoreboard extends uvm_scoreboard;
     end
   endfunction
 
+  function void set_rx_fifo_level_unknown(int unsigned count, string ctxt = "");
+    exp_rx_data_t unknown_entry;
+    int unsigned  model_count;
+
+    exp_rx_data_queue.delete();
+    model_count = count;
+    unknown_entry.known = 1'b0;
+    unknown_entry.read_id = -1;
+    unknown_entry.tid = '0;
+    unknown_entry.data_length = 0;
+    unknown_entry.word_idx = 0;
+    unknown_entry.valid_bytes = 4;
+    unknown_entry.data = '0;
+
+    if (count > RxFifoDepth) begin
+      `uvm_error(`gfn, $sformatf(
+                           "%s: RX FIFO backdoor level %0d exceeds scoreboard model depth %0d",
+                           ctxt, count, RxFifoDepth))
+      model_count = RxFifoDepth;
+    end
+
+    for (int unsigned i = 0; i < model_count; i++) begin
+      unknown_entry.word_idx = int'(i);
+      exp_rx_data_queue.push_back(unknown_entry);
+    end
+
+    `uvm_info(`gfn, $sformatf(
+              "%s: RX FIFO scoreboard model set to %0d unknown word(s)", ctxt, model_count),
+              UVM_MEDIUM)
+  endfunction
+
+
   function void handle_read_end(i3c_item item, exp_txn_t exp, ref i3c_resp_err_status_e resp_status,
                                 output bit expected_rstart, output bit expected_stop,
                                 output bit txn_aborted);
@@ -849,13 +1379,6 @@ class i3c_scoreboard extends uvm_scoreboard;
         !read_final_t_bit(item);
 
     if (hc_abort_active && item.stop) begin
-      // HC abort of an I3C SDR read (MIPI I3C Basic v1.1.1 5.1.2.3.4): the
-      // controller finishes the in-flight data word, then retakes SDA at its
-      // T-Bit. If the Target had parked the bus (final T-Bit=1) the takeover is
-      // a Repeated START followed by STOP (rstart=1); if the Target already
-      // ended the word (T-Bit=0) it is a direct STOP (rstart=0). Either way the
-      // RTL reports HcAborted (abort branch sets hc_aborted_d, not short_read_d).
-      // RTL priority Ovl > HcAborted preserved: Ovl already in resp_status → not overwritten.
       if (resp_status == Success) resp_status = HcAborted;
       expected_stop   = 1'b1;
       expected_rstart = read_final_t_bit(item);
@@ -863,10 +1386,7 @@ class i3c_scoreboard extends uvm_scoreboard;
       `DV_CHECK_EQ(item.rstart, expected_rstart,
                    "HC-aborted read rstart should match final T-Bit takeover")
       txn_aborted = 1'b1;
-      `uvm_info(`gfn, $sformatf("HC abort inferred (read): tid=0x%0h sent=%0d requested=%0d rstart=%0b",
-                                exp.tid, item.num_data, exp.data_length, expected_rstart), UVM_MEDIUM)
     end else if (short_read) begin
-      // Target-driven short read: T-bit=0 before all bytes, RTL sets short_read flag → I3cShortReadErr.
       if (resp_status == Success) resp_status = I3cShortReadErr;
       `DV_CHECK_EQ(item.stop, 1'b1, "Short read should end with STOP")
       expected_stop = 1'b1;
@@ -875,9 +1395,8 @@ class i3c_scoreboard extends uvm_scoreboard;
       `DV_CHECK_EQ(item.interrupted, 1'b1, "Controller read takeover should be marked interrupted")
       expected_rstart = 1'b1;
       if (resp_status == Ovl) begin
-        // RX overflow overrides the toc=0 continuation: the parked-target takeover Repeated START
-        // is followed by STOP, never a continuation into a next command, regardless of toc.
-        `DV_CHECK_EQ(item.stop, 1'b1, "Overflow read takeover should end with STOP regardless of toc")
+        `DV_CHECK_EQ(item.stop, 1'b1,
+                     "Overflow read takeover should end with STOP regardless of toc")
         expected_stop = 1'b1;
       end else begin
         `DV_CHECK_EQ(item.stop, exp.toc, "Read takeover STOP should follow command toc")
@@ -887,9 +1406,6 @@ class i3c_scoreboard extends uvm_scoreboard;
       `DV_CHECK_EQ(item.stop, 1'b1, "Read with toc=1 should end with STOP")
       expected_stop = 1'b1;
     end else if (resp_status == Ovl) begin
-      // RX overflow is an error that overrides the toc=0 continuation: the controller
-      // terminates the read and STOPs (no continuation Repeated START into a next command),
-      // reporting Ovl. This mirrors the abort/short-read override of toc=0.
       `DV_CHECK_EQ(item.stop, 1'b1, "Overflow read (toc=0) should end with STOP, not continuation")
       expected_stop   = 1'b1;
       expected_rstart = item.rstart;
@@ -904,8 +1420,6 @@ class i3c_scoreboard extends uvm_scoreboard;
     return item.data_ack_q[item.data_ack_q.size()-1];
   endfunction
 
-  // Returns 1 if any data byte was NACK'd by the target (data_ack_q entry == 0).
-  // Only meaningful for I2C writes; guards must check !exp.target_is_i3c before calling.
   function bit data_ack_q_has_nack(i3c_item item);
     for (int i = 0; i < item.data_ack_q.size(); i++) begin
       if (!item.data_ack_q[i]) return 1'b1;
@@ -913,7 +1427,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     return 1'b0;
   endfunction
 
-  function bit check_write_data(i3c_item item, exp_txn_t exp);
+  function bit check_write_txn(i3c_item item, exp_txn_t exp);
     bit inferred_tx_underflow;
     bit inferred_hc_abort;
     bit inferred_data_nack;
@@ -925,7 +1439,6 @@ class i3c_scoreboard extends uvm_scoreboard;
 
     if (exp.uses_tx_queue) begin
       if (item.num_data < exp.data_length) begin
-        // RTL priority: I2cDataNackOrI3cBusAborted > Ovl (underflow) > HcAborted.
         inferred_data_nack = !exp.target_is_i3c && data_ack_q_has_nack(item);
         inferred_tx_underflow = !inferred_data_nack && (tx_fifo_available_bytes() < exp.data_length);
         inferred_hc_abort = !inferred_data_nack && hc_abort_active && !inferred_tx_underflow;
@@ -941,7 +1454,6 @@ class i3c_scoreboard extends uvm_scoreboard;
             inferred_data_nack ? "I2C data NACK" : inferred_hc_abort ? "HC abort" : "Underflow",
             inferred_data_nack);
       end else if (item.num_data == exp.data_length) begin
-        // HC abort or data NACK may fire after all bytes are sent (at STOP boundary).
         inferred_data_nack = !exp.target_is_i3c && data_ack_q_has_nack(item);
         inferred_hc_abort  = !inferred_data_nack && hc_abort_active;
         check_tx_data_bytes(item, exp, exp.data_length, "TX", inferred_data_nack);
@@ -953,7 +1465,6 @@ class i3c_scoreboard extends uvm_scoreboard;
                    exp.data_length
                    ))
       end
-      // Mirror RTL current_resp_err_status() priority: I2cDataNack > Ovl > HcAborted > Success
       resp_status = inferred_data_nack    ? I2cDataNackOrI3cBusAborted :
                     inferred_tx_underflow ? Ovl :
                     inferred_hc_abort     ? HcAborted : Success;
@@ -963,19 +1474,15 @@ class i3c_scoreboard extends uvm_scoreboard;
     return inferred_tx_underflow || inferred_hc_abort || inferred_data_nack;
   endfunction
 
-  // Immediate writes carry data inline in the descriptor (no TX FIFO), so check_write_data's
-  // uses_tx_queue path is skipped. This mirrors it for inline data: verifies the inline byte
-  // count and values, infers HC abort, and records the modeled RESP.
-  function bit check_immediate_write_data(i3c_item item, exp_txn_t exp);
-    bit       inferred_hc_abort;
-    bit       inferred_data_nack;
+  function bit check_immediate_write_txn(i3c_item item, exp_txn_t exp);
+    bit                   inferred_hc_abort;
+    bit                   inferred_data_nack;
     i3c_resp_err_status_e resp_status;
 
     inferred_hc_abort  = 1'b0;
     inferred_data_nack = 1'b0;
 
     if (item.num_data < exp.data_length) begin
-      // RTL priority: I2cDataNackOrI3cBusAborted > HcAborted mid data phase.
       inferred_data_nack = !exp.target_is_i3c && data_ack_q_has_nack(item);
       inferred_hc_abort  = !inferred_data_nack && hc_abort_active;
       if (!inferred_data_nack && !inferred_hc_abort)
@@ -986,7 +1493,6 @@ class i3c_scoreboard extends uvm_scoreboard;
                    exp.tid
                    ))
     end else if (item.num_data == exp.data_length) begin
-      // HC abort or data NACK may fire after the last inline byte reached the STOP boundary.
       inferred_data_nack = !exp.target_is_i3c && data_ack_q_has_nack(item);
       inferred_hc_abort  = !inferred_data_nack && hc_abort_active;
     end else begin
@@ -998,7 +1504,6 @@ class i3c_scoreboard extends uvm_scoreboard;
                  ))
     end
 
-    // Verify inline byte values and T-bits against the descriptor.
     for (int i = 0; i < item.num_data; i++) begin
       if (i < item.data_q.size())
         `DV_CHECK_EQ(item.data_q[i], exp.imm_data_byte[i], $sformatf(
@@ -1008,12 +1513,9 @@ class i3c_scoreboard extends uvm_scoreboard;
                      "Immediate T-bit[%0d] mismatch (tid=0x%0h)", i, exp.tid))
     end
 
-    // toc=0 is not supported for immediate transfers: RTL completes all dtt bytes on the bus
-    // then generates STOP and sets not_supported_d=1, yielding RESP NotSupported (4'hA).
     if (!exp.toc) begin
       resp_status = NotSupported;
     end else begin
-      // Mirror RTL current_resp_err_status() priority: I2cDataNack > HcAborted > Success
       resp_status = inferred_data_nack ? I2cDataNackOrI3cBusAborted :
                     inferred_hc_abort  ? HcAborted : Success;
     end
@@ -1032,15 +1534,18 @@ class i3c_scoreboard extends uvm_scoreboard;
               )
               ), UVM_LOW)
     `uvm_info(`gfn, $sformatf(
-              "IMM T-BIT: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
+              "IMM %s: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
+              tx_ack_or_t_bit_label(
+                  exp.target_is_i3c
+              ),
               exp.tid,
               exp.data_length,
               item.data_ack_q.size(),
               format_expected_imm_t_bits(
                   exp, exp.data_length
               ),
-              format_observed_t_bits(
-                  item.data_ack_q, item.num_data
+              format_observed_ack_or_t_bits(
+                  exp.target_is_i3c, item.data_ack_q, item.num_data
               )
               ), UVM_LOW)
     if (!exp.toc)
@@ -1066,8 +1571,12 @@ class i3c_scoreboard extends uvm_scoreboard;
     `DV_CHECK_EQ(item.data_q.size(), data_length, $sformatf(
                  "%s write monitor captured the wrong number of data bytes", ctxt))
     `DV_CHECK_EQ(item.data_ack_q.size(), data_length, $sformatf(
-                 "%s write monitor captured the wrong number of %ss", ctxt,
-                 tx_ack_or_t_bit_label(exp.target_is_i3c)))
+                 "%s write monitor captured the wrong number of %ss",
+                 ctxt,
+                 tx_ack_or_t_bit_label(
+                     exp.target_is_i3c
+                 )
+                 ))
     `DV_CHECK_LE(data_length, tx_fifo_available_bytes(), $sformatf(
                  "%s write needs more bytes than the scoreboard TX FIFO model has", ctxt))
     foreach (item.data_q[i]) begin
@@ -1081,11 +1590,10 @@ class i3c_scoreboard extends uvm_scoreboard;
 
           i2c_data_nack_byte = allow_i2c_final_data_nack && !exp.target_is_i3c &&
                                (i == (data_length - 1));
-          `DV_CHECK_EQ(item.data_ack_q[i],
-                       expected_tx_ack_or_t_bit(exp.target_is_i3c, exp_byte,
-                                                i2c_data_nack_byte),
-                       $sformatf("%s %s mismatch at byte[%0d]", ctxt,
-                                 tx_ack_or_t_bit_label(exp.target_is_i3c), i))
+          `DV_CHECK_EQ(item.data_ack_q[i], expected_tx_ack_or_t_bit(exp.target_is_i3c, exp_byte,
+                                                                    i2c_data_nack_byte),
+                       $sformatf("%s %s mismatch at byte[%0d]", ctxt, tx_ack_or_t_bit_label(
+                                 exp.target_is_i3c), i))
         end
       end
     end
@@ -1112,8 +1620,8 @@ class i3c_scoreboard extends uvm_scoreboard;
               format_expected_tx_ack_or_t_bits(
                   data_length, exp.target_is_i3c, allow_i2c_final_data_nack
               ),
-              format_observed_t_bits(
-                  item.data_ack_q, data_length
+              format_observed_ack_or_t_bits(
+                  exp.target_is_i3c, item.data_ack_q, data_length
               )
               ), UVM_LOW)
   endfunction
@@ -1177,8 +1685,8 @@ class i3c_scoreboard extends uvm_scoreboard;
     `DV_EOT_PRINT_TLM_FIFO_CONTENTS(i3c_item, i3c_fifo)
   endfunction
 
-  function bit is_broadcast_enec_disec(bit [7:0] cmd);
-    return (cmd == ENEC) || (cmd == DISEC);
+  function bit is_enec_disec_ccc(bit [7:0] cmd);
+    return (cmd == ENEC) || (cmd == DISEC) || (cmd == DIR_ENEC) || (cmd == DIR_DISEC);
   endfunction
 
   function bit [6:0] get_device_addr(bit [4:0] dev_idx);
@@ -1197,11 +1705,11 @@ class i3c_scoreboard extends uvm_scoreboard;
     return 1'b0;
   endfunction
 
-  function void update_private_continuation(exp_txn_t exp, bit aborted = 1'b0);
-    if (exp.updates_private_continuation && !exp.is_ccc && !aborted) begin
-      pending_private_continuation = !exp.toc;
+  function void advance_private_transfer(exp_txn_t exp, bit aborted = 1'b0);
+    if (exp.updates_private_transfer && !exp.is_ccc && !aborted) begin
+      pending_private_transfer = !exp.toc;
     end else begin
-      pending_private_continuation = 1'b0;
+      pending_private_transfer = 1'b0;
     end
   endfunction
 

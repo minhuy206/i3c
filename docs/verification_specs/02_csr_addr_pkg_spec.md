@@ -91,19 +91,31 @@ endpackage
 
 ### 3.5. Timing Register Default Values
 
-Match the reset values from `csr_register.sv`:
+Match the reset values from `csr_registers.sv`:
 
 ```systemverilog
-  // Default timing values (system clock cycles @ 100 MHz in simulation)
-  localparam bit [19:0] RST_T_R      = 20'd4;
-  localparam bit [19:0] RST_T_F      = 20'd4;
-  localparam bit [19:0] RST_T_LOW    = 20'd13;
-  localparam bit [19:0] RST_T_HIGH   = 20'd13;
-  localparam bit [19:0] RST_T_SU_STA = 20'd13;
-  localparam bit [19:0] RST_T_HD_STA = 20'd13;
-  localparam bit [19:0] RST_T_SU_STO = 20'd13;
-  localparam bit [19:0] RST_T_SU_DAT = 20'd1;
-  localparam bit [19:0] RST_T_HD_DAT = 20'd4;
+  // Default timing values (system clock cycles @ 333.333 MHz in simulation)
+  localparam bit [19:0] RST_T_R          = 20'd4;
+  localparam bit [19:0] RST_T_F          = 20'd4;
+  localparam bit [19:0] RST_T_LOW        = 20'd16;
+  localparam bit [19:0] RST_T_HIGH       = 20'd11;
+  localparam bit [19:0] RST_T_SU_STA     = 20'd7;
+  localparam bit [19:0] RST_T_HD_STA     = 20'd13;
+  localparam bit [19:0] RST_T_SU_STO     = 20'd7;
+  localparam bit [19:0] RST_T_SU_DAT     = 20'd1;
+  localparam bit [19:0] RST_T_HD_DAT     = 20'd0;
+  localparam bit [19:0] RST_T_BUS_FREE   = 20'd13;
+  localparam bit [19:0] RST_T_LOW_OD     = 20'd67;
+  localparam bit [19:0] RST_I2C_T_R      = 20'd100;
+  localparam bit [19:0] RST_I2C_T_F      = 20'd100;
+  localparam bit [19:0] RST_I2C_T_LOW    = 20'd534;
+  localparam bit [19:0] RST_I2C_T_HIGH   = 20'd300;
+  localparam bit [19:0] RST_I2C_T_SU_STA = 20'd200;
+  localparam bit [19:0] RST_I2C_T_HD_STA = 20'd200;
+  localparam bit [19:0] RST_I2C_T_SU_STO = 20'd434;
+  localparam bit [19:0] RST_I2C_T_SU_DAT = 20'd34;
+  localparam bit [19:0] RST_I2C_T_HD_DAT = 20'd0;
+  localparam bit [19:0] RST_I2C_T_BUF    = 20'd434;
 ```
 
 ### 3.6. Helper Functions

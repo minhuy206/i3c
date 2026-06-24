@@ -6,6 +6,7 @@ module scl_generator #(
 
     input logic gen_start_i,
     input logic gen_rstart_i,
+    input logic takeover_i,
     input logic gen_stop_i,
     input logic gen_clock_i,
     input logic gen_idle_i,
@@ -32,20 +33,20 @@ module scl_generator #(
 );
 
   typedef enum logic [3:0] {
-    Idle           = 4'd0,
-    GenerateStart  = 4'd1,
-    SdaFall        = 4'd2,
-    HoldStart      = 4'd3,
-    DriveLow       = 4'd4,
-    DriveHigh      = 4'd5,
-    WaitCmd        = 4'd6,
-    GenerateRstart = 4'd7,
-    SclHigh        = 4'd8,
-    RstartSdaFall  = 4'd9,
-    GenerateStop   = 4'd10,
-    SclHighForStop = 4'd11,
-    SdaRise        = 4'd12,
-    BusFree        = 4'd13
+    Idle             = 4'd0,
+    GenerateStart    = 4'd1,
+    SdaFall          = 4'd2,
+    HoldStart        = 4'd3,
+    DriveLow         = 4'd4,
+    DriveHigh        = 4'd5,
+    WaitCmd          = 4'd6,
+    GenerateRstart   = 4'd7,
+    SclHighForRstart = 4'd8,
+    RstartSdaFall    = 4'd9,
+    GenerateStop     = 4'd10,
+    SclHighForStop   = 4'd11,
+    SdaRise          = 4'd12,
+    BusFree          = 4'd13
   } state_e;
 
   state_e state_q, state_d;
@@ -79,11 +80,14 @@ module scl_generator #(
         if (gen_start_i) begin
           load_tcount     = 1'b1;
           tcount_load_val = t_su_sta_i;
+        end else if (gen_rstart_i) begin
+          load_tcount     = 1'b1;
+          tcount_load_val = active_t_low + t_f_i;
         end
       end
 
       GenerateRstart: begin
-        if (scl_i) begin
+        if (tcount_expired && scl_i) begin
           load_tcount     = 1'b1;
           tcount_load_val = t_su_sta_i;
         end
@@ -102,14 +106,14 @@ module scl_generator #(
       end
 
       WaitCmd: begin
-        if (gen_stop_i || gen_clock_i) begin
+        if (gen_stop_i || gen_rstart_i || gen_clock_i) begin
           load_tcount     = 1'b1;
           tcount_load_val = active_t_low + t_f_i;
         end
       end
 
       DriveHigh: begin
-        if (tcount_expired && (gen_stop_i || gen_clock_i)) begin
+        if (tcount_expired && (gen_stop_i || (gen_rstart_i && !takeover_i) || gen_clock_i)) begin
           load_tcount     = 1'b1;
           tcount_load_val = active_t_low + t_f_i;
         end
@@ -118,6 +122,9 @@ module scl_generator #(
       DriveLow: begin
         if (tcount_expired) begin
           if (gen_stop_i) begin
+            load_tcount     = 1'b1;
+            tcount_load_val = active_t_low + t_f_i;
+          end else if (gen_rstart_i) begin
             load_tcount     = 1'b1;
             tcount_load_val = active_t_low + t_f_i;
           end else if (gen_clock_i && !gen_rstart_i) begin
@@ -187,7 +194,9 @@ module scl_generator #(
         end
 
         DriveHigh: begin
-          if (tcount_expired) begin
+          if (gen_rstart_i && takeover_i) begin
+            state_d = RstartSdaFall;
+          end else if (tcount_expired) begin
             if (gen_rstart_i) begin
               state_d = GenerateRstart;
             end else if (gen_stop_i) begin
@@ -209,12 +218,12 @@ module scl_generator #(
         end
 
         GenerateRstart: begin
-          if (scl_i) begin
-            state_d = SclHigh;
+          if (tcount_expired && scl_i) begin
+            state_d = SclHighForRstart;
           end
         end
 
-        SclHigh: begin
+        SclHighForRstart: begin
           if (tcount_expired) state_d = RstartSdaFall;
         end
 
@@ -260,6 +269,12 @@ module scl_generator #(
         end
       end
 
+      GenerateRstart: begin
+        if (!tcount_expired) begin
+          scl_o = 1'b0;
+        end
+      end
+
       SdaFall, HoldStart, RstartSdaFall, SclHighForStop: sda_o = 1'b0;
 
       default: ;
@@ -273,11 +288,11 @@ module scl_generator #(
 
   assign busy_o = (state_q != Idle);
 
-  assign sda_ctrl_active_o = (state_q == GenerateStart)  |
+  assign sda_ctrl_active_o = (state_q == GenerateStart)    |
                               (state_q == SdaFall)         |
                               (state_q == HoldStart)       |
                               (state_q == GenerateRstart)  |
-                              (state_q == SclHigh)         |
+                              (state_q == SclHighForRstart)|
                               (state_q == RstartSdaFall)   |
                               (state_q == GenerateStop)    |
                               (state_q == SclHighForStop)  |

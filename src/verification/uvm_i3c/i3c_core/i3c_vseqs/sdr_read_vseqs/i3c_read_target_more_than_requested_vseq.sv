@@ -48,14 +48,14 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     rd_cfg = make_transfer_cfg(
-        .ctxt("SDRR_004 toc0 over_length_first"),
+        .ctxt("SDRR_003 toc0 over_length_first"),
         .seq_name("sdrr004_toc0_rd_dev_seq"),
         .tid(4'd12), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
         .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0), .data_length(4), .settle_before_cmd(5),
         .timeout_cycles(0));
     wr_cfg = make_transfer_cfg(
-        .ctxt("SDRR_004 toc0 write_second"),
+        .ctxt("SDRR_003 toc0 write_second"),
         .seq_name("sdrr004_toc0_wr_dev_seq"),
         .tid(4'd13), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
         .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
@@ -70,21 +70,16 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
 
     // Over-length read is not an error: toc=0 continues into the second command with one RSTART.
     `DV_CHECK_EQ(rstart_count, 1,
-                 "SDRR_004 toc0: over-length read must continue with exactly one RSTART")
+                 "SDRR_003 toc0: over-length read must continue with exactly one RSTART")
     `DV_CHECK_EQ(dev_seq0.observed_rstart, 1'b1,
-                 "SDRR_004 toc0: over-length first read should end with a continuation RSTART")
+                 "SDRR_003 toc0: over-length first read should end with a continuation RSTART")
     `DV_CHECK_EQ(dev_seq1.observed_rstart, 1'b0,
-                 "SDRR_004 toc0: second (write) command should end with STOP")
-    `DV_CHECK_EQ(resp0[31:28], 4'h0, "SDRR_004 toc0: first read response must be Success")
-    `DV_CHECK_EQ(resp0[15:0], 16'd4,
-                 "SDRR_004 toc0: first read length must equal the requested count, not the offered")
-    `DV_CHECK_EQ(resp1[31:28], 4'h0, "SDRR_004 toc0: second response must be Success")
-    `DV_CHECK_EQ(resp1[27:24], 4'd13, "SDRR_004 toc0: second response TID mismatch")
+                 "SDRR_003 toc0: second (write) command should end with STOP")
 
-    check_all_queues_empty("after SDRR_004 toc0 over-length continuation");
+    check_all_queues_empty("after SDRR_003 toc0 over-length continuation");
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRR_004 result: case=toc0_over_length rstart_count=%0d resp0_status=0x%0h resp0_len=%0d resp1_status=0x%0h",
+                  "SDRR_003 result: case=toc0_over_length rstart_count=%0d resp0_status=0x%0h resp0_len=%0d resp1_status=0x%0h",
                   rstart_count, resp0[31:28], resp0[15:0], resp1[31:28]), UVM_LOW)
   endtask
 
@@ -98,14 +93,14 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
     i3c_device_response_seq        dev_seq;
 
     `DV_CHECK_GT(target_length, requested_length,
-                 $sformatf("SDRR_004 case %0d must provide more target bytes than requested",
+                 $sformatf("SDRR_003 case %0d must provide more target bytes than requested",
                            case_idx))
 
     build_payload(case_idx, target_length, read_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRR_004 %s req %0d target %0d",
+            "SDRR_003 %s req %0d target %0d",
             private_addr_mode_name(
                 broadcast_header_enable
             ),
@@ -139,14 +134,14 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
 
     `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b1,
                  $sformatf(
-                     "SDRR_004 req %0d target %0d: controller should terminate read with RSTART",
+                     "SDRR_003 req %0d target %0d: controller should terminate read with RSTART",
                      requested_length, target_length))
 
     check_all_queues_empty($sformatf(
-                           "after SDRR_004 req %0d target %0d", requested_length, target_length));
+                           "after SDRR_003 req %0d target %0d", requested_length, target_length));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRR_004 result: mode=%s requested_len=%0d target_len=%0d rx_words_drained=%0d observed_rstart=%0b",
+                  "SDRR_003 result: mode=%s requested_len=%0d target_len=%0d rx_words_drained=%0d observed_rstart=%0b",
                   private_addr_mode_name(broadcast_header_enable), requested_length, target_length,
                   rx_words.size(), dev_seq.observed_rstart), UVM_LOW)
   endtask

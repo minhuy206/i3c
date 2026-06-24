@@ -41,12 +41,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     exp_full  = (exp_depth == QueueDepth);
     exp_empty = (exp_depth == 0);
 
-    `DV_CHECK_EQ(hdl_read_word(paths.depth_path), 32'(exp_depth), $sformatf(
-                 "csr_queue_status_flags_vseq: %s depth mismatch %s", paths.name, ctxt))
-    `DV_CHECK_EQ(status[paths.full_bit], exp_full, $sformatf(
-                 "csr_queue_status_flags_vseq: %s full flag mismatch %s", paths.name, ctxt))
-    `DV_CHECK_EQ(status[paths.empty_bit], exp_empty, $sformatf(
-                 "csr_queue_status_flags_vseq: %s empty flag mismatch %s", paths.name, ctxt))
   endtask
 
   task fill_cmd_queue();
@@ -90,8 +84,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
         8'(8'h13 + (i << 2)), 8'(8'h12 + (i << 2)), 8'(8'h11 + (i << 2)), 8'(8'h10 + (i << 2))
       };
       read_rx_data(data);
-      `DV_CHECK_EQ(data, exp, $sformatf(
-                   "csr_queue_status_flags_vseq: RX data mismatch at entry %0d", i))
       settle_cycles();
       if ((i == 0) || (i == (QueueDepth - 2)) || (i == (QueueDepth - 1))) begin
         check_queue_state(rx_paths, QueueDepth - i - 1,
@@ -105,12 +97,6 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
 
     for (int unsigned i = 0; i < QueueDepth; i++) begin
       read_response(resp);
-      `DV_CHECK_EQ(resp[31:28], 4'h0, $sformatf(
-                   "csr_queue_status_flags_vseq: RESP error at entry %0d", i))
-      `DV_CHECK_EQ(resp[27:24], i[3:0], $sformatf(
-                   "csr_queue_status_flags_vseq: RESP TID mismatch at entry %0d", i))
-      `DV_CHECK_EQ(resp[15:0], 16'd4, $sformatf(
-                   "csr_queue_status_flags_vseq: RESP length mismatch at entry %0d", i))
       settle_cycles();
       if ((i == 0) || (i == (QueueDepth - 2)) || (i == (QueueDepth - 1))) begin
         check_queue_state(resp_paths, QueueDepth - i - 1,

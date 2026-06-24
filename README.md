@@ -129,7 +129,6 @@ i3c/
 └── docs/
     ├── phase1_spec_v2.md               # FSM state definitions, register maps, timing
     ├── improvements.md                 # Simplification analysis vs reference design
-    ├── bug_analysis_report.md          # Known bugs — read before modifying ctrl/
     ├── implementation_plan.md
     ├── module_specs/                   # Per-module specs (ports, FSMs, timing)
     │   ├── 01_i3c_phy_spec.md

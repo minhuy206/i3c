@@ -46,12 +46,12 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
     bit [31:0] data;
     bit [31:0] rptr_before;
     bit [31:0] wptr_before;
-    bit [31:0] depth_before;
+    int unsigned depth_before;
 
     check_port_depth(paths, 0, "before empty reads");
     rptr_before  = hdl_read_word(paths.rptr_path);
     wptr_before  = hdl_read_word(paths.wptr_path);
-    depth_before = hdl_read_word(paths.depth_path);
+    depth_before = hdl_read_fifo_depth(paths.depth_path);
 
     reg_read(port_addr, data);
     `DV_CHECK_EQ(data, 32'h0, $sformatf(
@@ -78,7 +78,7 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
     reg_read(ADDR_QUEUE_STATUS, status);
     exp_empty = (exp_depth == 0);
 
-    `DV_CHECK_EQ(hdl_read_word(paths.depth_path), 32'(exp_depth), $sformatf(
+    `DV_CHECK_EQ(hdl_read_fifo_depth(paths.depth_path), exp_depth, $sformatf(
                  "csr_rx_resp_read_pop_vseq: %s depth mismatch %s", paths.name, ctxt))
     `DV_CHECK_EQ(status[paths.full_bit], 1'b0, $sformatf(
                  "csr_rx_resp_read_pop_vseq: %s full flag should stay clear %s",
@@ -88,7 +88,7 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
   endtask
 
   task check_no_empty_read_underflow(queue_hdl_paths_t paths, bit [31:0] exp_rptr,
-                                     bit [31:0] exp_wptr, bit [31:0] exp_depth,
+                                     bit [31:0] exp_wptr, int unsigned exp_depth,
                                      string ctxt);
     `DV_CHECK_EQ(hdl_read_word(paths.rptr_path), exp_rptr, $sformatf(
                  "csr_rx_resp_read_pop_vseq: %s rptr changed on empty read %s",
@@ -96,7 +96,7 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(hdl_read_word(paths.wptr_path), exp_wptr, $sformatf(
                  "csr_rx_resp_read_pop_vseq: %s wptr changed on empty read %s",
                  paths.name, ctxt))
-    `DV_CHECK_EQ(hdl_read_word(paths.depth_path), exp_depth, $sformatf(
+    `DV_CHECK_EQ(hdl_read_fifo_depth(paths.depth_path), exp_depth, $sformatf(
                  "csr_rx_resp_read_pop_vseq: %s depth changed on empty read %s",
                  paths.name, ctxt))
     check_port_depth(paths, 0, ctxt);

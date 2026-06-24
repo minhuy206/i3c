@@ -33,7 +33,7 @@ class i3c_read_data_patterns_vseq extends i3c_base_vseq;
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRR_007 %s %s", private_addr_mode_name(broadcast_header_enable), pattern_name
+            "SDRR_004 %s %s", private_addr_mode_name(broadcast_header_enable), pattern_name
         )),
         .seq_name($sformatf(
             "sdrr007_%s_dev_seq_%s", private_addr_mode_name(broadcast_header_enable), pattern_name
@@ -54,10 +54,10 @@ class i3c_read_data_patterns_vseq extends i3c_base_vseq;
 
     run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
 
-    check_all_queues_empty($sformatf("after SDRR_007 %s", pattern_name));
+    check_all_queues_empty($sformatf("after SDRR_004 %s", pattern_name));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRR_007 result: mode=%s pattern=%s len=%0d rx_words_drained=%0d resp_len=%0d",
+                  "SDRR_004 result: mode=%s pattern=%s len=%0d rx_words_drained=%0d resp_len=%0d",
                   private_addr_mode_name(broadcast_header_enable), pattern_name, read_data.size(),
                   rx_words.size(), resp[15:0]), UVM_LOW)
   endtask

@@ -15,6 +15,12 @@ package i3c_agent_pkg;
     BusOpRead  = 1'b1
   } bus_op_e;
 
+  // Semantic ACK/NACK value stored in i3c_seq_item.T_bit for legacy I2C reads.
+  typedef enum bit {
+    SampledNack = 1'b0,
+    SampledAck  = 1'b1
+  } sampled_ack_nack_e;
+
   typedef enum int {
     DrvIdle,
     DrvAddr,
@@ -28,6 +34,7 @@ package i3c_agent_pkg;
     DrvRdPushPull,
     DrvStop,
     DrvWaitStopOrRStart,
+    DrvBcastDispatch,
     DrvDAA
   } i3c_drv_phase_e;
 
@@ -43,44 +50,49 @@ package i3c_agent_pkg;
 
   typedef uvm_enum_wrapper#(i3c_ccc_e) i3c_ccc_wrapper;
 
+  function string ccc_to_string(bit [7:0] ccc_raw);
+    i3c_ccc_e ccc;
+    string    ccc_name;
+
+    ccc = i3c_ccc_e'(ccc_raw);
+    ccc_name = ccc.name();
+    return (ccc_name != "") ? ccc_name : $sformatf("0x%02h", ccc_raw);
+  endfunction : ccc_to_string
+
   bit [1:0] defining_byte_for_CCC[logic [7:0]] = '{
       // {optional defining byte, required defining byte}
-      8'h00 :
-      2'b00,  // ENEC
-      8'h01 : 2'b00,  // DISEC
-      8'h07 : 2'b00,  // ENTDAA
-      8'h80 : 2'b00,  // DIR_ENEC
-      8'h81 : 2'b00  // DIR_DISEC
+      ENEC : 2'b00,
+      DISEC : 2'b00,
+      ENTDAA : 2'b00,
+      DIR_ENEC : 2'b00,
+      DIR_DISEC : 2'b00
   };
 
   bit [1:0] data_for_CCC[logic [7:0]] = '{
       // {optional data, required data}
-      8'h00 :
-      2'b01,  // ENEC
-      8'h01 : 2'b01,  // DISEC
-      8'h07 : 2'b00,  // ENTDAA
-      8'h80 : 2'b01,  // DIR_ENEC
-      8'h81 : 2'b01  // DIR_DISEC
+      ENEC : 2'b01,
+      DISEC : 2'b01,
+      ENTDAA : 2'b00,
+      DIR_ENEC : 2'b01,
+      DIR_DISEC : 2'b01
   };
 
   bit [1:0] subcmd_byte_for_CCC[logic [7:0]] = '{
       // {optional sub-command, required sub-command}
-      8'h00 :
-      2'b00,  // ENEC
-      8'h01 : 2'b00,  // DISEC
-      8'h07 : 2'b00,  // ENTDAA
-      8'h80 : 2'b00,  // DIR_ENEC
-      8'h81 : 2'b00  // DIR_DISEC
+      ENEC : 2'b00,
+      DISEC : 2'b00,
+      ENTDAA : 2'b00,
+      DIR_ENEC : 2'b00,
+      DIR_DISEC : 2'b00
   };
 
   bit data_direction_for_CCC[logic [7:0]] = '{
       // 0 - host to device, 1 - device to host
-      8'h00 :
-      1'b0,  // ENEC
-      8'h01 : 1'b0,  // DISEC
-      8'h07 : 1'b0,  // ENTDAA
-      8'h80 : 1'b0,  // DIR_ENEC
-      8'h81 : 1'b0  // DIR_DISEC
+      ENEC : 1'b0,
+      DISEC : 1'b0,
+      ENTDAA : 1'b0,
+      DIR_ENEC : 1'b0,
+      DIR_DISEC : 1'b0
   };
 
   typedef i3c_timing_pkg::i2c_timing_t i2c_timing_t;

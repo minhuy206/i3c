@@ -74,10 +74,6 @@ module controller_active
   logic scl_gen_scl, scl_gen_sda;
   logic scl_gen_done, scl_gen_busy, scl_gen_driving_sda;
 
-  // 1-cycle delayed copy of the controller's own SCL output.
-  // Used to derive edge/stable signals for bus_tx_flow without routing through
-  // the PHY 2FF synchronizer + bus_monitor chain (~8-cycle latency), which would
-  // cause SDA transitions during SCL-high (spurious RSTART).
   logic scl_gen_scl_q;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) scl_gen_scl_q <= 1'b1;
@@ -91,7 +87,7 @@ module controller_active
   assign scl_tx_posedge    = ~scl_gen_scl_q &  scl_gen_scl;
   assign scl_tx_stable_low = ~scl_gen_scl_q & ~scl_gen_scl;
 
-  logic flow_gen_start, flow_gen_rstart, flow_gen_stop;
+  logic flow_gen_start, flow_gen_rstart, flow_takeover, flow_gen_stop;
   logic flow_gen_clock, flow_gen_idle;
   logic flow_sel_i3c_i2c;
   logic flow_use_i2c_timing;
@@ -99,8 +95,9 @@ module controller_active
   logic flow_sel_od_pp;
   logic flow_tx_req_byte, flow_tx_req_bit;
   logic [7:0] flow_tx_req_value;
-  logic flow_rx_req_byte, flow_rx_req_bit;
+  logic flow_rx_req_byte, flow_rx_req_bit, flow_rx_req_bit_handoff;
   logic flow_ccc_valid;
+  logic flow_daa_stop;
   logic [4:0] flow_daa_dev_idx;
   logic [3:0] flow_ccc_dev_count;
   logic flow_hc_seq_cancel_event;
@@ -108,12 +105,12 @@ module controller_active
   logic flow_dat_read_valid;
   logic [DatAw-1:0] flow_dat_index;
 
-  logic daa_done;
-  logic daa_req_restart;
+  logic daa_done, daa_nack_error, daa_req_stop, daa_stopped;
+  logic daa_req_rstart;
   logic daa_tx_req_byte, daa_tx_req_bit;
   logic [7:0] daa_tx_req_value;
   logic daa_tx_sel_od_pp;
-  logic daa_rx_req_bit, daa_rx_req_byte;
+  logic daa_rx_req_bit, daa_rx_req_bit_handoff, daa_rx_req_byte;
   logic daa_dat_read_valid;
   logic [DatAw-1:0] daa_dat_index;
   logic [6:0] daa_address;
@@ -126,11 +123,13 @@ module controller_active
 
   logic [7:0] rx_flow_data;
   logic rx_flow_done, rx_flow_idle;
+  logic [7:0] bus_rx_data;
+  logic bus_rx_done;
 
   logic mux_tx_req_byte, mux_tx_req_bit;
   logic [7:0] mux_tx_req_value;
   logic mux_tx_sel_od_pp;
-  logic mux_rx_req_byte, mux_rx_req_bit;
+  logic mux_rx_req_byte, mux_rx_req_bit, mux_rx_req_bit_handoff;
   logic [19:0] active_t_r, active_t_f, active_t_low, active_t_high;
   logic [19:0] active_t_su_sta, active_t_hd_sta, active_t_su_sto;
   logic [19:0] active_t_su_dat, active_t_hd_dat, active_t_bus_free;
@@ -139,42 +138,67 @@ module controller_active
   logic daa_active;
   assign daa_active = flow_ccc_valid;
 
-  // Restart latch: entdaa_controller pulses req_restart for 1 cycle, but
-  // scl_generator needs gen_rstart held high until it completes the Sr.
-  logic daa_restart_pending_d, daa_restart_pending_q;
+  logic daa_rstart_pending_d, daa_rstart_pending_q;
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : update_daa_restart_pending
-    if (!rst_ni) daa_restart_pending_q <= 1'b0;
-    else daa_restart_pending_q <= daa_restart_pending_d;
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_daa_rstart_pending
+    if (!rst_ni) daa_rstart_pending_q <= 1'b0;
+    else daa_rstart_pending_q <= daa_rstart_pending_d;
   end
 
-  always_comb begin : compute_daa_restart_pending_d
-    daa_restart_pending_d = daa_restart_pending_q;
-    if (daa_req_restart) daa_restart_pending_d = 1'b1;
-    else if (scl_gen_done || !daa_active) daa_restart_pending_d = 1'b0;
+  always_comb begin : compute_daa_rstart_pending_d
+    daa_rstart_pending_d = daa_rstart_pending_q;
+    if (daa_req_rstart) daa_rstart_pending_d = 1'b1;
+    else if (scl_gen_done || !daa_active) daa_rstart_pending_d = 1'b0;
   end
 
-  logic gen_rstart_combined;
-  assign gen_rstart_combined = flow_gen_rstart | daa_req_restart | daa_restart_pending_q;
+  logic gen_rstart;
+  assign gen_rstart = flow_gen_rstart | daa_req_rstart | daa_rstart_pending_q;
 
-  // Bus TX/RX MUX: ENTDAA controller vs flow_active
   always_comb begin : mux_bus_tx_rx
     if (daa_active) begin
-      mux_tx_req_byte  = daa_tx_req_byte;
-      mux_tx_req_bit   = daa_tx_req_bit;
+      mux_tx_req_byte = daa_tx_req_byte;
+      mux_tx_req_bit = daa_tx_req_bit;
       mux_tx_req_value = daa_tx_req_value;
       mux_tx_sel_od_pp = daa_tx_sel_od_pp;
-      mux_rx_req_byte  = daa_rx_req_byte;
-      mux_rx_req_bit   = daa_rx_req_bit;
+      mux_rx_req_byte = daa_rx_req_byte;
+      mux_rx_req_bit = daa_rx_req_bit;
+      mux_rx_req_bit_handoff = daa_rx_req_bit_handoff;
     end else begin
-      mux_tx_req_byte  = flow_tx_req_byte;
-      mux_tx_req_bit   = flow_tx_req_bit;
+      mux_tx_req_byte = flow_tx_req_byte;
+      mux_tx_req_bit = flow_tx_req_bit;
       mux_tx_req_value = flow_tx_req_value;
       mux_tx_sel_od_pp = flow_sel_od_pp;
-      mux_rx_req_byte  = flow_rx_req_byte;
-      mux_rx_req_bit   = flow_rx_req_bit;
+      mux_rx_req_byte = flow_rx_req_byte;
+      mux_rx_req_bit = flow_rx_req_bit;
+      mux_rx_req_bit_handoff = flow_rx_req_bit_handoff;
     end
   end
+
+  logic handoff_sampled_q;
+  logic handoff_takeover_q;
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_low_bit_handoff
+    if (!rst_ni) begin
+      handoff_sampled_q  <= 1'b0;
+      handoff_takeover_q <= 1'b0;
+    end else begin
+      if (!mux_rx_req_bit_handoff) begin
+        handoff_sampled_q <= 1'b0;
+      end
+
+      if (handoff_takeover_q && (scl_tx_negedge || scl_gen_driving_sda)) begin
+        handoff_takeover_q <= 1'b0;
+      end
+
+      if (mux_rx_req_bit_handoff && !handoff_sampled_q && scl_tx_posedge) begin
+        handoff_sampled_q  <= 1'b1;
+        handoff_takeover_q <= ~ctrl_sda_i;
+      end
+    end
+  end
+
+  assign bus_rx_data = rx_flow_data;
+  assign bus_rx_done = rx_flow_done;
 
   assign active_t_r = flow_use_i2c_timing ? i2c_t_r_i : t_r_i;
   assign active_t_f = flow_use_i2c_timing ? i2c_t_f_i : t_f_i;
@@ -200,10 +224,12 @@ module controller_active
   end
 
   assign ctrl_scl_o = scl_gen_scl;
-  assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda : tx_flow_sda_drive ? tx_flow_sda : 1'b1;
+  assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda :
+      handoff_takeover_q ? 1'b0 : tx_flow_sda_drive ? tx_flow_sda : 1'b1;
   assign ctrl_sda_oe_o = scl_gen_driving_sda ? ~scl_gen_sda
+      : handoff_takeover_q ? 1'b1
       : tx_flow_sda_drive ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
-  assign sel_od_pp_o = scl_gen_driving_sda ? 1'b0 : tx_flow_sel_od_pp;
+  assign sel_od_pp_o = (scl_gen_driving_sda || handoff_takeover_q) ? 1'b0 : tx_flow_sel_od_pp;
 
   bus_monitor u_bus_mon (
       .clk_i,
@@ -220,7 +246,8 @@ module controller_active
       .clk_i,
       .rst_ni,
       .gen_start_i      (flow_gen_start),
-      .gen_rstart_i     (gen_rstart_combined),
+      .gen_rstart_i     (gen_rstart),
+      .takeover_i       (flow_takeover),
       .gen_stop_i       (flow_gen_stop),
       .gen_clock_i      (flow_gen_clock),
       .gen_idle_i       (flow_gen_idle),
@@ -271,7 +298,7 @@ module controller_active
       .scl_posedge_i    (bus_state.scl.pos_edge),
       .scl_stable_high_i(bus_state.scl.stable_high),
       .sda_i            (bus_state.sda.value),
-      .rx_req_bit_i     (mux_rx_req_bit),
+      .rx_req_bit_i     (mux_rx_req_bit | mux_rx_req_bit_handoff),
       .rx_req_byte_i    (mux_rx_req_byte),
       .rx_data_o        (rx_flow_data),
       .rx_done_o        (rx_flow_done),
@@ -299,43 +326,49 @@ module controller_active
       .resp_queue_wvalid_o,
       .resp_queue_wready_i,
       .resp_queue_wdata_o,
-      .dat_read_valid_hw_o(flow_dat_read_valid),
-      .dat_index_hw_o     (flow_dat_index),
+      .dat_read_valid_hw_o           (flow_dat_read_valid),
+      .dat_index_hw_o                (flow_dat_index),
       .dat_rdata_hw_i,
-      .bus_tx_req_byte_o  (flow_tx_req_byte),
-      .bus_tx_req_bit_o   (flow_tx_req_bit),
-      .bus_tx_req_value_o (flow_tx_req_value),
-      .bus_tx_done_i      (tx_flow_done),
-      .bus_tx_idle_i      (tx_flow_idle),
-      .bus_rx_req_byte_o  (flow_rx_req_byte),
-      .bus_rx_req_bit_o   (flow_rx_req_bit),
-      .bus_rx_data_i      (rx_flow_data),
-      .bus_rx_done_i      (rx_flow_done),
-      .bus_rx_idle_i      (rx_flow_idle),
-      .gen_start_o        (flow_gen_start),
-      .gen_rstart_o       (flow_gen_rstart),
-      .gen_stop_o         (flow_gen_stop),
-      .gen_clock_o        (flow_gen_clock),
-      .gen_idle_o         (flow_gen_idle),
-      .sel_i3c_i2c_o      (flow_sel_i3c_i2c),
-      .use_i2c_timing_o   (flow_use_i2c_timing),
-      .scl_use_od_low_o   (flow_scl_use_od_low),
-      .scl_gen_done_i     (scl_gen_done),
-      .scl_gen_busy_i     (scl_gen_busy),
-      .ccc_valid_o        (flow_ccc_valid),
-      .daa_dev_idx_o      (flow_daa_dev_idx),
-      .ccc_dev_count_o    (flow_ccc_dev_count),
-      .ccc_done_i         (daa_done),
-      .daa_address_i      (daa_address),
-      .daa_address_valid_i(daa_address_valid),
-      .daa_pid_i          (daa_pid),
-      .daa_bcr_i          (daa_bcr),
-      .daa_dcr_i          (daa_dcr),
-      .sel_od_pp_o        (flow_sel_od_pp),
+      .bus_tx_req_byte_o             (flow_tx_req_byte),
+      .bus_tx_req_bit_o              (flow_tx_req_bit),
+      .bus_tx_req_value_o            (flow_tx_req_value),
+      .bus_tx_done_i                 (tx_flow_done),
+      .bus_tx_idle_i                 (tx_flow_idle),
+      .bus_rx_req_byte_o             (flow_rx_req_byte),
+      .bus_rx_req_bit_o              (flow_rx_req_bit),
+      .bus_rx_req_bit_handoff_o      (flow_rx_req_bit_handoff),
+      .bus_rx_data_i                 (bus_rx_data),
+      .bus_rx_done_i                 (bus_rx_done),
+      .bus_rx_idle_i                 (rx_flow_idle),
+      .gen_start_o                   (flow_gen_start),
+      .gen_rstart_o                  (flow_gen_rstart),
+      .takeover_o                    (flow_takeover),
+      .gen_stop_o                    (flow_gen_stop),
+      .gen_clock_o                   (flow_gen_clock),
+      .gen_idle_o                    (flow_gen_idle),
+      .sel_i3c_i2c_o                 (flow_sel_i3c_i2c),
+      .use_i2c_timing_o              (flow_use_i2c_timing),
+      .scl_use_od_low_o              (flow_scl_use_od_low),
+      .scl_gen_done_i                (scl_gen_done),
+      .scl_gen_busy_i                (scl_gen_busy),
+      .ccc_valid_o                   (flow_ccc_valid),
+      .daa_stop_o                    (flow_daa_stop),
+      .daa_dev_idx_o                 (flow_daa_dev_idx),
+      .ccc_dev_count_o               (flow_ccc_dev_count),
+      .ccc_done_i                    (daa_done),
+      .daa_stop_req_i                (daa_req_stop),
+      .daa_stopped_i                 (daa_stopped),
+      .daa_nack_error_i              (daa_nack_error),
+      .daa_address_i                 (daa_address),
+      .daa_address_valid_i           (daa_address_valid),
+      .daa_pid_i                     (daa_pid),
+      .daa_bcr_i                     (daa_bcr),
+      .daa_dcr_i                     (daa_dcr),
+      .sel_od_pp_o                   (flow_sel_od_pp),
       .broadcast_header_enable_i,
       .i3c_fsm_en_i,
       .abort_i,
-      .hc_seq_cancel_event_o(flow_hc_seq_cancel_event),
+      .hc_seq_cancel_event_o         (flow_hc_seq_cancel_event),
       .hc_err_cmd_seq_timeout_event_o(flow_hc_err_cmd_seq_timeout_event),
       .i3c_fsm_idle_o
   );
@@ -348,31 +381,36 @@ module controller_active
   ) u_daa_ctrl (
       .clk_i,
       .rst_ni,
-      .ccc_valid_i        (flow_ccc_valid),
-      .dev_count_i        (flow_ccc_dev_count),
-      .dev_idx_i          (flow_daa_dev_idx),
-      .done_o             (daa_done),
-      .req_restart_o      (daa_req_restart),
-      .bus_tx_done_i      (tx_flow_done),
-      .bus_tx_idle_i      (tx_flow_idle),
-      .bus_tx_req_byte_o  (daa_tx_req_byte),
-      .bus_tx_req_bit_o   (daa_tx_req_bit),
-      .bus_tx_req_value_o (daa_tx_req_value),
-      .bus_tx_sel_od_pp_o (daa_tx_sel_od_pp),
-      .bus_rx_data_i      (rx_flow_data),
-      .bus_rx_done_i      (rx_flow_done),
-      .bus_rx_req_bit_o   (daa_rx_req_bit),
-      .bus_rx_req_byte_o  (daa_rx_req_byte),
-      .bus_start_det_i    (bus_state.start_det),
-      .bus_rstart_det_i   (bus_state.rstart_det),
-      .bus_stop_det_i     (bus_state.stop_det),
-      .dat_read_valid_o   (daa_dat_read_valid),
-      .dat_index_o        (daa_dat_index),
-      .dat_rdata_i        (dat_rdata_hw_i),
-      .daa_address_o      (daa_address),
-      .daa_address_valid_o(daa_address_valid),
-      .daa_pid_o          (daa_pid),
-      .daa_bcr_o          (daa_bcr),
-      .daa_dcr_o          (daa_dcr)
+      .daa_valid_i             (flow_ccc_valid),
+      .stop_i                  (flow_daa_stop),
+      .dev_count_i             (flow_ccc_dev_count),
+      .dev_idx_i               (flow_daa_dev_idx),
+      .done_o                  (daa_done),
+      .nack_error_o            (daa_nack_error),
+      .req_stop_o              (daa_req_stop),
+      .stopped_o               (daa_stopped),
+      .req_rstart_o            (daa_req_rstart),
+      .bus_tx_done_i           (tx_flow_done),
+      .bus_tx_idle_i           (tx_flow_idle),
+      .bus_tx_req_byte_o       (daa_tx_req_byte),
+      .bus_tx_req_bit_o        (daa_tx_req_bit),
+      .bus_tx_req_value_o      (daa_tx_req_value),
+      .bus_tx_sel_od_pp_o      (daa_tx_sel_od_pp),
+      .bus_rx_data_i           (bus_rx_data),
+      .bus_rx_done_i           (bus_rx_done),
+      .bus_rx_req_bit_o        (daa_rx_req_bit),
+      .bus_rx_req_bit_handoff_o(daa_rx_req_bit_handoff),
+      .bus_rx_req_byte_o       (daa_rx_req_byte),
+      .bus_start_det_i         (bus_state.start_det),
+      .bus_rstart_det_i        (bus_state.rstart_det),
+      .bus_stop_det_i          (bus_state.stop_det),
+      .dat_read_valid_o        (daa_dat_read_valid),
+      .dat_index_o             (daa_dat_index),
+      .dat_rdata_i             (dat_rdata_hw_i),
+      .daa_address_o           (daa_address),
+      .daa_address_valid_o     (daa_address_valid),
+      .daa_pid_o               (daa_pid),
+      .daa_bcr_o               (daa_bcr),
+      .daa_dcr_o               (daa_dcr)
   );
 endmodule

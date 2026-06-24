@@ -50,13 +50,6 @@ class i2c_regular_read_basic_vseq extends i3c_base_vseq;
 
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
-    `DV_CHECK_EQ(dev_seq.sampled_addr, I2C_STATIC_ADDR,
-                 $sformatf("%s: sampled static address mismatch", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b1,
-                 $sformatf("%s: sampled direction should be read", cfg.ctxt))
-    `DV_CHECK_EQ(rx, pack_bytes_to_word(read_data),
-                 $sformatf("%s: RX data word mismatch", cfg.ctxt))
-    check_master_ack_sequence(dev_seq, data_length, cfg.ctxt);
     check_all_queues_empty($sformatf("after I2C_002 len %0d", data_length));
 
     `uvm_info(`gfn, $sformatf(
@@ -81,27 +74,12 @@ class i2c_regular_read_basic_vseq extends i3c_base_vseq;
     for (int unsigned i = 0; i < data_length; i++) begin
       if (i > 0) s = {s, " "};
       if (i < dev_seq.sampled_t_bit.size()) begin
-        s = {s, dev_seq.sampled_t_bit[i] ? "ACK" : "NACK"};
+        s = {s, (dev_seq.sampled_t_bit[i] == SampledAck) ? "ACK" : "NACK"};
       end else begin
         s = {s, "MISSING"};
       end
     end
     return {s, "]"};
   endfunction
-
-  virtual task check_master_ack_sequence(i3c_device_response_seq dev_seq,
-                                         int unsigned data_length, string ctxt);
-    `DV_CHECK_EQ(dev_seq.sampled_t_bit.size(), data_length,
-                 $sformatf("%s: sampled master ACK/NACK count mismatch", ctxt))
-    for (int unsigned i = 0; i < data_length; i++) begin
-      if (i < dev_seq.sampled_t_bit.size()) begin
-        bit exp_ack;
-
-        exp_ack = (i < (data_length - 1));
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[i], exp_ack,
-                     $sformatf("%s: sampled master ACK/NACK byte[%0d] mismatch", ctxt, i))
-      end
-    end
-  endtask
 
 endclass

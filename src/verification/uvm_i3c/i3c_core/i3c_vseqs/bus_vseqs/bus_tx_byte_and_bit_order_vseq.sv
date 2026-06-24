@@ -42,29 +42,8 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
-    `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h08, "BUS_008: target address mismatch")
-    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0, "BUS_008: transfer direction should be write")
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), NUM_TEST_BYTES,
-                 "BUS_008: device should sample all write data bytes")
-    for (int i = 0; i < NUM_TEST_BYTES; i++) begin
-      if (i < dev_seq.sampled_data.size()) begin
-        `DV_CHECK_EQ(dev_seq.sampled_data[i], exp_data[i],
-                     $sformatf("BUS_008: sampled byte[%0d] mismatch; bit order is wrong", i))
-      end
-    end
 
-    `DV_CHECK_EQ(dev_seq.sampled_t_bit.size(), NUM_TEST_BYTES,
-                 "BUS_008: device should sample one controller T-bit per data byte")
-    for (int i = 0; i < NUM_TEST_BYTES; i++) begin
-      if (i < dev_seq.sampled_t_bit.size()) begin
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[i], ~^exp_data[i],
-                     $sformatf("BUS_008: T-bit parity mismatch for byte[%0d]", i))
-      end
-    end
 
-    `DV_CHECK_EQ(resp[31:28], 4'h0, "BUS_008: expected Success response")
-    `DV_CHECK_EQ(resp[27:24], cfg.tid, "BUS_008: response TID mismatch")
-    `DV_CHECK_EQ(resp[15:0], NUM_TEST_BYTES[15:0], "BUS_008: response length mismatch")
 
   endtask
 

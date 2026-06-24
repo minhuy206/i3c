@@ -419,31 +419,9 @@ Kết quả mong đợi là dữ liệu target thấy trên bus phải khớp ch
 
 Test này giúp phát hiện lỗi trong `bus_tx_flow`, byte ordering, và scoreboard expectation.
 
-### SDRW_004 - `i3c_write_tbit_parity_generation`
+SDR write T-bit parity không còn là một directed test riêng. Behavior này được assert bằng SVA `ap_sdr_write_tbit_parity`, cover bằng `cp_sdr_write_tbit_parity`, `cp_sdr_write_tbit_parity_one`, và `cp_sdr_write_tbit_parity_zero`, rồi được exercise tự nhiên bởi các SDRW test có payload random/pattern.
 
-Test này kiểm tra T-bit trong I3C SDR write.
-
-Trong I3C SDR write, sau mỗi data byte controller cần gửi thêm T-bit. Theo MIPI I3C SDR semantics, T-bit của controller write là odd parity trên data byte; trong SystemVerilog có thể tính bằng `~^data_byte`.
-
-Testbench sẽ gửi các data byte có parity chẵn và parity lẻ, rồi bus monitor sample T-bit sau từng byte.
-
-Kết quả mong đợi là T-bit trên bus luôn làm tổng số bit 1 của `{data_byte, T-bit}` là lẻ, tương đương giá trị `~^data_byte`. Nếu data byte thay đổi parity, T-bit cũng phải thay đổi tương ứng.
-
-Test này quan trọng vì target dùng T-bit để kiểm tra/đồng bộ data phase. Nếu T-bit sai, data byte có thể đúng nhưng transaction vẫn sai protocol.
-
-### SDRW_005 - `i3c_write_tx_fifo_underflow_ovl`
-
-Test này kiểm tra trường hợp controller cần write data nhưng TX FIFO chưa có đủ data.
-
-Testbench issue một write command 8 byte nhưng chỉ nạp sẵn một DWORD, tương đương 4 byte, vào TX FIFO. Test cũng issue các command 4 byte và 8 byte khi TX FIFO rỗng ngay từ đầu. Các biến thể này chạy cả `toc=1` và `toc=0`, trong hai mode private-address trực tiếp và broadcast-header-enabled.
-
-Khi thiếu data, controller không được truyền byte rác, không được đọc underflow từ TX FIFO, và không được đi vào state cũ `StallWrite`.
-
-Kết quả mong đợi là controller truyền đúng 4 byte đã có trong partial-underflow case, hoặc không truyền data/T-bit nào khi FIFO rỗng ngay từ đầu. Controller phát STOP và ghi response để software có thể drain RESP FIFO, nhưng test này không check các field RESP. Với biến thể `toc=0`, underflow vẫn phải terminate bằng STOP, không được tạo Repeated START hoặc continuation. Nếu software nạp thêm TX data sau lỗi, data đó không được consume cho command đã bị abort; TX FIFO vẫn non-empty cho đến khi SW reset flush queue. Encoding chi tiết của RESP `Ovl` thuộc nhóm `ERR_005`.
-
-Test này quan trọng vì TX underflow là lỗi producer/software; controller phải terminate deterministically thay vì giữ bus vô hạn để chờ software refill.
-
-### SDRW_006 - `i3c_write_toc_zero`
+### SDRW_004 - `i3c_write_toc_zero`
 
 Test này kiểm tra behavior continuation của regular SDR I3C write khi command đầu tiên có `toc=0`.
 
@@ -465,7 +443,7 @@ Trong negative subcase, command đầu tiên vẫn phải truyền đủ data/T-
 
 Test này quan trọng vì `toc=0` ảnh hưởng trực tiếp đến ownership của bus và sequencing giữa nhiều SDR private transfer trong cùng một frame. Nếu controller tạo STOP quá sớm, transfer bị tách frame sai. Nếu controller không tạo được `Sr`, không lấy command kế tiếp đúng lúc, hoặc phát lại `0x7e` ở mỗi continuation, continuation flow sẽ sai so với semantics đã specification hóa.
 
-### SDRW_007 - `i3c_write_back_to_back`
+### SDRW_005 - `i3c_write_back_to_back`
 
 Test này kiểm tra nhiều regular write command chạy liên tiếp.
 
@@ -477,7 +455,7 @@ Mỗi RESP phải có TID và length khớp với command tương ứng. Scorebo
 
 Test này quan trọng vì hệ thống thực tế thường không chỉ chạy một command đơn lẻ. Back-to-back command giúp phát hiện lỗi state cleanup, FIFO pointer, và response ordering.
 
-### SDRW_008 - `i3c_write_multi_dat_idx`
+### SDRW_006 - `i3c_write_multi_dat_idx`
 
 Test này kiểm tra controller chọn đúng DAT entry khi regular SDR private write dùng `dev_idx` khác nhau.
 
@@ -505,19 +483,9 @@ RX FIFO word mong đợi là `32'hBEBA_FECA`, và RESP trả về phải là suc
 
 Test này quan trọng vì đây là baseline để biết regular I3C read path vẫn tuân thủ spec, bao gồm address phase, data receive phase, RX FIFO packing, và response generation.
 
-### SDRR_002 - `i3c_read_broadcast_header_enabled`
+Case baseline chạy cả hai private-address mode. Khi `BROADCAST_ADDR_ENABLE=1`, frame phải bắt đầu bằng `START + 0x7e/W + ACK + Sr + 0x08/R`; khi bit này bằng 0, controller đi thẳng tới dynamic address.
 
-Test này kiểm tra private I3C read khi `HC_CONTROL[BROADCAST_ADDR_ENABLE]=1`.
-
-Với read, broadcast-header preamble vẫn dùng direction write cho reserved address `0x7e/W`, vì đây là header để mở private transfer. Sau ACK của broadcast header, controller phải tạo repeated START rồi mới phát dynamic address của target với direction read.
-
-DAT[0] chứa dynamic address `0x08`. Target ACK broadcast header, ACK `0x08/R`, sau đó drive bốn byte read data theo sequence đã cấu hình.
-
-Kết quả mong đợi trên bus là `START + 0x7e/W + ACK + Sr + 0x08/R + ACK + read data/T-bit + STOP`. RX FIFO phải chứa đúng data target trả về, RESP length phải khớp số byte đọc, và scoreboard phải xem preamble cộng target phase là một transaction đầy đủ.
-
-Test này quan trọng vì read path có cả address sequencing, target-driven data, T-bit read semantics, và RX FIFO packing. Nếu monitor tách `0x7e` thành transaction riêng, scoreboard có thể báo sai hoặc bỏ sót lỗi thật.
-
-### SDRR_003 - `i3c_regular_read_len_sweep`
+### SDRR_002 - `i3c_regular_read_len_sweep`
 
 Test này kiểm tra nhiều độ dài read khác nhau và cách RX FIFO pack byte thành DWORD.
 
@@ -529,19 +497,7 @@ Ví dụ nếu read 3 byte, controller không được đợi đủ 4 byte mới
 
 Test này quan trọng vì lỗi partial DWORD rất dễ xảy ra ở read path, đặc biệt khi length là 1, 2, 3, 5, hoặc 7 byte.
 
-### SDRR_004 - `i3c_read_short_target_end`
-
-Test này kiểm tra trường hợp target kết thúc read sớm hơn số byte controller yêu cầu.
-
-Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M < N`, sau đó dùng T-bit để báo end trước thời điểm controller mong đợi.
-
-Kết quả mong đợi là controller không được tiếp tục lấy thêm data giả. RX FIFO chỉ chứa đúng `M` byte đã thật sự nhận được từ target.
-
-Controller phải ghi response để software có thể drain RESP FIFO, nhưng test này chỉ kiểm tra flow read ngắn và dữ liệu RX hợp lệ. Encoding chi tiết của RESP `I3cShortReadErr` thuộc nhóm `ERR_004`.
-
-Test này quan trọng vì trong giao tiếp thực tế, target có thể không có đủ data hoặc chủ động kết thúc transfer. Controller phải report lỗi đúng và không được corrupt RX FIFO.
-
-### SDRR_005 - `i3c_read_target_more_than_requested`
+### SDRR_003 - `i3c_read_target_more_than_requested`
 
 Test này kiểm tra trường hợp target vẫn muốn gửi tiếp data sau khi controller đã nhận đủ số byte yêu cầu.
 
@@ -553,19 +509,7 @@ Nói cách khác, requested length của command là giới hạn mà controller
 
 Test này quan trọng vì nếu controller đọc dư byte, RX FIFO sẽ chứa data ngoài mong muốn và response length sẽ không còn khớp với command.
 
-### SDRR_006 - `i3c_read_rx_fifo_full_stall`
-
-Test này kiểm tra backpressure khi controller đang read nhưng RX FIFO không còn chỗ để ghi data.
-
-Trước khi hoặc trong lúc read, testbench làm RX FIFO full tại thời điểm controller cần flush data nhận được vào FIFO. Sau đó testbench drain RX FIFO để tạo chỗ trống.
-
-Khi RX FIFO full, controller không được làm mất data đã nhận, không được ghi tràn FIFO, và không được làm transaction bị corrupt. Controller phải stall an toàn, thường bằng cách giữ `SCL` low cho đến khi có thể tiếp tục.
-
-Kết quả mong đợi là sau khi RX FIFO được drain, controller resume và ghi data đúng thứ tự. Không có byte nào bị mất hoặc bị duplicate.
-
-Test này quan trọng vì software có thể đọc RX FIFO chậm hơn tốc độ controller nhận data từ bus.
-
-### SDRR_007 - `i3c_read_data_patterns`
+### SDRR_004 - `i3c_read_data_patterns`
 
 Test này kiểm tra data integrity của read path với nhiều pattern khác nhau.
 
@@ -575,23 +519,11 @@ Kết quả mong đợi là nội dung RX FIFO phải khớp chính xác với d
 
 Test này giúp phát hiện lỗi trong `i3c_driver`, `bus_rx_flow`, byte ordering, RX FIFO packing, và scoreboard expectation.
 
-### SDRR_008 - `i3c_read_no_parity_error_on_end_tbit`
-
-Test này kiểm tra ý nghĩa của T-bit trong I3C SDR read.
-
-Trong read phase, T-bit do target gửi không phải parity của data byte. Theo MIPI I3C SDR read semantics, khi target gửi T-bit bằng 0 thì đó là tín hiệu end-of-data.
-
-Testbench chạy một read transaction trong đó final T-bit bằng 0 đúng tại requested length.
-
-Kết quả mong đợi là controller xem T-bit này là kết thúc data hợp lệ, không đọc thêm byte giả, và drain các queue sạch sau khi transaction hoàn tất. Encoding chi tiết của RESP cho trường hợp này thuộc nhóm `ERR_013`.
-
-Test này quan trọng vì nếu controller diễn giải sai T-bit read phase, các read transaction hợp lệ có thể bị đọc dư byte hoặc kết thúc sai flow.
-
-### SDRR_009 - `i3c_read_toc_zero`
+### SDRR_005 - `i3c_read_toc_zero`
 
 Test này kiểm tra behavior continuation của regular SDR I3C read khi command đầu tiên có `toc=0`.
 
-Trong scope project hiện tại, `toc=0` continuation được định nghĩa cho SDR regular I3C private transfer, bao gồm cả write và read. Vì vậy read path cũng cần test riêng, không chỉ dựa vào `SDRW_006`.
+Trong scope project hiện tại, `toc=0` continuation được định nghĩa cho SDR regular I3C private transfer, bao gồm cả write và read. Vì vậy read path cũng cần test riêng, không chỉ dựa vào `SDRW_004`.
 
 Testbench queue hai command đến cùng I3C target. Command thứ nhất là regular read với `toc=0`, length 2 byte. Target trả về hai byte hợp lệ và T-bit cuối báo kết thúc đúng tại requested length. Command thứ hai là regular write với `toc=1`, length 2 byte, và command này đã nằm sẵn trong CMD FIFO trước khi read đầu tiên kết thúc.
 
@@ -601,17 +533,29 @@ RESP của read command phải báo Success với TID và length đúng. RESP c�
 
 Test này quan trọng vì read termination có thêm RX FIFO packing và T-bit semantics, nên không thể chỉ dùng write `toc=0` để kết luận read continuation đã đúng. Nếu controller flush RX data sai thời điểm, tạo STOP quá sớm, hoặc không tạo được `Sr`, response và bus sequencing đều có thể sai.
 
-### SDRR_010 - `i3c_read_toc_zero_broadcast_header_once`
+### SDRR_006 - `i3c_read_back_to_back`
 
-Test này kiểm tra private I3C read continuation khi `BROADCAST_ADDR_ENABLE=1`.
+Test này kiểm tra nhiều regular SDR private read được queue liên tiếp, tương tự coverage back-to-back của write path.
 
-Command đầu tiên là một private read mới, nên controller phải phát broadcast-header preamble một lần: `START + 0x7e/W + ACK + Sr`, rồi tới dynamic address với direction read. Sau khi read command đầu tiên kết thúc với `toc=0`, repeated START tiếp theo là continuation của cùng private sequence, không phải private sequence mới.
+Testbench cấu hình DAT[0] là một I3C target, rồi queue ba read command đến cùng target trước khi enable controller. Ba command dùng length khác nhau, ví dụ 3, 5, và 4 byte, và mỗi command có TID riêng. Target model trả về payload khác nhau cho từng command để dễ phát hiện lỗi trộn data.
 
-Testbench queue command read đầu tiên với `toc=0` và command thứ hai với `toc=1`. Target trả data hợp lệ cho read command đầu tiên.
+Kết quả mong đợi là controller xử lý ba command theo đúng FIFO order. Vì cả ba command đều có `toc=1`, mỗi read là một transfer độc lập và phải kết thúc bằng STOP; không được tạo Repeated START giữa các read độc lập này.
 
-Kết quả mong đợi là chỉ command đầu tiên có `0x7e` preamble. Sau data/T-bit của read đầu tiên, controller tạo `Sr` rồi tiếp tục command kế tiếp mà không phát lại `0x7e/W`. RX FIFO phải chứa đúng data read, và RESP của cả hai command phải đúng TID/length.
+RX FIFO phải chứa data theo đúng boundary của từng command. Khi testbench drain RX FIFO theo thứ tự command, payload của command thứ nhất chỉ chứa data của read thứ nhất, payload của command thứ hai chỉ chứa data của read thứ hai, và payload của command thứ ba chỉ chứa data của read thứ ba. Không được có byte bị rơi, duplicate, hoặc lẫn từ command trước/sau.
 
-Test này quan trọng vì nó bắt lỗi state `continuation pending`. Nếu controller quên rằng bus chưa có STOP, nó có thể phát lại broadcast header và làm frame sai. Nếu controller giữ state quá lâu sau STOP, transfer kế tiếp lại có thể thiếu preamble.
+RESP metadata phải giữ đúng thứ tự command, đặc biệt là TID và length tương ứng với từng read đã queue. Sau khi test hoàn tất, CMD, TX, RX, và RESP queue đều phải empty.
+
+Test này quan trọng vì read back-to-back dùng RX FIFO và RESP FIFO nhiều hơn write path. Nếu controller pop command sai thời điểm, pack partial DWORD sai, hoặc không giữ boundary giữa các read, lỗi sẽ xuất hiện dưới dạng RX data bị trộn hoặc response không còn khớp với command.
+
+### SDRR_007 - `i3c_read_multi_dat_idx`
+
+Test này kiểm tra regular SDR private read chọn đúng DAT entry khi command dùng nhiều `dev_idx`.
+
+Testbench program hai DAT entry với dynamic address khác nhau, chạy các read độc lập, rồi chạy một cặp read continuation `toc=0` sang `toc=1`.
+
+Kết quả mong đợi là mỗi command phát đúng dynamic address của DAT entry được chọn, RX data của từng target giữ đúng thứ tự và không bị trộn. Cặp continuation tạo đúng một Repeated START, chuyển sang target tiếp theo, và tất cả queue được drain sạch.
+
+Test này quan trọng vì nó kiểm tra đồng thời DAT lookup, RX FIFO ordering và việc thay đổi target tại continuation boundary.
 
 ## 4.6 Immediate Data Transfer
 
@@ -649,7 +593,7 @@ Immediate Data Transfer descriptor vẫn có field `toc`, nên testplan cần ki
 
 Với `toc=1`, kết quả mong đợi là controller tạo STOP ở cuối immediate transfer và RESP báo success nếu các phase trước đó đều hợp lệ.
 
-Với `toc=0`, test không nên tự suy ra một continuation hợp lệ như `SDRW_006`. Đây là clarification/negative case cho đến khi project spec định nghĩa policy. Policy được chấp nhận cho sign-off phải là một hành vi rõ ràng như reject/abort với error response hoặc force STOP; điểm quan trọng là controller không được để bus treo ở trạng thái không có STOP cũng không có `Sr`, và không được tự ý nối sang command kế tiếp bằng waveform sai.
+Với `toc=0`, test không nên tự suy ra một continuation hợp lệ như `SDRW_004`. Đây là clarification/negative case cho đến khi project spec định nghĩa policy. Policy được chấp nhận cho sign-off phải là một hành vi rõ ràng như reject/abort với error response hoặc force STOP; điểm quan trọng là controller không được để bus treo ở trạng thái không có STOP cũng không có `Sr`, và không được tự ý nối sang command kế tiếp bằng waveform sai.
 
 Test này quan trọng vì `toc` xuất hiện trong descriptor immediate, nhưng MIPI I3C spec chỉ định bus-level START, Repeated START và STOP, không định nghĩa trực tiếp khái niệm Immediate descriptor. Vì vậy test này dùng để khóa policy của project spec, còn test chứng minh `toc=0` continuation hợp lệ nằm ở regular SDR private transfer.
 
@@ -664,30 +608,6 @@ Kết quả mong đợi là controller dùng static address với direction writ
 Target ACK địa chỉ và các data byte. RESP length phải bằng đúng số byte đã truyền, và response phải là success.
 
 Test này quan trọng vì cùng một immediate command path có thể phục vụ cả I3C và I2C tùy theo DAT. Nếu decode device type sai, controller có thể dùng sai địa chỉ hoặc sai OD/PP mode.
-
-### IMM_005 - `immediate_addr_nack`
-
-Test này kiểm tra lỗi address NACK trong immediate transfer.
-
-Target được cấu hình để NACK địa chỉ ngay tại ACK/NACK slot sau address byte. Testbench issue cả I3C immediate write và I2C immediate write để kiểm tra hai loại device: I3C dùng `dynamic_address + W`, còn I2C legacy dùng `static_address + W`.
-
-Kết quả mong đợi là controller phát hiện `addr_nack` sau khi sample ACK/NACK bit của address phase, rồi tạo STOP để kết thúc transaction. Controller không được đi tiếp vào data phase, nên không có byte inline nào trong command descriptor được truyền ra bus sau address NACK.
-
-RESP phải báo error `AddrHeader`. Vì lỗi xảy ra trước data phase, response length phải là 0; address byte không được tính là data payload. Sau STOP, bus phải quay về idle hoặc recovery state hợp lệ, không được bị treo.
-
-Test này quan trọng vì immediate data nằm sẵn trong descriptor, nên nếu controller không chặn đúng sau address NACK, nó có thể vẫn truyền inline data dù target không tồn tại hoặc không chấp nhận transaction.
-
-### IMM_006 - `immediate_data_nack_i2c`
-
-Test này kiểm tra trường hợp I2C target ACK địa chỉ nhưng NACK một data byte trong immediate write.
-
-DAT entry được cấu hình là I2C legacy device. Testbench issue một multi-byte I2C immediate write. Target ACK address phase, ACK một số byte đầu nếu cần, rồi NACK một data byte cụ thể.
-
-Kết quả mong đợi là controller phát hiện data NACK ngay sau ACK/NACK slot của data byte bị từ chối. Controller phải tạo STOP để kết thúc I2C immediate transaction, rồi ghi RESP error `Nack`.
-
-Controller không được tiếp tục truyền các byte inline còn lại như thể target vẫn ACK bình thường. Data byte bị NACK vẫn đã được clock ra bus đủ 8 bit trước khi ACK/NACK slot được sample, nên response length có thể tính byte đó là byte đã truyền; nhưng các byte sau vị trí NACK không được xuất hiện trên bus.
-
-Test này quan trọng vì I2C data ACK/NACK là cơ chế flow/error cơ bản. Immediate path lấy payload trực tiếp từ command descriptor, nên nếu controller không chặn đúng sau data NACK thì controller có thể tiếp tục phát hết inline data dù target đã từ chối byte trước đó.
 
 ## 4.7 Common Command Codes
 
@@ -799,17 +719,23 @@ Phần 4.8 kiểm tra Dynamic Address Assignment, cụ thể là flow ENTDAA.
 
 ENTDAA là cơ chế I3C dùng để gán dynamic address cho các target chưa có địa chỉ động. Trong thiết kế này, flow bắt đầu từ `AddressAssignment` command, phát CCC ENTDAA opening frame, sau đó `entdaa_controller` và `entdaa_fsm` thực hiện từng round: gửi `7'h7E+R`, nhận PID/BCR/DCR từ target, gửi assigned dynamic address kèm parity, sample ACK/NACK, rồi lặp tiếp nếu `dev_count` yêu cầu nhiều device.
 
-Các test trong phần này tập trung vào cả success path và các corner case: không có device, số device ít hơn `dev_count`, tăng DAT index qua nhiều round, parity của assigned address, target reject address, capture PID/BCR/DCR, boundary của DAT, abort giữa round, và arbitration nhiều target.
+Các test trong phần này tập trung vào cả success path và các corner case: không có device, số device ít hơn `dev_count`, tăng DAT index qua nhiều round, parity của assigned address, target reject address, boundary của DAT, và arbitration nhiều target. Abort giữa round được gom vào nhóm error/recovery `ERR_007` vì đó là HC abort behavior chung, không phải positive DAA flow. Việc capture PID/BCR/DCR và pack DAA result vào RX FIFO là một phần bắt buộc của success path DAA_001, không phải một test độc lập.
 
 ### DAA_001 - `entdaa_single_device_success`
 
-Test này kiểm tra một round ENTDAA thành công với một target.
+Test này kiểm tra đầy đủ một round ENTDAA thành công với một target, bao gồm capture identity và đường DAA result software-visible.
 
-DAT[0] chứa dynamic address cần gán. Target model có khả năng drive PID, BCR, DCR và ACK assigned address. Testbench issue `AddressAssignment` với `dev_idx=0` và `dev_count=1`.
+DAT[0] chứa dynamic address cần gán. Target model drive các giá trị PID, BCR, DCR đã biết trước và ACK assigned address. Testbench issue `AddressAssignment` với `dev_idx=0` và `dev_count=1`.
 
-Kết quả mong đợi là ENTDAA frame hoàn tất đầy đủ. Controller gửi assigned address byte đúng với dynamic address trong DAT[0], bao gồm parity bit đúng. Target ACK address đó.
+Kết quả mong đợi là ENTDAA frame hoàn tất đầy đủ. PID/BCR/DCR được capture đúng giá trị và đúng thứ tự byte mà target đã drive. Controller gửi assigned address byte đúng với dynamic address trong DAT[0], bao gồm parity bit đúng. Target ACK address đó.
 
-RESP phải báo success. Nếu project spec định nghĩa việc đưa thông tin ENTDAA vào RX FIFO hoặc software-visible path, test phải kiểm tra theo đúng format đó.
+RESP phải báo `Success` với length 12. DAA result software-visible phải được ghi vào RX FIFO theo đúng ba DWORD:
+
+- `PID[47:16]`
+- `{PID[15:0], BCR[7:0], DCR[7:0]}`
+- `{25'h0, DA[6:0]}`
+
+Scoreboard so sánh dữ liệu RX FIFO với identity quan sát được trên bus. Assertion `ap_entdaa_done_outputs_id_fields` kiểm tra trực tiếp các output PID/BCR/DCR của `entdaa_fsm` so với shift register đã capture.
 
 Test này quan trọng vì đây là baseline của toàn bộ DAA flow. Nếu single-device success không đúng, các case multi-device hoặc corner case phía sau không có ý nghĩa.
 
@@ -847,17 +773,17 @@ Nếu có đủ `K` target phản hồi, controller phải assign đủ `K` dyna
 
 Test này quan trọng vì lỗi tăng index có thể làm nhiều target bị gán cùng địa chỉ, hoặc target thứ hai nhận nhầm địa chỉ của DAT entry khác.
 
-### DAA_005 - `entdaa_address_parity_sweep`
+### DAA_005 - `covered_by_sva_no_vseq`
 
 Test này kiểm tra parity bit của assigned address trong ENTDAA.
 
-Target ACK assigned address. Testbench sweep nhiều dynamic address đại diện, ví dụ địa chỉ thấp, địa chỉ cao, pattern xen kẽ bit 0/1, và một vài giá trị random hợp lệ.
+DAA_005 không có dedicated vseq. Stimulus được tái sử dụng từ các ENTDAA vseq như DAA_001 và DAA_004, kết hợp nhiều regression seed để tạo các dynamic address đại diện: địa chỉ thấp, địa chỉ cao, pattern xen kẽ bit 0/1, và các giá trị random hợp lệ khác.
 
 Kết quả mong đợi là controller gửi assigned address theo format `{dynamic_addr[6:0], PAR}`. Bit `PAR` phải là odd parity của 7-bit dynamic address: `PAR = ~^dynamic_addr[6:0]`. Nói cách khác, tổng số bit `1` trong `{dynamic_addr[6:0], PAR}` phải là số lẻ.
 
-Nếu dynamic address thay đổi, parity bit phải thay đổi theo công thức trên. Target chỉ ACK khi 7-bit address đúng và `PAR` đúng; nếu `PAR` sai thì target NACK assigned address.
+`ap_entdaa_send_addr_value` kiểm tra công thức này ở mọi lần FSM gửi assigned address. Scoreboard kiểm tra parity thực tế quan sát được trên bus. Covergroup trong `entdaa_fsm_sva` thu coverage cho nhóm địa chỉ low, high, alternating, nhóm còn lại, cả hai giá trị parity, và cross giữa nhóm địa chỉ với parity.
 
-Test này quan trọng vì assigned address không chỉ là 7-bit address. Parity sai có thể làm target reject assignment dù địa chỉ chính đúng.
+Coverage DAA_005 chỉ được close khi assertion pass và các functional coverage bin yêu cầu đã hit; việc một ENTDAA vseq đơn lẻ pass không đủ để close mục tiêu này. Test này quan trọng vì parity sai có thể làm target reject assignment dù địa chỉ chính đúng.
 
 ### DAA_006 - `entdaa_address_rejected`
 
@@ -871,53 +797,17 @@ Không được ghi nhận target là đã được assign address nếu target 
 
 Test này quan trọng vì target có quyền từ chối assigned address. Controller phải phân biệt rõ capture identity thành công với assignment thành công.
 
-### DAA_007 - `entdaa_pid_bcr_dcr_capture`
-
-Test này kiểm tra việc capture identity của target trong ENTDAA.
-
-Target drive các giá trị PID, BCR, và DCR đã biết trước. Testbench chạy một ENTDAA round thành công.
-
-Kết quả mong đợi là internal captured PID/BCR/DCR trong `entdaa_fsm` khớp chính xác với giá trị target đã drive trên bus.
-
-Nếu project spec expose thông tin này cho software qua RX FIFO hoặc một format nào đó, test phải kiểm tra format đó. Nếu software-visible format chưa được định nghĩa rõ, test phải document đây là spec gap.
-
-Test này quan trọng vì PID/BCR/DCR là identity của target trong DAA. Nếu capture sai, software hoặc controller có thể hiểu sai loại device hoặc trạng thái của target.
-
-### DAA_008 - `entdaa_dat_boundary`
+### DAA_007 - `entdaa_dat_boundary`
 
 Test này kiểm tra boundary của DAT khi ENTDAA bắt đầu gần cuối table.
 
-DAT trong thiết kế có số entry hữu hạn. Testbench program `dev_idx` gần entry cuối, ví dụ `dev_idx=15`. Sau đó chạy hai case: `dev_idx=15`, `dev_count=1`; và `dev_idx=15`, `dev_count>1`.
+DAT trong thiết kế có 32 entry, được đánh index từ 0 đến 31. Testbench program `dev_idx` tại entry cuối là `dev_idx=31`. Sau đó chạy hai case: `dev_idx=31`, `dev_count=1`; và `dev_idx=31`, `dev_count>1`.
 
-Kết quả mong đợi là case một device ở entry cuối hoạt động đúng. Với case `dev_count>1`, controller sẽ cần entry ngoài phạm vi DAT nếu không có cơ chế chặn.
+Kết quả mong đợi là case `dev_idx=31`, `dev_count=1` hoạt động đúng và sử dụng DAT[31]. Với case `dev_idx=31`, `dev_count=2`, tổng `dev_idx+dev_count=33` lớn hơn `DatDepth=32`, nên descriptor không hợp lệ.
 
-Expected result cho out-of-range case phải theo policy đã được specification hóa: report error hoặc ràng buộc bằng software precondition. Nếu policy chưa có, đây là spec gap và không được tính là positive sign-off coverage.
+Controller phải reject toàn bộ command ngay trong `FetchDAT`, trước khi assert DAT read hoặc tạo bất kỳ bus activity nào. RESP phải có status `NotSupported`, TID khớp command, reserved bits bằng 0, và length bằng 0. Không target nào được assign address, và DAT index không được wrap từ 31 về 0.
 
 Test này quan trọng vì lỗi boundary DAT có thể gây đọc sai entry, assign address rác, hoặc corrupt state khi software cấu hình sai.
-
-### DAA_009 - `entdaa_stop_mid_round`
-
-Test này kiểm tra handling khi ENTDAA bị interrupt hoặc abort giữa một round.
-
-External stimulus hoặc device model tạo điều kiện giống STOP/abort, hoặc reset được assert trong lúc controller đang nhận PID/BCR/DCR.
-
-Kết quả mong đợi là ENTDAA không được treo ở trạng thái giữa chừng. `entdaa_fsm` phải terminate hoặc controller phải quay về idle/recoverable state theo policy đã specification hóa. Nếu behavior chưa được định nghĩa rõ, test document gap.
-
-Sau abort, controller phải ở trạng thái có thể recover, ví dụ software reset hoặc command mới hợp lệ không bị ảnh hưởng bởi state cũ.
-
-Test này quan trọng vì abort giữa transaction là một trong những lỗi khó debug nhất. Nếu state cleanup sai, command sau có thể dùng lại PID/BCR/DCR hoặc DAT index cũ.
-
-### DAA_010 - `entdaa_two_target_arbitration`
-
-Test này kiểm tra wired-AND arbitration giữa hai target chưa được assign address.
-
-Trong I3C ENTDAA thật, nhiều target có thể cùng phản hồi. Khi chúng drive PID khác nhau trên bus open-drain, target thua arbitration phải dừng tham gia, target thắng tiếp tục round hiện tại.
-
-Testbench cần UVM bus model hỗ trợ nhiều target cùng drive bus. Hai unaddressed target sẽ drive PID khác nhau để tạo tình huống arbitration.
-
-Kết quả mong đợi là controller assign address cho arbitration winner trước. Target thua không được bị assign trong round đó, nhưng có thể được assign ở round sau nếu còn tham gia.
-
-Test này có priority Future trong testplan vì UVM bus model hiện tại có thể chưa hỗ trợ simultaneous target driving đầy đủ. Nó vẫn được ghi lại để định hướng mở rộng verification sau này.
 
 ## 4.9 I2C Legacy Compatibility
 
@@ -975,25 +865,13 @@ Các length không chia hết cho 4 phải xử lý partial DWORD đúng, đặc
 
 Test này quan trọng vì I2C path vẫn dùng HCI queues giống các path khác. Lỗi packing ở boundary DWORD có thể xuất hiện riêng ở I2C read/write dù I3C path đã pass.
 
-### I2C_005 - `i2c_data_nack_write`
-
-Test này kiểm tra data-byte NACK trong I2C write.
-
-Target ACK static address, sau đó NACK một data byte ở vị trí `M` trong multi-byte write.
-
-Kết quả mong đợi là controller phát hiện data NACK và RESP báo error `Nack`. Sau data NACK, transfer phải dừng hoặc recover theo I2C/project error policy.
-
-Controller không được tiếp tục truyền các byte còn lại như thể target vẫn ACK bình thường. Sau lỗi, một transfer hợp lệ tiếp theo vẫn phải chạy được, để chứng minh state đã được cleanup.
-
-Test này quan trọng vì I2C target có thể NACK data để báo không nhận thêm được. Controller phải xử lý đây là lỗi data phase, không nhầm với address error.
-
-### I2C_006 - `covered_by_sva_no_vseq`
+### I2C_005 - `covered_by_sva_no_vseq`
 
 Mục này không dùng virtual sequence riêng.
 
 Lý do là I2C legacy read/write đã được kích thích bởi I2C_001 và I2C_002. Nếu thêm một vseq chỉ chạy lại read/write để kiểm tra timing mặc định 400 kHz thì phần stimulus bị trùng và không chứng minh thêm nhiều.
 
-Coverage cho I2C_006 nên nằm ở SVA và reset/default checks: `I2C_T_*` reset về các giá trị tương đương I2C Fast-mode 400 kHz, và khi controller chạy I2C legacy transfer thì timing mux phải chọn `I2C_T_*` thay vì nhóm timing chung `T_*`.
+Coverage cho I2C_005 nên nằm ở SVA và reset/default checks: `I2C_T_*` reset về các giá trị tương đương I2C Fast-mode 400 kHz, và khi controller chạy I2C legacy transfer thì timing mux phải chọn `I2C_T_*` thay vì nhóm timing chung `T_*`.
 
 Kết quả mong đợi là default `I2C_T_LOW`, `I2C_T_HIGH`, START/STOP/data timing I2C được giữ đúng ở CSR/SVA level, còn functional transaction được cover bởi các I2C vseq còn lại.
 
@@ -1003,7 +881,7 @@ Mục này quan trọng để tránh hiểu nhầm rằng cần một vseq riên
 
 Phần 4.10 kiểm tra cách controller report lỗi, ghi response, xử lý reset, và recover khỏi các tình huống bất thường.
 
-Các test trước đó tập trung vào từng protocol flow riêng lẻ: data đúng, không corrupt FIFO, terminate/recover đúng, và không đi vào phase sai. Phần này gom lại các yêu cầu chung về status và recovery: RESP descriptor phải encode đúng success/error/TID/reserved/length, lỗi address và data phải được phân loại đúng, short read và overflow phải báo đúng error, FIFO response full phải tạo backpressure an toàn, reset không được để lại state rác, và các behavior chưa được hỗ trợ như bus stuck hoặc invalid descriptor phải được document rõ.
+Các test trước đó tập trung vào từng protocol flow riêng lẻ: data đúng, không corrupt FIFO, terminate/recover đúng, và không đi vào phase sai. Phần này gom lại các yêu cầu chung về status và recovery: RESP descriptor phải encode đúng success/error/TID/reserved/length, lỗi address và data phải được phân loại đúng, short read và overflow phải báo đúng error, FIFO response full phải tạo backpressure an toàn, reset không được để lại state rác, và các behavior chưa được hỗ trợ như bus stuck hoặc invalid descriptor phải được document rõ. Với descriptor đã có policy rõ, ví dụ `AddressAssignment`/ENTDAA có `toc=0`, `wroc=0`, `dev_count=0`, hoặc `dev_idx+dev_count>DatDepth`, test phải check strict `NotSupported`, không DAT access, và không bus activity.
 
 ### ERR_001 - `resp_success_tid_length`
 
@@ -1017,55 +895,89 @@ Theo testplan, các field quan trọng là `RESP[31:28]` cho status, `RESP[27:24
 
 Test này quan trọng vì software dựa vào RESP để biết command nào đã hoàn tất và hoàn tất với bao nhiêu data. Nếu TID hoặc length sai, software có thể ghép nhầm response với command khác.
 
-### ERR_002 - `resp_addr_header_error`
+### ERR_002 - `resp_private_addr_nack`
 
-Test này kiểm tra response khi lỗi xảy ra ở address/header phase.
+Test này kiểm tra response khi lỗi xảy ra ở private hoặc target address phase.
 
-Target được cấu hình để NACK address. Testbench chạy `i3c_addr_header_nack_resp_vseq` cho I3C write/read address NACK; I2C write/read và direct CCC target address phase sẽ extend cùng rule khi các directed test tương ứng được thêm.
+Target được cấu hình để NACK address. Testbench chạy `i3c_private_addr_nack_resp_vseq` cho I3C write/read, I2C write/read, I3C/I2C immediate write, và direct CCC target-address NACK.
 
-Kết quả mong đợi là controller không được đi vào data phase sau address NACK. Với write, không truyền data. Với read, không ghi RX data. Với direct CCC, không gửi direct data byte sau khi target address bị NACK.
+Kết quả mong đợi là controller không được đi vào phase tiếp theo sau address NACK. Với write, không truyền data. Với read, không ghi RX data. Với immediate write, không gửi inline data byte. Với direct CCC, broadcast header và opcode đã được ACK/nhận, nhưng nếu target address sau repeated START bị NACK thì controller không được gửi direct data byte.
 
-RESP phải báo error `AddrHeader` ở mọi command class được support có address/header NACK. TID phải khớp command, reserved bits phải bằng 0, và length phải bằng 0.
+RESP phải báo error `AddrHeader` ở mọi command class được support có private/target address NACK. TID phải khớp command, reserved bits phải bằng 0, và length phải bằng 0.
 
-Test này quan trọng vì address/header NACK là lỗi phổ biến và cần được phân loại riêng với data NACK hoặc short read.
+Test này quan trọng vì private/target address NACK là lỗi phổ biến và cần được phân loại riêng với data NACK hoặc short read.
 
-### ERR_003 - `resp_data_nack_error`
+### ERR_003 - `resp_broadcast_header_nack`
+
+Test này kiểm tra response khi broadcast header `7'h7E+W` bị NACK.
+
+Testbench chạy `i3c_broadcast_header_nack_resp_vseq` cho broadcast CCC ENEC, DISEC, và ENTDAA opening. Device NACK ngay tại broadcast header.
+
+Kết quả mong đợi là controller dừng frame ngay sau broadcast-header NACK. Không được phát CCC opcode, không được phát payload byte, và với ENTDAA không được bắt đầu round `7'h7E+R`.
+
+RESP phải báo error `AddrHeader`, TID phải khớp command, reserved bits phải bằng 0, và length phải bằng 0.
+
+Test này được tách khỏi `ERR_002` vì broadcast header là địa chỉ reserved `7'h7E` dùng để mở CCC/ENTDAA frame, còn `ERR_002` tập trung vào private hoặc target address của transfer cụ thể.
+
+### ERR_004 - `resp_data_nack_error`
 
 Test này kiểm tra response khi target NACK data byte trong các write-style phase của I2C.
 
-Testbench chạy I2C regular write hoặc I2C immediate write, target ACK address nhưng NACK một data byte.
+Testbench chạy `i2c_data_nack_write_vseq` cho regular write nhiều DWORD và `i3c_imm_data_nack_i2c_vseq` cho immediate write với `dtt=2..4`. Target ACK address nhưng NACK một data byte.
 
-Kết quả mong đợi là controller phát hiện data NACK, dừng hoặc recover transfer theo I2C/project error policy, và ghi RESP error `Nack`.
+Kết quả mong đợi là controller phát hiện data NACK, tạo STOP và không truyền các byte inline còn lại. Byte bị NACK vẫn đã được clock đủ 8 bit nên actual length bằng 1. RESP phải là `Nack`, TID phải khớp, reserved bits bằng 0 và length bằng số byte đã truyền tới boundary lỗi.
 
-Sau lỗi, controller phải có khả năng chạy transfer hợp lệ tiếp theo, chứng minh rằng state machine không bị kẹt trong error path.
+Regular write có thể để lại TX FIFO word chưa được fetch, nên recovery phải đợi idle rồi SW reset trước khi chạy FIFO-backed write tiếp theo. Immediate payload nằm trong descriptor nên immediate transfer hợp lệ tiếp theo phải chạy được mà không SW reset.
 
 Test này quan trọng vì data NACK khác với address NACK. Nếu report sai error, software khó xác định target không tồn tại hay target từ chối data.
 
-### ERR_004 - `resp_short_read_error`
+### ERR_005 - `resp_short_read_error`
 
 Test này kiểm tra response khi I3C target kết thúc read sớm.
 
 Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M < N`, rồi báo end bằng T-bit theo read semantics.
 
-Stimulus có thể giống SDRR short-read flow, nhưng check trong test này tập trung vào response descriptor.
+Test chạy `i3c_read_short_target_end_vseq` trong cả hai private-address mode, qua nhiều partial-DWORD boundary và một subcase `toc=0`.
 
 RESP phải báo error `I3cShortReadErr`. TID phải khớp command, reserved bits phải bằng 0, và length trong response phải phản ánh số byte thật sự đã nhận, không phải requested length `N`.
 
 Test này quan trọng vì short read không nhất thiết là bus corruption. Nó là một tình huống protocol cần report chính xác để software biết có bao nhiêu data hợp lệ trong RX FIFO.
 
-### ERR_005 - `resp_ovl_error`
+### ERR_006 - `resp_ovl_error`
 
 Test này kiểm tra response khi transfer kết thúc bằng overflow/underflow class `Ovl`.
 
-Testbench chạy cùng nhóm stimulus lỗi với flow tests: regular write thiếu TX data và regular read khi RX FIFO đã full.
+Testbench chạy `i3c_write_tx_fifo_underflow_vseq`, `i3c_read_rx_fifo_full_overflow_vseq`, và `i3c_entdaa_rx_fifo_partial_overflow_vseq`: regular write thiếu TX data, regular read khi RX FIFO full hoặc chỉ còn một slot, các biến thể `toc=0`, và ENTDAA khi RX FIFO không còn đủ chỗ để lưu trọn DAA result.
 
-Kết quả mong đợi là RESP báo error `Ovl`. TID phải khớp command, reserved bits phải bằng 0, và length phải bằng số byte thật sự đã xử lý: số byte đã truyền trước TX underflow hoặc số byte đã nhận/quan sát trước RX overflow.
+Kết quả mong đợi là RESP báo error `Ovl`. TID phải khớp command, reserved bits phải bằng 0, và length phải bằng số byte thật sự đã xử lý hoặc commit: số byte đã truyền trước TX underflow, số byte đã nhận/quan sát trước RX overflow, hoặc số byte DAA result đã ghi được vào RX FIFO.
 
-Stimulus có thể giống SDRW/SDRR boundary flow tests, nhưng check trong test này tập trung vào response descriptor.
+TX underflow recovery cần đợi FSM idle rồi SW reset nếu còn residual hoặc late TX data. RX overflow không bắt buộc SW reset: software drain các RX word đã được preserve và RESP trước khi chạy command mới.
+
+Với ENTDAA, một DAA result của design này cần 3 DWORD trong RX FIFO:
+
+- word 0: `PID[47:16]`
+- word 1: `{PID[15:0], BCR, DCR}`
+- word 2: `{25'h0, DA[6:0]}`
+
+Testbench chạy 3 subcase: RX FIFO còn 0 slot, 1 slot, và 2 slot trước khi DAA result được ghi. Controller không được silently drop DAA result rồi vẫn trả `Success`. RESP length phải lần lượt là 0, 4, hoặc 8 byte tương ứng với số DWORD đã commit được. Các word đã prefill trong RX FIFO phải giữ nguyên, và những DAA result DWORD đã commit được phải đúng format đã document. ENTDAA overflow recovery chỉ cần drain prefilled RX word, committed DAA result word và RESP; không cần SW reset.
 
 Test này quan trọng vì `Ovl` là error in-scope của FIFO boundary path. Software cần phân biệt nó với address NACK và short read để biết lỗi đến từ producer/consumer FIFO thay vì target không phản hồi.
 
-### ERR_006 - `resp_fifo_full_backpressure`
+### ERR_007 - `resp_hc_abort_error`
+
+Test này kiểm tra HC abort cho I3C SDR regular write/read, I2C regular write/read, immediate transfer và ENTDAA bằng `i3c_write_abort_vseq`, `i3c_read_abort_vseq`, `i2c_regular_abort_vseq`, `i3c_imm_abort_vseq` và `i3c_daa_hc_abort_vseq`.
+
+Các case SDR gồm abort sớm, abort sau khi đã truyền hoặc commit ít nhất một DWORD, và `toc=0` nơi abort phải override continuation. Immediate case assert abort trong `I3CWriteImmediate` cho cả hai private-address mode và trong `I2CWriteImmediate`. Transfer hoàn tất tại protocol boundary đã định nghĩa, tạo STOP, không chain command kế tiếp, và RESP phải là `HcAborted` với TID, reserved bits và actual length đúng.
+
+Với I3C hoặc I2C regular write, HC abort không tự flush phần TX FIFO chưa được fetch; recovery sạch cần clear `HC_CONTROL[3]`, đợi idle và SW reset. Với regular read, software drain và kiểm tra RX data đã commit cùng RESP sau khi clear abort; test phải chạy được một read hợp lệ tiếp theo mà không SW reset. I2C read abort phải drive controller NACK ở byte cuối rồi STOP và luôn giữ OD mode.
+
+Với immediate transfer, payload nằm trong command descriptor và không dùng TX/RX FIFO. Sau khi clear abort và đọc RESP, queue đã sạch và một immediate transfer hợp lệ tiếp theo phải chạy thành công trước bất kỳ SW reset cleanup nào.
+
+Với ENTDAA, test assert HC abort trong lúc nhận PID/BCR/DCR, trong assigned-address phase, và sau một round đã hoàn tất. RESP phải là `HcAborted` với TID, reserved bits và actual length đúng. Nếu đã có DAA result được commit vào RX FIFO, software drain phần result đó cùng RESP, clear abort, và một ENTDAA hợp lệ tiếp theo phải chạy thành công không cần SW reset.
+
+Test này quan trọng vì abort là error path có thể để lại dữ liệu hợp lệ lẫn residual queue state; recovery policy phải phân biệt rõ write và read.
+
+### ERR_009 - `resp_fifo_full_backpressure`
 
 Test này kiểm tra trường hợp RESP FIFO full khi controller cần ghi response.
 
@@ -1077,7 +989,7 @@ Sau khi RESP FIFO có chỗ trống, đúng một response phải được ghi v
 
 Test này quan trọng vì software có thể đọc response chậm hơn tốc độ controller hoàn tất command. Backpressure ở RESP FIFO phải được xử lý như một phần của flow control bình thường.
 
-### ERR_007 - `reset_during_idle`
+### ERR_012 - `reset_during_idle`
 
 Test này kiểm tra reset khi DUT đang idle.
 
@@ -1089,7 +1001,7 @@ Sau reset, controller phải có thể chạy một command hợp lệ mới t�
 
 Test này quan trọng vì reset idle là đường reset cơ bản nhất. Nếu reset idle không sạch, các reset trong active phase càng khó tin cậy.
 
-### ERR_008 - `reset_during_transfer_phases`
+### ERR_013 - `reset_during_transfer_phases`
 
 Test này kiểm tra reset trong lúc controller đang hoạt động.
 
@@ -1101,7 +1013,7 @@ Sau mỗi reset point, testbench chạy một legal transfer tiếp theo để k
 
 Test này quan trọng vì reset có thể xảy ra bất kỳ lúc nào trong hệ thống thật. Nếu reset giữa transfer để lại stale command, stale data, hoặc response nửa chừng, bug sẽ rất khó debug.
 
-### ERR_009 - `sw_reset_while_busy_policy`
+### ERR_014 - `sw_reset_while_busy_policy`
 
 Test này làm rõ policy khi software reset được assert trong lúc controller đang bận.
 
@@ -1113,7 +1025,7 @@ Nếu muốn kiểm tra busy software reset như một feature, project spec ph�
 
 Test này quan trọng vì software reset là công cụ recovery, nhưng nếu dùng sai thời điểm có thể làm trạng thái controller khó dự đoán.
 
-### ERR_010 - `bus_stuck_scl_low`
+### ERR_015 - `bus_stuck_scl_low`
 
 Test này xác định gap recovery khi bus bị kẹt, ví dụ `SCL` bị giữ low.
 
@@ -1125,7 +1037,7 @@ Kết quả quan trọng là behavior phải được ghi nhận rõ, không đ�
 
 Test này quan trọng vì bus stuck là lỗi thực tế trên hệ thống open-drain. Nếu không có timeout/recovery, software hoặc system-level logic phải biết đây là giới hạn hiện tại.
 
-### ERR_011 - `invalid_descriptor_attr`
+### ERR_010 - `invalid_descriptor_attr`
 
 Test này kiểm tra behavior khi command descriptor có attr hoặc mode không được hỗ trợ.
 
@@ -1137,17 +1049,33 @@ Nếu project spec chưa định nghĩa đầy đủ validation cho descriptor, 
 
 Test này quan trọng vì command descriptor là input từ software. Một descriptor sai không nên làm hỏng internal state hoặc phá toàn bộ controller.
 
-### ERR_013 - `i3c_read_tbit_no_parity_resp`
+### ERR_008 - `i3c_read_tbit_no_parity_resp`
 
-Test này kiểm tra response classification của T-bit cuối trong I3C SDR read và bảo đảm controller không report sai thành parity error.
+Test này kiểm tra response classification và end-of-data handling của T-bit cuối trong I3C SDR read, thay cho standalone SDR read no-parity case cũ.
 
 Trong read phase, T-bit do target gửi không phải parity của data byte. Theo MIPI I3C SDR read semantics, khi target gửi T-bit bằng 0 thì đó là tín hiệu end-of-data.
 
 Testbench chạy `i3c_read_tbit_no_parity_resp_vseq`, trong đó final T-bit bằng 0 đúng tại requested length, trong cả hai private-address mode.
 
-Kết quả mong đợi là controller không báo `Parity` response chỉ vì final T-bit bằng 0. RESP phải là `Success`, TID phải khớp command, reserved bits phải bằng 0, và length phải bằng requested length.
+Kết quả mong đợi là controller xem T-bit này là kết thúc data hợp lệ, không đọc thêm byte giả, và drain các queue sạch sau khi transaction hoàn tất. Controller cũng không được báo `Parity` response chỉ vì final T-bit bằng 0. RESP phải là `Success`, TID phải khớp command, reserved bits phải bằng 0, và length phải bằng requested length.
 
-Test này quan trọng vì nếu controller diễn giải sai T-bit read phase thành parity error, các read transaction hợp lệ sẽ bị báo sai nguyên nhân lỗi.
+Test này quan trọng vì nếu controller diễn giải sai T-bit read phase, các read transaction hợp lệ có thể bị đọc dư byte, kết thúc sai flow, hoặc bị báo sai nguyên nhân lỗi.
+
+### ERR_016 - `entdaa_invalid_descriptor_resp`
+
+Test này kiểm tra response khi software issue `AddressAssignment`/ENTDAA descriptor sai format.
+
+Các subcase chính là:
+
+- `toc=0`, `wroc=1`, `dev_count=1`
+- `toc=1`, `wroc=0`, `dev_count=1`
+- `toc=1`, `wroc=1`, `dev_count=0`
+
+Theo policy hiện tại, các descriptor này bị reject ngay trong `FetchDAT`, trước khi controller đọc DAT hoặc phát bất kỳ frame ENTDAA nào. Cùng policy này cũng áp dụng cho descriptor có `dev_idx+dev_count>DatDepth`.
+
+Kết quả mong đợi là không có START, không có broadcast header `7'h7E+W`, không có CCC opcode ENTDAA `8'h07`, và không có DAA round `7'h7E+R`. Controller chỉ ghi đúng một RESP với status `NotSupported`, TID khớp command, reserved bits bằng 0, và length bằng 0.
+
+Test này nên nằm trong error category, không nằm trong CCC/DAA happy-path, vì mục tiêu chính là kiểm tra error response và pre-bus rejection của command descriptor sai. Sau subcase lỗi, testbench nên chạy thêm một command hợp lệ để chứng minh queue/FSM không bị corrupt.
 
 ## 4.11 Arbitration and Bus Behavior
 
@@ -1172,6 +1100,8 @@ Test này kiểm tra true multi-target arbitration trong ENTDAA.
 Nhiều target chưa được assign address cùng tham gia ENTDAA và drive PID khác nhau. Vì bus open-drain/wired-AND, target nào thua arbitration phải dừng drive, còn target thắng tiếp tục round hiện tại.
 
 Kết quả mong đợi là controller assign address cho arbitration winner trước. Target thua sẽ retry ở round sau và được assign sau nếu vẫn còn tham gia.
+
+Case hai target chỉ là minimum subcase của mục multi-target này, không cần testcase riêng trong DAA category.
 
 Test này có priority Future vì cần UVM bus model hỗ trợ nhiều target simultaneous drive. Hiện tại nếu testbench chưa hỗ trợ điều này, test được giữ như roadmap cho verification mở rộng.
 

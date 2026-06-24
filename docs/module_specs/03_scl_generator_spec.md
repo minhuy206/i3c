@@ -137,7 +137,7 @@ flowchart LR
     subgraph SG["scl_generator"]
         direction TB
 
-        FSM["14-State FSM\nIdle / GenerateStart / SdaFall\nHoldStart / DriveLow / DriveHigh\nWaitCmd / GenerateRstart / SclHigh\nRstartSdaFall / GenerateStop\nSclHighForStop / SdaRise / BusFree"]
+        FSM["14-State FSM\nIdle / GenerateStart / SdaFall\nHoldStart / DriveLow / DriveHigh\nWaitCmd / GenerateRstart / SclHighForRstart\nRstartSdaFall / GenerateStop\nSclHighForStop / SdaRise / BusFree"]
 
         subgraph CNT["Timing Counter"]
             direction LR
@@ -150,7 +150,7 @@ flowchart LR
             direction TB
             SCL_DRV["scl_o\n0: DriveLow, WaitCmd\n   GenerateStop before expiry\n1: otherwise"]
             SDA_DRV["sda_o\n0: SdaFall, HoldStart\n   RstartSdaFall\n   GenerateStop, SclHighForStop\n1: otherwise"]
-            SDA_ACT["sda_ctrl_active_o\n1: GenerateStart, SdaFall, HoldStart\n   RstartSdaFall, GenerateRstart\n   SclHigh, GenerateStop\n   SclHighForStop, SdaRise\n0: Idle, DriveLow, DriveHigh\n   WaitCmd"]
+            SDA_ACT["sda_ctrl_active_o\n1: GenerateStart, SdaFall, HoldStart\n   RstartSdaFall, GenerateRstart\n   SclHighForRstart, GenerateStop\n   SclHighForStop, SdaRise\n0: Idle, DriveLow, DriveHigh\n   WaitCmd"]
         end
 
         FSM -->|"load on\nstate entry"| MUX
@@ -187,7 +187,7 @@ typedef enum logic [3:0] {
   DriveHigh      = 4'd5,
   WaitCmd        = 4'd6,
   GenerateRstart = 4'd7,
-  SclHigh        = 4'd8,
+  SclHighForRstart        = 4'd8,
   RstartSdaFall  = 4'd9,
   GenerateStop   = 4'd10,
   SclHighForStop = 4'd11,
@@ -207,8 +207,8 @@ stateDiagram-v2
     SdaFall --> HoldStart: SDA driven LOW
     HoldStart --> DriveLow: t_hd_sta expired
 
-    GenerateRstart --> SclHigh: SCL released HIGH
-    SclHigh --> RstartSdaFall: t_su_sta expired
+    GenerateRstart --> SclHighForRstart: SCL released HIGH
+    SclHighForRstart --> RstartSdaFall: t_su_sta expired
     RstartSdaFall --> HoldStart: SDA driven LOW
 
     DriveLow --> GenerateStop: gen_stop_i & t_low expired
@@ -239,7 +239,7 @@ stateDiagram-v2
 | `DriveHigh`      | H   | -   | 0                   | Release SCL HIGH, count t_high         |
 | `WaitCmd`        | L   | -   | 0                   | Hold SCL LOW, wait for next command    |
 | `GenerateRstart` | L→H | L→H | 1                   | From clock LOW, release SDA HIGH first |
-| `SclHigh`        | H   | H   | 1                   | SCL goes HIGH, wait t_su_sta for Sr    |
+| `SclHighForRstart`        | H   | H   | 1                   | SCL goes HIGH, wait t_su_sta for Sr    |
 | `RstartSdaFall`  | H   | L   | 1                   | Pull SDA LOW (Repeated START)          |
 | `GenerateStop`   | L→H | L   | 1                   | Hold SDA LOW, then release SCL HIGH    |
 | `SclHighForStop` | H   | L   | 1                   | SCL HIGH, wait t_su_sto                |
@@ -287,7 +287,7 @@ end
 
 The `tcount_load_value` is selected based on the current state transition:
 
-- Entering `GenerateStart` / `SclHigh`: load `t_su_sta_i`
+- Entering `GenerateStart` / `SclHighForRstart`: load `t_su_sta_i`
 - Entering `HoldStart`: load `t_hd_sta_i`
 - Entering `DriveLow`: load `active_t_low + t_f_i`, where `active_t_low` is `t_low_od_i` when `scl_use_od_low_i` is 1, otherwise `t_low_i`
 - Entering `DriveHigh`: load `t_high_i + t_r_i`
@@ -316,7 +316,7 @@ always_comb begin
       sda_o = 1'b0;
       sda_ctrl_active_o = 1'b1;
     end
-    GenerateRstart, SclHigh, RstartSdaFall: begin
+    GenerateRstart, SclHighForRstart, RstartSdaFall: begin
       sda_o = (state == RstartSdaFall) ? 1'b0 : 1'b1;
       sda_ctrl_active_o = 1'b1;
     end
@@ -335,26 +335,26 @@ end
 
 | Parameter    | Min Spec | Register Value | Actual Time |
 | ------------ | -------- | -------------- | ----------- |
-| `t_low_i`    | 24 ns    | 8              | 24 ns       |
+| `t_low_i`    | 48 ns    | 16             | 48 ns       |
 | `t_low_od_i` | 200 ns   | 67             | 201 ns      |
-| `t_high_i`   | 24 ns    | 8              | 24 ns       |
-| `t_su_sta_i` | -        | 8              | 24 ns       |
-| `t_hd_sta_i` | -        | 8              | 24 ns       |
-| `t_su_sto_i` | 12 ns    | 4              | 12 ns       |
+| `t_high_i`   | 32 ns    | 11             | 33 ns       |
+| `t_su_sta_i` | 20 ns    | 7              | 21 ns       |
+| `t_hd_sta_i` | 39 ns    | 13             | 39 ns       |
+| `t_su_sto_i` | 20 ns    | 7              | 21 ns       |
 | `t_r_i`      | 12 ns    | 4              | 12 ns       |
 | `t_f_i`      | 12 ns    | 4              | 12 ns       |
-| `t_bus_free_i` | -      | 0              | 0 ns        |
+| `t_bus_free_i` | 39 ns  | 13             | 39 ns       |
 
 ### I2C FM Mode (at 333 MHz, T_clk = 3 ns)
 
 | Parameter    | Min Spec | Register Value | Actual Time |
 | ------------ | -------- | -------------- | ----------- |
-| `t_low_i`    | 1300 ns  | 434            | 1302 ns     |
+| `t_low_i`    | 1600 ns  | 534            | 1602 ns     |
 | `t_low_od_i` | N/A      | Unused         | N/A         |
-| `t_high_i`   | 600 ns   | 200            | 600 ns      |
+| `t_high_i`   | 900 ns   | 300            | 900 ns      |
 | `t_su_sta_i` | 600 ns   | 200            | 600 ns      |
 | `t_hd_sta_i` | 600 ns   | 200            | 600 ns      |
-| `t_su_sto_i` | 600 ns   | 200            | 600 ns      |
+| `t_su_sto_i` | 1300 ns  | 434            | 1302 ns     |
 | `t_r_i`      | 300 ns   | 100            | 300 ns      |
 | `t_f_i`      | 300 ns   | 100            | 300 ns      |
 | `t_bus_free_i` | 1300 ns | 434           | 1302 ns     |
@@ -389,7 +389,7 @@ This is a completely new module. In the reference design:
 6. **I2C FM clock:** Set I2C timing values; verify SCL frequency of ~400 kHz
 7. **Clock gating:** Deassert `gen_clock_i` during DriveLow; verify SCL stays LOW until re-asserted
 8. **Full transaction:** START → 9 clock cycles → Sr → 9 clock cycles → STOP; verify complete waveform
-9. **`sda_ctrl_active_o`:** Verify asserted during GenerateStart, SdaFall, HoldStart, GenerateRstart, SclHigh, RstartSdaFall, GenerateStop, SclHighForStop, SdaRise; deasserted during Idle, DriveLow, DriveHigh, WaitCmd
+9. **`sda_ctrl_active_o`:** Verify asserted during GenerateStart, SdaFall, HoldStart, GenerateRstart, SclHighForRstart, RstartSdaFall, GenerateStop, SclHighForStop, SdaRise; deasserted during Idle, DriveLow, DriveHigh, WaitCmd
 10. **Reset behavior:** Verify both outputs go HIGH (idle) immediately on reset
 
 ### UVM Test Structure
