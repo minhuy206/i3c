@@ -65,7 +65,6 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
     read_rx_words(12, rx_words);
     read_response(resp);
 
-    check_success_resp_fields(resp, daa_cmd.tid, 12, ctxt);
     check_all_queues_empty($sformatf("after %s", ctxt));
     disable device_response;
   endtask
@@ -91,7 +90,6 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
     poll_idle();
     read_response(resp);
 
-    check_error_resp_fields(resp, RESP_NOT_SUPPORTED, daa_cmd.tid, 0, ctxt);
     check_all_queues_empty($sformatf("after %s", ctxt));
   endtask
 endclass

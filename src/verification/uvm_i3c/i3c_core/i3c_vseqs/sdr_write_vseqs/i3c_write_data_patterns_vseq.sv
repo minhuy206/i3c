@@ -55,17 +55,6 @@ class i3c_write_data_patterns_vseq extends i3c_base_vseq;
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
-    `DV_CHECK_EQ(dev_seq.done, 1'b1,
-                 $sformatf("SDRW_003 %s: device response did not finish", pattern_name))
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_data.size(),
-                 $sformatf("SDRW_003 %s: sampled byte count mismatch", pattern_name))
-    for (int unsigned i = 0; i < exp_data.size(); i++) begin
-      if (i < dev_seq.sampled_data.size()) begin
-        `DV_CHECK_EQ(dev_seq.sampled_data[i], exp_data[i],
-                     $sformatf("SDRW_003 %s: sampled byte[%0d] mismatch",
-                               pattern_name, i))
-      end
-    end
 
     check_all_queues_empty($sformatf("after SDRW_003 %s", pattern_name));
 

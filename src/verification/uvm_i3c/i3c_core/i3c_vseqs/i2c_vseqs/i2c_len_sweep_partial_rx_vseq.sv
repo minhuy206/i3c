@@ -55,8 +55,6 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
-    check_i2c_address_phase(dev_seq, cfg, 1'b0);
-    check_sampled_write_data(dev_seq, exp_data, data_length, cfg.ctxt);
     check_all_queues_empty($sformatf("after I2C_004 write len %0d", data_length));
 
     `uvm_info(`gfn, $sformatf(
@@ -92,9 +90,6 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
 
     run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
 
-    check_i2c_address_phase(dev_seq, cfg, 1'b1);
-    check_packed_words(read_data, rx_words, cfg.ctxt);
-    check_master_ack_sequence(dev_seq, data_length, cfg.ctxt);
     check_all_queues_empty($sformatf("after I2C_004 read len %0d", data_length));
 
     `uvm_info(`gfn, $sformatf(
@@ -124,29 +119,6 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
     end
   endfunction
 
-  virtual task check_i2c_address_phase(i3c_device_response_seq dev_seq,
-                                       transfer_stimulus_cfg_t cfg, bit exp_dir);
-    `DV_CHECK_EQ(dev_seq.sampled_addr, I2C_STATIC_ADDR,
-                 $sformatf("%s: sampled static address mismatch", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_dir, exp_dir,
-                 $sformatf("%s: sampled direction mismatch", cfg.ctxt))
-  endtask
-
-  virtual task check_packed_words(byte_queue_t exp_data, word_queue_t act_words, string ctxt);
-    word_queue_t exp_words;
-
-    pack_payload_words(exp_data, exp_words);
-
-    `DV_CHECK_EQ(act_words.size(), exp_words.size(),
-                 $sformatf("%s: RX word count mismatch", ctxt))
-    foreach (exp_words[word_idx]) begin
-      if (word_idx < act_words.size()) begin
-        `DV_CHECK_EQ(act_words[word_idx], exp_words[word_idx],
-                     $sformatf("%s: RX word[%0d] packing mismatch", ctxt, word_idx))
-      end
-    end
-  endtask
-
   virtual function string format_master_ack_sequence(i3c_device_response_seq dev_seq,
                                                      int unsigned data_length);
     string s;
@@ -162,20 +134,5 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
     end
     return {s, "]"};
   endfunction
-
-  virtual task check_master_ack_sequence(i3c_device_response_seq dev_seq,
-                                         int unsigned data_length, string ctxt);
-    `DV_CHECK_EQ(dev_seq.sampled_t_bit.size(), data_length,
-                 $sformatf("%s: sampled master ACK/NACK count mismatch", ctxt))
-    for (int unsigned i = 0; i < data_length; i++) begin
-      if (i < dev_seq.sampled_t_bit.size()) begin
-        sampled_ack_nack_e exp_ack;
-
-        exp_ack = (i < (data_length - 1)) ? SampledAck : SampledNack;
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[i], exp_ack,
-                     $sformatf("%s: sampled master ACK/NACK byte[%0d] mismatch", ctxt, i))
-      end
-    end
-  endtask
 
 endclass

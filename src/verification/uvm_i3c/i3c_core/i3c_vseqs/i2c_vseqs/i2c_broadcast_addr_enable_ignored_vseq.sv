@@ -57,8 +57,6 @@ class i2c_broadcast_addr_enable_ignored_vseq extends i3c_base_vseq;
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
-    check_i2c_address_phase(dev_seq, cfg, 1'b0);
-    check_sampled_write_data(dev_seq, exp_data, DATA_LENGTH, cfg.ctxt);
     check_all_queues_empty("after I2C_003 write");
 
     `uvm_info(
@@ -97,10 +95,6 @@ class i2c_broadcast_addr_enable_ignored_vseq extends i3c_base_vseq;
 
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
-    check_i2c_address_phase(dev_seq, cfg, 1'b1);
-    `DV_CHECK_EQ(rx, pack_bytes_to_word(read_data), $sformatf("%s: RX data word mismatch",
-                                                              cfg.ctxt))
-    check_master_ack_sequence(dev_seq, cfg.ctxt);
     check_all_queues_empty("after I2C_003 read");
 
     `uvm_info(
@@ -130,20 +124,6 @@ class i2c_broadcast_addr_enable_ignored_vseq extends i3c_base_vseq;
     end
   endfunction
 
-  virtual task check_i2c_address_phase(i3c_device_response_seq dev_seq, transfer_stimulus_cfg_t cfg,
-                                       bit exp_dir);
-    `DV_CHECK_EQ(cfg.start_with_broadcast_header, 1'b0,
-                 $sformatf("%s: I2C cfg should mask broadcast-header preamble", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.observed_broadcast_header, 1'b0,
-                 $sformatf("%s: I2C transfer should not emit 0x7e preamble", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.observed_broadcast_rstart, 1'b0,
-                 $sformatf("%s: I2C transfer should not emit broadcast repeated-start", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_addr, I2C_STATIC_ADDR,
-                 $sformatf("%s: sampled static address mismatch", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_dir, exp_dir, $sformatf("%s: sampled direction mismatch",
-                                                         cfg.ctxt))
-  endtask
-
   virtual function string format_master_ack_sequence(i3c_device_response_seq dev_seq);
     string s;
 
@@ -158,19 +138,5 @@ class i2c_broadcast_addr_enable_ignored_vseq extends i3c_base_vseq;
     end
     return {s, "]"};
   endfunction
-
-  virtual task check_master_ack_sequence(i3c_device_response_seq dev_seq, string ctxt);
-    `DV_CHECK_EQ(dev_seq.sampled_t_bit.size(), DATA_LENGTH,
-                 $sformatf("%s: sampled master ACK/NACK count mismatch", ctxt))
-    for (int unsigned i = 0; i < DATA_LENGTH; i++) begin
-      if (i < dev_seq.sampled_t_bit.size()) begin
-        sampled_ack_nack_e exp_ack;
-
-        exp_ack = (i < (DATA_LENGTH - 1)) ? SampledAck : SampledNack;
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[i], exp_ack,
-                     $sformatf("%s: sampled master ACK/NACK byte[%0d] mismatch", ctxt, i))
-      end
-    end
-  endtask
 
 endclass

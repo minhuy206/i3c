@@ -66,14 +66,14 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
     i3c_daa_stimulus        stimulus;
     string                  ctxt;
 
-    ctxt = "DAA_008 HC abort during ENTDAA identity";
-    stimulus = i3c_daa_stimulus::type_id::create("daa008_mid_id_stimulus");
-    `DV_CHECK_RANDOMIZE_FATAL(stimulus, "DAA_008 mid-identity stimulus randomization failed")
+    ctxt = "ERR_007 HC abort during ENTDAA identity";
+    stimulus = i3c_daa_stimulus::type_id::create("err007_mid_id_stimulus");
+    `DV_CHECK_RANDOMIZE_FATAL(stimulus, "ERR_007 mid-identity stimulus randomization failed")
 
     write_dat_entry(0, 7'h50, stimulus.assigned_addr, 1'b0);
     daa_cmd = make_daa_cmd(4'd8, 5'd0, 4'd1);
 
-    dev_seq = i3c_device_response_seq::type_id::create("daa008_mid_id_dev_seq");
+    dev_seq = i3c_device_response_seq::type_id::create("err007_mid_id_dev_seq");
     configure_joining_device(dev_seq, stimulus);
 
     fork : device_response
@@ -100,14 +100,14 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
     i3c_daa_stimulus        stimulus;
     string                  ctxt;
 
-    ctxt = "DAA_008 recovery ENTDAA after HC abort";
-    stimulus = i3c_daa_stimulus::type_id::create("daa008_recovery_stimulus");
-    `DV_CHECK_RANDOMIZE_FATAL(stimulus, "DAA_008 recovery stimulus randomization failed")
+    ctxt = "ERR_007 recovery ENTDAA after HC abort";
+    stimulus = i3c_daa_stimulus::type_id::create("err007_recovery_stimulus");
+    `DV_CHECK_RANDOMIZE_FATAL(stimulus, "ERR_007 recovery stimulus randomization failed")
 
     write_dat_entry(0, 7'h50, stimulus.assigned_addr, 1'b0);
     daa_cmd = make_daa_cmd(4'd9, 5'd0, 4'd1);
 
-    dev_seq = i3c_device_response_seq::type_id::create("daa008_recovery_dev_seq");
+    dev_seq = i3c_device_response_seq::type_id::create("err007_recovery_dev_seq");
     configure_joining_device(dev_seq, stimulus);
 
     fork : device_response
@@ -131,14 +131,14 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
     i3c_daa_stimulus        stimulus;
     string                  ctxt;
 
-    ctxt = "DAA_008 HC abort during assigned-address phase";
-    stimulus = i3c_daa_stimulus::type_id::create("daa008_addr_phase_stimulus");
-    `DV_CHECK_RANDOMIZE_FATAL(stimulus, "DAA_008 address-phase stimulus randomization failed")
+    ctxt = "ERR_007 HC abort during assigned-address phase";
+    stimulus = i3c_daa_stimulus::type_id::create("err007_addr_phase_stimulus");
+    `DV_CHECK_RANDOMIZE_FATAL(stimulus, "ERR_007 address-phase stimulus randomization failed")
 
     write_dat_entry(1, 7'h50, stimulus.assigned_addr, 1'b0);
     daa_cmd = make_daa_cmd(4'd10, 5'd1, 4'd1);
 
-    dev_seq = i3c_device_response_seq::type_id::create("daa008_addr_phase_dev_seq");
+    dev_seq = i3c_device_response_seq::type_id::create("err007_addr_phase_dev_seq");
     configure_joining_device(dev_seq, stimulus);
 
     fork : device_response
@@ -166,20 +166,20 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
     i3c_daa_stimulus        stimulus[2];
     string                  ctxt;
 
-    ctxt = "DAA_008 HC abort after one completed ENTDAA round";
-    stimulus[0] = i3c_daa_stimulus::type_id::create("daa008_round0_stimulus");
-    stimulus[1] = i3c_daa_stimulus::type_id::create("daa008_round1_stimulus");
-    `DV_CHECK_RANDOMIZE_FATAL(stimulus[0], "DAA_008 round[0] stimulus randomization failed")
+    ctxt = "ERR_007 HC abort after one completed ENTDAA round";
+    stimulus[0] = i3c_daa_stimulus::type_id::create("err007_round0_stimulus");
+    stimulus[1] = i3c_daa_stimulus::type_id::create("err007_round1_stimulus");
+    `DV_CHECK_RANDOMIZE_FATAL(stimulus[0], "ERR_007 round[0] stimulus randomization failed")
     if (!stimulus[1].randomize() with {
           assigned_addr != local::stimulus[0].assigned_addr;
         }) begin
-      `uvm_fatal(`gfn, "DAA_008 round[1] stimulus randomization failed")
+      `uvm_fatal(`gfn, "ERR_007 round[1] stimulus randomization failed")
     end
 
     for (int unsigned i = 0; i < 2; i++) begin
       write_dat_entry(2 + i, 7'h50, stimulus[i].assigned_addr, 1'b0);
       dev_seq[i] = i3c_device_response_seq::type_id::create(
-          $sformatf("daa008_round%0d_dev_seq", i)
+          $sformatf("err007_round%0d_dev_seq", i)
       );
       configure_joining_device(dev_seq[i], stimulus[i]);
     end

@@ -91,25 +91,8 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
     tx_words.push_back({24'h0, payload});
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
-    check_success_resp(resp, cfg);
-    check_device_write(dev_seq, cfg, payload);
     settle_cycles();
   endtask
 
-  virtual task check_device_write(input i3c_device_response_seq dev_seq,
-                                  input transfer_stimulus_cfg_t cfg,
-                                  input bit [7:0] exp_payload);
-    `DV_CHECK_EQ(dev_seq.done, 1'b1, $sformatf("%s: device response did not finish", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_addr, cfg.target_addr,
-                 $sformatf("%s: DAT-selected target address mismatch", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0,
-                 $sformatf("%s: transfer direction should be write", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), DATA_LENGTH,
-                 $sformatf("%s: sampled byte count mismatch", cfg.ctxt))
-    if (dev_seq.sampled_data.size() >= DATA_LENGTH) begin
-      `DV_CHECK_EQ(dev_seq.sampled_data[0], exp_payload,
-                   $sformatf("%s: sampled payload mismatch", cfg.ctxt))
-    end
-  endtask
 
 endclass

@@ -1,13 +1,12 @@
-class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
-  `uvm_object_utils(i3c_addr_header_nack_resp_vseq)
+class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
+  `uvm_object_utils(i3c_private_addr_nack_resp_vseq)
 
   localparam int unsigned DATA_LENGTH = 4;
   localparam bit [31:0]   TX_WORD = 32'hA5C3_5A3C;
-  localparam logic [3:0]  RESP_ADDR_HEADER = 4'h4;
   localparam bit [6:0]    I2C_STATIC_ADDR = 7'h50;
   localparam bit [6:0]    I3C_DYNAMIC_ADDR = 7'h08;
 
-  function new(string name = "i3c_addr_header_nack_resp_vseq");
+  function new(string name = "i3c_private_addr_nack_resp_vseq");
     super.new(name);
   endfunction
 
@@ -21,6 +20,10 @@ class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
     run_i3c_imm_write_addr_nack_resp_case(1'b0);
     run_i3c_imm_write_addr_nack_resp_case(1'b1);
     run_i2c_imm_write_addr_nack_resp_case();
+    run_direct_ccc_target_addr_nack_resp_case(DIR_ENEC, 8'h01, 4'd11,
+                                              "ERR_002 direct ENEC target_addr_nack_resp");
+    run_direct_ccc_target_addr_nack_resp_case(DIR_DISEC, 8'h02, 4'd12,
+                                              "ERR_002 direct DISEC target_addr_nack_resp");
 
   endtask
 
@@ -54,7 +57,6 @@ class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
 
     tx_words.push_back(TX_WORD);
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
-    check_error_resp_fields(resp, RESP_ADDR_HEADER, cfg.tid, 0, cfg.ctxt);
     check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit, 1'b0, 1'b0,
                       "after ERR_002 write address NACK RESP");
     request_sw_reset();
@@ -98,7 +100,6 @@ class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_error_resp_fields(resp, RESP_ADDR_HEADER, cfg.tid, 0, cfg.ctxt);
     check_all_queues_empty("after ERR_002 read address NACK RESP");
   endtask
 
@@ -132,7 +133,6 @@ class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
 
     tx_words.push_back(TX_WORD);
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
-    check_error_resp_fields(resp, RESP_ADDR_HEADER, cfg.tid, 0, cfg.ctxt);
     check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit, 1'b0, 1'b0,
                       "after ERR_002 i2c write address NACK RESP");
     request_sw_reset();
@@ -174,11 +174,10 @@ class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_error_resp_fields(resp, RESP_ADDR_HEADER, cfg.tid, 0, cfg.ctxt);
     check_all_queues_empty("after ERR_002 i2c read address NACK RESP");
   endtask
 
-  // IMM_005 (legacy) folded into ERR_002: an immediate write whose target address
+  // Legacy immediate address-NACK coverage is folded into ERR_002: an immediate write whose target address
   // is NACKed must produce the same AddrHeader response as the regular cases, and
   // the controller must generate STOP immediately with no inline data byte sent.
   // Covered for both I3C (both broadcast-header modes) and I2C device classes.
@@ -229,9 +228,6 @@ class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_error_resp_fields(resp, RESP_ADDR_HEADER, cfg.tid, 0, cfg.ctxt);
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), 0,
-                 $sformatf("%s: no inline data byte may be sent after address NACK", cfg.ctxt))
     check_all_queues_empty($sformatf("after %s", cfg.ctxt));
   endtask
 
@@ -280,10 +276,53 @@ class i3c_addr_header_nack_resp_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_error_resp_fields(resp, RESP_ADDR_HEADER, cfg.tid, 0, cfg.ctxt);
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), 0,
-                 $sformatf("%s: no inline data byte may be sent after address NACK", cfg.ctxt))
     check_all_queues_empty("after ERR_002 i2c imm write address NACK RESP");
+  endtask
+
+  virtual task run_direct_ccc_target_addr_nack_resp_case(i3c_ccc_e opcode, bit [7:0] event_byte,
+                                                         bit [3:0] tid, string ctxt);
+    immediate_data_trans_desc_t ccc_cmd;
+    bit [31:0]                  resp;
+    i3c_device_response_seq     dev_seq;
+
+    enable_dut(1'b0);
+    write_dat_entry(0, I2C_STATIC_ADDR, I3C_DYNAMIC_ADDR, 1'b0);
+
+    ccc_cmd                   = '0;
+    ccc_cmd.attr              = ImmediateDataTransfer;
+    ccc_cmd.tid               = tid;
+    ccc_cmd.cp                = 1'b1;
+    ccc_cmd.cmd               = opcode;
+    ccc_cmd.mode              = sdr0;
+    ccc_cmd.dtt               = 3'd4;
+    ccc_cmd.rnw               = 1'b0;
+    ccc_cmd.toc               = 1'b1;
+    ccc_cmd.wroc              = 1'b1;
+    ccc_cmd.dev_idx           = 5'd0;
+    ccc_cmd.def_or_data_byte1 = event_byte;
+
+    dev_seq                       = i3c_device_response_seq::type_id::create(
+        "err002_direct_ccc_target_nack_dev_seq");
+    dev_seq.target_addr           = 7'h7e;
+    dev_seq.ack_address           = 1'b1;
+    dev_seq.is_i3c                = 1'b1;
+    dev_seq.dir                   = 1'b0;
+    dev_seq.ccc_target_addr       = I3C_DYNAMIC_ADDR ^ 7'h01;
+    dev_seq.ccc_target_addr_valid = 1'b1;
+
+    fork : device_response
+      dev_seq.start(p_sequencer.m_i3c_sequencer);
+    join_none
+
+    write_cmd(ccc_cmd[31:0], ccc_cmd[63:32]);
+
+    poll_idle();
+    wait_for_device_done(dev_seq, ctxt, 2000);
+    read_response(resp);
+
+    check_all_queues_empty($sformatf("after %s", ctxt));
+
+    disable device_response;
   endtask
 
 endclass

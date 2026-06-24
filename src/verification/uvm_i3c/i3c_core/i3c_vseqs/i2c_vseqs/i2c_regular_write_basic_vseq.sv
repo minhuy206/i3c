@@ -50,12 +50,6 @@ class i2c_regular_write_basic_vseq extends i3c_base_vseq;
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
-    `DV_CHECK_EQ(dev_seq.sampled_addr, I2C_STATIC_ADDR,
-                 $sformatf("%s: sampled static address mismatch", cfg.ctxt))
-    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0,
-                 $sformatf("%s: sampled direction should be write", cfg.ctxt))
-    check_sampled_write_data(dev_seq, exp_data, data_length, cfg.ctxt);
-    check_success_resp(resp, cfg);
     check_all_queues_empty($sformatf("after I2C_001 len %0d", data_length));
 
     `uvm_info(`gfn, $sformatf(

@@ -48,14 +48,12 @@ BUS_REGRESSION_SEQS ?= \
 	bus_tx_byte_and_bit_order_vseq \
 	bus_rx_byte_and_bit_order_vseq \
 	bus_od_pp_phase_switch_vseq \
-	bus_tb_pad_model_odpp_wiring_vseq \
-	bus_i2c_od_only_check_vseq
+	bus_tb_pad_model_odpp_wiring_vseq
 
 SDRW_REGRESSION_SEQS ?= \
 	i3c_write_vseq \
 	i3c_write_len_sweep_vseq \
 	i3c_write_data_patterns_vseq \
-	i3c_write_tbit_parity_generation_vseq \
 	i3c_write_toc_zero_vseq \
 	i3c_write_back_to_back_vseq \
 	i3c_write_multi_dat_idx_vseq
@@ -63,10 +61,10 @@ SDRW_REGRESSION_SEQS ?= \
 SDRR_REGRESSION_SEQS ?= \
 	i3c_read_vseq \
 	i3c_read_len_sweep_vseq \
-	i3c_read_no_parity_error_on_end_tbit_vseq \
 	i3c_read_target_more_than_requested_vseq \
 	i3c_read_data_patterns_vseq \
 	i3c_read_toc_zero_vseq \
+	i3c_read_back_to_back_vseq \
 	i3c_read_multi_dat_idx_vseq
 
 IMM_REGRESSION_SEQS ?= \
@@ -90,21 +88,28 @@ CCC_REGRESSION_SEQS ?= \
 
 DAA_REGRESSION_SEQS ?= \
 	i3c_daa_single_device_success_vseq \
+	i3c_daa_no_device_vseq \
+	i3c_daa_fewer_devices_than_count_vseq \
+	i3c_daa_multi_device_dat_loop_vseq \
+	i3c_daa_address_rejected_vseq \
 	i3c_daa_dat_boundary_vseq
 
 ERR_REGRESSION_SEQS ?= \
-	i3c_addr_header_nack_resp_vseq \
+	i3c_private_addr_nack_resp_vseq \
+	i3c_broadcast_header_nack_resp_vseq \
 	i3c_read_tbit_no_parity_resp_vseq \
 	i3c_read_short_target_end_vseq \
 	i3c_ovl_resp_vseq \
 	i3c_write_tx_fifo_underflow_vseq \
 	i3c_read_rx_fifo_full_overflow_vseq \
+	i3c_entdaa_rx_fifo_partial_overflow_vseq \
 	i3c_write_abort_vseq \
 	i3c_read_abort_vseq \
 	i3c_imm_data_nack_i2c_vseq \
 	i3c_imm_abort_vseq \
 	i2c_data_nack_write_vseq \
-	i2c_regular_abort_vseq
+	i2c_regular_abort_vseq \
+	i3c_daa_hc_abort_vseq
 
 compile:
 	$(SIMULATOR) -compile -elaborate \
@@ -133,9 +138,15 @@ smoke:
 	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_imm_vseq
 
 regression:
-	$(MAKE) sim SEQ=i3c_imm_vseq
-	$(MAKE) sim SEQ=i3c_write_vseq
-	$(MAKE) sim SEQ=i3c_read_vseq
+	$(MAKE) csr_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) fifo_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) bus_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) sdr_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) imm_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) i2c_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) ccc_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) daa_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
+	$(MAKE) err_regression TEST=$(TEST) VERBOSITY=$(VERBOSITY) SEED=$(SEED)
 
 csr_regression:
 	@set -e; \

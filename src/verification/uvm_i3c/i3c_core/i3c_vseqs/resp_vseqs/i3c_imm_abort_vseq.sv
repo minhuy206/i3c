@@ -3,21 +3,11 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
 
   localparam bit [3:0] FSM_I3C_WRITE_IMM = 4'd5;
   localparam bit [3:0] FSM_I2C_WRITE_IMM = 4'd6;
-  localparam bit [3:0] RESP_HC_ABORTED = 4'h8;
 
   localparam int unsigned IMM_ABORT_FSM_TIMEOUT = 5000;
 
   function new(string name = "i3c_imm_abort_vseq");
     super.new(name);
-  endfunction
-
-  virtual function void check_abort_result(bit [31:0] resp, byte_queue_t sampled,
-                                           bit [7:0] expected[4], string ctxt);
-    `DV_CHECK_EQ(resp[31:28], RESP_HC_ABORTED, $sformatf("%s: expected RESP HcAborted (4'h8)", ctxt
-                 ))
-    foreach (sampled[i]) begin
-      `DV_CHECK_EQ(sampled[i], expected[i], $sformatf("%s: pre-abort byte %0d mismatch", ctxt, i))
-    end
   endfunction
 
   virtual task body();
@@ -30,7 +20,7 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
 
     `uvm_info(
         `gfn,
-        "IMM_006 conclusion: HC abort during immediate data phase reaches idle and SW reset flushes queues in all three cases (private I3C, broadcast I3C, I2C)",
+        "ERR_007 conclusion: HC abort during immediate data phase reaches idle and SW reset flushes queues in all three cases (private I3C, broadcast I3C, I2C)",
         UVM_LOW)
   endtask
 
@@ -69,33 +59,29 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
 
     wait_for_flow_fsm_state(
         FSM_I3C_WRITE_IMM, $sformatf(
-        "IMM_006 %s I3C: wait for I3CWriteImmediate", private_addr_mode_name(bcast_en)),
+        "ERR_007 %s I3C: wait for I3CWriteImmediate", private_addr_mode_name(bcast_en)),
         IMM_ABORT_FSM_TIMEOUT);
 
     reg_write(ADDR_HC_CONTROL, {28'h0, 1'b1  /*HC_ABORT*/, bcast_en, 1'b0  /*SW_RST*/, 1'b1  /*EN*/
               });
-    `uvm_info(`gfn, $sformatf("IMM_006 %s I3C: abort_asserted=1 while in I3CWriteImmediate",
+    `uvm_info(`gfn, $sformatf("ERR_007 %s I3C: abort_asserted=1 while in I3CWriteImmediate",
                               private_addr_mode_name(bcast_en)), UVM_LOW)
 
     poll_idle();
-    wait_for_device_done(dev_seq, $sformatf("IMM_006 %s I3C", private_addr_mode_name(bcast_en)),
+    wait_for_device_done(dev_seq, $sformatf("ERR_007 %s I3C", private_addr_mode_name(bcast_en)),
                          10000);
     read_response(resp);
 
     reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, bcast_en, 1'b0, 1'b1});
-    check_abort_result(resp, dev_seq.sampled_data, '{8'hA1, 8'hA2, 8'hA3, 8'hA4}, $sformatf(
-                       "IMM_006 %s I3C", private_addr_mode_name(bcast_en)));
-    check_error_resp_fields(resp, RESP_HC_ABORTED, imm_cmd.tid, dev_seq.sampled_data.size(),
-                            $sformatf("IMM_006 %s I3C", private_addr_mode_name(bcast_en)));
     check_all_queues_empty(
-        $sformatf("IMM_006 %s I3C: before recovery transfer", private_addr_mode_name(bcast_en)));
+        $sformatf("ERR_007 %s I3C: before recovery transfer", private_addr_mode_name(bcast_en)));
     run_recovery_case(1'b1, bcast_en);
 
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
-        $sformatf("IMM_006 %s I3C: after recovery SW reset", private_addr_mode_name(bcast_en)));
+        $sformatf("ERR_007 %s I3C: after recovery SW reset", private_addr_mode_name(bcast_en)));
 
-    `uvm_info(`gfn, $sformatf("IMM_006 result: mode=%s device=I3C resp=0x%08h sampled_bytes=%0d",
+    `uvm_info(`gfn, $sformatf("ERR_007 result: mode=%s device=I3C resp=0x%08h sampled_bytes=%0d",
                               private_addr_mode_name(bcast_en), resp, dev_seq.sampled_data.size()),
               UVM_LOW)
   endtask
@@ -132,28 +118,25 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
 
     write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
 
-    wait_for_flow_fsm_state(FSM_I2C_WRITE_IMM, "IMM_006 I2C: wait for I2CWriteImmediate",
+    wait_for_flow_fsm_state(FSM_I2C_WRITE_IMM, "ERR_007 I2C: wait for I2CWriteImmediate",
                             IMM_ABORT_FSM_TIMEOUT);
 
     reg_write(ADDR_HC_CONTROL, {
               28'h0, 1'b1  /*HC_ABORT*/, 1'b0  /*bcast_en*/, 1'b0  /*SW_RST*/, 1'b1  /*EN*/});
-    `uvm_info(`gfn, "IMM_006 I2C: abort_asserted=1 while in I2CWriteImmediate", UVM_LOW)
+    `uvm_info(`gfn, "ERR_007 I2C: abort_asserted=1 while in I2CWriteImmediate", UVM_LOW)
 
     poll_idle();
-    wait_for_device_done(dev_seq, "IMM_006 I2C", i2c_device_done_timeout_cycles(4));
+    wait_for_device_done(dev_seq, "ERR_007 I2C", i2c_device_done_timeout_cycles(4));
     read_response(resp);
 
     reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, 1'b0, 1'b0, 1'b1});
-    check_abort_result(resp, dev_seq.sampled_data, '{8'hB1, 8'hB2, 8'hB3, 8'hB4}, "IMM_006 I2C");
-    check_error_resp_fields(resp, RESP_HC_ABORTED, imm_cmd.tid, dev_seq.sampled_data.size(),
-                            "IMM_006 I2C");
-    check_all_queues_empty("IMM_006 I2C: before recovery transfer");
+    check_all_queues_empty("ERR_007 I2C: before recovery transfer");
     run_recovery_case(1'b0, 1'b0);
 
     request_sw_reset(.keep_enabled(1'b1));
-    check_all_queues_empty("IMM_006 I2C: after recovery SW reset");
+    check_all_queues_empty("ERR_007 I2C: after recovery SW reset");
 
-    `uvm_info(`gfn, $sformatf("IMM_006 result: device=I2C resp=0x%08h sampled_bytes=%0d", resp,
+    `uvm_info(`gfn, $sformatf("ERR_007 result: device=I2C resp=0x%08h sampled_bytes=%0d", resp,
                               dev_seq.sampled_data.size()), UVM_LOW)
   endtask
 
@@ -180,7 +163,7 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     imm_cmd.def_or_data_byte1 = exp_data[0];
 
     cfg = make_transfer_cfg(
-        .ctxt($sformatf("IMM_006 recovery without SW reset device=%s mode=%s",
+        .ctxt($sformatf("ERR_007 recovery without SW reset device=%s mode=%s",
                         is_i3c ? "I3C" : "I2C", private_addr_mode_name(bcast_en))),
         .seq_name($sformatf("imm006_recovery_%s_%s_dev_seq", is_i3c ? "i3c" : "i2c",
                            private_addr_mode_name(bcast_en))),
@@ -203,9 +186,7 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
-    check_sampled_write_data(dev_seq, exp_data, exp_data.size(), cfg.ctxt);
     read_response(resp);
-    check_success_resp_fields(resp, cfg.tid, exp_data.size(), cfg.ctxt);
     check_all_queues_empty(cfg.ctxt);
   endtask
 

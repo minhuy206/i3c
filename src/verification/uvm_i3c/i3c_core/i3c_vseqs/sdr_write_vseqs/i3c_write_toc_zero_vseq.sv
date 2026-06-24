@@ -87,7 +87,7 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
         "after toc0_vseq %s valid continuation", private_addr_mode_name(broadcast_header_enable)));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_005 result: mode=%s case=valid_continuation rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b first_broadcast_header=%0b second_broadcast_header=%0b",
+                  "SDRW_004 result: mode=%s case=valid_continuation rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b first_broadcast_header=%0b second_broadcast_header=%0b",
                   private_addr_mode_name(broadcast_header_enable), rstart_count,
                   dev_seq0.observed_rstart, dev_seq1.observed_rstart,
                   dev_seq0.observed_broadcast_header, dev_seq1.observed_broadcast_header),
@@ -174,7 +174,7 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
                            ));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_005 result: mode=%s case=missing_continuation observed_rstart=%0b intr_bits_before_clear=0x%08h intr_bits_after_clear=0x%08h",
+                  "SDRW_004 result: mode=%s case=missing_continuation observed_rstart=%0b intr_bits_before_clear=0x%08h intr_bits_after_clear=0x%08h",
                   private_addr_mode_name(broadcast_header_enable), dev_seq.observed_rstart,
                   intr_status_before_clear & exp_intr_bits, intr_status & exp_intr_bits), UVM_LOW)
   endtask

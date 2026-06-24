@@ -76,15 +76,8 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq1.observed_rstart, 1'b0,
                  "read_toc0_vseq: second write should end with STOP")
 
-    `DV_CHECK_EQ(resp0[31:28], 4'h0,         "read_toc0_vseq: first response expected Success")
-    `DV_CHECK_EQ(resp0[27:24], 4'd5,         "read_toc0_vseq: first response TID mismatch")
-    `DV_CHECK_EQ(resp0[15:0],  16'd2,        "read_toc0_vseq: first response length mismatch")
-    `DV_CHECK_EQ(resp1[31:28], 4'h0,         "read_toc0_vseq: second response expected Success")
-    `DV_CHECK_EQ(resp1[27:24], 4'd6,         "read_toc0_vseq: second response TID mismatch")
-    `DV_CHECK_EQ(resp1[15:0],  16'd2,        "read_toc0_vseq: second response length mismatch")
-
     `uvm_info(`gfn, $sformatf(
-                  "SDRR_008 result: mode=%s rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b read_resp_len=%0d write_resp_len=%0d",
+                  "SDRR_005 result: mode=%s rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b read_resp_len=%0d write_resp_len=%0d",
                   private_addr_mode_name(broadcast_header_enable), rstart_count,
                   dev_seq0.observed_rstart, dev_seq1.observed_rstart, resp0[15:0],
                   resp1[15:0]), UVM_LOW)

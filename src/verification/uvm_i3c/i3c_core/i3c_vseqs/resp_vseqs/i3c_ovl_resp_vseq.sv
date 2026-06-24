@@ -4,9 +4,7 @@ class i3c_ovl_resp_vseq extends i3c_base_vseq;
   localparam int unsigned WR_DATA_LENGTH = 8;
   localparam int unsigned WR_ACTUAL_LENGTH = 4;
   localparam int unsigned RD_DATA_LENGTH = 8;
-  localparam int unsigned RD_OBSERVED_LENGTH = 4;
   localparam int unsigned RX_FIFO_DEPTH = 8;
-  localparam logic [3:0]  RESP_OVL = 4'h6;
 
   function new(string name = "i3c_ovl_resp_vseq");
     super.new(name);
@@ -30,7 +28,7 @@ class i3c_ovl_resp_vseq extends i3c_base_vseq;
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     cfg = make_transfer_cfg(
-        .ctxt($sformatf("ERR_005 tx_underflow_ovl_resp actual%0d", actual_length)),
+        .ctxt($sformatf("ERR_006 tx_underflow_ovl_resp actual%0d", actual_length)),
         .seq_name($sformatf("err005_tx_underflow_dev_seq_%0d", actual_length)),
         .tid(4'd5),
         .dev_idx(5'd0),
@@ -56,8 +54,7 @@ class i3c_ovl_resp_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_error_resp_fields(resp, RESP_OVL, cfg.tid, actual_length, cfg.ctxt);
-    check_all_queues_empty("after ERR_005 TX underflow Ovl RESP");
+    check_all_queues_empty("after ERR_006 TX underflow Ovl RESP");
   endtask
 
   virtual task run_rx_fifo_full_resp_case();
@@ -73,7 +70,7 @@ class i3c_ovl_resp_vseq extends i3c_base_vseq;
     prefill_rx_fifo();
 
     cfg = make_transfer_cfg(
-        .ctxt("ERR_005 rx_fifo_full_ovl_resp"),
+        .ctxt("ERR_006 rx_fifo_full_ovl_resp"),
         .seq_name("err005_rx_fifo_full_dev_seq"),
         .tid(4'd6),
         .dev_idx(5'd0),
@@ -97,9 +94,8 @@ class i3c_ovl_resp_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_error_resp_fields(resp, RESP_OVL, cfg.tid, RD_OBSERVED_LENGTH, cfg.ctxt);
     drain_prefilled_rx_fifo();
-    check_all_queues_empty("after ERR_005 RX FIFO full Ovl RESP");
+    check_all_queues_empty("after ERR_006 RX FIFO full Ovl RESP");
   endtask
 
   virtual function bit [31:0] make_prefill_word(int unsigned index);

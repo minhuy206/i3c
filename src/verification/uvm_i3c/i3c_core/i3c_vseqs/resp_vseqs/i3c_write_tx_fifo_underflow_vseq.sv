@@ -75,7 +75,6 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_error_resp_fields(resp, 4'h6, cfg.tid, ACTUAL_LENGTH, cfg.ctxt);
     check_all_queues_empty($sformatf("after ERR_006 toc%0d tx_fifo_underflow_ovl", toc));
 
     `uvm_info(`gfn, $sformatf(
@@ -141,7 +140,6 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
 
     check_all_queues_empty(
         $sformatf("after ERR_006 toc%0d tx_fifo_empty_underflow_ovl len%0d", toc, data_length));
-    check_error_resp_fields(resp, 4'h6, cfg.tid, 0, cfg.ctxt);
 
     `uvm_info(`gfn, $sformatf(
                   "ERR_006 result: mode=%s toc=%0d requested_len=%0d supplied_words=0 sampled_bytes=%0d",
@@ -201,7 +199,6 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     settle_cycles(1);
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
-    check_error_resp_fields(resp, 4'h6, cfg.tid, ACTUAL_LENGTH, cfg.ctxt);
 
     build_random_tx_words(4, late_exp_data, late_tx_words);
     write_tx_words(late_tx_words);

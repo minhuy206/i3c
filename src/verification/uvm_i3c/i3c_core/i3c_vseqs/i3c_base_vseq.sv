@@ -239,8 +239,7 @@ class i3c_base_vseq extends uvm_sequence;
     end
   endfunction
 
-  virtual task configure_i3c_dat_target(int index, bit [6:0] static_addr,
-                                        bit [6:0] dynamic_addr);
+  virtual task configure_i3c_dat_target(int index, bit [6:0] static_addr, bit [6:0] dynamic_addr);
     if (index == 0) begin
       p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.static_addr = static_addr;
       p_sequencer.cfg.m_i3c_agent_cfg.i3c_target0.static_addr_valid = 1'b1;
@@ -256,8 +255,8 @@ class i3c_base_vseq extends uvm_sequence;
   endtask
 
   virtual function i3c_seq_item randomize_sdrw_item(
-      string name = "sdrw_item", int unsigned payload_len = 0,
-      bit [6:0] avoid_static_addr = 7'h7e, bit [6:0] avoid_dynamic_addr = 7'h7e);
+      string name = "sdrw_item", int unsigned payload_len = 0, bit [6:0] avoid_static_addr = 7'h7e,
+      bit [6:0] avoid_dynamic_addr = 7'h7e);
     i3c_seq_item item;
 
     item = i3c_seq_item::type_id::create(name);
@@ -271,15 +270,14 @@ class i3c_base_vseq extends uvm_sequence;
     return item;
   endfunction
 
-  virtual task randomize_i3c_dat_target(int index, output bit [6:0] static_addr,
-                                        output bit [6:0] dynamic_addr,
-                                        input bit [6:0] avoid_static_addr = 7'h7e,
-                                        input bit [6:0] avoid_dynamic_addr = 7'h7e);
+  virtual task randomize_i3c_dat_target(
+      int index, output bit [6:0] static_addr, output bit [6:0] dynamic_addr,
+      input bit [6:0] avoid_static_addr = 7'h7e, input bit [6:0] avoid_dynamic_addr = 7'h7e);
     i3c_seq_item item;
 
-    item = randomize_sdrw_item($sformatf("sdrw_dat_target_%0d_item", index), 0,
-                               avoid_static_addr, avoid_dynamic_addr);
-    static_addr  = item.static_addr;
+    item = randomize_sdrw_item($sformatf("sdrw_dat_target_%0d_item", index), 0, avoid_static_addr,
+                               avoid_dynamic_addr);
+    static_addr = item.static_addr;
     dynamic_addr = item.addr;
     configure_i3c_dat_target(index, static_addr, dynamic_addr);
   endtask
@@ -363,18 +361,6 @@ class i3c_base_vseq extends uvm_sequence;
       end
     endcase
   endfunction
-
-  virtual task check_sampled_write_data(i3c_device_response_seq dev_seq, byte_queue_t exp_data,
-                                        int unsigned exp_len, string ctxt);
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_len,
-                 $sformatf("%s: sampled write byte count mismatch", ctxt))
-    for (int unsigned i = 0; i < exp_len; i++) begin
-      if ((i < dev_seq.sampled_data.size()) && (i < exp_data.size())) begin
-        `DV_CHECK_EQ(dev_seq.sampled_data[i], exp_data[i],
-                     $sformatf("%s: sampled write byte[%0d] mismatch", ctxt, i))
-      end
-    end
-  endtask
 
   virtual task wait_for_device_done(i3c_device_response_seq dev_seq, string ctxt,
                                     int unsigned timeout_cycles = 1000);
@@ -687,8 +673,8 @@ class i3c_base_vseq extends uvm_sequence;
     int unsigned   value;
 
     if ((width == 0) || (width > $bits(value))) begin
-      `uvm_fatal(`gfn, $sformatf("%s: invalid hdl_read_uint_lsb width %0d for %s",
-                                 get_type_name(), width, path))
+      `uvm_fatal(`gfn, $sformatf("%s: invalid hdl_read_uint_lsb width %0d for %s", get_type_name(),
+                                 width, path))
     end
 
     raw   = hdl_read_checked(path);
@@ -701,13 +687,6 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual function int unsigned hdl_read_fifo_depth(string path);
     return hdl_read_uint_lsb(path, FIFO_DEPTH_W);
-  endfunction
-
-  virtual function bit [63:0] hdl_read_qword(string path);
-    uvm_hdl_data_t value;
-
-    value = hdl_read_checked(path);
-    return value[63:0];
   endfunction
 
   virtual function void hdl_force_checked(string path, uvm_hdl_data_t value);
@@ -829,26 +808,6 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual task read_response(output bit [31:0] data);
     reg_read(ADDR_RESP, data);
-  endtask
-
-  virtual task check_success_resp_fields(input bit [31:0] resp, input bit [3:0] tid,
-                                         input int unsigned data_length, input string ctxt);
-    `DV_CHECK_EQ(resp[31:28], 4'h0, $sformatf("%s: expected Success response", ctxt))
-    `DV_CHECK_EQ(resp[27:24], tid, $sformatf("%s: response TID mismatch", ctxt))
-    `DV_CHECK_EQ(resp[15:0], 16'(data_length), $sformatf("%s: response length mismatch", ctxt))
-  endtask
-
-  virtual task check_error_resp_fields(input bit [31:0] resp, input bit [3:0] err_status,
-                                       input bit [3:0] tid, input int unsigned data_length,
-                                       input string ctxt);
-    `DV_CHECK_EQ(resp[31:28], err_status, $sformatf("%s: response status mismatch", ctxt))
-    `DV_CHECK_EQ(resp[27:24], tid, $sformatf("%s: response TID mismatch", ctxt))
-    `DV_CHECK_EQ(resp[23:16], 8'h00, $sformatf("%s: response reserved field should be zero", ctxt))
-    `DV_CHECK_EQ(resp[15:0], 16'(data_length), $sformatf("%s: response length mismatch", ctxt))
-  endtask
-
-  virtual task check_success_resp(input bit [31:0] resp, input transfer_stimulus_cfg_t cfg);
-    check_success_resp_fields(resp, cfg.tid, cfg.data_length, cfg.ctxt);
   endtask
 
   virtual task poll_idle(int timeout = 10000);
