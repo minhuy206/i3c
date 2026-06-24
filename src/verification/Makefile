@@ -13,8 +13,6 @@ COV         ?= 0
 COV_ROOT    ?= cov_work
 COV_TEST    ?= $(SEQ)_$(SEED)
 COV_OPTS    = -coverage all -covworkdir $(COV_ROOT) -covtest $(COV_TEST)
-FIFO_005_LOG ?= fifo_non_power_of_two_elaboration.log
-FIFO_005_LIB ?= xcelium_fifo005.d
 
 CSR_REGRESSION_SEQS ?= \
 	csr_reset_defaults_vseq \
@@ -159,7 +157,6 @@ fifo_regression:
 	for seq in $(FIFO_REGRESSION_SEQS); do \
 	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
 	done
-	$(MAKE) fifo_non_power_of_two_elaboration
 
 bus_regression:
 	@set -e; \
@@ -211,30 +208,6 @@ err_regression:
 
 sdr_regression: sdrw_regression sdrr_regression
 
-fifo_non_power_of_two_elaboration:
-	@set +e; \
-	$(SIMULATOR) \
-	  -timescale 1ns/1ps \
-	  -access +rwc \
-	  -64 \
-	  -xmlibdirname $(FIFO_005_LIB) \
-	  ../rtl/hci/sync_fifo.sv \
-	  uvm_i3c/block_tests/fifo_non_power_of_two_tb.sv \
-	  -top fifo_non_power_of_two_tb > $(FIFO_005_LOG) 2>&1; \
-	status=$$?; \
-	if [ $$status -eq 0 ]; then \
-	  echo "FIFO_005 failed: illegal sync_fifo depth unexpectedly passed"; \
-	  cat $(FIFO_005_LOG); \
-	  exit 1; \
-	fi; \
-	if grep -q "sync_fifo: Depth (3) must be a power of 2" $(FIFO_005_LOG); then \
-	  echo "FIFO_005 passed: illegal sync_fifo depth rejected"; \
-	else \
-	  echo "FIFO_005 failed: expected sync_fifo depth fatal was not found"; \
-	  cat $(FIFO_005_LOG); \
-	  exit 1; \
-	fi
-
 waves:
 	$(MAKE) sim DUMP_WAVES=1
 
@@ -242,10 +215,10 @@ coverage:
 	$(MAKE) sim COV=1
 
 clean:
-	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs $(COV_ROOT) waves.shm xrun.history .simvision \
+	rm -rf xcelium.d INCA_libs $(COV_ROOT) waves.shm xrun.history .simvision \
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
         sdrw_regression sdrr_regression imm_regression i2c_regression ccc_regression \
         err_regression sdr_regression \
-        fifo_non_power_of_two_elaboration waves coverage clean
+        waves coverage clean

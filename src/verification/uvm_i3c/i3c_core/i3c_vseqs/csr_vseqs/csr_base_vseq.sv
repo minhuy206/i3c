@@ -60,6 +60,20 @@ class csr_base_vseq extends i3c_base_vseq;
     disable fork;
   endtask
 
+  virtual task check_no_host_start_until_event(event done_e, string ctxt);
+    fork : no_host_start_until_event
+      begin
+        p_sequencer.cfg.m_i3c_agent_cfg.vif.wait_for_host_start(
+            p_sequencer.cfg.m_i3c_agent_cfg.tc.i3c_tc);
+        `uvm_error(`gfn, $sformatf("%s: bus START observed during disabled window", ctxt))
+      end
+      begin
+        @done_e;
+      end
+    join_any
+    disable fork;
+  endtask
+
   virtual task clear_scoreboard_cmd_tx_model(string ctxt);
     uvm_component  comp;
     i3c_scoreboard scb;

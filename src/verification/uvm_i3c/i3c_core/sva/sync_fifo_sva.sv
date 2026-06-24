@@ -16,6 +16,7 @@ module sync_fifo_sva #(
     input logic             rready_i,
     input logic [Width-1:0] rdata_o,
 
+    input logic              full_o,
     input logic              empty_o,
     input logic [DepthW-1:0] depth_o,
     input logic [  PtrW:0]   wptr_q,
@@ -34,6 +35,56 @@ module sync_fifo_sva #(
     else past_valid_q <= 1'b1;
   end
 
+  ap_status_matches_depth:
+  assert property (@(posedge clk_i) disable iff (!rst_ni || flush_i)
+                   (full_o == (depth_o == DepthW'(Depth))) &&
+                   (empty_o == (depth_o == '0)) &&
+                   (wready_o == !full_o) &&
+                   (rvalid_o == !empty_o))
+  else $error("sync_fifo_sva: status/handshake outputs do not match FIFO depth");
+
+  cp_status_matches_depth:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || flush_i)
+                  (full_o == (depth_o == DepthW'(Depth))) &&
+                  (empty_o == (depth_o == '0)) &&
+                  (wready_o == !full_o) &&
+                  (rvalid_o == !empty_o));
+
+  ap_flush_clears_fifo_state:
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   flush_i |=> (empty_o && (depth_o == '0) && (wptr_q == '0) && (rptr_q == '0)))
+  else $error("sync_fifo_sva: flush did not clear FIFO state");
+
+  cp_flush_clears_fifo_state:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  flush_i ##1 (empty_o && (depth_o == '0) && (wptr_q == '0) && (rptr_q == '0)));
+
+  ap_flush_with_activity_clears_fifo_state:
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   flush_i && (wvalid_i || rready_i)
+                   |=> (empty_o && (depth_o == '0) && (wptr_q == '0) && (rptr_q == '0)))
+  else $error("sync_fifo_sva: flush with active request did not clear FIFO state");
+
+  cp_flush_with_activity_clears_fifo_state:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  flush_i && (wvalid_i || rready_i)
+                  ##1 (empty_o && (depth_o == '0) && (wptr_q == '0) && (rptr_q == '0)));
+
+  cp_flush_with_write_request:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  flush_i && wvalid_i
+                  ##1 (empty_o && (depth_o == '0)));
+
+  cp_flush_with_read_request:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  flush_i && rready_i
+                  ##1 (empty_o && (depth_o == '0)));
+
+  cp_flush_with_read_write_requests:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  flush_i && wvalid_i && rready_i
+                  ##1 (empty_o && (depth_o == '0)));
+
   ap_read_pop_advances_rptr:
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
                    do_read |=> (rptr_q == ($past(rptr_q) + 1'b1)))
@@ -51,6 +102,77 @@ module sync_fifo_sva #(
   cp_read_only_decrements_depth:
   cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
                   do_read && !do_write ##1 (depth_o == ($past(depth_o) - 1'b1)));
+
+  ap_write_push_advances_wptr:
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                   do_write |=> (wptr_q == ($past(wptr_q) + 1'b1)))
+  else $error("sync_fifo_sva: valid write did not advance wptr");
+
+  cp_write_push_advances_wptr:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  do_write ##1 (wptr_q == ($past(wptr_q) + 1'b1)));
+
+  ap_write_only_increments_depth:
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                   do_write && !do_read |=> (depth_o == ($past(depth_o) + 1'b1)))
+  else $error("sync_fifo_sva: write-only push did not increment depth");
+
+  cp_write_only_increments_depth:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  do_write && !do_read ##1 (depth_o == ($past(depth_o) + 1'b1)));
+
+  ap_simultaneous_read_write_advances_pointers:
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                   do_read && do_write
+                   |=> ((rptr_q == ($past(rptr_q) + 1'b1)) &&
+                        (wptr_q == ($past(wptr_q) + 1'b1))))
+  else $error("sync_fifo_sva: simultaneous read/write did not advance both pointers");
+
+  cp_simultaneous_read_write_advances_pointers:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  do_read && do_write
+                  ##1 ((rptr_q == ($past(rptr_q) + 1'b1)) &&
+                       (wptr_q == ($past(wptr_q) + 1'b1))));
+
+  ap_simultaneous_read_write_preserves_depth:
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                   do_read && do_write |=> (depth_o == $past(depth_o)))
+  else $error("sync_fifo_sva: simultaneous read/write changed FIFO depth");
+
+  cp_simultaneous_read_write_preserves_depth:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  do_read && do_write ##1 (depth_o == $past(depth_o)));
+
+  cp_simultaneous_read_write_near_empty:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  do_read && do_write && (depth_o == DepthW'(1))
+                  ##1 (depth_o == $past(depth_o)));
+
+  cp_simultaneous_read_write_mid_depth:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  do_read && do_write &&
+                  (depth_o > DepthW'(1)) && (depth_o < DepthW'(Depth - 1))
+                  ##1 (depth_o == $past(depth_o)));
+
+  cp_simultaneous_read_write_near_full:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  do_read && do_write && (depth_o == DepthW'(Depth - 1))
+                  ##1 (depth_o == $past(depth_o)));
+
+  ap_full_write_does_not_advance_wptr:
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                   wvalid_i && !wready_o
+                   |=> ((wptr_q == $past(wptr_q)) &&
+                        (rptr_q == $past(rptr_q)) &&
+                        (depth_o == $past(depth_o))))
+  else $error("sync_fifo_sva: blocked full write changed FIFO state");
+
+  cp_full_write_does_not_advance_wptr:
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
+                  wvalid_i && !wready_o
+                  ##1 ((wptr_q == $past(wptr_q)) &&
+                       (rptr_q == $past(rptr_q)) &&
+                       (depth_o == $past(depth_o))));
 
   ap_empty_read_does_not_advance_rptr:
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)
@@ -91,6 +213,7 @@ bind sync_fifo sync_fifo_sva #(
     .rvalid_o,
     .rready_i,
     .rdata_o,
+    .full_o,
     .empty_o,
     .depth_o,
     .wptr_q,

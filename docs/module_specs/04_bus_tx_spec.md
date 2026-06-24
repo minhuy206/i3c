@@ -89,9 +89,10 @@ None.
 
 #### Bus Output
 
-| Signal  | Direction | Width | Description      |
-| ------- | --------- | ----- | ---------------- |
-| `sda_o` | Output    | 1     | SDA drive output |
+| Signal         | Direction | Width | Description                                                                              |
+| -------------- | --------- | ----- | ----------------------------------------------------------------------------------------- |
+| `sda_o`        | Output    | 1     | SDA drive output                                                                          |
+| `sda_drive_o`  | Output    | 1     | SDA drive-enable; pass-through from `bus_tx`, feeds the `ctrl_sda_oe_o` derivation in `controller_active` |
 
 ### bus_tx (Low-Level Bit Driver)
 
@@ -118,7 +119,11 @@ Same as `bus_tx_flow` (passed through).
 
 #### OD/PP and Bus Output
 
-Same as `bus_tx_flow` (passed through).
+| Signal        | Direction | Width | Description                                                                              |
+| ------------- | --------- | ----- | ----------------------------------------------------------------------------------------- |
+| `sel_od_pp_o` | Output    | 1     | Pass-through of `sel_od_pp_i`                                                              |
+| `sda_o`       | Output    | 1     | SDA drive output                                                                          |
+| `sda_drive_o` | Output    | 1     | SDA drive-enable signal, asserted whenever this module is actively driving `sda_o`; propagated up through `bus_tx_flow` and consumed by `controller_active` to derive `ctrl_sda_oe_o` |
 
 ## 5. Functional Description
 
@@ -144,6 +149,8 @@ stateDiagram-v2
     NextTaskDecision --> DriveBit: req_bit_i
     NextTaskDecision --> Idle: no request
 ```
+
+> **Global abort override:** After the state case above is evaluated, an unconditional `if (~req | error) state_d = Idle;` is applied on top of the result. This means the abort path is not limited to `NextTaskDecision` — `~req` (no byte/bit request) or `error` (req_error or bus_error) forces a transition to `Idle` from **any** state (`Idle`, `DriveByte`, `DriveBit`, `NextTaskDecision` alike), not just on the `NextTaskDecision --> Idle` edge shown in the diagram.
 
 **State outputs:**
 
@@ -190,6 +197,8 @@ stateDiagram-v2
     TransmitData --> Idle: scl_negedge & t_hd_z (tx_done)
     HoldData --> Idle: tcount == 0 & scl_stable_low (tx_done)
 ```
+
+> **Global abort override:** After the state case above is evaluated, an unconditional `if (~drive_i) state_d = Idle;` is applied on top of the result. Deasserting `drive_i` forces an immediate transition to `Idle` from **any** state (`AwaitClockNegedge`, `SetupData`, `TransmitData`, `HoldData` alike), not just via the named transitions shown in the diagram.
 
 **Timing sequence for one bit:**
 
@@ -242,7 +251,8 @@ typedef enum logic [1:0] {
 | Error        | Detection                            | Action                            |
 | ------------ | ------------------------------------ | --------------------------------- |
 | Dual request | `req_byte_i & req_bit_i` both HIGH   | `req_error_o` = 1, return to Idle |
-| Abort        | `~req` (request deasserted)          | Return to Idle                    |
+| Abort (bus_tx_flow) | `~req \| error` (request deasserted, or req_error/bus_error) | Unconditional override applied after the FSM case in *every* state — forces `state_d = Idle` regardless of current state |
+| Abort (bus_tx)      | `~drive_i` (drive request deasserted)                        | Same pattern: unconditional override applied after the FSM case in *every* state — forces `state_d = Idle` regardless of current state |
 | Bus error    | Not implemented (`bus_error_o = '0`) | Future enhancement                |
 
 ## 9. Test Plan

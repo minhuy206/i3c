@@ -12,6 +12,8 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     bit                         [31:0] resp;
     bit                         [31:0] dword0;
     bit                         [31:0] dword1;
+    bit                         [63:0] cmd_wdata;
+    uvm_hdl_data_t                     raw_hdl;
     int unsigned                       exp_data_bytes;
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
@@ -34,9 +36,25 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
 
     reg_write(ADDR_CMD_QUEUE, dword0);
     settle_cycles();
+    `DV_CHECK_EQ(hdl_read_bit(csr_paths.cmd_staging_valid_path), 1'b1,
+                 "csr_cmd_queue_2dw_staging_vseq: DWORD0 should be staged")
+    `DV_CHECK_EQ(hdl_read_word(csr_paths.cmd_dword0_path), dword0,
+                 "csr_cmd_queue_2dw_staging_vseq: staged DWORD0 mismatch")
+    `DV_CHECK_EQ(hdl_read_bit(cmd_paths.write_valid_path), 1'b0,
+                 "csr_cmd_queue_2dw_staging_vseq: first DWORD must not push CMD")
+    check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit, 1'b0, 1'b1,
+                      "after CMD DWORD0 write");
 
     reg_write(ADDR_CMD_QUEUE, dword1);
     settle_cycles();
+    raw_hdl = hdl_read_checked(cmd_paths.write_data_path);
+    cmd_wdata = raw_hdl[63:0];
+    `DV_CHECK_EQ(hdl_read_bit(csr_paths.cmd_staging_valid_path), 1'b0,
+                 "csr_cmd_queue_2dw_staging_vseq: DWORD1 should clear staging")
+    `DV_CHECK_EQ(cmd_wdata, {dword1, dword0},
+                 "csr_cmd_queue_2dw_staging_vseq: emitted CMD dword order mismatch")
+    check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit, 1'b0, 1'b0,
+                      "after CMD DWORD1 write");
 
     dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr   = 7'h08;
@@ -52,18 +70,19 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_cmd_queue_2dw_staging_vseq");
-    if ((dev_seq.sampled_data.size() >= exp_data_bytes) &&
-        (dev_seq.sampled_t_bit.size() >= exp_data_bytes)) begin
-      for (int unsigned i = 0; i < exp_data_bytes; i++) begin
-        bit exp_t_bit;
-
-        exp_t_bit = ~^dev_seq.sampled_data[i];
-      end
+    `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_data_bytes,
+                 "csr_cmd_queue_2dw_staging_vseq: immediate payload byte count mismatch")
+    if (dev_seq.sampled_data.size() >= exp_data_bytes) begin
+      `DV_CHECK_EQ(dev_seq.sampled_data[0], imm_cmd.def_or_data_byte1,
+                   "csr_cmd_queue_2dw_staging_vseq: immediate byte1 mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_data[1], imm_cmd.data_byte2,
+                   "csr_cmd_queue_2dw_staging_vseq: immediate byte2 mismatch")
     end
 
     read_response(resp);
 
     reg_read(ADDR_QUEUE_STATUS, status);
+    check_all_queues_empty("after csr_cmd_queue_2dw_staging_vseq");
 
   endtask
 

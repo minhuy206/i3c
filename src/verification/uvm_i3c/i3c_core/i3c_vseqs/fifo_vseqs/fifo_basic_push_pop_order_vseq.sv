@@ -6,66 +6,29 @@ class fifo_basic_push_pop_order_vseq extends fifo_base_vseq;
   endfunction
 
   task body();
-    exercise_cmd_fifo();
-    exercise_tx_fifo();
-    exercise_rx_fifo();
-    exercise_resp_fifo();
+    exercise_queue(cmd_paths);
+    exercise_queue(tx_paths);
+    exercise_queue(rx_paths);
+    exercise_queue(resp_paths);
 
   endtask
 
-  task exercise_cmd_fifo();
-    bit [63:0] exp;
+  task exercise_queue(queue_hdl_paths_t paths);
+    uvm_hdl_data_t exp;
 
+    check_fifo_state(paths, 0, "at reset");
     for (int unsigned i = 0; i < QueueDepth; i++) begin
-      exp = make_cmd_entry(i);
-      wait_hdl_bit(cmd_paths.write_ready_path, 1'b1, $sformatf("before CMD push %0d", i));
-      force_fifo_write_one_cycle(cmd_paths, exp);
+      exp = make_queue_entry(paths, i);
+      wait_hdl_bit(paths.write_ready_path, 1'b1,
+                   $sformatf("before %s push %0d", paths.name, i));
+      force_fifo_write_one_cycle(paths, exp);
+      check_fifo_state(paths, i + 1, $sformatf("after push %0d", i));
     end
 
     for (int unsigned i = 0; i < QueueDepth; i++) begin
-      pop_fifo_one_entry(cmd_paths);
-    end
-  endtask
-
-  task exercise_tx_fifo();
-    bit [31:0] exp;
-
-    for (int unsigned i = 0; i < QueueDepth; i++) begin
-      exp = make_tx_entry(i);
-      wait_hdl_bit(tx_paths.write_ready_path, 1'b1, $sformatf("before TX push %0d", i));
-      force_fifo_write_one_cycle(tx_paths, exp);
-    end
-
-    for (int unsigned i = 0; i < QueueDepth; i++) begin
-      pop_fifo_one_entry(tx_paths);
-    end
-  endtask
-
-  task exercise_rx_fifo();
-    bit [31:0] exp;
-
-    for (int unsigned i = 0; i < QueueDepth; i++) begin
-      exp = make_rx_entry(i);
-      wait_hdl_bit(rx_paths.write_ready_path, 1'b1, $sformatf("before RX push %0d", i));
-      force_fifo_write_one_cycle(rx_paths, exp);
-    end
-
-    for (int unsigned i = 0; i < QueueDepth; i++) begin
-      pop_fifo_one_entry(rx_paths);
-    end
-  endtask
-
-  task exercise_resp_fifo();
-    bit [31:0] exp;
-
-    for (int unsigned i = 0; i < QueueDepth; i++) begin
-      exp = make_resp_entry(i);
-      wait_hdl_bit(resp_paths.write_ready_path, 1'b1, $sformatf("before RESP push %0d", i));
-      force_fifo_write_one_cycle(resp_paths, exp);
-    end
-
-    for (int unsigned i = 0; i < QueueDepth; i++) begin
-      pop_fifo_one_entry(resp_paths);
+      exp = make_queue_entry(paths, i);
+      expect_fifo_pop(paths, exp, $sformatf("after pop %0d", i));
+      check_fifo_state(paths, QueueDepth - i - 1, $sformatf("after pop %0d", i));
     end
   endtask
 

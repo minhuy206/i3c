@@ -114,6 +114,7 @@ module csr_registers_sva
   localparam logic [AddrWidth-1:0] ADDR_QUEUE_STATUS = 12'h110;
   localparam logic [AddrWidth-1:0] ADDR_DAT_BASE = 12'h200;
   localparam logic [AddrWidth-1:0] ADDR_DAT_END = ADDR_DAT_BASE + AddrWidth'(DatDepth * 4);
+  localparam logic [DataWidth-1:0] DAT_WRITABLE_MASK = 32'h807F_007F;
   localparam int unsigned QS_CMD_FULL_BIT = 0;
   localparam int unsigned QS_CMD_EMPTY_BIT = 1;
   localparam int unsigned QS_TX_FULL_BIT = 2;
@@ -170,6 +171,14 @@ module csr_registers_sva
   logic csr_bus_known;
   logic cmd_queue_write;
   logic tx_data_write;
+  logic timing_write;
+  logic timing_read;
+  logic timing_addr_valid;
+  logic [DataWidth-1:0] timing_read_data;
+  logic dat_write;
+  logic dat_read;
+  logic dat_addr_valid;
+  logic [DataWidth-1:0] dat_read_data;
   logic cmd_queue_blocked;
   logic tx_data_blocked;
   logic rx_data_read;
@@ -189,6 +198,76 @@ module csr_registers_sva
 
   always_comb begin : compute_dat_hw_read_expected
     dat_hw_read_exp = dat_mem_i[dat_index_i];
+  end
+
+  function automatic logic is_timing_addr(input logic [AddrWidth-1:0] addr);
+    unique case (addr)
+      ADDR_T_R,
+      ADDR_T_F,
+      ADDR_T_LOW,
+      ADDR_T_LOW_OD,
+      ADDR_T_HIGH,
+      ADDR_T_SU_STA,
+      ADDR_T_HD_STA,
+      ADDR_T_SU_STO,
+      ADDR_T_SU_DAT,
+      ADDR_T_HD_DAT,
+      ADDR_T_BUS_FREE,
+      ADDR_I2C_T_R,
+      ADDR_I2C_T_F,
+      ADDR_I2C_T_LOW,
+      ADDR_I2C_T_HIGH,
+      ADDR_I2C_T_SU_STA,
+      ADDR_I2C_T_HD_STA,
+      ADDR_I2C_T_SU_STO,
+      ADDR_I2C_T_SU_DAT,
+      ADDR_I2C_T_HD_DAT,
+      ADDR_I2C_T_BUF: return 1'b1;
+      default: return 1'b0;
+    endcase
+  endfunction
+
+  function automatic logic [CounterWidth-1:0] timing_value_for_addr(
+      input logic [AddrWidth-1:0] addr);
+    unique case (addr)
+      ADDR_T_R:          return t_r_i;
+      ADDR_T_F:          return t_f_i;
+      ADDR_T_LOW:        return t_low_i;
+      ADDR_T_LOW_OD:     return t_low_od_i;
+      ADDR_T_HIGH:       return t_high_i;
+      ADDR_T_SU_STA:     return t_su_sta_i;
+      ADDR_T_HD_STA:     return t_hd_sta_i;
+      ADDR_T_SU_STO:     return t_su_sto_i;
+      ADDR_T_SU_DAT:     return t_su_dat_i;
+      ADDR_T_HD_DAT:     return t_hd_dat_i;
+      ADDR_T_BUS_FREE:   return t_bus_free_i;
+      ADDR_I2C_T_R:      return i2c_t_r_i;
+      ADDR_I2C_T_F:      return i2c_t_f_i;
+      ADDR_I2C_T_LOW:    return i2c_t_low_i;
+      ADDR_I2C_T_HIGH:   return i2c_t_high_i;
+      ADDR_I2C_T_SU_STA: return i2c_t_su_sta_i;
+      ADDR_I2C_T_HD_STA: return i2c_t_hd_sta_i;
+      ADDR_I2C_T_SU_STO: return i2c_t_su_sto_i;
+      ADDR_I2C_T_SU_DAT: return i2c_t_su_dat_i;
+      ADDR_I2C_T_HD_DAT: return i2c_t_hd_dat_i;
+      ADDR_I2C_T_BUF:    return i2c_t_buf_i;
+      default:           return '0;
+    endcase
+  endfunction
+
+  always_comb begin : compute_timing_csr_decode
+    timing_addr_valid = is_timing_addr(addr_i);
+    timing_read_data  = {{(DataWidth - CounterWidth) {1'b0}}, timing_value_for_addr(addr_i)};
+  end
+
+  function automatic int unsigned dat_index_for_addr(input logic [AddrWidth-1:0] addr);
+    return int'((addr - ADDR_DAT_BASE) >> 2);
+  endfunction
+
+  always_comb begin : compute_dat_csr_decode
+    dat_addr_valid = (addr_i >= ADDR_DAT_BASE) && (addr_i <= (ADDR_DAT_END - 4));
+    dat_read_data  = '0;
+    if (dat_addr_valid) dat_read_data = dat_mem_i[dat_index_for_addr(addr_i)];
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : track_csr_write_after_reset
@@ -225,7 +304,11 @@ module csr_registers_sva
       ADDR_I2C_T_SU_DAT: reset_default_rdata = RST_I2C_T_SU_DAT;
       ADDR_I2C_T_HD_DAT: reset_default_rdata = RST_I2C_T_HD_DAT;
       ADDR_I2C_T_BUF: reset_default_rdata = RST_I2C_T_BUF;
-      ADDR_QUEUE_STATUS: reset_default_rdata = 32'h0000_00AA;
+      ADDR_QUEUE_STATUS: begin
+        // QUEUE_STATUS mirrors live FIFO state, so backdoor/FIFO-side activity can change it
+        // before any CSR write occurs. Reset value is checked by ap_queue_reset_defaults.
+        reset_default_addr_valid = 1'b0;
+      end
       default: begin
         if ((addr_i >= ADDR_DAT_BASE) && (addr_i <= (ADDR_DAT_END - 4))) begin
           reset_default_rdata = '0;
@@ -278,6 +361,10 @@ module csr_registers_sva
   assign csr_bus_known = !$isunknown({addr_i, wen_i, ren_i});
   assign cmd_queue_write = wen_i && (addr_i == ADDR_CMD_QUEUE);
   assign tx_data_write = wen_i && (addr_i == ADDR_TX_DATA);
+  assign timing_write = wen_i && ready_o && timing_addr_valid;
+  assign timing_read = ren_i && !wen_i && timing_addr_valid;
+  assign dat_write = wen_i && ready_o && dat_addr_valid;
+  assign dat_read = ren_i && !wen_i && dat_addr_valid;
   assign cmd_queue_blocked = cmd_queue_write && (cmd_wvalid_int_i || hc_control_cfg_i.sw_reset);
   assign tx_data_blocked = tx_data_write && (tx_wvalid_int_i || hc_control_cfg_i.sw_reset);
   assign rx_data_read = ren_i && (addr_i == ADDR_RX_DATA);
@@ -596,9 +683,11 @@ module csr_registers_sva
   ap_cmd_wdata_stable_until_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset)
                    cmd_wvalid_int_i && !cmd_wready_i
-                   |=> (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
+                   |=> ($past(hc_control_cfg_i.sw_reset) ||
+                        hc_control_cfg_i.sw_reset ||
+                        (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
       cmd_wdata_int_i
-  ))))
+  )))))
   else $error("csr_registers_sva: CMD write data changed before ready");
 
   cp_cmd_wdata_stable_until_ready :
@@ -646,9 +735,11 @@ module csr_registers_sva
   ap_tx_wdata_stable_until_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset)
                    tx_wvalid_int_i && !tx_wready_i
-                   |=> (tx_wvalid_int_i && (tx_wdata_int_i == $past(
+                   |=> ($past(hc_control_cfg_i.sw_reset) ||
+                        hc_control_cfg_i.sw_reset ||
+                        (tx_wvalid_int_i && (tx_wdata_int_i == $past(
       tx_wdata_int_i
-  ))))
+  )))))
   else $error("csr_registers_sva: TX write data changed before ready");
 
   cp_tx_wdata_stable_until_ready :
@@ -740,6 +831,34 @@ module csr_registers_sva
       rst_ni
   ) && timing_reset_defaults_match);
 
+  ap_timing_write_updates_selected_reg :
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                   timing_write
+                   |=> (timing_value_for_addr($past(addr_i)) == $past(
+      wdata_i[CounterWidth-1:0]
+  )))
+  else $error("csr_registers_sva: timing CSR write did not update selected register");
+
+  cp_timing_write_updates_selected_reg :
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  timing_write
+                  ##1 (timing_value_for_addr($past(addr_i)) == $past(
+      wdata_i[CounterWidth-1:0]
+  )));
+
+  ap_timing_readback :
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                   timing_read |=> (rdata_o == $past(
+      timing_read_data
+  )))
+  else $error("csr_registers_sva: timing CSR readback mismatch");
+
+  cp_timing_readback :
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  timing_read ##1 (rdata_o == $past(
+      timing_read_data
+  )));
+
   ap_status_reset_defaults :
   assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
       rst_ni
@@ -788,6 +907,131 @@ module csr_registers_sva
       reset_default_rdata
   )));
 
+  cp_reset_readback_hc_control :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_HC_CONTROL) ##1 (rdata_o == 32'h0000_0000));
+
+  cp_reset_readback_hc_status :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_HC_STATUS) ##1 (rdata_o == 32'h0000_0005));
+
+  cp_reset_readback_intr_status :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_INTR_STATUS) ##1 (rdata_o == 32'h0000_0000));
+
+  cp_reset_readback_t_r :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_R) ##1 (rdata_o == DataWidth'(RST_T_R)));
+
+  cp_reset_readback_t_f :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_F) ##1 (rdata_o == DataWidth'(RST_T_F)));
+
+  cp_reset_readback_t_low :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_LOW) ##1 (rdata_o == DataWidth'(RST_T_LOW)));
+
+  cp_reset_readback_t_low_od :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_LOW_OD) ##1 (rdata_o == DataWidth'(RST_T_LOW_OD)));
+
+  cp_reset_readback_t_high :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_HIGH) ##1 (rdata_o == DataWidth'(RST_T_HIGH)));
+
+  cp_reset_readback_t_su_sta :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_SU_STA) ##1 (rdata_o == DataWidth'(RST_T_SU_STA)));
+
+  cp_reset_readback_t_hd_sta :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_HD_STA) ##1 (rdata_o == DataWidth'(RST_T_HD_STA)));
+
+  cp_reset_readback_t_su_sto :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_SU_STO) ##1 (rdata_o == DataWidth'(RST_T_SU_STO)));
+
+  cp_reset_readback_t_su_dat :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_SU_DAT) ##1 (rdata_o == DataWidth'(RST_T_SU_DAT)));
+
+  cp_reset_readback_t_hd_dat :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_HD_DAT) ##1 (rdata_o == DataWidth'(RST_T_HD_DAT)));
+
+  cp_reset_readback_t_bus_free :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_T_BUS_FREE) ##1 (rdata_o == DataWidth'(RST_T_BUS_FREE)));
+
+  cp_reset_readback_i2c_t_r :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_R) ##1 (rdata_o == DataWidth'(RST_I2C_T_R)));
+
+  cp_reset_readback_i2c_t_f :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_F) ##1 (rdata_o == DataWidth'(RST_I2C_T_F)));
+
+  cp_reset_readback_i2c_t_low :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_LOW) ##1 (rdata_o == DataWidth'(RST_I2C_T_LOW)));
+
+  cp_reset_readback_i2c_t_high :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_HIGH) ##1 (rdata_o == DataWidth'(RST_I2C_T_HIGH)));
+
+  cp_reset_readback_i2c_t_su_sta :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_SU_STA) ##1 (rdata_o == DataWidth'(RST_I2C_T_SU_STA)));
+
+  cp_reset_readback_i2c_t_hd_sta :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_HD_STA) ##1 (rdata_o == DataWidth'(RST_I2C_T_HD_STA)));
+
+  cp_reset_readback_i2c_t_su_sto :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_SU_STO) ##1 (rdata_o == DataWidth'(RST_I2C_T_SU_STO)));
+
+  cp_reset_readback_i2c_t_su_dat :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_SU_DAT) ##1 (rdata_o == DataWidth'(RST_I2C_T_SU_DAT)));
+
+  cp_reset_readback_i2c_t_hd_dat :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_HD_DAT) ##1 (rdata_o == DataWidth'(RST_I2C_T_HD_DAT)));
+
+  cp_reset_readback_i2c_t_buf :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_I2C_T_BUF) ##1 (rdata_o == DataWidth'(RST_I2C_T_BUF)));
+
+  cp_reset_readback_queue_status :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  ren_i && !wen_i && !csr_written_since_reset_q &&
+                  (addr_i == ADDR_QUEUE_STATUS) ##1 (rdata_o == 32'h0000_00AA));
+
   ap_dat_hw_read_latency :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    dat_read_valid_i |=> (dat_rdata_o == $past(
@@ -799,6 +1043,46 @@ module csr_registers_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni) dat_read_valid_i ##1 (dat_rdata_o == $past(
       dat_hw_read_exp
   )));
+
+  ap_dat_write_updates_selected_entry :
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                   dat_write
+                   |=> (DataWidth'(dat_mem_i[dat_index_for_addr($past(
+      addr_i
+  ))]) == ($past(
+      wdata_i
+  ) & DAT_WRITABLE_MASK)))
+  else $error("csr_registers_sva: DAT write did not update selected entry");
+
+  cp_dat_write_updates_selected_entry :
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  dat_write
+                  ##1 (DataWidth'(dat_mem_i[dat_index_for_addr($past(
+      addr_i
+  ))]) == ($past(
+      wdata_i
+  ) & DAT_WRITABLE_MASK)));
+
+  ap_dat_readback :
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                   dat_read |=> (rdata_o == $past(
+      dat_read_data
+  )))
+  else $error("csr_registers_sva: DAT readback mismatch");
+
+  cp_dat_readback :
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  dat_read ##1 (rdata_o == $past(
+      dat_read_data
+  )));
+
+  cp_dat_device_i3c_write :
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  dat_write && !wdata_i[31]);
+
+  cp_dat_device_i2c_write :
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  dat_write && wdata_i[31]);
 
   for (genvar i = 0; i < DatDepth; i++) begin : gen_dat_reserved_zero
     ap_dat_reserved_fields_zero :
@@ -824,6 +1108,25 @@ module csr_registers_sva
     cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
         rst_ni
     ) && (dat_mem_i[i] == dat_entry_t'('0)));
+  end
+
+  for (genvar i = 0; i < DatDepth; i++) begin : gen_dat_reset_default_readback
+    localparam logic [AddrWidth-1:0] DAT_ADDR = ADDR_DAT_BASE + AddrWidth'(i * 4);
+
+    cp_dat_idx_write :
+    cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                    dat_write && (addr_i == DAT_ADDR));
+
+    cp_dat_idx_readback :
+    cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                    dat_read && (addr_i == DAT_ADDR) ##1 (rdata_o == $past(
+        dat_read_data
+    )));
+
+    cp_dat_reset_default_readback :
+    cover property (@(posedge clk_i) disable iff (!rst_ni)
+                    ren_i && !wen_i && !csr_written_since_reset_q &&
+                    (addr_i == DAT_ADDR) ##1 (rdata_o == '0));
   end
 
 endmodule

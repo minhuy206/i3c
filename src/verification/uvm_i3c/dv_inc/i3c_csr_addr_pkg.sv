@@ -88,7 +88,8 @@ package i3c_csr_addr_pkg;
 
   // 3. Timing Register Reset Values
   // All values in system clock cycles @ 333.333 MHz simulation clock
-  // Match reset values in src/rtl/csr/csr_registers.sv
+  // Expected by the CSR/module specification; these constants are the DV oracle
+  // for CSR_001 and must not be copied from current RTL behavior.
 
   localparam bit [19:0] RST_T_R = 20'd4;
   localparam bit [19:0] RST_T_F = 20'd4;

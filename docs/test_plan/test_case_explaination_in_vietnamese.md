@@ -14,7 +14,7 @@ Phần 4.1 kiểm tra lớp register của controller. Mục tiêu là đảm b�
 
 Test này kiểm tra giá trị các thanh ghi ngay sau reset.
 
-Sau khi reset được assert và release, testbench sẽ đọc các register quan trọng như `HC_CONTROL`, `HC_STATUS`, các timing register, `QUEUE_STATUS`, và toàn bộ DAT từ `DAT[0]` đến `DAT[15]`.
+Sau khi reset được assert và release, testbench sẽ đọc các register quan trọng như `HC_CONTROL`, `HC_STATUS`, các timing register, `QUEUE_STATUS`, và toàn bộ DAT từ `DAT[0]` đến `DAT[31]`.
 
 Kết quả mong đợi là controller chưa được enable, FSM đang ở trạng thái idle, các queue đang empty, toàn bộ DAT entry bằng 0, và các timing register có giá trị default đúng với CSR/module spec.
 
@@ -58,7 +58,7 @@ Test này giúp xác nhận software có thể lập trình timing cho I3C/I2C t
 
 Test này kiểm tra DAT, viết tắt của Device Address Table.
 
-DAT lưu thông tin địa chỉ của các device mà controller sẽ giao tiếp. Mỗi entry có các field quan trọng như `device`, `dynamic_address`, và `static_address`. Testbench sẽ ghi các giá trị khác nhau vào `DAT[0]` đến `DAT[15]`, sau đó đọc lại từng entry.
+DAT lưu thông tin địa chỉ của các device mà controller sẽ giao tiếp. Mỗi entry có các field quan trọng như `device`, `dynamic_address`, và `static_address`. Testbench sẽ ghi các giá trị khác nhau vào `DAT[0]` đến `DAT[31]`, sau đó đọc lại từng entry.
 
 Kết quả mong đợi là các field trong DAT khớp với encoding được định nghĩa trong CSR/DAT spec, bao gồm bit `[31]`, bits `[22:16]`, và bits `[6:0]`. Ngoài ra, ghi vào một DAT entry không được làm hỏng entry bên cạnh.
 
@@ -220,11 +220,11 @@ Kết quả mong đợi là flush có ưu tiên rõ ràng: pointer phải đư�
 
 Test này quan trọng vì nếu flush không xóa sạch FIFO, command hoặc response cũ có thể xuất hiện sau reset, gây lỗi rất khó debug.
 
-### FIFO_005 - `fifo_non_power_of_two_elaboration`
+### FIFO_005 - `sync_fifo_depth_power_of_two_contract`
 
-Test này kiểm tra ràng buộc cấu hình của module `sync_fifo`.
+Mục này không còn là một test regression riêng. Ràng buộc cấu hình của module `sync_fifo` đã được cover trực tiếp bởi assertion trong RTL.
 
-Theo testplan, `sync_fifo` yêu cầu depth phải là power-of-two, ví dụ:
+`sync_fifo` yêu cầu depth phải là power-of-two, ví dụ:
 
 ```text
 2, 4, 8, 16, 32, ...
@@ -232,11 +232,11 @@ Theo testplan, `sync_fifo` yêu cầu depth phải là power-of-two, ví dụ:
 
 Các depth như 3, 5, 6, 10 không hợp lệ.
 
-Đây là negative compile test. Nghĩa là test không chạy simulation bình thường, mà cố tình instantiate `sync_fifo` với depth không hợp lệ. Kết quả mong đợi là elaboration phải báo fatal hoặc assertion đúng như FIFO parameter contract đã định nghĩa.
+RTL hiện có elaboration-time assertion kiểm tra `Depth == (1 << $clog2(Depth))`. Vì vậy nếu người dùng instantiate `sync_fifo` với depth không hợp lệ, elaboration sẽ fail ngay theo parameter contract của module.
 
-Mục tiêu của test không phải là làm FIFO hoạt động với depth sai. Mục tiêu là xác nhận parameter contract của FIFO phát hiện cấu hình sai sớm, thay vì để lỗi âm thầm xuất hiện trong simulation hoặc synthesis.
+Do đây là ràng buộc cấu hình tĩnh, không phải behavior runtime, không cần giữ một negative UVM/regression target riêng. Các FIFO runtime test vẫn cover các depth hợp lệ đang dùng trong top-level testbench, còn depth bất hợp lệ được chặn bởi assertion trong chính RTL.
 
-Priority của test này là Low vì đây là ràng buộc cấu hình, không phải luồng chức năng runtime chính. Tuy nhiên nó vẫn hữu ích để bảo vệ người dùng RTL khỏi parameter sai.
+Trạng thái của FIFO_005 là retired/already covered by RTL elaboration assertion.
 
 ## 4.3 PHY, Bus Conditions, and Timing
 

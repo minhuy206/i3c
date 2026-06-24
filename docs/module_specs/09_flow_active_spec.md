@@ -4,10 +4,10 @@
 > Reference: `i3c-core/src/ctrl/flow_active.sv` (580 lines)
 > Estimated LoC: ~1700 lines
 
-> Deferred review notes:
-> - ENTDAA no-device response policy: spec currently documents `Nack`; RTL behavior should be reviewed later before changing either side.
-> - CCC phase OD/PP and ACK/T-bit wording: spec currently keeps the existing CCC description; RTL phase behavior should be reviewed later.
-> - `WriteResp` ready/valid wording: spec currently keeps the existing wording; handshake description should be reviewed later.
+> Resolved review notes (audited against RTL):
+> - ENTDAA no-device response policy: **Aligned.** No-device → `Success`, length 0, matching §8. `Nack` is reserved for the DAA-reject-after-retry case (`daa_nack_error_q`), not the no-device case.
+> - CCC phase OD/PP and ACK/T-bit wording: **Aligned.** Confirmed correct as written in §5.2 sub-cases B/C.
+> - `WriteResp` ready/valid wording: **Resolved.** `resp_queue_wvalid_o` is asserted unconditionally in `WriteResp` and the state is held until `resp_queue_wready_i` (standard valid-before-ready); see §5.2.
 
 ## 1. Purpose
 
@@ -124,6 +124,7 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 | ------------------- | --------- | ----- | ----------------------------- |
 | `bus_rx_req_byte_o` | Output    | 1     | Request byte reception        |
 | `bus_rx_req_bit_o`  | Output    | 1     | Request bit reception         |
+| `bus_rx_req_bit_handoff_o` | Output | 1 | Request bit reception with controller-takes-9th-bit handoff (address-ACK and write T-bit sampling) |
 | `bus_rx_data_i`     | Input     | 8     | Received data                 |
 | `bus_rx_done_i`     | Input     | 1     | RX completed                  |
 | `bus_rx_idle_i`     | Input     | 1     | RX is idle (from `rx_idle_o`) |
@@ -134,6 +135,7 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 | ---------------- | --------- | ----- | -------------------------------- |
 | `gen_start_o`    | Output    | 1     | Request START                    |
 | `gen_rstart_o`   | Output    | 1     | Request Repeated START           |
+| `takeover_o`     | Output    | 1     | Read-takeover fast-path: asserted alongside `gen_rstart_o` when the controller retakes SDA mid-read (requested-length reached or HC abort) or during ENTDAA Repeated START handling |
 | `gen_stop_o`     | Output    | 1     | Request STOP                     |
 | `gen_clock_o`    | Output    | 1     | Enable clock generation          |
 | `gen_idle_o`     | Output    | 1     | Force return to idle (abort)     |
@@ -150,9 +152,13 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 | Signal            | Direction | Width | Description                                                               |
 | ----------------- | --------- | ----- | ------------------------------------------------------------------------- |
 | `ccc_valid_o`     | Output    | 1     | Start ENTDAA; held high until `ccc_done_i`                                |
+| `daa_stop_o`      | Output    | 1     | Request STOP of the ENTDAA loop (asserted on HC abort or `abort_i` during the DAA phase) |
 | `ccc_dev_count_o` | Output    | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)        |
 | `daa_dev_idx_o`   | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
 | `ccc_done_i`      | Input     | 1     | ENTDAA complete (from `entdaa_controller.done_o`)                         |
+| `daa_stop_req_i`  | Input     | 1     | Request to generate STOP now and end the ENTDAA loop                      |
+| `daa_stopped_i`   | Input     | 1     | ENTDAA loop has stopped (gates `IssueCmd` → `WriteResp` together with `ccc_done_i`) |
+| `daa_nack_error_i`| Input     | 1     | A device address-assignment attempt was NACKed after retry; latched into `daa_nack_error_q` and reported as `Nack` |
 
 ### ENTDAA Results (from entdaa_controller module)
 
@@ -205,6 +211,22 @@ typedef enum logic [3:0] {
 } flow_fsm_state_e;
 ```
 
+A second, narrower helper enum steers the exit out of `I3CBcastHeader` once the broadcast
+header preamble completes (latched in `WaitDAT`, before `I3CBcastHeader` is even entered):
+
+```systemverilog
+typedef enum logic [1:0] {
+  BcastHeaderPrivate      = 2'd0,  // private regular/immediate xfer, broadcast header was opt-in
+  BcastHeaderBroadcastCCC = 2'd1,  // CCC sub-case A/B (no target address byte)
+  BcastHeaderDirectCCC    = 2'd2,  // CCC sub-case C (direct, has target address byte)
+  BcastHeaderEntdaa       = 2'd3   // AddressAssignment (ENTDAA)
+} bcast_header_next_e;
+```
+
+`bcast_header_next_q` is latched in `WaitDAT` alongside the main FSM state and read back in
+`I3CBcastHeader` to choose its successor state (`I3CWriteImmediate`/`IssueCmd`/`InitI3CWrite`/
+`InitI3CRead`) — see the dispatch edges in the diagram below.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
@@ -215,12 +237,18 @@ stateDiagram-v2
     FetchDAT --> WaitDAT: dat_read_valid_hw_q=1
 
     WaitDAT --> I2CWriteImmediate: q=0, I2C + Immediate
-    WaitDAT --> I3CWriteImmediate: q=0, I3C + Immediate
-    WaitDAT --> InitI3CWrite: q=0, I3C Regular/Combo + Write
-    WaitDAT --> InitI3CRead: q=0, I3C Regular/Combo + Read
+    WaitDAT --> I3CBcastHeader: q=0, I3C + broadcast_header_enable_i (private) or CCC/ENTDAA
+    WaitDAT --> I3CWriteImmediate: q=0, I3C + Immediate, no broadcast header
+    WaitDAT --> InitI3CWrite: q=0, I3C Regular/Combo + Write, no broadcast header
+    WaitDAT --> InitI3CRead: q=0, I3C Regular/Combo + Read, no broadcast header
     WaitDAT --> InitI2CWrite: q=0, I2C Regular/Combo + Write
     WaitDAT --> InitI2CRead: q=0, I2C Regular/Combo + Read
-    WaitDAT --> IssueCmd: q=0, AddressAssignment (ENTDAA)
+    WaitDAT --> WriteResp: invalid AddressAssignment descriptor (NotSupported)
+
+    I3CBcastHeader --> I3CWriteImmediate: bcast_header_next_q=BcastHeaderPrivate, Immediate
+    I3CBcastHeader --> IssueCmd: bcast_header_next_q=BcastHeaderBroadcastCCC/DirectCCC/Entdaa
+    I3CBcastHeader --> InitI3CWrite: bcast_header_next_q=BcastHeaderPrivate, Regular/Combo Write
+    I3CBcastHeader --> InitI3CRead: bcast_header_next_q=BcastHeaderPrivate, Regular/Combo Read
 
     I2CWriteImmediate --> WriteResp: transfer complete
     I3CWriteImmediate --> WriteResp: transfer complete
@@ -229,7 +257,8 @@ stateDiagram-v2
     FetchTxData --> WriteResp: TX FIFO empty, STOP complete, RESP Ovl
 
     IssueCmd --> FetchTxData: need more TX data
-    IssueCmd --> WriteResp: transfer complete
+    IssueCmd --> WriteResp: transfer complete, or HC-abort STOP complete
+    IssueCmd --> FetchDAT: toc=0 continuation — next queued command accepted in-line (accept_continuation_cmd), no return to Idle
 
     InitI3CWrite --> FetchTxData: I3C write address phase complete
     InitI3CRead --> IssueCmd: I3C read address phase complete
@@ -237,6 +266,8 @@ stateDiagram-v2
     InitI2CRead --> IssueCmd: I2C read initialized
 
     WriteResp --> Idle: response written
+
+    IssueCmd --> IssueCmd: HC abort (abort_i) on active I3C/I2C read — STOP deferred to next T-Bit/ACK boundary (abort_active_state/abort_stop_now/abort_stop_required), then terminates via the FetchTxData/WriteResp edges above
 ```
 
 ### 5.2. State Descriptions (All 14 States)
@@ -291,7 +322,7 @@ stateDiagram-v2
   - Read ACK via `bus_rx_flow`
   - Send up to 4 inline data bytes from command descriptor
   - Generate STOP (if `toc` bit set)
-- **Counter:** `transfer_cnt` tracks current byte position
+- **Counter:** `issue_phase_q` (phase micro-counter) tracks current byte/bit position; `data_byte_idx` (derived from `issue_phase_q`) selects the inline data byte
 - **OD/PP:** Open-Drain throughout (I2C mode)
 - **Transition:** → `WriteResp` when all bytes sent
 
@@ -330,7 +361,7 @@ stateDiagram-v2
 5. Send `{dynamic_address, 1'b0}` (target address + write from DAT entry); read ACK (Open-Drain)
 6. Send defining byte with T-bit parity; generate STOP (if `toc`)
 
-- **Counter:** `transfer_cnt` tracks current byte position within inline data
+- **Counter:** `issue_phase_q` (phase micro-counter) tracks current byte/bit position within inline data
 - **OD/PP switching:**
   - Sub-cases A, B: Open-Drain for address/ACK phases; Push-Pull for I3C data/CCC payload bytes and controller T-bits
   - Sub-case C: Open-Drain for broadcast/target ACK sampling; Push-Pull for CCC opcode, controller T-bits, target address byte, and defining/event byte
@@ -373,7 +404,7 @@ stateDiagram-v2
 - **Actions:**
   - Generate START (Open-Drain)
   - Send `{static_address, 1'b0}` (I2C address + write bit)
-  - Read ACK — if NACK, set `resp_err_status = Nack`
+  - Read ACK — if NACK, latch `addr_nack_q` → response status `AddrHeader`
 - **OD/PP:** Open-Drain throughout
 - **Transition:** → `IssueCmd` to send data bytes, or → `WriteResp` on NACK
 
@@ -383,7 +414,7 @@ stateDiagram-v2
 - **Actions:**
   - Generate START (Open-Drain)
   - Send `{static_address, 1'b1}` (I2C address + read bit)
-  - Read ACK — if NACK, set `resp_err_status = Nack`
+  - Read ACK — if NACK, latch `addr_nack_q` → response status `AddrHeader`
 - **OD/PP:** Open-Drain throughout
 - **Transition:** → `IssueCmd` to receive data bytes, or → `WriteResp` on NACK
 
@@ -404,7 +435,7 @@ stateDiagram-v2
   - Enable clock generation (`gen_clock_o = 1`)
   - For each byte in `tx_dword`: send via `bus_tx_flow` with T-bit (odd parity)
   - Read ACK after address byte
-  - Decrement `remaining_length` counter
+  - Decrement `remaining_len_q` counter
   - When DWORD exhausted: → `FetchTxData` for more, or → `WriteResp` when done
 - **Actions (Read):**
   - Enable clock generation
@@ -459,8 +490,8 @@ stateDiagram-v2
   resp_desc.data_length = resp_data_length_d;  // Actual bytes transferred
   ```
 
-- **Actions:** Assert `resp_queue_wvalid_o` when `resp_queue_wready_i`
-- **Transition:** → `Idle` when response written
+- **Actions:** Assert `resp_queue_wvalid_o` unconditionally (standard valid-before-ready); the state is held until `resp_queue_wready_i` is asserted
+- **Transition:** → `Idle` when `resp_queue_wready_i` (response written)
 
 ### 5.3. Command Descriptor Parsing
 
@@ -494,25 +525,38 @@ assign cmd_dir  = cmd_desc[29] ? Read : Write;
 
 Errors are accumulated during a transaction and reported in the response. Only the codes emitted by the RTL are listed:
 
+Computed by `map_resp_err_status()` (priority order, first match wins):
+
 ```systemverilog
-always_ff @(posedge clk_i or negedge rst_ni) begin
-  if (!rst_ni || i3c_fsm_idle_o)
-    resp_err_status_d <= Success;
-  else if (addr_nack_detected)
-    resp_err_status_d <= AddrHeader;
-  else if (nack_detected)
-    resp_err_status_d <= Nack;
-  else if (rx_overflow_detected || tx_underflow_detected)
-    resp_err_status_d <= Ovl;
-  else if (short_read_detected)
-    resp_err_status_d <= I3cShortReadErr;
-  else if (not_supported_detected)
-    resp_err_status_d <= NotSupported;
-  else if (hc_abort_detected)
-    resp_err_status_d <= HcAborted;
-  // First error wins — once set, don't overwrite
-end
+function automatic i3c_resp_err_status_e map_resp_err_status();
+  if (addr_nack_q) begin
+    return AddrHeader;
+  end else if (data_nack_q) begin
+    return I2cDataNackOrI3cBusAborted;
+  end else if (daa_nack_error_q) begin
+    return Nack;
+  end else if (rx_overflow_q || tx_underflow_q) begin
+    return Ovl;
+  end else if (short_read_q) begin
+    return I3cShortReadErr;
+  end else if (not_supported_q) begin
+    return NotSupported;
+  end else if (hc_aborted_q) begin
+    return HcAborted;
+  end else begin
+    return Success;
+  end
+endfunction
 ```
+
+- `addr_nack_q` — address byte (I2C or I3C) was NACKed → `AddrHeader`
+- `data_nack_q` — an I2C data byte was NACKed (set only on I2C regular-write/immediate data-byte NACK) → `I2cDataNackOrI3cBusAborted` (4'b1001), **not** `Nack`
+- `daa_nack_error_q` — ENTDAA address-assignment attempt was rejected after retry (from `daa_nack_error_i`) → `Nack` (4'b0101); this is the only path that emits `Nack`
+- `rx_overflow_q` / `tx_underflow_q` → `Ovl`
+- `short_read_q` → `I3cShortReadErr`
+- `not_supported_q` → `NotSupported`
+- `hc_aborted_q` → `HcAborted`
+- none of the above → `Success`
 
 ### 5.5. OD/PP Switching Logic
 
@@ -552,7 +596,7 @@ end
 | IssueCmd                  | Empty TODO                                   | Full implementation                |
 | WaitDAT (State 3)         | Not present                                  | Added for M-6 DAT capture fix      |
 | Error handling            | Always returns `Success`                     | Proper error accumulation          |
-| Error codes emitted       | `Success` only                               | `Success`, `AddrHeader`, `Nack`, `Ovl`, `I3cShortReadErr`, `NotSupported`, `HcAborted` |
+| Error codes emitted       | `Success` only                               | `Success`, `AddrHeader`, `I2cDataNackOrI3cBusAborted`, `Nack`, `Ovl`, `I3cShortReadErr`, `NotSupported`, `HcAborted` |
 | IBI interface             | 8 ports, always `'0`                         | Removed entirely                   |
 | DCT interface             | Full DCT read/write ports                    | Removed (SW stores PID/BCR/DCR)    |
 | I2C controller interface  | `fmt_fifo_*` signals to `i2c_controller_fsm` | Direct bus_tx/bus_rx control       |
@@ -566,8 +610,9 @@ end
 
 | Error            | Detection                                              | Response Code    |
 | ---------------- | ------------------------------------------------------ | ---------------- |
-| Address NACK     | ACK bit = 1 after address byte                         | `AddrHeader`     |
-| Data NACK        | ACK bit = 1 after data byte                            | `Nack`           |
+| Address NACK     | ACK bit = 1 after address byte (I2C or I3C)             | `AddrHeader`     |
+| I2C data NACK    | ACK bit = 1 after an I2C data byte (`data_nack_q`)      | `I2cDataNackOrI3cBusAborted` |
+| DAA address-assignment reject | ENTDAA device address attempt NACKed after retry (`daa_nack_error_i`/`daa_nack_error_q`) | `Nack` |
 | TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
 | RX overflow      | RX FIFO cannot accept received data or DAA result data | `Ovl`            |
 | Short read       | Target drives T-bit=0 before all requested bytes sent  | `I3cShortReadErr`|
@@ -630,9 +675,9 @@ src/verification/uvm_i3c/
 ## 10. Implementation Notes
 
 - The reference design uses `i2c_controller_fsm` as a sub-module for I2C transactions (via `fmt_fifo_*` interface). This design eliminates that dependency — `flow_active` drives `bus_tx_flow` and `bus_rx_flow` directly for both I3C and I2C transfers. The difference is only in timing (CSR values) and OD/PP mode.
-- The `transfer_cnt` counter is used in both immediate and regular transfers but with different semantics: for immediate, it counts bytes within the descriptor; for regular, it counts bytes within the current DWORD from TX FIFO. A separate `remaining_length` counter tracks the total transfer progress.
+- There is no signal literally named `transfer_cnt`/`remaining_length` in the RTL. Sequencing within a byte/word uses the phase micro-counter `issue_phase_q` (localparams `PhaseStart`…`PhaseDirectCccStop`); the running count of bytes still owed for the overall transfer is `remaining_len_q`; the running count of bytes already placed into the current response is `resp_data_len_q`; and the byte position inside the current TX/RX DWORD is tracked by `tx_byte_idx_q`/`rx_byte_idx_q`.
 - The `cmd_desc` register is loaded once in `WaitForCmd` and remains stable throughout the transaction. Individual fields are extracted combinationally.
 - OD/PP switching must happen at byte boundaries — never mid-byte. The `sel_od_pp_o` output changes only when transitioning between bus phases (address → data, ACK → data).
 - For ENTDAA, `flow_active` generates the initial broadcast header (`{7'h7E, 1'b0}`) and ENTDAA code (`0x07`) with ACK checks, then activates `entdaa_controller` (`ccc_valid_o = 1`) for the multi-device DAA loop. The restart signal flow is: `entdaa_controller.req_restart_o` → `daa_restart_pending_q` (in `controller_active`) → `scl_generator` — entirely bypassing `flow_active`. After `ccc_done_i`, `flow_active` generates STOP and writes the response.
 - For ENEC and DISEC, `flow_active` handles the full CCC frame within `I3CWriteImmediate`. No `ccc_valid_o` is ever asserted for these CCCs. The `cp` flag and `cmd` field of the `ImmediateDataTransfer` descriptor carry all necessary information.
-- The error codes emitted by the RTL are: `Success`, `AddrHeader`, `Nack`, `Ovl`, `I3cShortReadErr`, `NotSupported`, and `HcAborted`. Error codes such as `Frame` and `Parity` are defined in the package but not used by this module.
+- The error codes emitted by the RTL are: `Success`, `AddrHeader`, `I2cDataNackOrI3cBusAborted`, `Nack`, `Ovl`, `I3cShortReadErr`, `NotSupported`, and `HcAborted`. `I2cDataNackOrI3cBusAborted` is emitted for an I2C data-byte NACK (`data_nack_q`); `Nack` is reserved for an ENTDAA device address-assignment reject after retry (`daa_nack_error_q`). Error codes such as `Crc`, `Frame`, and `Parity` are defined in the package but not used by this module.

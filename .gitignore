@@ -8,6 +8,7 @@ GEMINI.md
 docs/architecture_qa_session.md
 docs/i3c_scope_analysis.md
 docs/thesis_report/*.pdf
+docs/spec_rtl_audit.md
 
 # LaTeX compiler output
 *.aux

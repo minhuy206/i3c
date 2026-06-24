@@ -244,16 +244,22 @@ First write stores DWORD0 in a staging register. Second write provides DWORD1 an
 ```systemverilog
 // cmd_write FF block
 always_ff @(posedge clk_i or negedge rst_ni) begin
-  if (!rst_ni || sw_reset) begin
+  if (!rst_ni) begin
     cmd_staging_valid <= 1'b0;
+    cmd_wvalid <= '0;
     cmd_dword0 <= '0;
-  end else if (wen_i && addr_i == 12'h100) begin
+    cmd_wdata <= '0;
+  end else if (sw_reset || (cmd_wvalid && cmd_wready_i)) begin
+    cmd_staging_valid <= 1'b0;
+    cmd_wvalid <= '0;
+  end else if (wen_i && addr_i == 12'h100 && !cmd_wvalid) begin
     if (!cmd_staging_valid) begin
       cmd_dword0 <= wdata_i;
       cmd_staging_valid <= 1'b1;
     end else begin
-      // Trigger 64-bit write: {wdata_i (DWORD1), cmd_dword0 (DWORD0)}
-      cmd_staging_valid <= 1'b0;
+      cmd_wdata <= {wdata_i, cmd_dword0};
+      cmd_wvalid <= 1'b1;
+      cmd_staging_valid <= '0;
     end
   end
 end
@@ -264,15 +270,20 @@ end
 ```systemverilog
 // tx_write FF block
 always_ff @(posedge clk_i or negedge rst_ni) begin
-  if (!rst_ni || sw_reset) begin
-    tx_wvalid_o <= 1'b0;
-    tx_wdata_o  <= '0;
-  end else begin
-    tx_wvalid_o <= wen_i && (addr_i == 12'h104);
-    if (wen_i && addr_i == 12'h104)
-      tx_wdata_o <= wdata_i;
+  if (!rst_ni) begin
+    tx_wdata  <= '0;
+    tx_wvalid <= '0;
+  end else if (sw_reset) begin
+    tx_wdata  <= '0;
+    tx_wvalid <= '0;
+  end else if (tx_wvalid && tx_wready_i) begin
+    tx_wvalid <= '0;
+  end else if (wen_i && (addr_i == 12'h104) && !tx_wvalid) begin
+    tx_wdata  <= wdata_i;
+    tx_wvalid <= 1'b1;
   end
 end
+// tx_wvalid_o = tx_wvalid; tx_wdata_o = tx_wdata; (assigned separately)
 ```
 
 #### QUEUE_STATUS (0x110) — Read Only
@@ -327,11 +338,11 @@ always_comb begin
       12'h010: rdata_d = {12'b0, t_r};
       // ... other timing regs ...
       12'h108: begin
-        rx_rready = 1'b1;
+        rx_rready = ren_i;
         if (rx_rvalid_i) rdata_d = rx_rdata_i;
       end
       12'h10C: begin
-        resp_rready = 1'b1;
+        resp_rready = ren_i;
         if (resp_rvalid_i) rdata_d = resp_rdata_i;
       end
       12'h110: rdata_d = queue_status;
