@@ -16,7 +16,7 @@ class i3c_ccc_entdaa_opening_frame_vseq extends i3c_base_vseq;
     daa_cmd           = '0;
     daa_cmd.attr      = AddressAssignment;
     daa_cmd.tid       = 4'd1;
-    daa_cmd.cmd       = 8'h07;
+    daa_cmd.cmd       = ENTDAA;
     daa_cmd.dev_idx   = 5'd0;
     daa_cmd.dev_count = 4'd1;
     daa_cmd.wroc      = 1'b1;
@@ -26,8 +26,9 @@ class i3c_ccc_entdaa_opening_frame_vseq extends i3c_base_vseq;
     dev_seq.target_addr   = 7'h7e;
     dev_seq.ack_address   = 1'b1;
     dev_seq.is_i3c        = 1'b1;
+    dev_seq.is_daa        = 1'b1;
     dev_seq.dir           = 1'b0;
-    dev_seq.read_data_cnt = 1;
+    dev_seq.entdaa_join   = 1'b0;
 
     fork : device_response
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -38,19 +39,25 @@ class i3c_ccc_entdaa_opening_frame_vseq extends i3c_base_vseq;
     poll_idle();
     wait_for_device_done(dev_seq, "CCC_001 ENTDAA opening frame", 2000);
 
-    `DV_CHECK_EQ(dev_seq.sampled_addr, 7'h7e, "ccc_001: broadcast address mismatch")
-    `DV_CHECK_EQ(dev_seq.sampled_dir, 1'b0, "ccc_001: broadcast direction should be write")
+    `DV_CHECK_GE(dev_seq.sampled_addr_q.size(), 2, "ccc_001: expected broadcast and DAA address phases")
+    if (dev_seq.sampled_addr_q.size() >= 2) begin
+      `DV_CHECK_EQ(dev_seq.sampled_addr_q[0], 7'h7e, "ccc_001: broadcast address mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_dir_q[0], 1'b0, "ccc_001: broadcast direction should be write")
+      `DV_CHECK_EQ(dev_seq.sampled_addr_q[1], 7'h7e, "ccc_001: DAA round address mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_dir_q[1], 1'b1, "ccc_001: DAA round direction should be read")
+    end
     `DV_CHECK_EQ(dev_seq.sampled_data.size(), 1, "ccc_001: expected only ENTDAA opcode")
 
     if (dev_seq.sampled_data.size() >= 1) begin
-      `DV_CHECK_EQ(dev_seq.sampled_data[0], 8'h07, "ccc_001: ENTDAA opcode mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_data[0], 8'(ENTDAA), "ccc_001: ENTDAA opcode mismatch")
     end
 
     `DV_CHECK_EQ(dev_seq.sampled_t_bit.size(), 1, "ccc_001: expected ENTDAA opcode T-bit")
     if (dev_seq.sampled_t_bit.size() >= 1) begin
-      `DV_CHECK_EQ(dev_seq.sampled_t_bit[0], ~^8'h07, "ccc_001: ENTDAA opcode T-bit mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_t_bit[0], ~^8'(ENTDAA),
+                   "ccc_001: ENTDAA opcode T-bit mismatch")
     end
-    `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b1,
+    `DV_CHECK_EQ(dev_seq.observed_broadcast_rstart, 1'b1,
                  "ccc_001: expected repeated START before ENTDAA 7'h7E+R round")
 
     read_response(resp);

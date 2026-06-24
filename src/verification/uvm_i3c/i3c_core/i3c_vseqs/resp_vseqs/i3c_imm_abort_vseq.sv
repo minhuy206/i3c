@@ -83,12 +83,17 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     read_response(resp);
 
     reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, bcast_en, 1'b0, 1'b1});
+    check_abort_result(resp, dev_seq.sampled_data, '{8'hA1, 8'hA2, 8'hA3, 8'hA4}, $sformatf(
+                       "IMM_006 %s I3C", private_addr_mode_name(bcast_en)));
+    check_error_resp_fields(resp, RESP_HC_ABORTED, imm_cmd.tid, dev_seq.sampled_data.size(),
+                            $sformatf("IMM_006 %s I3C", private_addr_mode_name(bcast_en)));
+    check_all_queues_empty(
+        $sformatf("IMM_006 %s I3C: before recovery transfer", private_addr_mode_name(bcast_en)));
+    run_recovery_case(1'b1, bcast_en);
+
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
         $sformatf("IMM_006 %s I3C: after recovery SW reset", private_addr_mode_name(bcast_en)));
-
-    check_abort_result(resp, dev_seq.sampled_data, '{8'hA1, 8'hA2, 8'hA3, 8'hA4}, $sformatf(
-                       "IMM_006 %s I3C", private_addr_mode_name(bcast_en)));
 
     `uvm_info(`gfn, $sformatf("IMM_006 result: mode=%s device=I3C resp=0x%08h sampled_bytes=%0d",
                               private_addr_mode_name(bcast_en), resp, dev_seq.sampled_data.size()),
@@ -139,13 +144,69 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     read_response(resp);
 
     reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, 1'b0, 1'b0, 1'b1});
+    check_abort_result(resp, dev_seq.sampled_data, '{8'hB1, 8'hB2, 8'hB3, 8'hB4}, "IMM_006 I2C");
+    check_error_resp_fields(resp, RESP_HC_ABORTED, imm_cmd.tid, dev_seq.sampled_data.size(),
+                            "IMM_006 I2C");
+    check_all_queues_empty("IMM_006 I2C: before recovery transfer");
+    run_recovery_case(1'b0, 1'b0);
+
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty("IMM_006 I2C: after recovery SW reset");
 
-    check_abort_result(resp, dev_seq.sampled_data, '{8'hB1, 8'hB2, 8'hB3, 8'hB4}, "IMM_006 I2C");
-
     `uvm_info(`gfn, $sformatf("IMM_006 result: device=I2C resp=0x%08h sampled_bytes=%0d", resp,
                               dev_seq.sampled_data.size()), UVM_LOW)
+  endtask
+
+  virtual task run_recovery_case(bit is_i3c, bit bcast_en);
+    immediate_data_trans_desc_t imm_cmd;
+    bit                  [31:0] resp;
+    i3c_device_response_seq     dev_seq;
+    transfer_stimulus_cfg_t     cfg;
+    byte_queue_t                no_read_data;
+    byte_queue_t                exp_data;
+    bit                   [6:0] target_addr;
+
+    target_addr = is_i3c ? 7'h08 : 7'h52;
+    exp_data.push_back(is_i3c ? 8'hC1 : 8'hD1);
+
+    imm_cmd                   = '0;
+    imm_cmd.attr              = ImmediateDataTransfer;
+    imm_cmd.tid               = 4'hE;
+    imm_cmd.mode              = sdr0;
+    imm_cmd.dtt               = 3'd1;
+    imm_cmd.rnw               = 1'b0;
+    imm_cmd.toc               = 1'b1;
+    imm_cmd.wroc              = 1'b1;
+    imm_cmd.def_or_data_byte1 = exp_data[0];
+
+    cfg = make_transfer_cfg(
+        .ctxt($sformatf("IMM_006 recovery without SW reset device=%s mode=%s",
+                        is_i3c ? "I3C" : "I2C", private_addr_mode_name(bcast_en))),
+        .seq_name($sformatf("imm006_recovery_%s_%s_dev_seq", is_i3c ? "i3c" : "i2c",
+                           private_addr_mode_name(bcast_en))),
+        .tid(imm_cmd.tid),
+        .dev_idx(5'd0),
+        .target_addr(target_addr),
+        .is_i3c(is_i3c),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b0),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(is_i3c && bcast_en),
+        .data_length(exp_data.size()),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
+
+    start_device_response(cfg, 1'b0, no_read_data, dev_seq);
+    write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
+
+    poll_idle();
+    wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+    check_sampled_write_data(dev_seq, exp_data, exp_data.size(), cfg.ctxt);
+    read_response(resp);
+    check_success_resp_fields(resp, cfg.tid, exp_data.size(), cfg.ctxt);
+    check_all_queues_empty(cfg.ctxt);
   endtask
 
 endclass

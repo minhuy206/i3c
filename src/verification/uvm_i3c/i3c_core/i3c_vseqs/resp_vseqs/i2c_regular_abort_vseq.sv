@@ -327,8 +327,49 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
                  $sformatf("%s: I2C abort must terminate with STOP", cfg.ctxt))
 
     clear_hc_abort();
+    check_all_queues_empty($sformatf("before I2C_006 %s read recovery transfer", case_name));
+    run_read_recovery_case(case_name);
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty($sformatf("after I2C_006 %s", case_name));
+  endtask
+
+  virtual task run_read_recovery_case(string case_name);
+    transfer_stimulus_cfg_t cfg;
+    byte_queue_t            read_data;
+    word_queue_t            rx_words;
+    bit              [31:0] resp;
+    i3c_device_response_seq dev_seq;
+
+    read_data.push_back(8'h5A);
+
+    cfg = make_transfer_cfg(
+        .ctxt($sformatf("I2C_006 %s read recovery without SW reset", case_name)),
+        .seq_name($sformatf("i2c006_%s_read_recovery_dev_seq", case_name)),
+        .tid(4'hE),
+        .dev_idx(I2C_DEV_IDX[4:0]),
+        .target_addr(I2C_STATIC_ADDR),
+        .is_i3c(1'b0),
+        .ack_address(1'b1),
+        .ack_data(1'b1),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(read_data.size()),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
+    );
+
+    run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
+
+    check_i2c_address_phase(dev_seq, cfg, 1'b1);
+    `DV_CHECK_EQ(rx_words.size(), 1,
+                 $sformatf("%s: recovery RX word count mismatch", cfg.ctxt))
+    if (rx_words.size() > 0) begin
+      `DV_CHECK_EQ(rx_words[0][7:0], read_data[0],
+                   $sformatf("%s: recovery RX data mismatch", cfg.ctxt))
+    end
+    check_success_resp_fields(resp, cfg.tid, read_data.size(), cfg.ctxt);
+    check_all_queues_empty(cfg.ctxt);
   endtask
 
   virtual task assert_hc_abort();

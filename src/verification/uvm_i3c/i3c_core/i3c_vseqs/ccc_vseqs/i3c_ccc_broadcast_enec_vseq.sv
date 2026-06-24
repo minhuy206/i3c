@@ -17,7 +17,7 @@ class i3c_ccc_broadcast_enec_vseq extends i3c_base_vseq;
     ccc_cmd.attr              = ImmediateDataTransfer;
     ccc_cmd.tid               = 4'd2;
     ccc_cmd.cp                = 1'b1;
-    ccc_cmd.cmd               = 8'h00;
+    ccc_cmd.cmd               = ENEC;
     ccc_cmd.mode              = sdr0;
     ccc_cmd.dtt               = 3'd4;
     ccc_cmd.rnw               = 1'b0;
@@ -31,7 +31,6 @@ class i3c_ccc_broadcast_enec_vseq extends i3c_base_vseq;
     dev_seq.ack_address       = 1'b1;
     dev_seq.is_i3c            = 1'b1;
     dev_seq.dir               = 1'b0;
-    dev_seq.read_data_cnt     = 2;
 
     fork : device_response
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -52,13 +51,13 @@ class i3c_ccc_broadcast_enec_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq.sampled_data.size(), 2, "ccc_002: expected CCC opcode and event byte")
 
     if (dev_seq.sampled_data.size() >= 2) begin
-      `DV_CHECK_EQ(dev_seq.sampled_data[0], 8'h00, "ccc_002: ENEC opcode mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_data[0], 8'(ENEC), "ccc_002: ENEC opcode mismatch")
       `DV_CHECK_EQ(dev_seq.sampled_data[1], 8'h01, "ccc_002: Target Events byte mismatch")
     end
 
     `DV_CHECK_EQ(dev_seq.sampled_t_bit.size(), 2, "ccc_002: expected two controller T-bits")
     if (dev_seq.sampled_t_bit.size() >= 2) begin
-      `DV_CHECK_EQ(dev_seq.sampled_t_bit[0], ~^8'h00, "ccc_002: ENEC opcode T-bit mismatch")
+      `DV_CHECK_EQ(dev_seq.sampled_t_bit[0], ~^8'(ENEC), "ccc_002: ENEC opcode T-bit mismatch")
       `DV_CHECK_EQ(dev_seq.sampled_t_bit[1], ~^8'h01, "ccc_002: event byte T-bit mismatch")
     end
 

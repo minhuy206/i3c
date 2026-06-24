@@ -56,37 +56,30 @@ SDRW_REGRESSION_SEQS ?= \
 	i3c_write_len_sweep_vseq \
 	i3c_write_data_patterns_vseq \
 	i3c_write_tbit_parity_generation_vseq \
-	i3c_write_tx_fifo_underflow_vseq \
 	i3c_write_toc_zero_vseq \
 	i3c_write_back_to_back_vseq \
-	i3c_write_multi_dat_idx_vseq \
-	i3c_write_abort_vseq
+	i3c_write_multi_dat_idx_vseq
 
 SDRR_REGRESSION_SEQS ?= \
 	i3c_read_vseq \
 	i3c_read_len_sweep_vseq \
-	i3c_read_short_target_end_vseq \
 	i3c_read_no_parity_error_on_end_tbit_vseq \
 	i3c_read_target_more_than_requested_vseq \
-	i3c_read_rx_fifo_full_overflow_vseq \
 	i3c_read_data_patterns_vseq \
 	i3c_read_toc_zero_vseq \
-	i3c_read_multi_dat_idx_vseq \
-	i3c_read_abort_vseq
+	i3c_read_multi_dat_idx_vseq
 
 IMM_REGRESSION_SEQS ?= \
 	i3c_imm_vseq \
 	i3c_imm_dtt_sweep_vseq \
 	i3c_imm_toc_vseq \
-	i3c_imm_i2c_write_vseq \
-	i3c_imm_data_nack_i2c_vseq
+	i3c_imm_i2c_write_vseq
 
 I2C_REGRESSION_SEQS ?= \
 	i2c_regular_write_basic_vseq \
 	i2c_regular_read_basic_vseq \
 	i2c_broadcast_addr_enable_ignored_vseq \
-	i2c_len_sweep_partial_rx_vseq \
-	i2c_data_nack_write_vseq
+	i2c_len_sweep_partial_rx_vseq
 
 CCC_REGRESSION_SEQS ?= \
 	i3c_ccc_entdaa_opening_frame_vseq \
@@ -95,11 +88,23 @@ CCC_REGRESSION_SEQS ?= \
 	i3c_ccc_direct_enec_vseq \
 	i3c_ccc_direct_disec_vseq
 
+DAA_REGRESSION_SEQS ?= \
+	i3c_daa_single_device_success_vseq \
+	i3c_daa_dat_boundary_vseq
+
 ERR_REGRESSION_SEQS ?= \
 	i3c_addr_header_nack_resp_vseq \
 	i3c_read_tbit_no_parity_resp_vseq \
-	i3c_short_read_resp_vseq \
-	i3c_ovl_resp_vseq
+	i3c_read_short_target_end_vseq \
+	i3c_ovl_resp_vseq \
+	i3c_write_tx_fifo_underflow_vseq \
+	i3c_read_rx_fifo_full_overflow_vseq \
+	i3c_write_abort_vseq \
+	i3c_read_abort_vseq \
+	i3c_imm_data_nack_i2c_vseq \
+	i3c_imm_abort_vseq \
+	i2c_data_nack_write_vseq \
+	i2c_regular_abort_vseq
 
 compile:
 	$(SIMULATOR) -compile -elaborate \
@@ -178,6 +183,12 @@ i2c_regression:
 ccc_regression:
 	@set -e; \
 	for seq in $(CCC_REGRESSION_SEQS); do \
+	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
+	done
+
+daa_regression:
+	@set -e; \
+	for seq in $(DAA_REGRESSION_SEQS); do \
 	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
 	done
 

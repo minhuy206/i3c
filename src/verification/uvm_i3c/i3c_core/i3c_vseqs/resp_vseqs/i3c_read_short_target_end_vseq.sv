@@ -67,6 +67,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
 
     run_toc_zero_read_write_stimulus(rd_cfg, wr_cfg, read_data, tx_words, rx, resp0, resp1,
                                      rstart_count, dev_seq0, dev_seq1);
+    check_error_resp_fields(resp0, RESP_SHORT_READ, rd_cfg.tid, read_data.size(), rd_cfg.ctxt);
 
     // First read short-ends and STOPs; second command runs fresh -> no continuation RSTART.
     `DV_CHECK_EQ(resp0[31:28], RESP_SHORT_READ,
@@ -132,6 +133,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
     );
 
     run_read_stimulus_words_with_actual_len(cfg, read_data, actual_length, rx_words, resp, dev_seq);
+    check_error_resp_fields(resp, RESP_SHORT_READ, cfg.tid, actual_length, cfg.ctxt);
 
     check_all_queues_empty($sformatf(
                            "after SDRR_003 req %0d actual %0d", requested_length, actual_length));

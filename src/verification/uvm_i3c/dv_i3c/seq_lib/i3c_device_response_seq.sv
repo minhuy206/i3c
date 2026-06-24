@@ -10,6 +10,12 @@ class i3c_device_response_seq extends uvm_sequence #(
   bit ack_data = 1;
   bit data_ack_pattern[$];
   bit start_with_broadcast_header;
+  bit is_daa;
+  bit entdaa_join;
+  bit [7:0] daa_id_bytes[$];
+  bit daa_accept_addr = 1'b1;
+  bit [6:0] ccc_target_addr;
+  bit ccc_target_addr_valid;
   int read_data_cnt = 4;
   bit observed_rstart;
   bit observed_broadcast_header;
@@ -18,6 +24,8 @@ class i3c_device_response_seq extends uvm_sequence #(
   bit request_issued;
   bit [6:0] sampled_addr;
   bit sampled_dir;
+  bit [6:0] sampled_addr_q[$];
+  bit sampled_dir_q[$];
   bit [7:0] sampled_data[$];
   bit sampled_t_bit[$];
 
@@ -38,6 +46,8 @@ class i3c_device_response_seq extends uvm_sequence #(
     request_issued = 1'b0;
     sampled_addr = '0;
     sampled_dir = 1'b0;
+    sampled_addr_q.delete();
+    sampled_dir_q.delete();
     sampled_data.delete();
     sampled_t_bit.delete();
 
@@ -45,7 +55,12 @@ class i3c_device_response_seq extends uvm_sequence #(
     req.addr = target_addr;
     req.dir = dir;
     req.dev_ack = ack_address;
-    req.is_daa = 0;
+    req.is_daa = is_daa;
+    req.entdaa_join = entdaa_join;
+    req.daa_id_bytes = daa_id_bytes;
+    req.daa_accept_addr = daa_accept_addr;
+    req.ccc_target_addr = ccc_target_addr;
+    req.ccc_target_addr_valid = ccc_target_addr_valid;
     req.end_with_rstart = 0;
     req.start_with_broadcast_header = start_with_broadcast_header;
 
@@ -83,6 +98,8 @@ class i3c_device_response_seq extends uvm_sequence #(
       observed_broadcast_rstart = rsp_item.observed_broadcast_rstart;
       sampled_addr = rsp_item.addr;
       sampled_dir = rsp_item.dir;
+      sampled_addr_q = rsp_item.sampled_addr_q;
+      sampled_dir_q = rsp_item.sampled_dir_q;
       sampled_data = rsp_item.data;
       sampled_t_bit = rsp_item.T_bit;
     end

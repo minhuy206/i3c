@@ -39,6 +39,11 @@ module bus_monitor
   logic start_det;  // indicates start or repeated start is detected on the bus
   logic stop_det_trigger, stop_det_pending;
   logic stop_det;  // indicates stop is detected on the bus
+  logic start_candidate;
+  logic stop_candidate;
+  logic start_candidate_q;
+  logic stop_candidate_q;
+  logic scl_high_at_sda_edge;
 
   logic rstart_detection_en;
 
@@ -63,10 +68,6 @@ module bus_monitor
 
   assign scl_edge = scl_negedge | scl_posedge;
   assign sda_edge = sda_negedge | sda_posedge;
-
-  logic simultaneous_posedge, simultaneous_negedge;
-  assign simultaneous_posedge = sda_posedge && scl_posedge;
-  assign simultaneous_negedge = sda_negedge && scl_negedge;
 
   edge_detector #(
       .DETECT_NEGEDGE(1'b1)
@@ -163,6 +164,39 @@ module bus_monitor
   assign sda = sda_r | sda_posedge;
   assign scl = scl_r | scl_posedge;
 
+  assign scl_high_at_sda_edge = scl_stable_high && scl_i_q && scl_i;
+
+  assign start_candidate = sda_negedge_i ? scl_high_at_sda_edge : start_candidate_q;
+  assign stop_candidate = sda_posedge_i ? scl_high_at_sda_edge : stop_candidate_q;
+
+  // Classify START/STOP candidates when the raw SDA transition occurs, then
+  // wait for the delayed edge detector to confirm the transition was stable.
+  // This prevents a data-bit SDA transition during SCL LOW from being reported
+  // later as START/STOP after SCL has risen.
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      start_candidate_q <= 1'b0;
+    end else if (!enable) begin
+      start_candidate_q <= 1'b0;
+    end else if (sda_negedge_i) begin
+      start_candidate_q <= scl_high_at_sda_edge;
+    end else if (sda_posedge_i || sda_negedge) begin
+      start_candidate_q <= 1'b0;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      stop_candidate_q <= 1'b0;
+    end else if (!enable) begin
+      stop_candidate_q <= 1'b0;
+    end else if (sda_posedge_i) begin
+      stop_candidate_q <= scl_high_at_sda_edge;
+    end else if (sda_negedge_i || sda_posedge) begin
+      stop_candidate_q <= 1'b0;
+    end
+  end
+
 
   // Start and Stop detection
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -199,11 +233,11 @@ module bus_monitor
   end
 
   // (Repeated) Start condition detection by target
-  assign start_det_trigger = enable & scl_stable_high & sda_negedge & !scl_negedge & !simultaneous_negedge;
+  assign start_det_trigger = enable & start_candidate & sda_negedge;
   assign start_det = enable & start_det_pending;
 
   // Stop condition detection by target
-  assign stop_det_trigger = enable & scl_stable_high & sda_posedge & !scl_negedge & !simultaneous_posedge;
+  assign stop_det_trigger = enable & stop_candidate & sda_posedge;
   assign stop_det = enable & stop_det_pending;
 
   // Detection output

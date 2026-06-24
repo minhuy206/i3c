@@ -18,6 +18,10 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
     write_dat_entry(I2C_DEV_IDX, I2C_STATIC_ADDR, I3C_DYNAMIC_ADDR, 1'b1);
 
     run_data_nack_case();
+    `DV_CHECK_GT(hdl_read_fifo_depth(tx_paths.depth_path), 0,
+                 "I2C_005 data NACK should preserve unfetched TX FIFO data")
+    request_sw_reset(.keep_enabled(1'b1));
+    check_all_queues_empty("after I2C_005 data NACK recovery SW reset");
     run_recovery_write_case();
 
     `uvm_info(

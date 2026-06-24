@@ -6,6 +6,7 @@ module flow_active_sva
   import controller_pkg::Read;
   import controller_pkg::Write;
   import i3c_pkg::AddressAssignment;
+  import i3c_pkg::addr_assign_desc_t;
   import i3c_pkg::AddrHeader;
   import i3c_pkg::HcAborted;
   import i3c_pkg::I3C_RSVD_ADDR;
@@ -38,6 +39,7 @@ module flow_active_sva
     input cmd_transfer_dir_e                                 cmd_dir,
     input immediate_data_trans_desc_t                        imm_desc,
     input regular_trans_desc_t                               reg_desc,
+    input addr_assign_desc_t                                 aa_desc,
     input dat_entry_t                                        dat_entry,
     input logic                                              dat_read_valid_hw_o,
     input logic                       [            DatAw-1:0] dat_index_hw_o,
@@ -399,6 +401,14 @@ module flow_active_sva
            (resp_queue_wdata[27:24] == cmd_tid) &&
            (resp_queue_wdata[23:16] == 8'h00) &&
            (resp_queue_wdata[15:0] == resp_data_len_q);
+  endfunction
+
+  function automatic logic invalid_addr_assign_desc();
+    logic [5:0] dat_end;
+
+    dat_end = {1'b0, aa_desc.dev_idx} + {2'b00, aa_desc.dev_count};
+    return !aa_desc.toc || !aa_desc.wroc || (aa_desc.dev_count == 4'd0) ||
+           (dat_end > DatDepth);
   endfunction
 
   function automatic logic sdr_write_active_state();
@@ -1482,7 +1492,7 @@ module flow_active_sva
                                             success_resp_matches_current_len() &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o)
-  else $error("flow_active_sva: SDRW_007 toc=0 must accept continuation without STOP in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 must accept continuation without STOP in %m");
 
   cp_toc0_accept_continuation :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1528,7 +1538,7 @@ module flow_active_sva
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !cmd_queue_rready_o)
-  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation must STOP without CMD pop in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation must STOP without CMD pop in %m");
 
   cp_toc0_missing_continuation_requests_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1549,7 +1559,7 @@ module flow_active_sva
                                             |->
                                             hc_seq_cancel_event_o &&
                                             hc_err_cmd_seq_timeout_event_o)
-  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation must raise interrupt events in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation must raise interrupt events in %m");
 
   cp_toc0_missing_continuation_sets_intr_events :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1572,7 +1582,7 @@ module flow_active_sva
                                             !next_cmd_available
                                             |->
                                             success_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_007 toc=0 missing continuation response must be Success in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation response must be Success in %m");
 
   cp_toc0_missing_continuation_success_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1596,7 +1606,7 @@ module flow_active_sva
                                             !next_cmd_supported
                                             |->
                                             not_supported_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_007 toc=0 unsupported continuation response must be NotSupported in %m");
+  else $error("flow_active_sva: SDRW_005 toc=0 unsupported continuation response must be NotSupported in %m");
 
   cp_toc0_unsupported_continuation_not_supported_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1619,7 +1629,7 @@ module flow_active_sva
                                             gen_rstart_o &&
                                             !gen_start_o &&
                                             !gen_stop_o)
-  else $error("flow_active_sva: SDRW_007 continuation must request repeated START only in %m");
+  else $error("flow_active_sva: SDRW_005 continuation must request repeated START only in %m");
 
   ap_toc0_private_write_continuation_skips_bcast_header :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1629,7 +1639,7 @@ module flow_active_sva
                                             sdr_regular_i3c_write()
                                             |=>
                                             state_q != I3CBcastHeader)
-  else $error("flow_active_sva: SDRW_007 continuation must not emit a second broadcast header in %m");
+  else $error("flow_active_sva: SDRW_005 continuation must not emit a second broadcast header in %m");
 
   cp_toc0_private_write_continuation_skips_bcast_header :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2478,6 +2488,46 @@ module flow_active_sva
                                             state_q == WriteResp &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             imm_desc.dtt > 3'd4 &&
+                                            not_supported_resp_matches_current_len());
+
+  // DAA_007 / ERR_016: reject invalid AddressAssignment descriptors before DAT or bus access.
+  ap_addr_assign_invalid_rejected_before_access :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc()
+                                            |->
+                                            (!dat_read_valid_hw_o &&
+                                             !gen_start_o &&
+                                             !gen_rstart_o &&
+                                             !gen_stop_o &&
+                                             !bus_tx_req_byte &&
+                                             !bus_tx_req_bit)
+                                            ##1 state_q == WriteResp)
+  else $error("flow_active_sva: invalid AddressAssignment must be rejected before DAT or bus access in %m");
+
+  cp_addr_assign_invalid_rejected_before_access :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == FetchDAT &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc() &&
+                                            !dat_read_valid_hw_o
+                                            ##1 state_q == WriteResp);
+
+  ap_addr_assign_invalid_not_supported_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc()
+                                            |->
+                                            not_supported_resp_matches_current_len())
+  else $error("flow_active_sva: invalid AddressAssignment response must be NotSupported with length 0 in %m");
+
+  cp_addr_assign_invalid_not_supported_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            invalid_addr_assign_desc() &&
                                             not_supported_resp_matches_current_len());
 
   // IMM_003: toc=0 immediate still sends all dtt bytes, then NotSupported.
@@ -3346,6 +3396,7 @@ bind flow_active flow_active_sva #(
     .cmd_dir,
     .imm_desc,
     .reg_desc,
+    .aa_desc,
     .dat_entry,
     .dat_read_valid_hw_o,
     .dat_index_hw_o,

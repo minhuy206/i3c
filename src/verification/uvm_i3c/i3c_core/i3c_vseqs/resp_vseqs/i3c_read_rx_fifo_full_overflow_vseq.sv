@@ -116,6 +116,7 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
+    check_error_resp_fields(resp, RESP_OVL, cfg.tid, OBSERVED_LENGTH, cfg.ctxt);
 
     check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
                       "before SDRR_006 prefill drain");

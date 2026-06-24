@@ -49,12 +49,14 @@ module flow_active
 
     output logic       bus_rx_req_byte_o,
     output logic       bus_rx_req_bit_o,
+    output logic       bus_rx_req_bit_handoff_o,
     input  logic [7:0] bus_rx_data_i,
     input  logic       bus_rx_done_i,
     input  logic       bus_rx_idle_i,
 
     output logic gen_start_o,
     output logic gen_rstart_o,
+    output logic takeover_o,
     output logic gen_stop_o,
     output logic gen_clock_o,
     output logic gen_idle_o,
@@ -65,9 +67,13 @@ module flow_active
     input  logic scl_gen_busy_i,
 
     output logic       ccc_valid_o,
+    output logic       daa_stop_o,
     output logic [4:0] daa_dev_idx_o,
     output logic [3:0] ccc_dev_count_o,
     input  logic       ccc_done_i,
+    input  logic       daa_stop_req_i,
+    input  logic       daa_stopped_i,
+    input  logic       daa_nack_error_i,
 
     input logic [ 6:0] daa_address_i,
     input logic        daa_address_valid_i,
@@ -164,6 +170,7 @@ module flow_active
   logic data_nack_d, data_nack_q;
   logic hc_aborted_d, hc_aborted_q;
   logic not_supported_d, not_supported_q;
+  logic daa_nack_error_d, daa_nack_error_q;
   logic scl_stop_done_d, scl_stop_done_q;
   logic entdaa_stop_req_d, entdaa_stop_req_q;
   logic next_start_is_rstart_d, next_start_is_rstart_q;
@@ -175,6 +182,7 @@ module flow_active
 
   logic gen_start;
   logic gen_rstart;
+  logic takeover;
   logic gen_stop;
   logic gen_clock;
   logic gen_idle;
@@ -188,11 +196,13 @@ module flow_active
   logic [7:0] bus_tx_req_value;
   logic bus_rx_req_byte;
   logic bus_rx_req_bit;
+  logic bus_rx_req_bit_handoff;
 
   logic resp_queue_wvalid;
   logic [31:0] resp_queue_wdata;
 
   logic ccc_valid;
+  logic daa_stop;
   logic [4:0] daa_dev_idx;
   logic [3:0] ccc_dev_count;
   logic hc_seq_cancel_event;
@@ -241,6 +251,14 @@ module flow_active
     make_resp_word = {err_status, tid, 8'h00, data_len};
   endfunction
 
+  function automatic logic invalid_addr_assign_desc(input addr_assign_desc_t desc);
+    logic [5:0] dat_end;
+
+    dat_end = {1'b0, desc.dev_idx} + {2'b00, desc.dev_count};
+    invalid_addr_assign_desc =
+        !desc.toc || !desc.wroc || (desc.dev_count == 4'd0) || (dat_end > DatDepth);
+  endfunction
+
   function automatic logic [1:0] next_byte_idx(input logic [1:0] idx);
     next_byte_idx = (idx == 2'd3) ? 2'd0 : (idx + 2'd1);
   endfunction
@@ -272,6 +290,8 @@ module flow_active
       return AddrHeader;
     end else if (data_nack_q) begin
       return I2cDataNackOrI3cBusAborted;
+    end else if (daa_nack_error_q) begin
+      return Nack;
     end else if (rx_overflow_q || tx_underflow_q) begin
       return Ovl;
     end else if (short_read_q) begin
@@ -296,6 +316,17 @@ module flow_active
     endcase
   endfunction
 
+  function automatic logic [31:0] daa_rx_result_word(input logic [1:0] phase,
+                                                     input logic [47:0] pid, input logic [7:0] bcr,
+                                                     input logic [7:0] dcr, input logic [6:0] addr);
+    unique case (phase)
+      2'd0: daa_rx_result_word = pid[47:16];
+      2'd1: daa_rx_result_word = {pid[15:0], bcr, dcr};
+      2'd2: daa_rx_result_word = {25'h0, addr};
+      default: daa_rx_result_word = '0;
+    endcase
+  endfunction
+
   task automatic request_stop(input logic is_not_supported);
     gen_stop = 1'b1;
     if (scl_gen_done_i) begin
@@ -316,6 +347,7 @@ module flow_active
 
   task automatic request_read_takeover;
     gen_rstart = 1'b1;
+    takeover   = 1'b1;
     read_takeover_pending_d = 1'b1;
     if (scl_gen_done_i) begin
       read_takeover_pending_d = 1'b0;
@@ -349,6 +381,7 @@ module flow_active
     short_read_d            = 1'b0;
     hc_aborted_d            = 1'b0;
     not_supported_d         = 1'b0;
+    daa_nack_error_d        = 1'b0;
     scl_stop_done_d         = 1'b0;
     read_takeover_pending_d = 1'b0;
     read_takeover_done_d    = 1'b0;
@@ -428,7 +461,8 @@ module flow_active
 
       PhaseAddrAck: begin
         sel_od_pp      = 1'b0;
-        bus_rx_req_bit = 1'b1;
+        bus_rx_req_bit = direction == Read;
+        bus_rx_req_bit_handoff = direction == Write;
         if (bus_rx_done_i) begin
           addr_nack_d   = bus_rx_data_i[0];
           issue_phase_d = issue_phase_q + 8'h1;
@@ -459,8 +493,8 @@ module flow_active
       end
 
       PhaseAddrAck: begin
-        sel_od_pp      = 1'b0;
-        bus_rx_req_bit = 1'b1;
+        sel_od_pp                = 1'b0;
+        bus_rx_req_bit_handoff   = 1'b1;
         if (bus_rx_done_i) begin
           addr_nack_d   = bus_rx_data_i[0];
           issue_phase_d = issue_phase_q + 8'h1;
@@ -648,6 +682,14 @@ module flow_active
     end
   end
 
+  always_ff @(posedge clk_i or negedge rst_ni) begin : update_daa_nack_error
+    if (!rst_ni) begin
+      daa_nack_error_q <= 1'b0;
+    end else begin
+      daa_nack_error_q <= daa_nack_error_d;
+    end
+  end
+
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_scl_stop_done
     if (!rst_ni) begin
       scl_stop_done_q <= 1'b0;
@@ -745,7 +787,8 @@ module flow_active
             state_q
         ) && abort_stop_now(
             state_q, target_is_i3c, cmd_dir, cmd_attr
-        )) begin
+        ) && !((state_q == IssueCmd) && (cmd_attr == AddressAssignment) &&
+               (issue_phase_q > 8'd4))) begin
       if (abort_stop_required(state_q, cont_pending_q)) begin
         state_d = scl_stop_done_q ? WriteResp : state_q;
       end else begin
@@ -768,7 +811,9 @@ module flow_active
         end
 
         FetchDAT: begin
-          if (dat_read_valid_hw_q) begin
+          if ((cmd_attr == AddressAssignment) && invalid_addr_assign_desc(aa_desc)) begin
+            state_d = WriteResp;
+          end else if (dat_read_valid_hw_q) begin
             state_d = WaitDAT;
           end
         end
@@ -777,7 +822,11 @@ module flow_active
           if (cont_pending_q && !target_is_i3c) begin
             if (scl_stop_done_q) state_d = WriteResp;
           end else if (!dat_read_valid_hw_q) begin
-            if (cmd_attr == ImmediateDataTransfer && imm_desc.dtt > 3'd4) begin
+            if ((cmd_attr == ImmediateDataTransfer && imm_desc.dtt > 3'd4) ||
+                (cmd_attr == AddressAssignment &&
+                 invalid_addr_assign_desc(
+                    aa_desc
+                ))) begin
               state_d = WriteResp;
             end else if (cmd_attr == ImmediateDataTransfer) begin
               if (imm_desc.cp) begin
@@ -937,7 +986,9 @@ module flow_active
 
         IssueCmd: begin
           if (cmd_attr == AddressAssignment) begin
-            if (entdaa_stop_req_q && scl_gen_done_i) begin
+            if (daa_stopped_i && ccc_done_i && !daa_wr_busy_q) begin
+              state_d = WriteResp;
+            end else if (entdaa_stop_req_q && scl_gen_done_i) begin
               state_d = WriteResp;
             end
           end else if (cmd_dir == Write) begin
@@ -1033,6 +1084,7 @@ module flow_active
     short_read_d                 = short_read_q;
     hc_aborted_d                 = hc_aborted_q;
     not_supported_d              = not_supported_q;
+    daa_nack_error_d             = daa_nack_error_q;
     entdaa_stop_req_d            = entdaa_stop_req_q;
     next_start_is_rstart_d       = next_start_is_rstart_q;
     addr_after_rstart_d          = addr_after_rstart_q;
@@ -1043,6 +1095,7 @@ module flow_active
 
     gen_start                    = 1'b0;
     gen_rstart                   = 1'b0;
+    takeover                     = 1'b0;
     gen_stop                     = 1'b0;
     gen_clock                    = 1'b0;
     gen_idle                     = 1'b0;
@@ -1056,11 +1109,12 @@ module flow_active
     bus_tx_req_value             = 8'h00;
     bus_rx_req_byte              = 1'b0;
     bus_rx_req_bit               = 1'b0;
+    bus_rx_req_bit_handoff       = 1'b0;
 
     resp_queue_wvalid            = 1'b0;
     resp_queue_wdata             = '0;
-
     ccc_valid                    = 1'b0;
+    daa_stop                     = 1'b0;
     daa_dev_idx                  = 5'h00;
     ccc_dev_count                = 4'h0;
     hc_seq_cancel_event          = 1'b0;
@@ -1070,7 +1124,8 @@ module flow_active
             state_q
         ) && abort_stop_now(
             state_q, target_is_i3c, cmd_dir, cmd_attr
-        )) begin
+        ) && !((state_q == IssueCmd) && (cmd_attr == AddressAssignment) &&
+               (issue_phase_q > 8'd4))) begin
       hc_aborted_d = 1'b1;
       if (abort_stop_required(state_q, cont_pending_q)) begin
         request_stop(1'b0);
@@ -1093,6 +1148,7 @@ module flow_active
           short_read_d = 1'b0;
           hc_aborted_d = 1'b0;
           not_supported_d = 1'b0;
+          daa_nack_error_d = 1'b0;
           entdaa_stop_req_d = 1'b0;
           next_start_is_rstart_d = 1'b0;
           addr_after_rstart_d = 1'b0;
@@ -1111,16 +1167,25 @@ module flow_active
         end
 
         FetchDAT: begin
-          dat_read_valid_hw_d = 1'b1;
-          dat_index_hw = dev_index;
-          if (cmd_attr == RegularTransfer || cmd_attr == ComboTransfer) begin
-            remaining_len_d = reg_desc.data_length;
+          if ((cmd_attr == AddressAssignment) && invalid_addr_assign_desc(aa_desc)) begin
+            not_supported_d = 1'b1;
+          end else begin
+            dat_read_valid_hw_d = 1'b1;
+            dat_index_hw = dev_index;
+            if (cmd_attr == RegularTransfer || cmd_attr == ComboTransfer) begin
+              remaining_len_d = reg_desc.data_length;
+            end
           end
         end
 
         WaitDAT: begin
           use_i2c_timing = cont_pending_q && !target_is_i3c;
-          if (!dat_read_valid_hw_q && cmd_attr == ImmediateDataTransfer && imm_desc.dtt > 3'd4) begin
+          if (!dat_read_valid_hw_q &&
+              ((cmd_attr == ImmediateDataTransfer && imm_desc.dtt > 3'd4) ||
+               (cmd_attr == AddressAssignment &&
+                invalid_addr_assign_desc(
+                  aa_desc
+              )))) begin
             not_supported_d = 1'b1;
           end else if (cmd_attr == ImmediateDataTransfer && imm_desc.cp) begin
             if (imm_desc.cp && imm_desc.cmd[7]) begin
@@ -1291,8 +1356,8 @@ module flow_active
               end
 
               8'd7: begin
-                sel_od_pp = 1'b0;
-                bus_rx_req_bit = 1'b1;
+                sel_od_pp              = 1'b0;
+                bus_rx_req_bit_handoff = 1'b1;
                 if (bus_rx_done_i) begin
                   addr_nack_d   = bus_rx_data_i[0];
                   issue_phase_d = issue_phase_q + 8'h1;
@@ -1467,49 +1532,38 @@ module flow_active
           if (cmd_attr == AddressAssignment) begin
             sel_i3c_i2c = 1'b1;
             sel_od_pp   = 1'b0;
-            if (addr_nack_q) begin
-              request_stop(1'b0);
-            end else begin
-              unique case (issue_phase_q)
-                8'd3: begin
-                  sel_od_pp = 1'b1;
-                  bus_tx_req_byte = 1'b1;
-                  bus_tx_req_value = CCC_ENTDAA;
-                  if (bus_tx_done_i) begin
-                    issue_phase_d = issue_phase_q + 8'h1;
-                  end
+            unique case (issue_phase_q)
+              8'd3: begin
+                sel_od_pp = 1'b1;
+                bus_tx_req_byte = 1'b1;
+                bus_tx_req_value = CCC_ENTDAA;
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
                 end
+              end
 
-                8'd4: begin
-                  sel_od_pp        = 1'b1;
-                  bus_tx_req_bit   = 1'b1;
-                  bus_tx_req_value = {7'b0, ~^CCC_ENTDAA};
-                  if (bus_tx_done_i) begin
-                    issue_phase_d = issue_phase_q + 8'h1;
-                  end
+              8'd4: begin
+                sel_od_pp        = 1'b1;
+                bus_tx_req_bit   = 1'b1;
+                bus_tx_req_value = {7'b0, ~^CCC_ENTDAA};
+                if (bus_tx_done_i) begin
+                  issue_phase_d = issue_phase_q + 8'h1;
                 end
+              end
 
-                default: begin
-                  if (issue_phase_q > 8'd4) begin
-                    ccc_valid     = 1'b1;
-                    ccc_dev_count = aa_desc.dev_count;
-                    daa_dev_idx   = aa_desc.dev_idx;
-                    if (daa_address_valid_i && !daa_wr_busy_q) begin
-                      daa_pid_d      = daa_pid_i;
-                      daa_bcr_d      = daa_bcr_i;
-                      daa_dcr_d      = daa_dcr_i;
-                      daa_addr_d     = daa_address_i;
-                      daa_wr_busy_d  = 1'b1;
-                      daa_wr_phase_d = 2'd0;
-                    end
-                    if (daa_wr_busy_q) begin
+              default: begin
+                if (issue_phase_q > 8'd4) begin
+                  ccc_valid     = 1'b1;
+                  daa_stop      = hc_aborted_q || abort_i;
+                  ccc_dev_count = aa_desc.dev_count;
+                  daa_dev_idx   = aa_desc.dev_idx;
+                  hc_aborted_d |= abort_i;
+                  daa_nack_error_d |= daa_nack_error_i;
+                  if (daa_wr_busy_q) begin
+                    rx_queue_wdata = daa_rx_result_word(daa_wr_phase_q, daa_pid_q, daa_bcr_q,
+                                                        daa_dcr_q, daa_addr_q);
+                    if (rx_queue_wready_i && !rx_queue_full_i) begin
                       rx_queue_wvalid = 1'b1;
-                      unique case (daa_wr_phase_q)
-                        2'd0: rx_queue_wdata = daa_pid_q[47:16];
-                        2'd1: rx_queue_wdata = {daa_pid_q[15:0], daa_bcr_q, daa_dcr_q};
-                        2'd2: rx_queue_wdata = {25'h0, daa_addr_q};
-                        default: rx_queue_wdata = '0;
-                      endcase
                       resp_data_len_d = resp_data_len_q + 16'd4;
                       if (daa_wr_phase_q == 2'd2) begin
                         daa_wr_busy_d  = 1'b0;
@@ -1517,16 +1571,35 @@ module flow_active
                       end else begin
                         daa_wr_phase_d = daa_wr_phase_q + 2'd1;
                       end
+                    end else begin
+                      rx_overflow_d     = 1'b1;
+                      daa_wr_busy_d     = 1'b0;
+                      daa_wr_phase_d    = 2'd0;
+                      entdaa_stop_req_d = 1'b1;
+                      gen_stop          = 1'b1;
                     end
-                    if (entdaa_stop_req_q && scl_gen_done_i) entdaa_stop_req_d = 1'b0;
-                    if (ccc_done_i) entdaa_stop_req_d = 1'b1;
-                    if (ccc_done_i || entdaa_stop_req_q) begin
-                      gen_stop = 1'b1;
-                    end
+                  end else if (daa_address_valid_i && !daa_wr_busy_q && !rx_overflow_q && !entdaa_stop_req_q) begin
+                    daa_pid_d      = daa_pid_i;
+                    daa_bcr_d      = daa_bcr_i;
+                    daa_dcr_d      = daa_dcr_i;
+                    daa_addr_d     = daa_address_i;
+                    daa_wr_busy_d  = 1'b1;
+                    daa_wr_phase_d = 2'd0;
+                  end
+                  if (daa_stop_req_i || (ccc_done_i && !daa_stopped_i) || entdaa_stop_req_q) begin
+                    gen_stop = 1'b1;
+                  end
+
+                  if (ccc_done_i && !daa_stopped_i) begin
+                    entdaa_stop_req_d = 1'b1;
+                  end
+
+                  if (entdaa_stop_req_q && scl_gen_done_i) begin
+                    entdaa_stop_req_d = 1'b0;
                   end
                 end
-              endcase
-            end
+              end
+            endcase
           end else if (cmd_dir == Write) begin
             sel_i3c_i2c = target_is_i3c;
             if (target_is_i3c) begin
@@ -1620,7 +1693,7 @@ module flow_active
                     issue_phase_d = issue_phase_q + 8'h1;
                   end
                 end else begin
-                  bus_rx_req_bit = 1'b1;
+                  bus_rx_req_bit_handoff = 1'b1;
                   if (bus_rx_done_i) begin
                     issue_phase_d   = issue_phase_q + 8'h1;
                     rx_byte_idx_d   = next_byte_idx(rx_byte_idx_q);
@@ -1752,6 +1825,7 @@ module flow_active
 
   assign gen_start_o = gen_start;
   assign gen_rstart_o = gen_rstart;
+  assign takeover_o = takeover;
   assign gen_stop_o = gen_stop;
   assign gen_clock_o = gen_clock;
   assign gen_idle_o = gen_idle;
@@ -1764,8 +1838,10 @@ module flow_active
   assign bus_tx_req_value_o = bus_tx_req_value;
   assign bus_rx_req_byte_o = bus_rx_req_byte;
   assign bus_rx_req_bit_o = bus_rx_req_bit;
+  assign bus_rx_req_bit_handoff_o = bus_rx_req_bit_handoff;
 
   assign ccc_valid_o = ccc_valid;
+  assign daa_stop_o = daa_stop;
   assign daa_dev_idx_o = daa_dev_idx;
   assign ccc_dev_count_o = ccc_dev_count;
   assign hc_seq_cancel_event_o = hc_seq_cancel_event;

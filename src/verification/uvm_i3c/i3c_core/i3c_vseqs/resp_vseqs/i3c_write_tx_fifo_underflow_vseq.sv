@@ -39,14 +39,14 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_006 %s toc%0d tx_fifo_underflow_ovl",
+            "ERR_006 %s toc%0d tx_fifo_underflow_ovl",
             private_addr_mode_name(
                 broadcast_header_enable
             ),
             toc
         )),
         .seq_name($sformatf(
-            "sdrw006_%s_toc%0d_dev_seq", private_addr_mode_name(broadcast_header_enable), toc
+            "err006_%s_toc%0d_dev_seq", private_addr_mode_name(broadcast_header_enable), toc
         )),
         .tid(4'd6),
         .dev_idx(5'd0),
@@ -75,10 +75,11 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    check_all_queues_empty($sformatf("after SDRW_006 toc%0d tx_fifo_underflow_ovl", toc));
+    check_error_resp_fields(resp, 4'h6, cfg.tid, ACTUAL_LENGTH, cfg.ctxt);
+    check_all_queues_empty($sformatf("after ERR_006 toc%0d tx_fifo_underflow_ovl", toc));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_006 result: mode=%s toc=%0d requested_len=%0d supplied_words=1 sampled_bytes=%0d",
+                  "ERR_006 result: mode=%s toc=%0d requested_len=%0d supplied_words=1 sampled_bytes=%0d",
                   private_addr_mode_name(broadcast_header_enable), toc, DATA_LENGTH,
                   dev_seq.sampled_data.size()), UVM_LOW)
   endtask
@@ -98,7 +99,7 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_006 %s toc%0d tx_fifo_empty_underflow_ovl len%0d",
+            "ERR_006 %s toc%0d tx_fifo_empty_underflow_ovl len%0d",
             private_addr_mode_name(
                 broadcast_header_enable
             ),
@@ -106,7 +107,7 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
             data_length
         )),
         .seq_name($sformatf(
-            "sdrw006_%s_toc%0d_empty_dev_seq_len%0d",
+            "err006_%s_toc%0d_empty_dev_seq_len%0d",
             private_addr_mode_name(
                 broadcast_header_enable
             ),
@@ -139,10 +140,11 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     read_response(resp);
 
     check_all_queues_empty(
-        $sformatf("after SDRW_006 toc%0d tx_fifo_empty_underflow_ovl len%0d", toc, data_length));
+        $sformatf("after ERR_006 toc%0d tx_fifo_empty_underflow_ovl len%0d", toc, data_length));
+    check_error_resp_fields(resp, 4'h6, cfg.tid, 0, cfg.ctxt);
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_006 result: mode=%s toc=%0d requested_len=%0d supplied_words=0 sampled_bytes=%0d",
+                  "ERR_006 result: mode=%s toc=%0d requested_len=%0d supplied_words=0 sampled_bytes=%0d",
                   private_addr_mode_name(broadcast_header_enable), toc, data_length,
                   dev_seq.sampled_data.size()), UVM_LOW)
   endtask
@@ -165,13 +167,13 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_006 %s tx_fifo_late_refill_after_ovl",
+            "ERR_006 %s tx_fifo_late_refill_after_ovl",
             private_addr_mode_name(
                 broadcast_header_enable
             )
         )),
         .seq_name($sformatf(
-            "sdrw006_%s_late_refill_dev_seq", private_addr_mode_name(broadcast_header_enable)
+            "err006_%s_late_refill_dev_seq", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'd6),
         .dev_idx(5'd0),
@@ -199,16 +201,17 @@ class i3c_write_tx_fifo_underflow_vseq extends i3c_base_vseq;
     settle_cycles(1);
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
+    check_error_resp_fields(resp, 4'h6, cfg.tid, ACTUAL_LENGTH, cfg.ctxt);
 
     build_random_tx_words(4, late_exp_data, late_tx_words);
     write_tx_words(late_tx_words);
     check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit, 1'b0, 1'b0,
-                      "after SDRW_006 late refill");
+                      "after ERR_006 late refill");
     request_sw_reset(1'b1);
-    check_all_queues_empty("after SDRW_006 late refill SW reset");
+    check_all_queues_empty("after ERR_006 late refill SW reset");
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_006 result: mode=%s requested_len=%0d sampled_bytes_before_late_refill=%0d late_refill_words=1 sw_reset_flushed_queues=1",
+                  "ERR_006 result: mode=%s requested_len=%0d sampled_bytes_before_late_refill=%0d late_refill_words=1 sw_reset_flushed_queues=1",
                   private_addr_mode_name(broadcast_header_enable), DATA_LENGTH,
                   dev_seq.sampled_data.size()), UVM_LOW)
   endtask
