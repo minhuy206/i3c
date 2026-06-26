@@ -32,7 +32,10 @@
 ../rtl/i3c_controller_top.sv
 
 // ─── Verification: focused SVA checkers ──────────────────────────────────────
+uvm_i3c/i3c_core/sva/i3c_phy_sva.sv
 uvm_i3c/i3c_core/sva/sync_fifo_sva.sv
+uvm_i3c/i3c_core/sva/bus_monitor_sva.sv
+uvm_i3c/i3c_core/sva/scl_generator_sva.sv
 uvm_i3c/i3c_core/sva/entdaa_fsm_sva.sv
 uvm_i3c/i3c_core/sva/entdaa_controller_sva.sv
 uvm_i3c/i3c_core/sva/flow_active_sva.sv

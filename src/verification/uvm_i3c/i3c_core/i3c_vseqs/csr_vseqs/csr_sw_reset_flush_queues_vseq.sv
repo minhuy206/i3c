@@ -9,8 +9,6 @@ class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
 
   task body();
     regular_trans_desc_t           wr_cmd;
-    regular_trans_desc_t           rd_cmd;
-    i3c_device_response_seq        dev_seq;
     bit                     [31:0] data;
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
@@ -28,54 +26,31 @@ class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
     poll_idle();
     write_cmd(wr_cmd[31:0], wr_cmd[63:32]);
     write_tx_data(32'hCAFE_0077);
+    backdoor_fill_rx_resp_queues();
     settle_cycles();
     check_queue_occupancy(cmd_paths, 1, "before CMD flush");
     check_queue_occupancy(tx_paths, 1, "before TX flush");
+    check_queue_occupancy(rx_paths, 1, "before simultaneous RX flush");
+    check_queue_occupancy(resp_paths, 1, "before simultaneous RESP flush");
 
     request_sw_reset(1'b0);
-    check_all_queues_empty("after CMD/TX flush");
+    check_all_queues_flushed("after simultaneous CMD/TX/RX/RESP flush");
 
     check_blocked_tx_write_flush();
 
-    rd_cmd              = '0;
-    rd_cmd.attr         = RegularTransfer;
-    rd_cmd.tid          = 4'd8;
-    rd_cmd.rnw          = 1'b1;
-    rd_cmd.mode         = sdr0;
-    rd_cmd.toc          = 1'b1;
-    rd_cmd.wroc         = 1'b1;
-    rd_cmd.dev_idx      = 5'd0;
-    rd_cmd.data_length  = 16'd4;
-
-    dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
-    dev_seq.target_addr   = 7'h08;
-    dev_seq.ack_address   = 1'b1;
-    dev_seq.dir           = 1'b1;
-    dev_seq.is_i3c        = 1'b1;
-    dev_seq.read_data_cnt = rd_cmd.data_length;
-    dev_seq.read_data.push_back(8'h07);
-    dev_seq.read_data.push_back(8'h17);
-    dev_seq.read_data.push_back(8'h27);
-    dev_seq.read_data.push_back(8'h37);
-    fork
-      dev_seq.start(p_sequencer.m_i3c_sequencer);
-    join_none
-
-    enable_dut();
-    write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
-    poll_idle();
-    wait_for_device_done(dev_seq, "csr_sw_reset_flush_queues_vseq");
-    check_queue_occupancy(rx_paths, 1, "before RX flush");
-    check_queue_occupancy(resp_paths, 1, "before RESP flush");
-
-    request_sw_reset(1'b1);
-    check_all_queues_empty("after RX/RESP flush");
-
-    reg_read(ADDR_RX_DATA, data);
+    reg_read(ADDR_PIO_DATA_PORT, data);
     `DV_CHECK_EQ(data, 32'h0, "csr_sw_reset_flush_queues_vseq: empty RX_DATA read should return 0")
     reg_read(ADDR_RESP, data);
     `DV_CHECK_EQ(data, 32'h0, "csr_sw_reset_flush_queues_vseq: empty RESP read should return 0")
 
+  endtask
+
+  task backdoor_fill_rx_resp_queues();
+    backdoor_write_fifo_entry(rx_paths, 0, 32'hA3A2_A1A0);
+    backdoor_set_fifo_level(rx_paths, 1);
+
+    backdoor_write_fifo_entry(resp_paths, 0, 32'h0007_0004);
+    backdoor_set_fifo_level(resp_paths, 1);
   endtask
 
   task check_queue_occupancy(queue_hdl_paths_t paths, int unsigned exp_depth, string ctxt);
@@ -91,6 +66,20 @@ class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(status[paths.empty_bit], 1'b0,
                  $sformatf("csr_sw_reset_flush_queues_vseq: %s should be non-empty %s",
                            paths.name, ctxt))
+  endtask
+
+  task check_queue_flushed(queue_hdl_paths_t paths, string ctxt);
+    check_queue_flags(paths.name, paths.full_bit, paths.empty_bit, 1'b0, 1'b1, ctxt);
+    `DV_CHECK_EQ(hdl_read_fifo_depth(paths.depth_path), 0,
+                 $sformatf("csr_sw_reset_flush_queues_vseq: %s depth should be zero %s",
+                           paths.name, ctxt))
+  endtask
+
+  task check_all_queues_flushed(string ctxt);
+    check_queue_flushed(cmd_paths, ctxt);
+    check_queue_flushed(tx_paths, ctxt);
+    check_queue_flushed(rx_paths, ctxt);
+    check_queue_flushed(resp_paths, ctxt);
   endtask
 
   task check_blocked_tx_write_flush();
@@ -114,8 +103,7 @@ class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
     settle_cycles(4);
 
     reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(hdl_read_fifo_depth(tx_paths.depth_path), 0,
-                 "csr_sw_reset_flush_queues_vseq: blocked TX write must not re-enter after reset")
+    check_queue_flushed(tx_paths, "after blocked TX write reset");
     `DV_CHECK_EQ(hdl_read_bit(tx_paths.write_valid_path), 1'b0,
                  "csr_sw_reset_flush_queues_vseq: pending TX write valid should clear on reset")
     `DV_CHECK_EQ(status[QS_TX_FULL_BIT], 1'b0,

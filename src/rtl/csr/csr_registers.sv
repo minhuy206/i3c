@@ -1,15 +1,13 @@
 module csr_registers
-  import controller_pkg::dat_entry_t;
-  import controller_pkg::fifo_status_t;
-  import controller_pkg::hc_control_cfg_t;
-  import controller_pkg::intr_event_t;
+  import controller_pkg::dat_entry_t, controller_pkg::fifo_status_t,
+         controller_pkg::hc_control_cfg_t;
 #(
     parameter int unsigned DatDepth  = 32,
     parameter int unsigned AddrWidth = 12,
     parameter int unsigned DataWidth = 32,
     parameter int unsigned CounterWidth = 20,
     parameter int unsigned CmdDataWidth = 64,
-    localparam int unsigned DatAw    = $clog2(DatDepth)
+    parameter int unsigned DatAw    = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -34,15 +32,12 @@ module csr_registers
     output logic [CounterWidth-1:0] t_su_dat_o,
     output logic [CounterWidth-1:0] t_hd_dat_o,
     output logic [CounterWidth-1:0] t_bus_free_o,
-    output logic [CounterWidth-1:0] i2c_t_r_o,
-    output logic [CounterWidth-1:0] i2c_t_f_o,
     output logic [CounterWidth-1:0] i2c_t_low_o,
     output logic [CounterWidth-1:0] i2c_t_high_o,
     output logic [CounterWidth-1:0] i2c_t_su_sta_o,
     output logic [CounterWidth-1:0] i2c_t_hd_sta_o,
     output logic [CounterWidth-1:0] i2c_t_su_sto_o,
     output logic [CounterWidth-1:0] i2c_t_su_dat_o,
-    output logic [CounterWidth-1:0] i2c_t_hd_dat_o,
     output logic [CounterWidth-1:0] i2c_t_buf_o,
 
     input  logic                 dat_read_valid_i,
@@ -70,55 +65,41 @@ module csr_registers
     input fifo_status_t rx_status_i,
     input fifo_status_t resp_status_i,
 
-    input intr_event_t intr_event_i,
-
     input logic i3c_fsm_idle_i
 );
 
-  localparam logic [AddrWidth-1:0] ADDR_HC_CONTROL = 12'h000;
-  localparam logic [AddrWidth-1:0] ADDR_HC_STATUS = 12'h004;
-  localparam logic [AddrWidth-1:0] ADDR_INTR_STATUS = 12'h008;
-  localparam logic [AddrWidth-1:0] ADDR_T_R = 12'h010;
-  localparam logic [AddrWidth-1:0] ADDR_T_F = 12'h014;
-  localparam logic [AddrWidth-1:0] ADDR_T_LOW = 12'h018;
-  localparam logic [AddrWidth-1:0] ADDR_T_LOW_OD = 12'h01C;
-  localparam logic [AddrWidth-1:0] ADDR_T_HIGH = 12'h020;
-  localparam logic [AddrWidth-1:0] ADDR_T_SU_STA = 12'h024;
-  localparam logic [AddrWidth-1:0] ADDR_T_HD_STA = 12'h028;
-  localparam logic [AddrWidth-1:0] ADDR_T_SU_STO = 12'h02C;
-  localparam logic [AddrWidth-1:0] ADDR_T_SU_DAT = 12'h030;
-  localparam logic [AddrWidth-1:0] ADDR_T_HD_DAT = 12'h034;
-  localparam logic [AddrWidth-1:0] ADDR_T_BUS_FREE = 12'h038;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_R = 12'h040;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_F = 12'h044;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_LOW = 12'h048;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HIGH = 12'h04C;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_STA = 12'h050;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HD_STA = 12'h054;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_STO = 12'h058;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_DAT = 12'h05C;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HD_DAT = 12'h060;
-  localparam logic [AddrWidth-1:0] ADDR_I2C_T_BUF = 12'h064;
-  localparam logic [AddrWidth-1:0] ADDR_CMD_QUEUE = 12'h100;
-  localparam logic [AddrWidth-1:0] ADDR_TX_DATA = 12'h104;
-  localparam logic [AddrWidth-1:0] ADDR_RX_DATA = 12'h108;
-  localparam logic [AddrWidth-1:0] ADDR_RESP = 12'h10C;
-  localparam logic [AddrWidth-1:0] ADDR_QUEUE_STATUS = 12'h110;
-  localparam logic [AddrWidth-1:0] ADDR_DAT_BASE = 12'h200;
+  localparam logic [AddrWidth-1:0] ADDR_HC_CONTROL = 12'h004;
+  localparam logic [AddrWidth-1:0] ADDR_RESET_CONTROL = 12'h010;
+  localparam logic [AddrWidth-1:0] ADDR_HC_STATUS = 12'h014;
+  localparam logic [AddrWidth-1:0] ADDR_CMD_QUEUE = 12'h080;
+  localparam logic [AddrWidth-1:0] ADDR_RESP = 12'h084;
+  localparam logic [AddrWidth-1:0] ADDR_PIO_DATA_PORT = 12'h088;
+  localparam logic [AddrWidth-1:0] ADDR_QUEUE_STATUS = 12'h0B4;
+  localparam logic [AddrWidth-1:0] ADDR_T_R = 12'h32C;
+  localparam logic [AddrWidth-1:0] ADDR_T_F = 12'h330;
+  localparam logic [AddrWidth-1:0] ADDR_T_SU_DAT = 12'h334;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_DAT = 12'h338;
+  localparam logic [AddrWidth-1:0] ADDR_T_HD_DAT = 12'h33C;
+  localparam logic [AddrWidth-1:0] ADDR_T_HIGH = 12'h340;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HIGH = 12'h34C;
+  localparam logic [AddrWidth-1:0] ADDR_T_LOW = 12'h350;
+  localparam logic [AddrWidth-1:0] ADDR_T_LOW_OD = 12'h354;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_LOW = 12'h358;
+  localparam logic [AddrWidth-1:0] ADDR_T_HD_STA = 12'h35C;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_HD_STA = 12'h360;
+  localparam logic [AddrWidth-1:0] ADDR_T_SU_STA = 12'h368;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_STA = 12'h36C;
+  localparam logic [AddrWidth-1:0] ADDR_T_SU_STO = 12'h370;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_SU_STO = 12'h374;
+  localparam logic [AddrWidth-1:0] ADDR_T_BUS_FREE = 12'h37C;
+  localparam logic [AddrWidth-1:0] ADDR_I2C_T_BUF = 12'h380;
+  localparam logic [AddrWidth-1:0] ADDR_DAT_BASE = 12'h400;
   localparam logic [AddrWidth-1:0] ADDR_DAT_END = ADDR_DAT_BASE + AddrWidth'(DatDepth * 4);
   localparam logic [DataWidth-1:0] DAT_WRITABLE_MASK = 32'h807F_007F;
-  localparam int unsigned INTR_HC_INTERNAL_ERR_BIT = 10;
-  localparam int unsigned INTR_HC_SEQ_CANCEL_BIT = 11;
-  localparam int unsigned INTR_HC_WARN_CMD_SEQ_STALL_BIT = 12;
-  localparam int unsigned INTR_HC_ERR_CMD_SEQ_TIMEOUT_BIT = 13;
-  localparam int unsigned INTR_SCHED_CMD_MISSED_TICK_BIT = 14;
-  localparam logic [DataWidth-1:0] INTR_STATUS_W1C_MASK =
-      (DataWidth'(1) << INTR_HC_INTERNAL_ERR_BIT) |
-      (DataWidth'(1) << INTR_HC_SEQ_CANCEL_BIT) |
-      (DataWidth'(1) << INTR_HC_WARN_CMD_SEQ_STALL_BIT) |
-      (DataWidth'(1) << INTR_HC_ERR_CMD_SEQ_TIMEOUT_BIT) |
-      (DataWidth'(1) << INTR_SCHED_CMD_MISSED_TICK_BIT);
-
+  localparam int unsigned HC_CTRL_IBA_INCLUDE_BIT = 0;
+  localparam int unsigned HC_CTRL_ABORT_BIT = 29;
+  localparam int unsigned HC_CTRL_BUS_ENABLE_BIT = 31;
+  localparam int unsigned RESET_CTRL_SOFT_RST_BIT = 0;
   localparam logic [CounterWidth-1:0] RST_T_R = 20'd4;
   localparam logic [CounterWidth-1:0] RST_T_F = 20'd4;
   localparam logic [CounterWidth-1:0] RST_T_LOW = 20'd16;
@@ -130,24 +111,20 @@ module csr_registers
   localparam logic [CounterWidth-1:0] RST_T_SU_DAT = 20'd1;
   localparam logic [CounterWidth-1:0] RST_T_HD_DAT = 20'd0;
   localparam logic [CounterWidth-1:0] RST_T_BUS_FREE = 20'd13;
-  localparam logic [CounterWidth-1:0] RST_I2C_T_R = 20'd100;
-  localparam logic [CounterWidth-1:0] RST_I2C_T_F = 20'd100;
   localparam logic [CounterWidth-1:0] RST_I2C_T_LOW = 20'd534;
   localparam logic [CounterWidth-1:0] RST_I2C_T_HIGH = 20'd300;
   localparam logic [CounterWidth-1:0] RST_I2C_T_SU_STA = 20'd200;
   localparam logic [CounterWidth-1:0] RST_I2C_T_HD_STA = 20'd200;
   localparam logic [CounterWidth-1:0] RST_I2C_T_SU_STO = 20'd434;
   localparam logic [CounterWidth-1:0] RST_I2C_T_SU_DAT = 20'd34;
-  localparam logic [CounterWidth-1:0] RST_I2C_T_HD_DAT = 20'd0;
   localparam logic [CounterWidth-1:0] RST_I2C_T_BUF = 20'd434;
 
-  logic [DataWidth-1:0] hc_control, hc_status, intr_status, queue_status;
-  logic [DataWidth-1:0] intr_status_event;
+  logic [DataWidth-1:0] hc_control, hc_status, queue_status;
   logic [CounterWidth-1:0] t_r, t_f, t_low, t_low_od, t_high;
   logic [CounterWidth-1:0] t_su_sta, t_hd_sta, t_su_sto, t_su_dat, t_hd_dat, t_bus_free;
-  logic [CounterWidth-1:0] i2c_t_r, i2c_t_f, i2c_t_low, i2c_t_high;
+  logic [CounterWidth-1:0] i2c_t_low, i2c_t_high;
   logic [CounterWidth-1:0] i2c_t_su_sta, i2c_t_hd_sta, i2c_t_su_sto, i2c_t_su_dat;
-  logic [CounterWidth-1:0] i2c_t_hd_dat, i2c_t_buf;
+  logic [CounterWidth-1:0] i2c_t_buf;
 
   dat_entry_t dat_mem[DatDepth];
   dat_entry_t dat_rdata;
@@ -170,16 +147,6 @@ module csr_registers
   logic rx_rready;
   logic cmd_queue_write;
   logic tx_data_write;
-  logic intr_status_write;
-
-  always_comb begin : compute_intr_status_event
-    intr_status_event = '0;
-    intr_status_event[INTR_HC_INTERNAL_ERR_BIT] = intr_event_i.hc_internal_err;
-    intr_status_event[INTR_HC_SEQ_CANCEL_BIT] = intr_event_i.hc_seq_cancel;
-    intr_status_event[INTR_HC_WARN_CMD_SEQ_STALL_BIT] = intr_event_i.hc_warn_cmd_seq_stall;
-    intr_status_event[INTR_HC_ERR_CMD_SEQ_TIMEOUT_BIT] = intr_event_i.hc_err_cmd_seq_timeout;
-    intr_status_event[INTR_SCHED_CMD_MISSED_TICK_BIT] = intr_event_i.sched_cmd_missed_tick;
-  end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : reg_write
     if (!rst_ni) begin
@@ -187,7 +154,6 @@ module csr_registers
       sw_reset <= '0;
       broadcast_header_enable <= 1'b0;
       hc_abort <= 1'b0;
-      intr_status <= '0;
       t_r <= RST_T_R;
       t_f <= RST_T_F;
       t_low <= RST_T_LOW;
@@ -199,34 +165,27 @@ module csr_registers
       t_su_dat <= RST_T_SU_DAT;
       t_hd_dat <= RST_T_HD_DAT;
       t_bus_free <= RST_T_BUS_FREE;
-      i2c_t_r <= RST_I2C_T_R;
-      i2c_t_f <= RST_I2C_T_F;
       i2c_t_low <= RST_I2C_T_LOW;
       i2c_t_high <= RST_I2C_T_HIGH;
       i2c_t_su_sta <= RST_I2C_T_SU_STA;
       i2c_t_hd_sta <= RST_I2C_T_HD_STA;
       i2c_t_su_sto <= RST_I2C_T_SU_STO;
       i2c_t_su_dat <= RST_I2C_T_SU_DAT;
-      i2c_t_hd_dat <= RST_I2C_T_HD_DAT;
       i2c_t_buf <= RST_I2C_T_BUF;
       for (int i = 0; i < DatDepth; i++) begin
         dat_mem[i] <= '0;
       end
     end else begin
       sw_reset <= 0;
-      intr_status <= (intr_status &
-                      ~(intr_status_write ? (wdata_i & INTR_STATUS_W1C_MASK) : '0)) |
-                     intr_status_event;
       if (wen_i && ready_o) begin
         unique case (addr_i)
           ADDR_HC_CONTROL: begin
-            hc_enable <= wdata_i[0];
-            // SW_RESET only safe when HC_STATUS[FSM_IDLE]=1; see spec §HC_CONTROL[1]
-            sw_reset <= wdata_i[1];
-            broadcast_header_enable <= wdata_i[2];
-            hc_abort <= wdata_i[3];
+            hc_enable <= wdata_i[HC_CTRL_BUS_ENABLE_BIT];
+            broadcast_header_enable <= wdata_i[HC_CTRL_IBA_INCLUDE_BIT];
+            hc_abort <= wdata_i[HC_CTRL_ABORT_BIT];
           end
-          ADDR_INTR_STATUS: begin
+          ADDR_RESET_CONTROL: begin
+            sw_reset <= wdata_i[RESET_CTRL_SOFT_RST_BIT];
           end
           ADDR_T_R: t_r <= wdata_i[19:0];
           ADDR_T_F: t_f <= wdata_i[19:0];
@@ -239,15 +198,12 @@ module csr_registers
           ADDR_T_SU_DAT: t_su_dat <= wdata_i[19:0];
           ADDR_T_HD_DAT: t_hd_dat <= wdata_i[19:0];
           ADDR_T_BUS_FREE: t_bus_free <= wdata_i[19:0];
-          ADDR_I2C_T_R: i2c_t_r <= wdata_i[19:0];
-          ADDR_I2C_T_F: i2c_t_f <= wdata_i[19:0];
           ADDR_I2C_T_LOW: i2c_t_low <= wdata_i[19:0];
           ADDR_I2C_T_HIGH: i2c_t_high <= wdata_i[19:0];
           ADDR_I2C_T_SU_STA: i2c_t_su_sta <= wdata_i[19:0];
           ADDR_I2C_T_HD_STA: i2c_t_hd_sta <= wdata_i[19:0];
           ADDR_I2C_T_SU_STO: i2c_t_su_sto <= wdata_i[19:0];
           ADDR_I2C_T_SU_DAT: i2c_t_su_dat <= wdata_i[19:0];
-          ADDR_I2C_T_HD_DAT: i2c_t_hd_dat <= wdata_i[19:0];
           ADDR_I2C_T_BUF: i2c_t_buf <= wdata_i[19:0];
           default: begin
             if (addr_i >= ADDR_DAT_BASE && addr_i <= (ADDR_DAT_END - 4)) begin
@@ -312,8 +268,8 @@ module csr_registers
     if (ren_i) begin
       unique case (addr_i)
         ADDR_HC_CONTROL:   rdata_d = hc_control;
+        ADDR_RESET_CONTROL: rdata_d = '0;
         ADDR_HC_STATUS:    rdata_d = hc_status;
-        ADDR_INTR_STATUS:  rdata_d = intr_status;
         ADDR_T_R:          rdata_d = {12'b0, t_r};
         ADDR_T_F:          rdata_d = {12'b0, t_f};
         ADDR_T_LOW:        rdata_d = {12'b0, t_low};
@@ -325,17 +281,14 @@ module csr_registers
         ADDR_T_SU_DAT:     rdata_d = {12'b0, t_su_dat};
         ADDR_T_HD_DAT:     rdata_d = {12'b0, t_hd_dat};
         ADDR_T_BUS_FREE:   rdata_d = {12'b0, t_bus_free};
-        ADDR_I2C_T_R:      rdata_d = {12'b0, i2c_t_r};
-        ADDR_I2C_T_F:      rdata_d = {12'b0, i2c_t_f};
         ADDR_I2C_T_LOW:    rdata_d = {12'b0, i2c_t_low};
         ADDR_I2C_T_HIGH:   rdata_d = {12'b0, i2c_t_high};
         ADDR_I2C_T_SU_STA: rdata_d = {12'b0, i2c_t_su_sta};
         ADDR_I2C_T_HD_STA: rdata_d = {12'b0, i2c_t_hd_sta};
         ADDR_I2C_T_SU_STO: rdata_d = {12'b0, i2c_t_su_sto};
         ADDR_I2C_T_SU_DAT: rdata_d = {12'b0, i2c_t_su_dat};
-        ADDR_I2C_T_HD_DAT: rdata_d = {12'b0, i2c_t_hd_dat};
         ADDR_I2C_T_BUF:    rdata_d = {12'b0, i2c_t_buf};
-        ADDR_RX_DATA: begin
+        ADDR_PIO_DATA_PORT: begin
           rx_rready = ren_i;
           if (rx_rvalid_i) rdata_d = rx_rdata_i;
         end
@@ -373,20 +326,16 @@ module csr_registers
   assign t_su_dat_o = t_su_dat;
   assign t_hd_dat_o = t_hd_dat;
   assign t_bus_free_o = t_bus_free;
-  assign i2c_t_r_o = i2c_t_r;
-  assign i2c_t_f_o = i2c_t_f;
   assign i2c_t_low_o = i2c_t_low;
   assign i2c_t_high_o = i2c_t_high;
   assign i2c_t_su_sta_o = i2c_t_su_sta;
   assign i2c_t_hd_sta_o = i2c_t_hd_sta;
   assign i2c_t_su_sto_o = i2c_t_su_sto;
   assign i2c_t_su_dat_o = i2c_t_su_dat;
-  assign i2c_t_hd_dat_o = i2c_t_hd_dat;
   assign i2c_t_buf_o = i2c_t_buf;
 
   assign cmd_queue_write = wen_i && (addr_i == ADDR_CMD_QUEUE);
-  assign tx_data_write = wen_i && (addr_i == ADDR_TX_DATA);
-  assign intr_status_write = wen_i && ready_o && (addr_i == ADDR_INTR_STATUS);
+  assign tx_data_write = wen_i && (addr_i == ADDR_PIO_DATA_PORT);
   assign ready_o         = !((cmd_queue_write && (cmd_wvalid || sw_reset)) ||
                              (tx_data_write && (tx_wvalid || sw_reset)));
 
@@ -396,7 +345,13 @@ module csr_registers
   assign tx_wvalid_o = tx_wvalid;
   assign tx_wdata_o = tx_wdata;
 
-  assign hc_control = {28'b0, hc_abort, broadcast_header_enable, sw_reset, hc_enable};
+  always_comb begin : compute_hc_control_readback
+    hc_control = '0;
+    hc_control[HC_CTRL_IBA_INCLUDE_BIT] = broadcast_header_enable;
+    hc_control[HC_CTRL_ABORT_BIT] = hc_abort;
+    hc_control[HC_CTRL_BUS_ENABLE_BIT] = hc_enable;
+  end
+
   assign hc_status = {29'b0, resp_status_i.empty, cmd_status_i.full, i3c_fsm_idle_i};
   assign queue_status = {
     24'b0,

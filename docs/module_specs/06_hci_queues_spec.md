@@ -44,6 +44,15 @@ Four synchronous FIFOs:
 | `RxDataWidth`   | int  | 32      | RX entry width           |
 | `RespDataWidth` | int  | 32      | RESP entry width         |
 
+Four derived `localparam`s size the depth ports (each `= $clog2(Depth + 1)`, to represent counts `0..Depth`):
+
+| Localparam     | Value                      | Description               |
+| -------------- | --------------------------- | -------------------------- |
+| `CmdDepthW`    | `$clog2(CmdFifoDepth + 1)`  | Width of `cmd_depth_o`     |
+| `TxDepthW`     | `$clog2(TxFifoDepth + 1)`   | Width of `tx_depth_o`      |
+| `RxDepthW`     | `$clog2(RxFifoDepth + 1)`   | Width of `rx_depth_o`      |
+| `RespDepthW`   | `$clog2(RespFifoDepth + 1)` | Width of `resp_depth_o`    |
+
 ## 4. Ports / Interfaces
 
 ### Clock and Reset
@@ -71,6 +80,7 @@ Four synchronous FIFOs:
 | `cmd_rdata_o`  | Output    | 64    | Command descriptor to HW   |
 | `cmd_full_o`   | Output    | 1     | FIFO full flag             |
 | `cmd_empty_o`  | Output    | 1     | FIFO empty flag            |
+| `cmd_depth_o`  | Output    | `CmdDepthW`  | Current FIFO occupancy (entries) |
 
 ### TX FIFO — Software Write / Hardware Read
 
@@ -84,6 +94,7 @@ Four synchronous FIFOs:
 | `tx_rdata_o`  | Output    | 32    | TX data to HW         |
 | `tx_full_o`   | Output    | 1     | FIFO full flag        |
 | `tx_empty_o`  | Output    | 1     | FIFO empty flag       |
+| `tx_depth_o`  | Output    | `TxDepthW`   | Current FIFO occupancy (entries) |
 
 ### RX FIFO — Hardware Write / Software Read
 
@@ -97,6 +108,7 @@ Four synchronous FIFOs:
 | `rx_rdata_o`  | Output    | 32    | RX data to SW         |
 | `rx_full_o`   | Output    | 1     | FIFO full flag        |
 | `rx_empty_o`  | Output    | 1     | FIFO empty flag       |
+| `rx_depth_o`  | Output    | `RxDepthW`   | Current FIFO occupancy (entries) |
 
 ### RESP FIFO — Hardware Write / Software Read
 
@@ -110,6 +122,7 @@ Four synchronous FIFOs:
 | `resp_rdata_o`  | Output    | 32    | Response descriptor to SW   |
 | `resp_full_o`   | Output    | 1     | RESP FIFO full flag         |
 | `resp_empty_o`  | Output    | 1     | RESP FIFO empty flag        |
+| `resp_depth_o`  | Output    | `RespDepthW` | Current FIFO occupancy (entries) |
 
 ## 5. Functional Description
 
@@ -138,7 +151,8 @@ module sync_fifo #(
 
   // Status
   output logic             full_o,
-  output logic             empty_o
+  output logic             empty_o,
+  output logic [DepthW-1:0] depth_o
 );
 ```
 
@@ -148,6 +162,7 @@ module sync_fifo #(
 - Write pointer (`wptr`) and read pointer (`rptr`), both `$clog2(Depth)+1` bits wide (extra MSB for full/empty detection)
 - `full_o  = (rptr_q == {~wptr_q[PtrW], wptr_q[PtrW-1:0]})` — same lower bits, opposite MSB
 - `empty_o = (wptr_q == rptr_q)` — all bits equal
+- `depth_o = wptr_q - rptr_q` — current occupancy in entries, width `DepthW = $clog2(Depth + 1)`
 - `wready_o = ~full_o`
 - `rvalid_o = ~empty_o`
 - Write occurs when `wvalid_i & wready_o`; read occurs when `rvalid_o & rready_i`
@@ -216,13 +231,12 @@ The queues are accessed via the CSR register interface at these offsets (see spe
 
 | Register         | Offset | Access | Description                                              |
 | ---------------- | ------ | ------ | -------------------------------------------------------- |
-| `CMD_QUEUE_PORT` | 0x100  | W      | Write CMD descriptor (2x 32-bit writes for 64-bit entry) |
-| `TX_DATA_PORT`   | 0x104  | W      | Write TX data DWORD                                      |
-| `RX_DATA_PORT`   | 0x108  | R      | Read RX data DWORD                                       |
-| `RESP_PORT`      | 0x10C  | R      | Read response descriptor                                 |
-| `QUEUE_STATUS`   | 0x110  | R      | Full/empty flags for all queues                          |
+| `CMD_QUEUE_PORT` | 0x080  | W      | Write CMD descriptor (2x 32-bit writes for 64-bit entry) |
+| `PIO_DATA_PORT`  | 0x088  | W/R    | Write TX data DWORD / read RX data DWORD                 |
+| `RESP_PORT`      | 0x084  | R      | Read response descriptor                                 |
+| `QUEUE_STATUS`   | 0x0B4  | R      | Full/empty flags for all queues                          |
 
-**CMD FIFO 64-bit write protocol:** Software writes DWORD0 first (offset 0x100), then DWORD1 (offset 0x100 again). The CSR module assembles the 64-bit entry and writes to CMD FIFO as a single transaction.
+**CMD FIFO 64-bit write protocol:** Software writes DWORD0 first (offset 0x080), then DWORD1 (offset 0x080 again). The CSR module assembles the 64-bit entry and writes to CMD FIFO as a single transaction.
 
 ## 9. Error Handling
 
@@ -274,4 +288,4 @@ src/verification/uvm_i3c/
 - `sync_fifo` uses a circular buffer with extra-MSB pointer comparison for full/empty detection. Pointers are `$clog2(Depth)+1` bits wide; the MSB wraps independently and allows distinguishing full from empty when lower bits are equal. For FPGA, the synthesizer will infer block RAM for depth >= 16 entries.
 - The CMD FIFO is 64-bit wide — on a 32-bit register bus, the CSR module handles the 2-write assembly. The FIFO itself always handles full 64-bit entries.
 - The reference design's threshold system (`start_thld`, `ready_thld`, `thld_trig` signals) is removed. The simplified design relies on `full` / `empty` flags. If interrupt-driven operation is needed later, a simple comparator on `depth_o` can be added in the CSR module.
-- `depth_o` is not exposed in the current `hci_queues` port list (only `full_o` and `empty_o`). The `sync_fifo` internally computes depth but the wrapper does not connect it.
+- `depth_o` IS exposed at the `hci_queues` level: each `sync_fifo`'s internally computed `depth_o` is wired straight through to a per-queue port (`cmd_depth_o`, `tx_depth_o`, `rx_depth_o`, `resp_depth_o`), sized by the corresponding `*DepthW` localparam.

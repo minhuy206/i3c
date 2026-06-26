@@ -52,25 +52,33 @@ This test plan covers functional, performance, and coverage verification of the 
 
 | Offset | Name | Key Fields |
 |---|---|---|
-| 0x000 | HC_CONTROL | `[0]=hc_enable`, `[1]=sw_reset` |
-| 0x004 | HC_STATUS | `[0]=i3c_fsm_idle`, `[1]=cmd_full`, `[2]=resp_empty` |
-| 0x010 | T_R | Rise time cycles (reset 4) |
-| 0x014 | T_F | Fall time cycles (reset 4) |
-| 0x018 | T_LOW | SCL low period (reset 16) |
-| 0x01C | T_LOW_OD | Open-drain SCL low period (reset 67) |
-| 0x020 | T_HIGH | SCL high period (reset 11) |
-| 0x024 | T_SU_STA | START setup (reset 7) |
-| 0x028 | T_HD_STA | START hold (reset 13) |
-| 0x02C | T_SU_STO | STOP setup (reset 7) |
-| 0x030 | T_SU_DAT | Data setup (reset 1) |
-| 0x034 | T_HD_DAT | Data hold (reset 0) |
-| 0x038 | T_BUS_FREE | Bus free time (reset 13) |
-| 0x100 | CMD_QUEUE | Two consecutive 32-bit writes = one 64-bit CMD descriptor |
-| 0x104 | TX_DATA | 32-bit TX payload write |
-| 0x108 | RX_DATA | 32-bit RX payload read |
-| 0x10C | RESP | 32-bit response descriptor read |
-| 0x110 | QUEUE_STATUS | `[7:0]` = resp_empty/full, rx_empty/full, tx_empty/full, cmd_empty/full |
-| 0x200–0x27C | DAT[0..31] | 32-bit device address table entries |
+| 0x004 | HC_CONTROL | `[0]=iba_include` (broadcast_header_enable), `[29]=abort`, `[31]=bus_enable` |
+| 0x010 | RESET_CONTROL | `[0]=soft_rst` (self-clearing pulse, flushes FIFOs) |
+| 0x014 | HC_STATUS | `[0]=i3c_fsm_idle`, `[1]=cmd_full`, `[2]=resp_empty` |
+| 0x020 | Unmapped | Reads return 0; writes ignored |
+| 0x080 | CMD_QUEUE | Two consecutive 32-bit writes = one 64-bit CMD descriptor |
+| 0x084 | RESP | 32-bit response descriptor read |
+| 0x088 | PIO_DATA_PORT | Write = 32-bit TX payload push; read = 32-bit RX payload pop |
+| 0x0B4 | QUEUE_STATUS | `[7:0]` = resp_empty/full, rx_empty/full, tx_empty/full, cmd_empty/full |
+| 0x32C | T_R | Rise time cycles (reset 4) |
+| 0x330 | T_F | Fall time cycles (reset 4) |
+| 0x334 | T_SU_DAT | I3C data setup (reset 1) |
+| 0x338 | I2C_T_SU_DAT | I2C data setup (reset 34) |
+| 0x33C | T_HD_DAT | Shared I3C/I2C data hold (reset 0) |
+| 0x340 | T_HIGH | I3C SCL high period (reset 11) |
+| 0x34C | I2C_T_HIGH | I2C SCL high period (reset 300) |
+| 0x350 | T_LOW | I3C SCL low period (reset 16) |
+| 0x354 | T_LOW_OD | I3C open-drain SCL low period (reset 67) |
+| 0x358 | I2C_T_LOW | I2C SCL low period (reset 534) |
+| 0x35C | T_HD_STA | I3C START hold (reset 13) |
+| 0x360 | I2C_T_HD_STA | I2C START hold (reset 200) |
+| 0x368 | T_SU_STA | I3C START setup (reset 7) |
+| 0x36C | I2C_T_SU_STA | I2C START setup (reset 200) |
+| 0x370 | T_SU_STO | I3C STOP setup (reset 7) |
+| 0x374 | I2C_T_SU_STO | I2C STOP setup (reset 434) |
+| 0x37C | T_BUS_FREE | I3C bus free time (reset 13) |
+| 0x380 | I2C_T_BUF | I2C bus free time (reset 434) |
+| 0x400–0x47C | DAT[0..31] | 32-bit device address table entries |
 
 ### 2.3 Phase-1 Feature Matrix
 
@@ -154,17 +162,17 @@ The following additions are implied by the new test categories but are not yet i
 
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 1.1 | HC_CONTROL | csr_hc_enable_set_clear | Verify hc_enable bit writes and reads back correctly | Write 0x1 to HC_CONTROL; read back; write 0x0; read back | Readback matches written value on both transitions | High | csr_register.sv | — |
-| 1.2 | HC_CONTROL | csr_sw_reset_self_clear | Verify sw_reset bit is self-clearing (pulse only) | Write 0x2 to HC_CONTROL; read back after one cycle | sw_reset bit reads 0 on second access; FIFO pointers reset | High | csr_register.sv | cp_reset_point.Idle |
+| 1.1 | HC_CONTROL | csr_hc_enable_set_clear | Verify bus_enable bit writes and reads back correctly | Write 0x8000_0000 to HC_CONTROL (BUS_ENABLE, bit 31); read back; write 0x0; read back | Readback matches written value on both transitions | High | csr_register.sv | — |
+| 1.2 | RESET_CONTROL | csr_sw_reset_self_clear | Verify soft_rst bit is self-clearing (pulse only) | Write 0x1 to RESET_CONTROL (SOFT_RST); read back after one cycle | soft_rst pulse self-clears; reads 0 on second access; FIFO pointers reset | High | csr_register.sv | cp_reset_point.Idle |
 | 1.3 | HC_STATUS | csr_hc_status_idle | Verify i3c_fsm_idle reads 1 when hc_enable=1 and no command pending | Enable DUT; read HC_STATUS | HC_STATUS[0]=1 (fsm_idle) | High | csr_register.sv, flow_active.sv | — |
 | 1.4 | HC_STATUS | csr_hc_status_cmd_full | Verify cmd_full bit reflects CMD FIFO full condition | Write CMD_QUEUE 9 times (4 DWORDs = 4 CMDs beyond depth-8) | QUEUE_STATUS[0]=0 (cmd_empty), HC_STATUS[1]=1 when full | High | csr_register.sv, hci_queues.sv | cp_fifo_state.cmd_full |
 | 1.5 | HC_STATUS | csr_hc_status_resp_empty | Verify resp_empty bit after reset before any command | After reset and enable; read HC_STATUS | HC_STATUS[2]=1 (resp_empty), QUEUE_STATUS[7]=1 | High | csr_register.sv, hci_queues.sv | cp_fifo_state.all_empty |
 | 1.6 | QUEUE_STATUS | csr_queue_status_all_bits | Verify all 8 QUEUE_STATUS bits toggled by FIFOs | Fill each FIFO to full; drain each FIFO; observe status bits | Each full flag and empty flag transitions correctly for all 4 FIFOs | High | csr_register.sv, hci_queues.sv | cp_fifo_state.cmd_full, cp_fifo_state.tx_empty, cp_fifo_state.rx_full, cp_fifo_state.resp_full |
-| 1.7 | Timing reg | csr_timing_tr_tf_rw | Verify T_R and T_F registers write and read back correctly | Write non-default values (e.g., T_R=8, T_F=6) to 0x010 and 0x014; read back | Readback matches written values; no side effects | High | csr_register.sv | cp_timing_reg.min |
+| 1.7 | Timing reg | csr_timing_tr_tf_rw | Verify T_R and T_F registers write and read back correctly | Write non-default values (e.g., T_R=8, T_F=6) to 0x32C and 0x330; read back | Readback matches written values; no side effects | High | csr_register.sv | cp_timing_reg.min |
 | 1.8 | Timing reg | csr_timing_tlow_thigh_rw | Verify T_LOW and T_HIGH registers programmability | Write T_LOW=8, T_HIGH=10; read back | Readback correct; SCL period changes accordingly when command issued | High | csr_register.sv, scl_generator.sv | cp_timing_reg.min, cp_timing_reg.max |
 | 1.9 | Timing reg | csr_timing_all_rw | Verify all 9 timing registers accept writes and read back | Write distinct non-default values to T_R, T_F, T_LOW, T_HIGH, T_SU_STA, T_HD_STA, T_SU_STO, T_SU_DAT, T_HD_DAT | All 9 registers read back the written values | Medium | csr_register.sv | cp_timing_reg.typ |
-| 1.10 | DAT | csr_dat_entry0_rw | Verify DAT entry 0 (0x200) write and read back | Write DAT[0] with I3C device (device=0, dyn_addr=0x0A, static_addr=0x00); read back | Readback matches written value | High | csr_register.sv | cp_dat_index.0 |
-| 1.11 | DAT | csr_dat_entry31_rw | Verify DAT entry 31 (last, 0x27C) write and read back | Write DAT[31] with I3C device (dyn_addr=0x7F); read back | Readback matches; no overflow into unmapped space | High | csr_register.sv | cp_dat_index.31 |
+| 1.10 | DAT | csr_dat_entry0_rw | Verify DAT entry 0 (0x400) write and read back | Write DAT[0] with I3C device (device=0, dyn_addr=0x0A, static_addr=0x00); read back | Readback matches written value | High | csr_register.sv | cp_dat_index.0 |
+| 1.11 | DAT | csr_dat_entry31_rw | Verify DAT entry 31 (last, 0x47C) write and read back | Write DAT[31] with I3C device (dyn_addr=0x7F); read back | Readback matches; no overflow into unmapped space | High | csr_register.sv | cp_dat_index.31 |
 | 1.12 | DAT | csr_dat_all_entries_rw | Verify all 32 DAT entries write/read independently | Write distinct values to DAT[0..31]; read all back | All 32 entries correct; no aliasing | Medium | csr_register.sv | cp_dat_index.0, cp_dat_index.31, cp_dat_index.mid |
 | 1.13 | HC_CONTROL | csr_sw_reset_clears_staging | Verify sw_reset clears CMD staging register | Write DWORD0 to CMD_QUEUE; assert sw_reset; write new DWORD0 + DWORD1; issue enable | New CMD dispatches correctly; no mix with stale DWORD0 | High | csr_register.sv | cp_reset_point.Idle |
 
@@ -219,7 +227,7 @@ The following additions are implied by the new test categories but are not yet i
 | 4.7 | SDR read | i3c_sdr_read_tbit_semantics | Verify master observes T-bit=0 (end) and T-bit=1 (more data) correctly | Device drives data with T-bit=1 for first N-1 bytes, T-bit=0 for last byte | Master reads exactly N bytes without timeout; last T-bit=0 terminates read | High | bus_rx_flow.sv, flow_active.sv | cp_dir.Read |
 | 4.8 | SDR read | i3c_sdr_read_master_nack_last | Verify master drives T-bit (NACK/end indicator) after final byte | RegularTransfer rnw=1 with known data_length; observe master T-bit output after last byte | Master drives T-bit=1 (end) on 9th clock of last byte cycle in push-pull | High | bus_tx.sv, flow_active.sv | cp_dir.Read |
 | 4.9 | SDR read | i3c_sdr_read_parity_error | Verify Parity error reported when T-bit does not match expected parity | Device drives data byte then deliberately drives wrong T-bit | RESP err_status=Parity (2); no additional bytes consumed | High | flow_active.sv | cp_resp_err.Parity, cp_dir×cp_resp_err |
-| 4.10 | SDR read | i3c_sdr_read_rx_full_stall | Verify StallRead when RX FIFO is full | Initiate read of 16 bytes into depth-8 RX FIFO without software draining | flow_active enters StallRead; resumes when software reads RX_DATA; RESP Success | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
+| 4.10 | SDR read | i3c_sdr_read_rx_full_stall | Verify StallRead when RX FIFO is full | Initiate read of 16 bytes into depth-8 RX FIFO without software draining | flow_active enters StallRead; resumes when software reads PIO_DATA_PORT; RESP Success | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
 | 4.11 | SDR read | i3c_sdr_read_addr_nack | Verify AddrHeader error on read when target NACKs address | Device driver configured to NACK address on read CMD | RESP err_status=AddrHeader (4); no RX data written; data_length=0 | High | flow_active.sv | cp_resp_err.AddrHeader, cp_dir.Read |
 
 ---
@@ -270,7 +278,7 @@ The following additions are implied by the new test categories but are not yet i
 | 7.9 | ENTDAA | i3c_entdaa_addr_parity | Verify dynamic address transmitted with correct odd parity bit | DAT[0].dynamic_address=0x08 (0b0001000); parity=~^0b0001000 | 7-bit address + parity bit transmitted on SDA; target samples correct parity | High | entdaa_fsm.sv | cp_entdaa_dev_count.1 |
 | 7.10 | ENTDAA | i3c_entdaa_addr_ack | Verify addr_valid when target ACKs dynamic address (ACK=0) | ENTDAA round with device driving ACK on address; check addr_valid_o | entdaa_fsm reaches Done with addr_valid=1; entdaa_controller advances dev_round | High | entdaa_fsm.sv | cp_entdaa_dev_count.1 |
 | 7.11 | ENTDAA | i3c_entdaa_devcount_clamp | Verify dev_idx + dev_round is clamped to DatDepth-1 when dev_count > remaining DAT entries | dev_idx=14, dev_count=4 (would require DAT[14..17]) | dev_idx + dev_round clamped at 15; no segfault; RESP issued | Medium | entdaa_controller.sv | cp_dat_index.15 |
-| 7.12 | ENTDAA | i3c_entdaa_rx_fifo_addrs | Verify assigned dynamic addresses are written to RX FIFO | ENTDAA with 2 devices; read RX_DATA after completion | RX FIFO contains assigned addresses (as reported by daa_address_o from entdaa_controller) | High | flow_active.sv, entdaa_controller.sv | cp_entdaa_dev_count.2, cp_dir.Read |
+| 7.12 | ENTDAA | i3c_entdaa_rx_fifo_addrs | Verify assigned dynamic addresses are written to RX FIFO | ENTDAA with 2 devices; read PIO_DATA_PORT after completion | RX FIFO contains assigned addresses (as reported by daa_address_o from entdaa_controller) | High | flow_active.sv, entdaa_controller.sv | cp_entdaa_dev_count.2, cp_dir.Read |
 
 ---
 
@@ -312,7 +320,7 @@ The following additions are implied by the new test categories but are not yet i
 | 10.2 | CMD FIFO | fifo_cmd_empty | Verify CMD FIFO empty initially after reset | Reset DUT; enable; read QUEUE_STATUS | QUEUE_STATUS.cmd_empty=1 | High | hci_queues.sv | cp_fifo_state.all_empty |
 | 10.3 | TX FIFO | fifo_tx_empty_stall | Verify StallWrite state entered when TX FIFO drains mid-write | Start RegularTransfer data_length=8; load only 4 bytes in TX FIFO before CMD issued | Flow FSM enters StallWrite; gen_clock deasserted; StallWrite exits when TX refilled | High | flow_active.sv, hci_queues.sv | cp_fifo_state.tx_empty, cp_flow_state.StallWrite |
 | 10.4 | TX FIFO | fifo_tx_stall_then_resume | Verify transfer resumes correctly after StallWrite exits | Trigger StallWrite; then write remaining TX data; wait for RESP | RESP Success; all bytes in correct order on bus; no byte gap other than SCL stretch | High | flow_active.sv | cp_flow_state.StallWrite, cp_resp_err.Success |
-| 10.5 | RX FIFO | fifo_rx_full_stall | Verify StallRead state entered when RX FIFO full | Read 8+ bytes without software draining RX FIFO (depth=8) | FSM enters StallRead; SCL held low; resumes when software reads RX_DATA | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
+| 10.5 | RX FIFO | fifo_rx_full_stall | Verify StallRead state entered when RX FIFO full | Read 8+ bytes without software draining RX FIFO (depth=8) | FSM enters StallRead; SCL held low; resumes when software reads PIO_DATA_PORT | High | flow_active.sv, hci_queues.sv | cp_fifo_state.rx_full, cp_flow_state.StallRead |
 | 10.6 | RESP FIFO | fifo_resp_full | Verify RESP FIFO full condition (depth=8 in TB) | Issue 8 commands without reading RESP; check QUEUE_STATUS | QUEUE_STATUS.resp_full=1 after 8 completions; subsequent CMD stalls | Medium | hci_queues.sv, csr_register.sv | cp_fifo_state.resp_full |
 | 10.7 | QUEUE_STATUS | fifo_queue_status_accuracy | Verify all 8 QUEUE_STATUS bits reflect accurate FIFO states | Systematically fill/drain each FIFO; check QUEUE_STATUS after each step | Each bit transitions at the correct threshold (full at 8, empty at 0) | High | csr_register.sv, hci_queues.sv | cp_fifo_state.cmd_full, cp_fifo_state.tx_empty, cp_fifo_state.rx_full, cp_fifo_state.resp_full |
 | 10.8 | SW reset | fifo_sw_reset_clears_all | Verify sw_reset flushes all 4 FIFOs simultaneously | Partially fill CMD, TX, RX, RESP FIFOs; pulse sw_reset | All FIFOs empty after reset; QUEUE_STATUS shows all-empty | High | csr_register.sv, hci_queues.sv | cp_reset_point.Idle |
@@ -341,7 +349,7 @@ The following additions are implied by the new test categories but are not yet i
 
 | No | Test Item | Test Name | Description | Test flow | Pass Condition | Priority | Related Module | Coverage Tags |
 |---|---|---|---|---|---|---|---|---|
-| 12.1 | T_R | timing_tr_min | Verify T_R=1 (minimum, 1 cycle) loads correctly and SCL rise measured | Write T_R=1 to 0x010; issue SDR transfer | scl_generator counts t_r=1 cycle on rising edge; no timing violation | Medium | scl_generator.sv, csr_register.sv | cp_timing_reg.min |
+| 12.1 | T_R | timing_tr_min | Verify T_R=1 (minimum, 1 cycle) loads correctly and SCL rise measured | Write T_R=1 to 0x32C; issue SDR transfer | scl_generator counts t_r=1 cycle on rising edge; no timing violation | Medium | scl_generator.sv, csr_register.sv | cp_timing_reg.min |
 | 12.2 | T_R | timing_tr_max | Verify T_R=15 cycles (practical max) slows rise time correctly | Write T_R=15; issue SDR transfer; measure SCL cycle | SCL rise phase takes 15+13=28 cycles (DriveHigh state count) | Medium | scl_generator.sv | cp_timing_reg.max |
 | 12.3 | T_F | timing_tf_range | Verify T_F register affects scl_generator DriveLow countdown | Write T_F=2 then T_F=8; measure SCL LOW phase | t_LOW effective = T_LOW + T_F cycles; changes proportionally | Medium | scl_generator.sv | cp_timing_reg.min, cp_timing_reg.max |
 | 12.4 | T_LOW | timing_tlow_spec_min | Verify default T_LOW=16 meets the conservative I3C SDR 48 ns target at 333.333 MHz | Use default T_LOW=16; issue SDR transfer; measure SCL LOW period | t_LOW >= 16 cycles at 333.333 MHz (48 ns); meets spec | High | scl_generator.sv | cp_timing_reg.typ |
@@ -395,8 +403,8 @@ The following additions are implied by the new test categories but are not yet i
 | 15.1 | Illegal CMD | neg_cmd_attr_undefined | Verify undefined cmd_attr=2'b11 does not crash FSM | Issue CMD DWORD with cmd_attr=2'b11 (undefined enum) | FSM issues RESP or stays Idle; no simulation deadlock within 5000 cycles | High | flow_active.sv | cp_cmd_attr.ComboTransfer |
 | 15.2 | Illegal DAT | neg_dev_idx_out_of_range | Verify dev_idx > 15 does not cause out-of-bounds DAT access | Issue CMD with dev_idx=17 (> DatDepth-1=15) | DAT read clamped or wraps; no XMEM error; RESP issued; no crash | High | flow_active.sv, csr_register.sv | cp_dat_index.out_of_range |
 | 15.3 | Protocol | neg_cmd_before_enable | Verify CMD written before hc_enable has no effect on bus | Write CMD DWORD without setting HC_CONTROL.hc_enable=1 | No bus activity; cmd_full may assert; no RESP generated until enable | High | csr_register.sv, flow_active.sv | — |
-| 15.4 | Register | neg_write_to_ro_status | Verify write to read-only HC_STATUS has no effect | Write 0xFFFFFFFF to 0x004 (HC_STATUS); read back | HC_STATUS unchanged; read-back reflects hardware state | Medium | csr_register.sv | — |
-| 15.5 | FIFO | neg_read_empty_rx_fifo | Verify read of empty RX_DATA does not assert rx_rready spuriously | Read 0x108 (RX_DATA) when QUEUE_STATUS.rx_empty=1 | Stale or zero data returned; rx_rready_o not pulsed spuriously; no protocol error | Medium | csr_register.sv, hci_queues.sv | cp_fifo_state.all_empty |
+| 15.4 | Register | neg_write_to_ro_status | Verify write to read-only HC_STATUS has no effect | Write 0xFFFFFFFF to 0x014 (HC_STATUS); read back | HC_STATUS unchanged; read-back reflects hardware state | Medium | csr_register.sv | — |
+| 15.5 | FIFO | neg_read_empty_rx_fifo | Verify read of empty PIO_DATA_PORT does not assert rx_rready spuriously | Read 0x088 (PIO_DATA_PORT) when QUEUE_STATUS.rx_empty=1 | Stale or zero data returned; rx_rready_o not pulsed spuriously; no protocol error | Medium | csr_register.sv, hci_queues.sv | cp_fifo_state.all_empty |
 | 15.6 | HDR mode | neg_hdr_tsx_ignored | Verify HDR-TS mode descriptor does not cause FSM divergence | Issue CMD with mode=hdr_tsx (2'b110); observe bus | Bus activity same as SDR (mode field silently ignored); RESP issued; no hang | Medium | flow_active.sv | — |
 | 15.7 | HDR mode | neg_hdr_ddr_ignored | Verify HDR-DDR mode descriptor treated as SDR | Issue CMD with mode=hdr_ddr (2'b111) | Same behavior as SDR; no HDR-DDR bus patterns; RESP issued normally | Medium | flow_active.sv | — |
 | 15.8 | Data length | neg_data_length_zero_write | Verify write CMD with data_length=0 | Issue RegularTransfer rnw=0, data_length=0 | RESP issued (Success or AddrHeader); no TX FIFO popped; no hang | Medium | flow_active.sv | cp_data_length.[1] |

@@ -23,7 +23,7 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     cfg = make_transfer_cfg(
-        .ctxt("BUS_008"),
+        .ctxt("BUS_010"),
         .seq_name("dev_seq"),
         .tid(4'd8),
         .dev_idx(5'd0),
@@ -41,10 +41,6 @@ class bus_tx_byte_and_bit_order_vseq extends bus_base_vseq;
     tx_words.push_back({exp_data[3], exp_data[2], exp_data[1], exp_data[0]});
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
-
-
-
-
   endtask
 
 endclass

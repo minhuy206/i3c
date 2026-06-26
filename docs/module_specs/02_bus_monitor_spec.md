@@ -182,6 +182,7 @@ The timing delays account for rise/fall times on the physical bus — an edge is
 
 ```systemverilog
 module edge_detector #(
+  parameter int CounterWidth   = 20,
   parameter bit DETECT_NEGEDGE = 1'b0  // 0=posedge, 1=negedge
 )(
   input  logic        clk_i,
@@ -202,7 +203,9 @@ module edge_detector #(
 ### 6.3. Stable High Detector Sub-module (`stable_high_detector`)
 
 ```systemverilog
-module stable_high_detector (
+module stable_high_detector #(
+  parameter int CounterWidth = 20
+)(
   input  logic        clk_i,
   input  logic        rst_ni,
   input  logic        line_i,
@@ -213,26 +216,38 @@ module stable_high_detector (
 
 **Behavior:**
 
-- Counter increments each cycle while `line_i` is HIGH
-- Counter resets when `line_i` goes LOW
-- `stable_o` asserted when counter reaches `delay_count_i`
-- If `delay_count_i == 0`: `stable_o = line_i` (immediate)
+- `line_i` is first registered (1-cycle delay) into an internal `line` signal; the counter and `stable_o` operate on this registered value, not on `line_i` directly
+- Counter increments each cycle while `line` is HIGH and `do_count` is asserted (a self-gating term that deasserts once the count threshold is reached)
+- Counter resets to 0 when `line` is LOW
+- `stable_o` asserted when the counter is strictly greater than `delay_count_i` (`count > delay_count_i`, not "reaches")
+- If `delay_count_i == 0`: `stable_o = line_i` (immediate, bypasses the registered/counted path)
 
 ### 6.4. START/STOP Detection
 
-**START condition (SDA falls while SCL is stable HIGH):**
+START/STOP detection uses a **candidate-latch** scheme rather than a single combinational equation: the module classifies a SDA transition as a START/STOP *candidate* at the moment the raw (undelayed) SDA edge occurs, latches that classification, and only confirms it once the corresponding delayed (timing-filtered) SDA edge detector fires. This two-stage scheme prevents a data-bit SDA transition that occurs while SCL is LOW from later being misreported as START/STOP once SCL has risen and the delayed edge detector fires.
+
+**Candidate classification (at the raw SDA edge):**
 
 ```
-start_det_trigger = enable & scl_stable_high & sda_negedge & !scl_negedge & !simultaneous_negedge
-start_det = enable & start_det_pending
+scl_high_at_sda_edge = scl_stable_high & scl_i_q & scl_i   // SCL was already stable HIGH at the raw edge
+
+start_candidate = sda_negedge_i ? (scl_high_at_sda_edge &  sda_r) : start_candidate_q
+stop_candidate  = sda_posedge_i ? (scl_high_at_sda_edge & ~sda_r) : stop_candidate_q
 ```
 
-**STOP condition (SDA rises while SCL is stable HIGH):**
+`start_candidate_q` / `stop_candidate_q` are registers: they latch `scl_high_at_sda_edge` plus the prior filtered SDA state on the raw `sda_negedge_i` / `sda_posedge_i` pulse, and are cleared on reset, on `!enable`, or when the opposite raw edge (or the confirmed edge of the same polarity) occurs. The START candidate requires filtered SDA to have been HIGH before the raw falling edge; the STOP candidate requires filtered SDA to have been LOW before the raw rising edge. This rejects the return edge of a short SDA glitch that was never confirmed by the delayed edge detector.
+
+**Confirmation (at the delayed/confirmed SDA edge):**
 
 ```
-stop_det_trigger = enable & scl_stable_high & sda_posedge & !scl_negedge & !simultaneous_posedge
-stop_det = enable & stop_det_pending
+start_det_trigger = enable & start_candidate & sda_negedge
+start_det         = enable & start_det_pending
+
+stop_det_trigger  = enable & stop_candidate & sda_posedge
+stop_det          = enable & stop_det_pending
 ```
+
+There is no `!simultaneous_negedge` / `!simultaneous_posedge` term in the RTL — simultaneous SCL/SDA transitions are not explicitly filtered by a separate term; rejection of spurious edges instead falls out of the candidate-latch timing (the candidate is only set if SCL was already stable HIGH *before* the raw SDA edge and SDA was in the opposite confirmed state before the raw SDA edge).
 
 The `_pending` registers ensure the detection signal stays asserted until consumed.
 
@@ -305,7 +320,7 @@ Note: `sda.stable_low` is permanently `'0` (unused).
 
 - No explicit error outputs
 - If `enable_i` is deasserted, all detection outputs are suppressed (pending flags cleared)
-- Simultaneous edge conditions (SCL and SDA transitioning in the same cycle) are explicitly filtered to prevent false START/STOP detection
+- There is no explicit "simultaneous edge" filter term; false START/STOP detection from a coincident SCL/SDA transition is instead avoided implicitly by the candidate-latch scheme (see §6.4), since a candidate is only latched if SCL was already stable HIGH before the raw SDA edge and SDA was in the opposite confirmed state before that edge
 
 ## 10. Test Plan
 

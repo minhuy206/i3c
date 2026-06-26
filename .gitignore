@@ -8,6 +8,7 @@ GEMINI.md
 docs/architecture_qa_session.md
 docs/i3c_scope_analysis.md
 docs/thesis_report/*.pdf
+docs/spec_rtl_audit.md
 
 # LaTeX compiler output
 *.aux
@@ -36,6 +37,7 @@ docs/thesis_report/*.pdf
 # Xcelium generated files
 xcelium.d/
 xcelium_fifo005.d/
+run.lnx8664.*.d
 cov_work/
 INCA_libs/
 xrun.history

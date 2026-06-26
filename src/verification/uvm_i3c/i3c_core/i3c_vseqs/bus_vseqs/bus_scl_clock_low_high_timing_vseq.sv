@@ -9,6 +9,11 @@ class bus_scl_clock_low_high_timing_vseq extends bus_base_vseq;
   endfunction
 
   task body();
+    p_sequencer.cfg.m_i3c_agent_cfg.en_monitor = 1'b0;
+    force_hard_reset();
+    wait_sync_cycles(2);
+    release_hard_reset();
+
     run_i3c_pp_timing_profile("I3C SDR PP profile", i3c_sdr, 0, 0);
     run_i3c_pp_timing_profile("I3C SDR PP stretched profile", i3c_sdr, 4, 3);
     run_i3c_od_timing_profile("I3C SDR OD profile", i3c_sdr, 0);
@@ -58,6 +63,7 @@ class bus_scl_clock_low_high_timing_vseq extends bus_base_vseq;
 
     program_timing_registers(t_r, t_f, t_low, t_high, t_su_sta, t_hd_sta, t_su_sto, t_su_dat,
                              t_hd_dat, RST_T_BUS_FREE, t_low_od);
+    enable_dut();
     force_scl_generator_timing_mode(use_od_low);
     reset_scl_generator_to_idle();
     start_scl_clocking();

@@ -8,15 +8,15 @@ module hci_queues #(
     parameter int unsigned RxDataWidth = 32,
     parameter int unsigned RespDataWidth = 32,
     // Depth counter widths: $clog2(Depth + 1) to represent 0..Depth
-    localparam int unsigned CmdDepthW = $clog2(CmdFifoDepth + 1),
-    localparam int unsigned TxDepthW = $clog2(TxFifoDepth + 1),
-    localparam int unsigned RxDepthW = $clog2(RxFifoDepth + 1),
-    localparam int unsigned RespDepthW = $clog2(RespFifoDepth + 1)
+    parameter int unsigned CmdDepthW = $clog2(CmdFifoDepth + 1),
+    parameter int unsigned TxDepthW = $clog2(TxFifoDepth + 1),
+    parameter int unsigned RxDepthW = $clog2(RxFifoDepth + 1),
+    parameter int unsigned RespDepthW = $clog2(RespFifoDepth + 1)
 ) (
     input logic clk_i,
     input logic rst_ni,
 
-    // Software-initiated FIFO flush (from HC_CONTROL SW_RESET bit)
+    // Software-initiated FIFO flush (from RESET_CONTROL.SOFT_RST)
     input logic sw_reset_i,
 
     // CMD FIFO — Software write / Hardware read

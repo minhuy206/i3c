@@ -6,7 +6,7 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
   endfunction
 
   task body();
-    exercise_empty_reads(rx_paths, ADDR_RX_DATA);
+    exercise_empty_reads(rx_paths, ADDR_PIO_DATA_PORT);
     exercise_empty_reads(resp_paths, ADDR_RESP);
 
     // Subsequent queue states are synthetic backdoor states, not reset defaults.
@@ -15,8 +15,8 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
 
     backdoor_load_rx_queue(32'hAAAA_BBBB, 32'hCCCC_DDDD);
     check_port_depth(rx_paths, 2, "after RX backdoor load");
-    drain_two_entries(rx_paths, ADDR_RX_DATA, 32'hAAAA_BBBB, 32'hCCCC_DDDD);
-    exercise_empty_reads(rx_paths, ADDR_RX_DATA);
+    drain_two_entries(rx_paths, ADDR_PIO_DATA_PORT, 32'hAAAA_BBBB, 32'hCCCC_DDDD);
+    exercise_empty_reads(rx_paths, ADDR_PIO_DATA_PORT);
 
     backdoor_load_resp_queue(32'h0123_0004, 32'h0456_0008);
     check_port_depth(resp_paths, 2, "after RESP backdoor load");

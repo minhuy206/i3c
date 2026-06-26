@@ -60,6 +60,20 @@ class csr_base_vseq extends i3c_base_vseq;
     disable fork;
   endtask
 
+  virtual task check_no_host_start_until_event(event done_e, string ctxt);
+    fork : no_host_start_until_event
+      begin
+        p_sequencer.cfg.m_i3c_agent_cfg.vif.wait_for_host_start(
+            p_sequencer.cfg.m_i3c_agent_cfg.tc.i3c_tc);
+        `uvm_error(`gfn, $sformatf("%s: bus START observed during disabled window", ctxt))
+      end
+      begin
+        @done_e;
+      end
+    join_any
+    disable fork;
+  endtask
+
   virtual task clear_scoreboard_cmd_tx_model(string ctxt);
     uvm_component  comp;
     i3c_scoreboard scb;
@@ -80,17 +94,20 @@ class csr_base_vseq extends i3c_base_vseq;
     poll_idle();
     reg_read(ADDR_HC_CONTROL, data);
     keep_broadcast_header_enable = data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
-    reg_write(ADDR_HC_CONTROL, {29'h0, keep_broadcast_header_enable, 1'b1, keep_enabled});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(keep_enabled),
+                                                .iba_include(keep_broadcast_header_enable)));
+    reg_write(ADDR_RESET_CONTROL, 32'h1 << RESET_CTRL_SOFT_RST_BIT);
     settle_cycles();
 
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
                  $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
-    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0, $sformatf("%s: SW_RESET should self-clear",
-                                                             get_type_name()))
     `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], keep_broadcast_header_enable,
                  $sformatf("%s: SW_RESET should preserve BROADCAST_HEADER_ENABLE config",
                            get_type_name()))
+    reg_read(ADDR_RESET_CONTROL, data);
+    `DV_CHECK_EQ(data[RESET_CTRL_SOFT_RST_BIT], 1'b0, $sformatf("%s: SOFT_RST should self-clear",
+                                                                get_type_name()))
   endtask
 
 endclass

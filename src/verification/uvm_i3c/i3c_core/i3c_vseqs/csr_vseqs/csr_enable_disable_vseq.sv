@@ -10,8 +10,12 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     i3c_device_response_seq            dev_seq;
     bit                         [31:0] data;
     bit                         [31:0] resp;
+    event                              disabled_window_done;
+    event                              disabled_window_done_after_disable;
 
     reg_read(ADDR_HC_CONTROL, data);
+    `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], 1'b0,
+                 "csr_enable_disable_vseq: HC_CONTROL.ENABLE should reset disabled")
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
@@ -28,21 +32,29 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     imm_cmd.data_byte2        = 8'hBB;
 
     fork
-      check_no_host_start_for_cycles(100, "csr_enable_disable_vseq");
-      write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
+      check_no_host_start_until_event(disabled_window_done, "csr_enable_disable_vseq");
+      begin
+        write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
+
+        reg_read(ADDR_QUEUE_STATUS, data);
+        `DV_CHECK_EQ(data[QS_CMD_EMPTY_BIT], 1'b0,
+                     "csr_enable_disable_vseq: disabled CMD queue should hold pending command")
+        `DV_CHECK_EQ(data[QS_RESP_EMPTY_BIT], 1'b1,
+                     "csr_enable_disable_vseq: disabled controller should not create response")
+
+        dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
+        dev_seq.target_addr   = 7'h08;
+        dev_seq.ack_address   = 1'b1;
+        dev_seq.is_i3c        = 1'b1;
+        dev_seq.dir           = 1'b0;
+        dev_seq.read_data_cnt = 2;
+        fork
+          dev_seq.start(p_sequencer.m_i3c_sequencer);
+        join_none
+
+        -> disabled_window_done;
+      end
     join
-
-    reg_read(ADDR_QUEUE_STATUS, data);
-
-    dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
-    dev_seq.target_addr   = 7'h08;
-    dev_seq.ack_address   = 1'b1;
-    dev_seq.is_i3c        = 1'b1;
-    dev_seq.dir           = 1'b0;
-    dev_seq.read_data_cnt = 2;
-    fork
-      dev_seq.start(p_sequencer.m_i3c_sequencer);
-    join_none
 
     enable_dut();
 
@@ -51,31 +63,50 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     read_response(resp);
 
     reg_read(ADDR_HC_STATUS, data);
+    `DV_CHECK_EQ(data[HC_STS_FSM_IDLE_BIT], 1'b1,
+                 "csr_enable_disable_vseq: HC_STATUS.FSM_IDLE should be set after completion")
+    check_all_queues_empty("after csr_enable_disable_vseq first enable run");
 
     disable_dut();
+    reg_read(ADDR_HC_CONTROL, data);
+    `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], 1'b0,
+                 "csr_enable_disable_vseq: HC_CONTROL.ENABLE should clear after disable")
 
     fork
-      check_no_host_start_for_cycles(100, "csr_enable_disable_vseq disable_after_enable");
-      write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
+      check_no_host_start_until_event(disabled_window_done_after_disable,
+                                      "csr_enable_disable_vseq disable_after_enable");
+      begin
+        write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
+
+        reg_read(ADDR_QUEUE_STATUS, data);
+        `DV_CHECK_EQ(data[QS_CMD_EMPTY_BIT], 1'b0,
+                     "csr_enable_disable_vseq: disabled-after-enable CMD queue should hold pending command")
+        `DV_CHECK_EQ(data[QS_RESP_EMPTY_BIT], 1'b1,
+                     "csr_enable_disable_vseq: disabled-after-enable controller should not create response")
+
+        dev_seq               = i3c_device_response_seq::type_id::create("dev_seq_after_disable");
+        dev_seq.target_addr   = 7'h08;
+        dev_seq.ack_address   = 1'b1;
+        dev_seq.is_i3c        = 1'b1;
+        dev_seq.dir           = 1'b0;
+        dev_seq.read_data_cnt = 2;
+        fork
+          dev_seq.start(p_sequencer.m_i3c_sequencer);
+        join_none
+
+        -> disabled_window_done_after_disable;
+      end
     join
-
-    reg_read(ADDR_QUEUE_STATUS, data);
-
-    dev_seq               = i3c_device_response_seq::type_id::create("dev_seq_after_disable");
-    dev_seq.target_addr   = 7'h08;
-    dev_seq.ack_address   = 1'b1;
-    dev_seq.is_i3c        = 1'b1;
-    dev_seq.dir           = 1'b0;
-    dev_seq.read_data_cnt = 2;
-    fork
-      dev_seq.start(p_sequencer.m_i3c_sequencer);
-    join_none
 
     enable_dut();
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_enable_disable_vseq disable_after_enable");
     read_response(resp);
+    reg_read(ADDR_HC_STATUS, data);
+    `DV_CHECK_EQ(data[HC_STS_FSM_IDLE_BIT], 1'b1,
+                 "csr_enable_disable_vseq: HC_STATUS.FSM_IDLE should be set after re-enable completion")
+    check_all_queues_empty("after csr_enable_disable_vseq re-enable run");
 
   endtask
 

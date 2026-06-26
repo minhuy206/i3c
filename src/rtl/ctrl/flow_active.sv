@@ -1,18 +1,13 @@
 module flow_active
-  import controller_pkg::cmd_transfer_dir_e;
-  import controller_pkg::dat_entry_t;
-  import controller_pkg::ACK;
-  import controller_pkg::NACK;
-  import controller_pkg::Read;
-  import controller_pkg::Write;
-  import i3c_pkg::*;
+  import controller_pkg::cmd_transfer_dir_e, controller_pkg::dat_entry_t, controller_pkg::ACK,
+         controller_pkg::NACK, controller_pkg::Read, controller_pkg::Write, i3c_pkg::*;
 #(
     parameter int HciCmdDataWidth = 64,
     parameter int HciTxDataWidth = 32,
     parameter int HciRxDataWidth = 32,
     parameter int HciRespDataWidth = 32,
     parameter int unsigned DatDepth = 32,
-    localparam int unsigned DatAw = $clog2(DatDepth)
+    parameter int unsigned DatAw = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -86,8 +81,6 @@ module flow_active
     input  logic broadcast_header_enable_i,
     input  logic i3c_fsm_en_i,
     input  logic abort_i,
-    output logic hc_seq_cancel_event_o,
-    output logic hc_err_cmd_seq_timeout_event_o,
     output logic i3c_fsm_idle_o
 );
 
@@ -205,9 +198,6 @@ module flow_active
   logic daa_stop;
   logic [4:0] daa_dev_idx;
   logic [3:0] ccc_dev_count;
-  logic hc_seq_cancel_event;
-  logic hc_err_cmd_seq_timeout_event;
-
   logic [7:0] imm_data_byte;
   logic [7:0] imm_data_phase;
   logic [2:0] data_byte_idx;
@@ -339,10 +329,6 @@ module flow_active
 
   task automatic request_missing_continuation_stop;
     request_stop(1'b0);
-    if (scl_gen_done_i) begin
-      hc_seq_cancel_event          = 1'b1;
-      hc_err_cmd_seq_timeout_event = 1'b1;
-    end
   endtask
 
   task automatic request_read_takeover;
@@ -1117,9 +1103,6 @@ module flow_active
     daa_stop                     = 1'b0;
     daa_dev_idx                  = 5'h00;
     ccc_dev_count                = 4'h0;
-    hc_seq_cancel_event          = 1'b0;
-    hc_err_cmd_seq_timeout_event = 1'b0;
-
     if (abort_i && !i2c_read_abort() && abort_active_state(
             state_q
         ) && abort_stop_now(
@@ -1844,8 +1827,6 @@ module flow_active
   assign daa_stop_o = daa_stop;
   assign daa_dev_idx_o = daa_dev_idx;
   assign ccc_dev_count_o = ccc_dev_count;
-  assign hc_seq_cancel_event_o = hc_seq_cancel_event;
-  assign hc_err_cmd_seq_timeout_event_o = hc_err_cmd_seq_timeout_event;
 
   assign sel_od_pp_o = sel_od_pp;
 

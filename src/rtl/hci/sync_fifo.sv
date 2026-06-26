@@ -1,8 +1,8 @@
 module sync_fifo #(
-    parameter  int unsigned Width  = 32,
-    parameter  int unsigned Depth  = 64,
-    localparam int unsigned PtrW   = $clog2(Depth),
-    localparam int unsigned DepthW = $clog2(Depth + 1)
+    parameter int unsigned Width  = 32,
+    parameter int unsigned Depth  = 64,
+    parameter int unsigned PtrW   = $clog2(Depth),
+    parameter int unsigned DepthW = $clog2(Depth + 1)
 ) (
     input logic clk_i,
     input logic rst_ni,

@@ -184,7 +184,7 @@ forever begin
       // After both DWORDs: decode cmd_attr, dev_idx, rnw, data_length
       // Push expected transaction info
     end
-    ADDR_TX_DATA: begin
+    ADDR_PIO_DATA_PORT: begin
       // Push TX data to tx_data_queue
       tx_data_queue.push_back(item.wdata);
     end

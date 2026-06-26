@@ -32,15 +32,19 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
   endtask
 
   task check_queue_state(queue_hdl_paths_t paths, int unsigned exp_depth, string ctxt);
-    bit [31:0] status;
-    bit        exp_full;
-    bit        exp_empty;
+    int unsigned depth;
+    bit          exp_full;
+    bit          exp_empty;
 
     settle_cycles();
-    reg_read(ADDR_QUEUE_STATUS, status);
+    depth     = hdl_read_fifo_depth(paths.depth_path);
     exp_full  = (exp_depth == QueueDepth);
     exp_empty = (exp_depth == 0);
 
+    `DV_CHECK_EQ(depth, exp_depth,
+                 $sformatf("csr_queue_status_flags_vseq: %s depth mismatch %s",
+                           paths.name, ctxt))
+    check_queue_flags(paths.name, paths.full_bit, paths.empty_bit, exp_full, exp_empty, ctxt);
   endtask
 
   task fill_cmd_queue();
@@ -84,6 +88,8 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
         8'(8'h13 + (i << 2)), 8'(8'h12 + (i << 2)), 8'(8'h11 + (i << 2)), 8'(8'h10 + (i << 2))
       };
       read_rx_data(data);
+      `DV_CHECK_EQ(data, exp,
+                   $sformatf("csr_queue_status_flags_vseq: RX data mismatch at entry %0d", i))
       settle_cycles();
       if ((i == 0) || (i == (QueueDepth - 2)) || (i == (QueueDepth - 1))) begin
         check_queue_state(rx_paths, QueueDepth - i - 1,

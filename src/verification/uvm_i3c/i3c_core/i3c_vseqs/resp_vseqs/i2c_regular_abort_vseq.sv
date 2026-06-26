@@ -353,13 +353,11 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task assert_hc_abort();
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b1 /*HC_ABORT*/, 1'b0 /*BCAST_EN*/,
-                                1'b0 /*SW_RST*/, 1'b1 /*EN*/});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1), .abort(1'b1)));
   endtask
 
   virtual task clear_hc_abort();
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0 /*HC_ABORT*/, 1'b0 /*BCAST_EN*/,
-                                1'b0 /*SW_RST*/, 1'b1 /*EN*/});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1)));
   endtask
 
   virtual task setup_i2c_target();

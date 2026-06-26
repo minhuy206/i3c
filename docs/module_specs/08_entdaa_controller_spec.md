@@ -27,7 +27,7 @@ See `08b_entdaa_fsm_spec.md` for the per-device round FSM.
 
 ### Parent modules
 
-- `controller_active` (MUXes TX/RX bus access and extends `req_restart_o` via `daa_restart_pending_q`)
+- `controller_active` (MUXes TX/RX bus access and extends `req_rstart_o` via `daa_restart_pending_q`)
 
 ### Packages
 
@@ -53,16 +53,20 @@ See `08b_entdaa_fsm_spec.md` for the per-device round FSM.
 
 | Signal          | Direction | Width | Description                                                               |
 | --------------- | --------- | ----- | ------------------------------------------------------------------------- |
-| `ccc_valid_i`   | Input     | 1     | Assert to start ENTDAA; held high until `done_o`                          |
+| `daa_valid_i`   | Input     | 1     | Assert to start ENTDAA; held high until `done_o`                          |
+| `stop_i`        | Input     | 1     | Forced-stop request (e.g. host abort); latched into `stop_pending_q` and forwarded to `entdaa_fsm.stop_pending_i`, causing the in-progress per-device round to terminate early via a bus STOP |
 | `dev_count_i`   | Input     | 4     | Number of devices to address (from `addr_assign_desc_t.dev_count`)        |
 | `dev_idx_i`     | Input     | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
-| `done_o`        | Output    | 1     | ENTDAA execution complete (all devices addressed or no device responded)  |
+| `done_o`        | Output    | 1     | ENTDAA execution complete (all devices addressed, no device responded, NACK-escalated, or stopped) |
+| `nack_error_o`  | Output    | 1     | Sticky NACK-escalation flag: set when a device NACKs its assigned address twice in a row (the retry-once policy in `RunEntdaa` is exhausted); held until `Done` sees `daa_valid_i` deasserted |
+| `req_stop_o`    | Output    | 1     | Forwarded from `entdaa_fsm.req_stop_o` while in `RunEntdaa`; requests the host-facing flow issue a bus STOP to end the current round cleanly |
+| `stopped_o`     | Output    | 1     | Asserted in `Done` (driven by `completed_by_stop_q`) when ENTDAA terminated because of a STOP condition rather than normal loop completion |
 
 ### Repeated-Start Request (to controller_active / scl_generator)
 
 | Signal          | Direction | Width | Description                                                                       |
-| --------------- | --------- | ----- | --------------------------------------------------------------------------------- |
-| `req_restart_o` | Output    | 1     | 1-cycle pulse: request Repeated START; `controller_active` extends via latch      |
+| --------------- | --------- | ----- | ----------------------------------------------------------------------------------- |
+| `req_rstart_o`  | Output    | 1     | 1-cycle pulse: request Repeated START; `controller_active` extends via latch      |
 
 ### Bus TX Interface (to bus_tx_flow via controller_active MUX)
 
@@ -71,18 +75,19 @@ See `08b_entdaa_fsm_spec.md` for the per-device round FSM.
 | `bus_tx_done_i`      | Input     | 1     | TX completed current request                      |
 | `bus_tx_idle_i`      | Input     | 1     | TX is idle                                        |
 | `bus_tx_req_byte_o`  | Output    | 1     | Request byte transmission                         |
-| `bus_tx_req_bit_o`   | Output    | 1     | Always `0` (ENTDAA uses byte-level TX only)       |
+| `bus_tx_req_bit_o`   | Output    | 1     | Forwarded from `entdaa_fsm`; reads `0` in practice (ENTDAA uses byte-level TX only) |
 | `bus_tx_req_value_o` | Output    | 8     | Value to transmit                                 |
-| `bus_tx_sel_od_pp_o` | Output    | 1     | Always `0` (Open-Drain) during ENTDAA             |
+| `bus_tx_sel_od_pp_o` | Output    | 1     | Forwarded from `entdaa_fsm`; reads `0` in practice (Open-Drain throughout ENTDAA) |
 
 ### Bus RX Interface (to bus_rx_flow via controller_active MUX)
 
 | Signal              | Direction | Width | Description                                            |
 | ------------------- | --------- | ----- | ------------------------------------------------------ |
-| `bus_rx_data_i`     | Input     | 8     | Received data (only bit [0] used for single-bit reads) |
-| `bus_rx_done_i`     | Input     | 1     | RX completed current request                           |
-| `bus_rx_req_bit_o`  | Output    | 1     | Request single-bit reception                           |
-| `bus_rx_req_byte_o` | Output    | 1     | Always `0` (unused; byte-level RX not used in ENTDAA)  |
+| `bus_rx_data_i`             | Input     | 8     | Received data (only bit [0] used for single-bit reads)                                 |
+| `bus_rx_done_i`             | Input     | 1     | RX completed current request                                                            |
+| `bus_rx_req_bit_o`          | Output    | 1     | Request single-bit reception                                                             |
+| `bus_rx_req_bit_handoff_o`  | Output    | 1     | Forwarded from `entdaa_fsm.bus_rx_req_bit_handoff_o`: marks the low-bit handoff cycle of bit-bang RX (transfers drive of the bit's low phase between RX and the FSM during the wired-AND ACK/PID sampling) |
+| `bus_rx_req_byte_o`         | Output    | 1     | Always `0` (unused; byte-level RX not used in ENTDAA)                                   |
 
 ### Bus Monitor Interface
 
@@ -122,7 +127,7 @@ flow_active:  [S]  [0x7E+W]  [ACK]  [0x07]  [ACK]
               → then sets ccc_valid_o=1, ccc_dev_count_o, daa_dev_idx_o
 
 entdaa_controller (per round):
-              →  pulse req_restart_o  →  controller_active extends via daa_restart_pending_q
+              →  pulse req_rstart_o  →  controller_active extends via daa_restart_pending_q
               →  scl_generator issues [Sr] on bus
               →  wait bus_rstart_det_i
               →  read DAT[dev_idx + round].dynamic_address
@@ -140,13 +145,13 @@ flow_active:  [P]  ← STOP on done_o
 
 ```systemverilog
 typedef enum logic [2:0] {
-  Idle           = 3'd0,
-  StartLoop      = 3'd1,
-  RequestRestart = 3'd2,
-  WaitRestart    = 3'd3,
-  ReadDAT        = 3'd4,
-  RunEntdaa      = 3'd5,
-  Done           = 3'd6
+  Idle          = 3'd0,
+  StartLoop     = 3'd1,
+  RequestRStart = 3'd2,
+  WaitRStart    = 3'd3,
+  ReadDAT       = 3'd4,
+  RunEntdaa     = 3'd5,
+  Done          = 3'd6
 } ccc_state_e;
 ```
 
@@ -154,72 +159,82 @@ typedef enum logic [2:0] {
 stateDiagram-v2
     [*] --> Idle
 
-    Idle --> StartLoop: ccc_valid_i
+    Idle --> StartLoop: daa_valid_i
 
-    StartLoop --> RequestRestart: dev_round_q < dev_count_i
+    StartLoop --> RequestRStart: dev_round_q < dev_count_i
     StartLoop --> Done: dev_round_q >= dev_count_i
 
-    RequestRestart --> WaitRestart
+    RequestRStart --> WaitRStart
 
-    WaitRestart --> ReadDAT: bus_rstart_det_i
+    WaitRStart --> ReadDAT: bus_rstart_det_i
 
     ReadDAT --> RunEntdaa: 1 cycle latency
 
+    RunEntdaa --> Done: done_daa_o && stopped_o (child FSM stopped)
     RunEntdaa --> StartLoop: done_daa_o && addr_valid_o
     RunEntdaa --> Done: done_daa_o && no_device_o
+    RunEntdaa --> StartLoop: done_daa_o && !addr_valid_o && !no_device_o && !addr_rejected_once_q (1st consecutive address NACK — retry)
+    RunEntdaa --> Done: done_daa_o && !addr_valid_o && !no_device_o && addr_rejected_once_q (2nd consecutive address NACK — nack_error_o)
 
-    Done --> Idle: done_o pulse
+    Done --> Idle: !daa_valid_i
 ```
 
 #### State Descriptions
 
-**Idle:** Wait for `ccc_valid_i`. On entry, clear `dev_round_q` counter.
+**Idle:** Wait for `daa_valid_i`. On entry, clear `dev_round_q` counter.
 
-**StartLoop:** Check `dev_round_q < dev_count_i`. Route to `RequestRestart` to run the next device, or to `Done` when all `dev_count_i` devices have been addressed.
+**StartLoop:** Check `dev_round_q < dev_count_i`. Route to `RequestRStart` to run the next device, or to `Done` when all `dev_count_i` devices have been addressed.
 
-**RequestRestart:** Assert `req_restart_o` for one cycle. `controller_active` latches this via `daa_restart_pending_q` and forwards it to `scl_generator`, which generates the Sr bus condition.
+**RequestRStart:** Assert `req_rstart_o` for one cycle. `controller_active` latches this via `daa_restart_pending_q` and forwards it to `scl_generator`, which generates the Sr bus condition.
 
-**WaitRestart:** Deassert `req_restart_o`. Hold until `bus_rstart_det_i` confirms Sr was emitted. Simultaneously assert `dat_read_valid_o` and `dat_index_o = dev_idx_i + dev_round_q` so the DAT read arrives before `entdaa_fsm` begins.
+**WaitRStart:** Deassert `req_rstart_o`. Hold until `bus_rstart_det_i` confirms Sr was emitted. Simultaneously assert `dat_read_valid_o` and `dat_index_o = dev_idx_i + dev_round_q` so the DAT read arrives before `entdaa_fsm` begins.
 
 **ReadDAT:** Capture `dat_rdata_i` into `dat_entry_t`. Extract `dynamic_address[22:16]` as `daa_addr_next`. Advance to `RunEntdaa` after one cycle.
 
-**RunEntdaa:** Assert `start_daa_i` and provide `daa_addr_i` to `entdaa_fsm`. Wait for `done_daa_o`.
+**RunEntdaa:** Assert `start_daa_i` and provide `daa_addr_i` to `entdaa_fsm`. Wait for `done_daa_o`, then branch on the child FSM's result:
 
-- If `addr_valid_o`: latch `pid_o`, `bcr_o`, `dcr_o`; pulse `daa_address_valid_o` and `daa_address_o`; increment `dev_round_q`; return to `StartLoop`.
-- If `no_device_o`: no more responsive targets; go to `Done` regardless of remaining count.
+- **Stopped:** if the child FSM reports `stopped_o` (a STOP occurred during the round, e.g. due to `stop_i`), latch `completed_by_stop_q` and go to `Done`.
+- **Address accepted (`addr_valid_o`):** latch `pid_o`, `bcr_o`, `dcr_o`; pulse `daa_address_valid_o` and `daa_address_o`; increment `dev_round_q`; clear `addr_rejected_once_q`; return to `StartLoop`.
+- **No device (`no_device_o`):** no responsive target answered `0x7E+R` — clear `addr_rejected_once_q` and go to `Done` regardless of remaining count.
+- **Address rejected, retry-once policy:** if the assigned address is NACKed (`!addr_valid_o && !no_device_o`):
+  - First occurrence (`addr_rejected_once_q == 0`): set `addr_rejected_once_d = 1` and return to `StartLoop` to retry the same device/round.
+  - Second consecutive occurrence (`addr_rejected_once_q == 1`): set `nack_error_d = 1` (sticky `nack_error_o`) and go to `Done` — the controller gives up after one retry.
 
-**Done:** Assert `done_o` for one cycle. Return to `Idle`.
+**Done:** Assert `done_o` for one cycle (combinationally, every cycle `state_q == Done`). Assert `stopped_o = completed_by_stop_q`. Wait for `daa_valid_i` to deassert before returning to `Idle` — `Done` is a handshake state, not a single-cycle pulse-and-return; it persists as long as the host holds `daa_valid_i` high, clearing `addr_rejected_once_q`, `nack_error_q`, `stop_pending_q`, and `completed_by_stop_q` once `daa_valid_i` drops.
 
-On `bus_stop_det_i` in any active state: forced transition to `Done`.
+On `bus_stop_det_i`: forced transition to `Done` in every active state **except `RunEntdaa`** (and except `Idle`/`Done`, which are not "active"). During `RunEntdaa`, a STOP is instead handled inside the child `entdaa_fsm` (via `stop_pending_i`), which reports back through `done_daa_o`/`stopped_o` as described above — this avoids double-counting the STOP and lets the child FSM unwind its byte/bit-level transfer cleanly before `entdaa_controller` reacts.
 
 ### 5.3. Bus MUX Within entdaa_controller
 
-`entdaa_controller` passes bus access to `entdaa_fsm` only during `RunEntdaa`:
+`entdaa_controller` passes bus access to `entdaa_fsm` only during `RunEntdaa`. Unlike earlier revisions of this spec, the RTL forwards **all** TX/RX signals produced by the child FSM (not just byte-TX and bit-RX) — `bus_tx_req_bit_o`, `bus_tx_sel_od_pp_o`, `bus_rx_req_bit_handoff_o`, and `bus_rx_req_byte_o` are forwarded too, even though `entdaa_fsm` itself never drives them non-zero in practice (it only uses byte-level TX and bit-level RX). Net behavior is identical to a narrower MUX, but the actual RTL structure forwards the full bundle uniformly:
 
 ```systemverilog
-assign bus_tx_req_bit_o  = 1'b0;   // never used
-assign bus_rx_req_byte_o = 1'b0;   // never used
-assign bus_tx_sel_od_pp_o = 1'b0;  // always Open-Drain
-
-always_comb begin
-  if (state_q == RunEntdaa) begin
-    bus_tx_req_byte_o  = entdaa_tx_req_byte;
-    bus_tx_req_value_o = entdaa_tx_req_value;
-    bus_rx_req_bit_o   = entdaa_rx_req_bit;
-  end else begin
-    bus_tx_req_byte_o  = 1'b0;
-    bus_tx_req_value_o = 8'h00;
-    bus_rx_req_bit_o   = 1'b0;
+unique case (state_q)
+  ...
+  RunEntdaa: begin
+    start_daa                = 1'b1;
+    req_stop_o               = req_stop;               // from entdaa_fsm
+    stopped_o                = stopped;                 // from entdaa_fsm
+    bus_tx_req_byte_o        = entdaa_tx_req_byte;
+    bus_tx_req_bit_o         = entdaa_tx_req_bit;        // forwarded; entdaa_fsm ties to 0
+    bus_tx_req_value_o       = entdaa_tx_req_value;
+    bus_tx_sel_od_pp_o       = entdaa_tx_sel_od_pp;      // forwarded; entdaa_fsm ties to 0
+    bus_rx_req_bit_o         = entdaa_rx_req_bit;
+    bus_rx_req_bit_handoff_o = entdaa_rx_req_bit_handoff;
+    bus_rx_req_byte_o        = entdaa_rx_req_byte;       // forwarded; entdaa_fsm ties to 0
   end
-end
+  ...
+endcase
+// All bus_tx_*/bus_rx_* outputs default to 0 in every other state
+// via the always_comb block's reset block at the top of drive_data_and_outputs.
 ```
 
 ### 5.4. DAT Address Lookup
 
-During `WaitRestart` and `ReadDAT`, `entdaa_controller` reads the pre-populated dynamic address:
+During `WaitRStart` and `ReadDAT`, `entdaa_controller` reads the pre-populated dynamic address:
 
 ```systemverilog
-// During WaitRestart:
+// During WaitRStart:
 dat_read_valid_o = 1'b1;
 dat_index_o      = dev_idx_i + dev_round_q;  // saturate at DatDepth-1
 
@@ -251,7 +266,7 @@ Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` wi
 | HDR mode                        | `ent_hdr_*` outputs, `is_in_hdr_mode_i`                                 | Removed (SDR only)                                                |
 | CSR side-effects                | MWL, MRL, DASA, AASA, RSTACT, GETCAPS, etc.                             | Removed entirely                                                  |
 | DAT integration                 | None                                                                    | DAT read port for address lookup per round                        |
-| `ccc_valid_i` (input)           | `ccc_i` with CCC code                                                   | Binary valid/done handshake (ENTDAA only)                         |
+| `daa_valid_i` (input)           | `ccc_i` with CCC code                                                   | Binary valid/done handshake (ENTDAA only)                         |
 | Restart to scl_generator        | Direct                                                                  | Via `daa_restart_pending_q` latch in `controller_active` (M-7 fix)|
 | LoC                             | 1,406 lines                                                             | ~120 lines                                                        |
 
@@ -260,8 +275,9 @@ Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` wi
 | Error                   | Detection                                       | Action                                        |
 | ----------------------- | ----------------------------------------------- | --------------------------------------------- |
 | No target on bus        | NACK after `0x7E+R` (from `entdaa_fsm.no_device_o`) | Exit loop early; assert `done_o`          |
-| Target rejects address  | NACK after `Addr+P` (`addr_valid_o = 0`)        | `daa_address_valid_o` not pulsed; continue loop |
-| Unexpected STOP         | `bus_stop_det_i` in any active state             | Forced → `Done`                               |
+| Target rejects address (1st time)  | NACK after `Addr+P` (`addr_valid_o = 0`), `addr_rejected_once_q == 0` | `daa_address_valid_o` not pulsed; `addr_rejected_once_d = 1`; retry same round via `StartLoop` |
+| Target rejects address (2nd consecutive) | NACK after `Addr+P` again, `addr_rejected_once_q == 1` | `nack_error_d = 1` (sticky `nack_error_o`); abandon retries → `Done` |
+| Unexpected STOP         | `bus_stop_det_i` in any active state except `RunEntdaa` | Forced → `Done`; during `RunEntdaa` the STOP is instead absorbed by the child `entdaa_fsm` and reported back via `stopped_o`/`completed_by_stop_q` |
 | dev_count exhausted     | `dev_round_q >= dev_count_i` in `StartLoop`     | Normal termination → `Done`                   |
 | DAT index out of range  | SW must ensure `dev_idx + dev_count <= DatDepth`| No hardware check; SW responsibility          |
 
@@ -274,11 +290,11 @@ Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` wi
 3. **ENTDAA all assigned:** After `dev_count` rounds, verify `done_o` fires
 4. **ENTDAA no device:** First `0x7E+R` gets NACK; verify `no_device_o`, `done_o` immediately
 5. **ENTDAA fewer devices than count:** 2 targets, `dev_count=4`; verify loop exits after second round when NoDev
-6. **Address NACK:** Target NACKs assigned address; verify `addr_valid_o = 0`, loop continues
-7. **STOP during loop:** External STOP mid-PID; verify forced → `Done`
+6. **Address NACK (retry-once):** Target NACKs assigned address once; verify `addr_valid_o = 0`, `addr_rejected_once_q` sets, loop retries via `StartLoop`; if the same device NACKs a second consecutive time, verify `nack_error_o` sets and the loop exits to `Done`
+7. **STOP during loop:** External STOP mid-PID; verify the STOP is absorbed inside the active `entdaa_fsm` round (`RunEntdaa` does not force-transition directly) and surfaces as `stopped_o`/`completed_by_stop_q` in `Done`; verify STOP during any other active state forces an immediate transition to `Done`
 8. **DAT address correctness:** `dev_idx=2`, round 1: verify `dat_index_o = 3`; round 2: `dat_index_o = 4`
 9. **Parity calculation:** Verify `Addr+P` byte has correct odd parity for various 7-bit addresses
-10. **req_restart_o latch:** Verify 1-cycle pulse is held by `controller_active` until `scl_generator` acknowledges (M-7)
+10. **req_rstart_o latch:** Verify 1-cycle pulse is held by `controller_active` until `scl_generator` acknowledges (M-7)
 
 ### UVM Test Structure
 
@@ -292,9 +308,8 @@ src/verification/uvm_i3c/
 
 ## 10. Implementation Notes
 
-- `entdaa_controller` handles only ENTDAA — there is no command code input or dispatch logic. The `ccc_valid_i` / `done_o` handshake is sufficient.
-- The `req_restart_o` pulse is 1 cycle. `controller_active`'s `daa_restart_pending_q` extends it until `scl_generator` acknowledges. `entdaa_controller` does not need a ready signal back — it waits for `bus_rstart_det_i` from `bus_monitor`.
-- `bus_tx_req_bit_o` and `bus_rx_req_byte_o` are permanently tied to `0`. ENTDAA uses byte-level TX (for `0x7E+R` and `Addr+P`) and bit-level RX (for ACK bits and 64 ID bits) only.
-- `bus_tx_sel_od_pp_o = 1'b0` throughout all ENTDAA activity. Push-Pull is never used because targets drive ACK and PID bits simultaneously (wired-AND).
+- `entdaa_controller` handles only ENTDAA — there is no command code input or dispatch logic. The `daa_valid_i` / `done_o` handshake is sufficient.
+- The `req_rstart_o` pulse is 1 cycle. `controller_active`'s `daa_restart_pending_q` extends it until `scl_generator` acknowledges. `entdaa_controller` does not need a ready signal back — it waits for `bus_rstart_det_i` from `bus_monitor`.
+- `bus_tx_req_bit_o`, `bus_tx_sel_od_pp_o`, `bus_rx_req_bit_handoff_o`, and `bus_rx_req_byte_o` read as `0` throughout ENTDAA activity, but not because `entdaa_controller` ties them off directly — they are forwarded from `entdaa_fsm`, which itself never drives them non-zero (ENTDAA uses byte-level TX for `0x7E+R`/`Addr+P` and bit-level RX for ACK/ID bits only). Push-Pull (`bus_tx_sel_od_pp_o`) is never used because targets drive ACK and PID bits simultaneously (wired-AND).
 - Software must fill DAT entries `[dev_idx .. dev_idx + dev_count - 1]` with valid dynamic addresses before issuing the ENTDAA `AddressAssignment` command.
-- On `bus_stop_det_i`, both `entdaa_controller` (→ `Done`) and `entdaa_fsm` (→ `NoDev`) synchronously terminate to avoid hanging.
+- On `bus_stop_det_i`, `entdaa_controller` itself force-transitions directly to `Done` in every active state except `RunEntdaa` (and `Idle`/`Done`). While in `RunEntdaa`, the STOP is instead absorbed by the child `entdaa_fsm`, which terminates its round and reports `stopped_o`; `entdaa_controller` then latches `completed_by_stop_q` and moves to `Done` via the normal `done_daa_o` path — avoiding a double, unsynchronized reaction to the same STOP.

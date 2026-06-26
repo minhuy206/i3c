@@ -153,14 +153,15 @@ endtask
 #### enable_dut(broadcast_header_enable)
 ```systemverilog
 virtual task enable_dut(bit broadcast_header_enable = 1'b0);
-  reg_write(ADDR_HC_CONTROL, {29'h0, broadcast_header_enable, 1'b0, 1'b1});
+  reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                              .iba_include(broadcast_header_enable)));
 endtask
 ```
 
 #### disable_dut()
 ```systemverilog
 virtual task disable_dut();
-  reg_write(ADDR_HC_CONTROL, {29'h0, 1'b0, 1'b0, 1'b0});
+  reg_write(ADDR_HC_CONTROL, hc_control_value());
 endtask
 ```
 
@@ -187,14 +188,14 @@ endtask
 #### write_tx_data(data)
 ```systemverilog
 virtual task write_tx_data(bit [31:0] data);
-  reg_write(ADDR_TX_DATA, data);
+  reg_write(ADDR_PIO_DATA_PORT, data);
 endtask
 ```
 
 #### read_rx_data(output data)
 ```systemverilog
 virtual task read_rx_data(output bit [31:0] data);
-  reg_read(ADDR_RX_DATA, data);
+  reg_read(ADDR_PIO_DATA_PORT, data);
 endtask
 ```
 

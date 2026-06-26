@@ -27,14 +27,6 @@ package controller_pkg;
   } fifo_status_t;
 
   typedef struct packed {
-    logic hc_internal_err;
-    logic hc_seq_cancel;
-    logic hc_warn_cmd_seq_stall;
-    logic hc_err_cmd_seq_timeout;
-    logic sched_cmd_missed_tick;
-  } intr_event_t;
-
-  typedef struct packed {
     logic ctrl_enable;
     logic i3c_fsm_en;
     logic sw_reset;

@@ -196,15 +196,12 @@ u_csr.t_hd_dat_o   → u_ctrl.t_hd_dat_i
 u_csr.t_bus_free_o → u_ctrl.t_bus_free_i
 
 // I2C timing registers
-u_csr.i2c_t_r_o        → u_ctrl.i2c_t_r_i
-u_csr.i2c_t_f_o        → u_ctrl.i2c_t_f_i
 u_csr.i2c_t_low_o      → u_ctrl.i2c_t_low_i
 u_csr.i2c_t_high_o     → u_ctrl.i2c_t_high_i
 u_csr.i2c_t_su_sta_o   → u_ctrl.i2c_t_su_sta_i
 u_csr.i2c_t_hd_sta_o   → u_ctrl.i2c_t_hd_sta_i
 u_csr.i2c_t_su_sto_o   → u_ctrl.i2c_t_su_sto_i
 u_csr.i2c_t_su_dat_o   → u_ctrl.i2c_t_su_dat_i
-u_csr.i2c_t_hd_dat_o   → u_ctrl.i2c_t_hd_dat_i
 u_csr.i2c_t_buf_o      → u_ctrl.i2c_t_buf_i
 
 // HC_CONTROL configuration
@@ -216,10 +213,6 @@ u_csr.hc_control_cfg_o.sw_reset                 → u_queues.sw_reset_i
 
 // Status feedback
 u_ctrl.i3c_fsm_idle_o → u_csr.i3c_fsm_idle_i
-
-// Interrupt-status events
-u_ctrl.hc_seq_cancel_event_o          → u_csr.intr_event_i.hc_seq_cancel
-u_ctrl.hc_err_cmd_seq_timeout_event_o → u_csr.intr_event_i.hc_err_cmd_seq_timeout
 ```
 
 #### Controller Active ↔ PHY
@@ -260,7 +253,7 @@ u_csr.dat_rdata_o          → u_ctrl.dat_rdata_hw_i
 // Global async reset to all modules
 rst_ni → u_phy.rst_ni, u_csr.rst_ni, u_queues.rst_ni, u_ctrl.rst_ni
 
-// Software reset from HC_CONTROL[1]
+// Software reset from RESET_CONTROL[0]
 // - Flushes the HCI FIFOs through hci_queues.sw_reset_i
 // - Clears CSR CMD/TX staging state inside csr_registers
 u_csr.hc_control_cfg_o.sw_reset → u_queues.sw_reset_i
@@ -293,13 +286,7 @@ u_csr.hc_control_cfg_o.sw_reset → u_queues.sw_reset_i
 
 ## 8. Error Handling
 
-The top level does not create new error policy, but it routes controller events into the CSR interrupt-status path in addition to normal RESP FIFO reporting:
-
-- `hc_seq_cancel_event_o` from `controller_active` sets `INTR_STATUS[11]`
-- `hc_err_cmd_seq_timeout_event_o` from `controller_active` sets `INTR_STATUS[13]`
-- Other `intr_event_t` fields are tied low at the top level
-
-Protocol transaction outcomes are still reported through the RESP FIFO.
+The top level does not create new error policy. Protocol transaction outcomes are reported through the RESP FIFO and live status is exposed through `HC_STATUS` and `QUEUE_STATUS`; there is no IRQ output or interrupt-status CSR.
 
 ## 9. Test Plan
 

@@ -62,8 +62,8 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
         "ERR_007 %s I3C: wait for I3CWriteImmediate", private_addr_mode_name(bcast_en)),
         IMM_ABORT_FSM_TIMEOUT);
 
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b1  /*HC_ABORT*/, bcast_en, 1'b0  /*SW_RST*/, 1'b1  /*EN*/
-              });
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1), .iba_include(bcast_en),
+                                                .abort(1'b1)));
     `uvm_info(`gfn, $sformatf("ERR_007 %s I3C: abort_asserted=1 while in I3CWriteImmediate",
                               private_addr_mode_name(bcast_en)), UVM_LOW)
 
@@ -72,7 +72,7 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
                          10000);
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, bcast_en, 1'b0, 1'b1});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1), .iba_include(bcast_en)));
     check_all_queues_empty(
         $sformatf("ERR_007 %s I3C: before recovery transfer", private_addr_mode_name(bcast_en)));
     run_recovery_case(1'b1, bcast_en);
@@ -121,15 +121,14 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     wait_for_flow_fsm_state(FSM_I2C_WRITE_IMM, "ERR_007 I2C: wait for I2CWriteImmediate",
                             IMM_ABORT_FSM_TIMEOUT);
 
-    reg_write(ADDR_HC_CONTROL, {
-              28'h0, 1'b1  /*HC_ABORT*/, 1'b0  /*bcast_en*/, 1'b0  /*SW_RST*/, 1'b1  /*EN*/});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1), .abort(1'b1)));
     `uvm_info(`gfn, "ERR_007 I2C: abort_asserted=1 while in I2CWriteImmediate", UVM_LOW)
 
     poll_idle();
     wait_for_device_done(dev_seq, "ERR_007 I2C", i2c_device_done_timeout_cycles(4));
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, 1'b0, 1'b0, 1'b1});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1)));
     check_all_queues_empty("ERR_007 I2C: before recovery transfer");
     run_recovery_case(1'b0, 1'b0);
 

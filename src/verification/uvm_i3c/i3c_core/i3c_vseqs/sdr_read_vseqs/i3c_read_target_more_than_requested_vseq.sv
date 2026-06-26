@@ -49,14 +49,14 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
 
     rd_cfg = make_transfer_cfg(
         .ctxt("SDRR_003 toc0 over_length_first"),
-        .seq_name("sdrr004_toc0_rd_dev_seq"),
+        .seq_name("sdrr003_toc0_rd_dev_seq"),
         .tid(4'd12), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
         .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0), .data_length(4), .settle_before_cmd(5),
         .timeout_cycles(0));
     wr_cfg = make_transfer_cfg(
         .ctxt("SDRR_003 toc0 write_second"),
-        .seq_name("sdrr004_toc0_wr_dev_seq"),
+        .seq_name("sdrr003_toc0_wr_dev_seq"),
         .tid(4'd13), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
         .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0), .data_length(2), .settle_before_cmd(0),
@@ -108,7 +108,7 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
             target_length
         )),
         .seq_name($sformatf(
-            "sdrr004_%s_dev_seq_%0d_%0d",
+            "sdrr003_%s_dev_seq_%0d_%0d",
             private_addr_mode_name(
                 broadcast_header_enable
             ),

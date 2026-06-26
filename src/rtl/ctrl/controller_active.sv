@@ -1,8 +1,8 @@
 module controller_active
   import i3c_pkg::bus_state_t;
 #(
-    parameter  int unsigned DatDepth = 32,
-    localparam int unsigned DatAw    = $clog2(DatDepth)
+    parameter int unsigned DatDepth = 32,
+    parameter int unsigned DatAw    = $clog2(DatDepth)
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -49,23 +49,18 @@ module controller_active
     input logic [19:0] t_su_dat_i,
     input logic [19:0] t_hd_dat_i,
     input logic [19:0] t_bus_free_i,
-    input logic [19:0] i2c_t_r_i,
-    input logic [19:0] i2c_t_f_i,
     input logic [19:0] i2c_t_low_i,
     input logic [19:0] i2c_t_high_i,
     input logic [19:0] i2c_t_su_sta_i,
     input logic [19:0] i2c_t_hd_sta_i,
     input logic [19:0] i2c_t_su_sto_i,
     input logic [19:0] i2c_t_su_dat_i,
-    input logic [19:0] i2c_t_hd_dat_i,
     input logic [19:0] i2c_t_buf_i,
 
     input  logic ctrl_enable_i,
     input  logic broadcast_header_enable_i,
     input  logic i3c_fsm_en_i,
     input  logic abort_i,
-    output logic hc_seq_cancel_event_o,
-    output logic hc_err_cmd_seq_timeout_event_o,
     output logic i3c_fsm_idle_o
 );
 
@@ -100,8 +95,6 @@ module controller_active
   logic flow_daa_stop;
   logic [4:0] flow_daa_dev_idx;
   logic [3:0] flow_ccc_dev_count;
-  logic flow_hc_seq_cancel_event;
-  logic flow_hc_err_cmd_seq_timeout_event;
   logic flow_dat_read_valid;
   logic [DatAw-1:0] flow_dat_index;
 
@@ -200,15 +193,15 @@ module controller_active
   assign bus_rx_data = rx_flow_data;
   assign bus_rx_done = rx_flow_done;
 
-  assign active_t_r = flow_use_i2c_timing ? i2c_t_r_i : t_r_i;
-  assign active_t_f = flow_use_i2c_timing ? i2c_t_f_i : t_f_i;
+  assign active_t_r = t_r_i;
+  assign active_t_f = t_f_i;
   assign active_t_low = flow_use_i2c_timing ? i2c_t_low_i : t_low_i;
   assign active_t_high = flow_use_i2c_timing ? i2c_t_high_i : t_high_i;
   assign active_t_su_sta = flow_use_i2c_timing ? i2c_t_su_sta_i : t_su_sta_i;
   assign active_t_hd_sta = flow_use_i2c_timing ? i2c_t_hd_sta_i : t_hd_sta_i;
   assign active_t_su_sto = flow_use_i2c_timing ? i2c_t_su_sto_i : t_su_sto_i;
   assign active_t_su_dat = flow_use_i2c_timing ? i2c_t_su_dat_i : t_su_dat_i;
-  assign active_t_hd_dat = flow_use_i2c_timing ? i2c_t_hd_dat_i : t_hd_dat_i;
+  assign active_t_hd_dat = t_hd_dat_i;
   assign active_t_bus_free = flow_use_i2c_timing ? i2c_t_buf_i : t_bus_free_i;
   assign active_scl_use_od_low = flow_use_i2c_timing ? 1'b0 :
                                  daa_active ? 1'b1 : flow_scl_use_od_low;
@@ -368,13 +361,8 @@ module controller_active
       .broadcast_header_enable_i,
       .i3c_fsm_en_i,
       .abort_i,
-      .hc_seq_cancel_event_o         (flow_hc_seq_cancel_event),
-      .hc_err_cmd_seq_timeout_event_o(flow_hc_err_cmd_seq_timeout_event),
       .i3c_fsm_idle_o
   );
-
-  assign hc_seq_cancel_event_o = flow_hc_seq_cancel_event;
-  assign hc_err_cmd_seq_timeout_event_o = flow_hc_err_cmd_seq_timeout_event;
 
   entdaa_controller #(
       .DatDepth(DatDepth)

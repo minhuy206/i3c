@@ -1,6 +1,5 @@
 module bus_monitor
-  import i3c_pkg::bus_state_t;
-  import i3c_pkg::signal_state_t;
+  import i3c_pkg::bus_state_t, i3c_pkg::signal_state_t;
 #(
     parameter int CounterWidth = 20
 ) (
@@ -166,20 +165,23 @@ module bus_monitor
 
   assign scl_high_at_sda_edge = scl_stable_high && scl_i_q && scl_i;
 
-  assign start_candidate = sda_negedge_i ? scl_high_at_sda_edge : start_candidate_q;
-  assign stop_candidate = sda_posedge_i ? scl_high_at_sda_edge : stop_candidate_q;
+  assign start_candidate = sda_negedge_i ? (scl_high_at_sda_edge && sda_r) :
+                                           start_candidate_q;
+  assign stop_candidate = sda_posedge_i ? (scl_high_at_sda_edge && !sda_r) :
+                                          stop_candidate_q;
 
   // Classify START/STOP candidates when the raw SDA transition occurs, then
   // wait for the delayed edge detector to confirm the transition was stable.
   // This prevents a data-bit SDA transition during SCL LOW from being reported
-  // later as START/STOP after SCL has risen.
+  // later as START/STOP after SCL has risen. The filtered SDA state qualifier
+  // also rejects the return edge of a short SDA glitch.
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       start_candidate_q <= 1'b0;
     end else if (!enable) begin
       start_candidate_q <= 1'b0;
     end else if (sda_negedge_i) begin
-      start_candidate_q <= scl_high_at_sda_edge;
+      start_candidate_q <= scl_high_at_sda_edge && sda_r;
     end else if (sda_posedge_i || sda_negedge) begin
       start_candidate_q <= 1'b0;
     end
@@ -191,7 +193,7 @@ module bus_monitor
     end else if (!enable) begin
       stop_candidate_q <= 1'b0;
     end else if (sda_posedge_i) begin
-      stop_candidate_q <= scl_high_at_sda_edge;
+      stop_candidate_q <= scl_high_at_sda_edge && !sda_r;
     end else if (sda_negedge_i || sda_posedge) begin
       stop_candidate_q <= 1'b0;
     end

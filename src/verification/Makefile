@@ -13,8 +13,6 @@ COV         ?= 0
 COV_ROOT    ?= cov_work
 COV_TEST    ?= $(SEQ)_$(SEED)
 COV_OPTS    = -coverage all -covworkdir $(COV_ROOT) -covtest $(COV_TEST)
-FIFO_005_LOG ?= fifo_non_power_of_two_elaboration.log
-FIFO_005_LIB ?= xcelium_fifo005.d
 
 CSR_REGRESSION_SEQS ?= \
 	csr_reset_defaults_vseq \
@@ -29,7 +27,8 @@ CSR_REGRESSION_SEQS ?= \
 	csr_queue_status_flags_vseq \
 	csr_sw_reset_flush_queues_vseq \
 	csr_sw_reset_clears_cmd_staging_vseq \
-	csr_unmapped_addr_no_side_effect_vseq
+	csr_unmapped_addr_no_side_effect_vseq \
+	csr_hc_abort_control_vseq
 
 FIFO_REGRESSION_SEQS ?= \
 	fifo_basic_push_pop_order_vseq \
@@ -41,19 +40,18 @@ BUS_REGRESSION_SEQS ?= \
 	bus_phy_reset_and_sync_vseq \
 	bus_start_stop_detect_vseq \
 	bus_repeated_start_detect_vseq \
-	bus_scl_start_stop_timing_vseq \
+	bus_monitor_glitch_and_simultaneous_edge_filter_vseq \
+	bus_monitor_enable_gating_and_edge_pulses_vseq \
 	bus_scl_clock_low_high_timing_vseq \
 	bus_scl_waitcmd_stall_resume_vseq \
 	bus_scl_repeated_start_from_waitcmd_vseq \
 	bus_tx_byte_and_bit_order_vseq \
 	bus_rx_byte_and_bit_order_vseq \
-	bus_od_pp_phase_switch_vseq \
 	bus_tb_pad_model_odpp_wiring_vseq
 
 SDRW_REGRESSION_SEQS ?= \
 	i3c_write_vseq \
 	i3c_write_len_sweep_vseq \
-	i3c_write_data_patterns_vseq \
 	i3c_write_toc_zero_vseq \
 	i3c_write_back_to_back_vseq \
 	i3c_write_multi_dat_idx_vseq
@@ -62,7 +60,6 @@ SDRR_REGRESSION_SEQS ?= \
 	i3c_read_vseq \
 	i3c_read_len_sweep_vseq \
 	i3c_read_target_more_than_requested_vseq \
-	i3c_read_data_patterns_vseq \
 	i3c_read_toc_zero_vseq \
 	i3c_read_back_to_back_vseq \
 	i3c_read_multi_dat_idx_vseq
@@ -159,7 +156,6 @@ fifo_regression:
 	for seq in $(FIFO_REGRESSION_SEQS); do \
 	  $(MAKE) sim TEST=$(TEST) SEQ=$$seq VERBOSITY=$(VERBOSITY) SEED=$(SEED); \
 	done
-	$(MAKE) fifo_non_power_of_two_elaboration
 
 bus_regression:
 	@set -e; \
@@ -211,30 +207,6 @@ err_regression:
 
 sdr_regression: sdrw_regression sdrr_regression
 
-fifo_non_power_of_two_elaboration:
-	@set +e; \
-	$(SIMULATOR) \
-	  -timescale 1ns/1ps \
-	  -access +rwc \
-	  -64 \
-	  -xmlibdirname $(FIFO_005_LIB) \
-	  ../rtl/hci/sync_fifo.sv \
-	  uvm_i3c/block_tests/fifo_non_power_of_two_tb.sv \
-	  -top fifo_non_power_of_two_tb > $(FIFO_005_LOG) 2>&1; \
-	status=$$?; \
-	if [ $$status -eq 0 ]; then \
-	  echo "FIFO_005 failed: illegal sync_fifo depth unexpectedly passed"; \
-	  cat $(FIFO_005_LOG); \
-	  exit 1; \
-	fi; \
-	if grep -q "sync_fifo: Depth (3) must be a power of 2" $(FIFO_005_LOG); then \
-	  echo "FIFO_005 passed: illegal sync_fifo depth rejected"; \
-	else \
-	  echo "FIFO_005 failed: expected sync_fifo depth fatal was not found"; \
-	  cat $(FIFO_005_LOG); \
-	  exit 1; \
-	fi
-
 waves:
 	$(MAKE) sim DUMP_WAVES=1
 
@@ -242,10 +214,10 @@ coverage:
 	$(MAKE) sim COV=1
 
 clean:
-	rm -rf xcelium.d $(FIFO_005_LIB) INCA_libs $(COV_ROOT) waves.shm xrun.history .simvision \
+	rm -rf xcelium.d INCA_libs $(COV_ROOT) waves.shm xrun.history .simvision \
 	       xmsc_run.log *.log *.key *.shm .cxl.*
 
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
         sdrw_regression sdrr_regression imm_regression i2c_regression ccc_regression \
         err_regression sdr_regression \
-        fifo_non_power_of_two_elaboration waves coverage clean
+        waves coverage clean

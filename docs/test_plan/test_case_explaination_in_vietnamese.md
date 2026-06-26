@@ -14,7 +14,7 @@ Phần 4.1 kiểm tra lớp register của controller. Mục tiêu là đảm b�
 
 Test này kiểm tra giá trị các thanh ghi ngay sau reset.
 
-Sau khi reset được assert và release, testbench sẽ đọc các register quan trọng như `HC_CONTROL`, `HC_STATUS`, các timing register, `QUEUE_STATUS`, và toàn bộ DAT từ `DAT[0]` đến `DAT[15]`.
+Sau khi reset được assert và release, testbench sẽ đọc các register quan trọng như `HC_CONTROL`, `HC_STATUS`, các timing register, `QUEUE_STATUS`, và toàn bộ DAT từ `DAT[0]` đến `DAT[31]`.
 
 Kết quả mong đợi là controller chưa được enable, FSM đang ở trạng thái idle, các queue đang empty, toàn bộ DAT entry bằng 0, và các timing register có giá trị default đúng với CSR/module spec.
 
@@ -22,9 +22,9 @@ Test này quan trọng vì reset là trạng thái ban đầu của toàn bộ D
 
 ### CSR_002 - `csr_enable_disable`
 
-Test này kiểm tra bit enable của controller trong `HC_CONTROL[0]`.
+Test này kiểm tra bit enable của controller trong `HC_CONTROL[31]` (BUS_ENABLE).
 
-Testbench sẽ ghi command vào CMD queue khi controller chưa enable, sau đó mới bật enable. Khi controller đang disabled, DUT không được bắt đầu transaction trên bus. Sau khi `HC_CONTROL[0]` được set lên 1, command mới được phép chạy.
+Testbench sẽ ghi command vào CMD queue khi controller chưa enable, sau đó mới bật enable. Khi controller đang disabled, DUT không được bắt đầu transaction trên bus. Sau khi `HC_CONTROL[31]` (BUS_ENABLE) được set lên 1, command mới được phép chạy.
 
 Kết quả mong đợi là không có bus transaction trước khi enable. Sau khi enable, command được thực thi và controller quay về idle khi hoàn tất.
 
@@ -32,11 +32,11 @@ Test này đảm bảo software có quyền kiểm soát lúc nào controller đ
 
 ### CSR_003 - `csr_broadcast_header_control`
 
-Test này kiểm tra bit `BROADCAST_ADDR_ENABLE` trong `HC_CONTROL[2]` và kiểm tra luôn hiệu ứng của bit này lên private I3C transfer.
+Test này kiểm tra bit `BROADCAST_ADDR_ENABLE` trong `HC_CONTROL[0]` (IBA_INCLUDE) và kiểm tra luôn hiệu ứng của bit này lên private I3C transfer.
 
 Bit này chỉ điều khiển việc private I3C transfer có bắt đầu bằng broadcast header `0x7e/W` hay không. Nó không phải bit enable controller và không được tự tạo traffic trên bus.
 
-Testbench sẽ đọc `HC_CONTROL[BROADCAST_ADDR_ENABLE]` sau reset, sau đó ghi set và clear bit này qua `HC_CONTROL`. Testbench cũng thử set riêng bit này khi `HC_CONTROL[0]` vẫn bằng 0.
+Testbench sẽ đọc `HC_CONTROL[BROADCAST_ADDR_ENABLE]` sau reset, sau đó ghi set và clear bit này qua `HC_CONTROL`. Testbench cũng thử set riêng bit này khi `HC_CONTROL[31]` (BUS_ENABLE) vẫn bằng 0.
 
 Sau phần control-plane, testbench sẽ cấu hình DAT[0] là I3C target có dynamic address `0x08`, rồi issue hai regular SDR private write 4 byte với TX data đã biết. Lần thứ nhất chạy với `BROADCAST_ADDR_ENABLE=0`, lần thứ hai chạy với `BROADCAST_ADDR_ENABLE=1`. Ở mode enable, device model phải ACK broadcast header `0x7e/W`, sau đó ACK dynamic address `0x08/W`.
 
@@ -48,7 +48,7 @@ Test này quan trọng vì nó chứng minh cả hai mặt của cùng một CSR
 
 Test này kiểm tra khả năng ghi và đọc lại các timing register.
 
-Timing register điều khiển các tham số thời gian của bus, gồm nhóm I3C `T_R`, `T_F`, `T_LOW`, `T_LOW_OD`, `T_HIGH`, `T_SU_STA`, `T_HD_STA`, `T_SU_STO`, `T_SU_DAT`, `T_HD_DAT`, `T_BUS_FREE` và nhóm I2C `I2C_T_R` tới `I2C_T_BUF`. Testbench sẽ ghi các giá trị default, 0, giá trị nhỏ hợp lệ, giá trị lớn nhất 20-bit, giá trị random hợp lệ, và giá trị có các bit reserved phía trên được set, sau đó đọc lại.
+Timing register điều khiển các tham số thời gian của bus, gồm nhóm I3C `T_R`, `T_F`, `T_LOW`, `T_LOW_OD`, `T_HIGH`, `T_SU_STA`, `T_HD_STA`, `T_SU_STO`, `T_SU_DAT`, `T_HD_DAT`, `T_BUS_FREE` và nhóm I2C `I2C_T_SU_DAT` tới `I2C_T_BUF` (I2C dùng chung `T_R`/`T_F`/`T_HD_DAT` với I3C). Testbench sẽ ghi các giá trị default, 0, giá trị nhỏ hợp lệ, giá trị lớn nhất 20-bit, giá trị random hợp lệ, và giá trị có các bit reserved phía trên được set, sau đó đọc lại.
 
 Kết quả mong đợi là 20 bit thấp `[19:0]` đọc ra đúng với giá trị đã ghi. Các bit reserved phía trên phải đọc ra 0. Sau mỗi lần ghi một timing register, các timing register còn lại cũng được đọc lại để bảo đảm không có lỗi ghi nhầm địa chỉ hoặc làm hỏng giá trị lân cận.
 
@@ -58,7 +58,7 @@ Test này giúp xác nhận software có thể lập trình timing cho I3C/I2C t
 
 Test này kiểm tra DAT, viết tắt của Device Address Table.
 
-DAT lưu thông tin địa chỉ của các device mà controller sẽ giao tiếp. Mỗi entry có các field quan trọng như `device`, `dynamic_address`, và `static_address`. Testbench sẽ ghi các giá trị khác nhau vào `DAT[0]` đến `DAT[15]`, sau đó đọc lại từng entry.
+DAT lưu thông tin địa chỉ của các device mà controller sẽ giao tiếp. Mỗi entry có các field quan trọng như `device`, `dynamic_address`, và `static_address`. Testbench sẽ ghi các giá trị khác nhau vào `DAT[0]` đến `DAT[31]`, sau đó đọc lại từng entry.
 
 Kết quả mong đợi là các field trong DAT khớp với encoding được định nghĩa trong CSR/DAT spec, bao gồm bit `[31]`, bits `[22:16]`, và bits `[6:0]`. Ngoài ra, ghi vào một DAT entry không được làm hỏng entry bên cạnh.
 
@@ -86,9 +86,9 @@ Test này bảo vệ một case thực tế trong software: software có thể c
 
 ### CSR_008 - `csr_sw_reset_flush_queues`
 
-Test này kiểm tra software reset thông qua `HC_CONTROL[1]`.
+Test này kiểm tra software reset thông qua `RESET_CONTROL[0]` (SOFT_RST).
 
-Khi các queue đang có dữ liệu, testbench sẽ đợi controller idle, sau đó ghi `HC_CONTROL[1]=1` để yêu cầu software reset. Sau reset, testbench đọc queue status và các port liên quan.
+Khi các queue đang có dữ liệu, testbench sẽ đợi controller idle, sau đó ghi `RESET_CONTROL[0]=1` để yêu cầu software reset. Sau reset, testbench đọc queue status và các port liên quan.
 
 Kết quả mong đợi là CMD, TX, RX, và RESP queue đều bị flush về empty. Bit `SW_RESET` phải tự clear, nghĩa là software không cần ghi lại 0 để xóa bit này.
 
@@ -116,9 +116,9 @@ Test này quan trọng vì software dựa vào `QUEUE_STATUS` để biết khi n
 
 ### CSR_011 - `csr_rx_resp_read_pop`
 
-Test này kiểm tra hành vi đọc từ `RX_DATA_PORT` và `RESP_PORT`.
+Test này kiểm tra hành vi đọc từ `PIO_DATA_PORT` và `RESP_PORT`.
 
-`RX_DATA_PORT` dùng để software đọc data mà controller nhận được từ target trong các read transaction. `RESP_PORT` dùng để software đọc response descriptor sau khi command hoàn tất. Cả hai port này được nối với FIFO, nên mỗi lần đọc hợp lệ phải pop đúng một entry.
+`PIO_DATA_PORT` dùng để software đọc data mà controller nhận được từ target trong các read transaction. `RESP_PORT` dùng để software đọc response descriptor sau khi command hoàn tất. Cả hai port này được nối với FIFO, nên mỗi lần đọc hợp lệ phải pop đúng một entry.
 
 Ví dụ RX FIFO có hai entry:
 
@@ -126,7 +126,7 @@ Ví dụ RX FIFO có hai entry:
 [0xAAAA_BBBB, 0xCCCC_DDDD]
 ```
 
-Lần đọc đầu tiên từ `RX_DATA_PORT` phải trả về `0xAAAA_BBBB`, sau đó FIFO chỉ còn `0xCCCC_DDDD`. Lần đọc thứ hai trả về `0xCCCC_DDDD`, sau đó FIFO empty.
+Lần đọc đầu tiên từ `PIO_DATA_PORT` phải trả về `0xAAAA_BBBB`, sau đó FIFO chỉ còn `0xCCCC_DDDD`. Lần đọc thứ hai trả về `0xCCCC_DDDD`, sau đó FIFO empty.
 
 Nếu software tiếp tục đọc khi FIFO đã empty, DUT phải trả về 0 và không được làm hỏng FIFO pointer. Tương tự, đọc `RESP_PORT` khi có response phải pop một response; đọc khi empty phải trả về 0 và không underflow.
 
@@ -143,6 +143,16 @@ Kết quả mong đợi là read từ địa chỉ unmapped trả về 0. Write 
 Ví dụ nếu `HC_CONTROL`, `DAT[0]`, và CMD FIFO đang có trạng thái xác định, sau khi ghi `0xDEADBEEF` vào một địa chỉ invalid, các trạng thái đó phải giữ nguyên.
 
 Test này quan trọng vì software có thể truy cập nhầm địa chỉ, hoặc có bug trong driver. DUT cần xử lý truy cập invalid một cách an toàn, không tạo side effect không mong muốn.
+
+### CSR_013 - `csr_hc_abort_control`
+
+Test này kiểm tra bit abort của host controller trong `HC_CONTROL[29]` (ABORT).
+
+Sau reset, testbench đọc `HC_CONTROL` để xác nhận bit này bằng 0. Sau đó testbench ghi set và clear bit này qua `HC_CONTROL`, đồng thời thử set riêng `ABORT` khi `HC_CONTROL[31]` (BUS_ENABLE) vẫn bằng 0.
+
+Kết quả mong đợi là `ABORT` là bit RW dạng level: software ghi 1 thì đọc lại thấy 1, ghi 0 thì đọc lại thấy 0, và hardware không tự clear bit này. Việc set riêng `ABORT` không được tự enable controller và không được tự tạo transaction trên bus.
+
+Test này chỉ kiểm tra mặt control-plane của bit abort. Hành vi abort khi controller đang chạy transaction, response encoding, data boundary, và recovery policy được kiểm tra ở `ERR_007`.
 
 ## 4.2 FIFO and Queue Behavior
 
@@ -220,11 +230,11 @@ Kết quả mong đợi là flush có ưu tiên rõ ràng: pointer phải đư�
 
 Test này quan trọng vì nếu flush không xóa sạch FIFO, command hoặc response cũ có thể xuất hiện sau reset, gây lỗi rất khó debug.
 
-### FIFO_005 - `fifo_non_power_of_two_elaboration`
+### FIFO_005 - `sync_fifo_depth_power_of_two_contract`
 
-Test này kiểm tra ràng buộc cấu hình của module `sync_fifo`.
+Mục này không còn là một test regression riêng. Ràng buộc cấu hình của module `sync_fifo` đã được cover trực tiếp bởi assertion trong RTL.
 
-Theo testplan, `sync_fifo` yêu cầu depth phải là power-of-two, ví dụ:
+`sync_fifo` yêu cầu depth phải là power-of-two, ví dụ:
 
 ```text
 2, 4, 8, 16, 32, ...
@@ -232,11 +242,41 @@ Theo testplan, `sync_fifo` yêu cầu depth phải là power-of-two, ví dụ:
 
 Các depth như 3, 5, 6, 10 không hợp lệ.
 
-Đây là negative compile test. Nghĩa là test không chạy simulation bình thường, mà cố tình instantiate `sync_fifo` với depth không hợp lệ. Kết quả mong đợi là elaboration phải báo fatal hoặc assertion đúng như FIFO parameter contract đã định nghĩa.
+RTL hiện có elaboration-time assertion kiểm tra `Depth == (1 << $clog2(Depth))`. Vì vậy nếu người dùng instantiate `sync_fifo` với depth không hợp lệ, elaboration sẽ fail ngay theo parameter contract của module.
 
-Mục tiêu của test không phải là làm FIFO hoạt động với depth sai. Mục tiêu là xác nhận parameter contract của FIFO phát hiện cấu hình sai sớm, thay vì để lỗi âm thầm xuất hiện trong simulation hoặc synthesis.
+Do đây là ràng buộc cấu hình tĩnh, không phải behavior runtime, không cần giữ một negative UVM/regression target riêng. Các FIFO runtime test vẫn cover các depth hợp lệ đang dùng trong top-level testbench, còn depth bất hợp lệ được chặn bởi assertion trong chính RTL.
 
-Priority của test này là Low vì đây là ràng buộc cấu hình, không phải luồng chức năng runtime chính. Tuy nhiên nó vẫn hữu ích để bảo vệ người dùng RTL khỏi parameter sai.
+Trạng thái của FIFO_005 là retired/already covered by RTL elaboration assertion.
+
+### FIFO_006 - `fifo_pointer_wrap_reuse`
+
+Test này kiểm tra trường hợp FIFO đã chạy đủ nhiều để read pointer và write pointer wrap qua boundary của depth.
+
+Ví dụ FIFO depth là 8. Testbench fill đủ 8 entry, drain hết 8 entry, sau đó push một chuỗi data mới hoàn toàn khác và drain tiếp. Ở lượt thứ hai, pointer nội bộ đã quay lại index thấp nhưng extra MSB của pointer đã thay đổi, nên đây là chỗ dễ lộ bug full/empty hoặc stale data.
+
+Kết quả mong đợi là chuỗi data thứ hai phải đọc ra đúng thứ tự và không được lẫn bất kỳ entry cũ nào từ chuỗi thứ nhất. Các flag empty/full/depth phải vẫn đúng sau mỗi lần fill, drain, wrap, và sau final drain.
+
+Test này quan trọng vì FIFO dùng circular buffer. Nếu pointer wrap sai, bug có thể không xuất hiện ở push/pop đơn giản nhưng sẽ xuất hiện sau nhiều transaction back-to-back.
+
+### FIFO_007 - `fifo_simultaneous_rw_empty_full_edges`
+
+Test này bổ sung hai boundary còn thiếu của simultaneous read/write.
+
+Trường hợp thứ nhất là FIFO đang empty, testbench assert `wvalid` và `rready` cùng một cycle. Vì FIFO đang empty nên `rvalid` phải bằng 0, read không hợp lệ, và chỉ write hợp lệ được nhận. Sau cycle đó FIFO phải có depth bằng 1 và entry vừa ghi phải đọc ra được.
+
+Trường hợp thứ hai là FIFO đang full, testbench assert `wvalid` và `rready` cùng một cycle. Vì FIFO đang full nên `wready` phải bằng 0, write dư không được nhận, còn read hợp lệ được thực hiện. Sau cycle đó FIFO giảm xuống `Depth-1`, entry overflow không được xuất hiện khi drain, và thứ tự các entry còn lại phải đúng.
+
+Test này quan trọng vì boundary empty/full có handshake khác với mid-depth. Nếu chỉ test near-empty hoặc near-full thì chưa chứng minh rõ behavior khi một phía handshake bị block bởi trạng thái biên chính xác.
+
+### FIFO_008 - `fifo_csr_blocked_sw_write_boundaries`
+
+Test này kiểm tra full-boundary từ góc nhìn software qua CSR, tập trung vào CMD và TX queue.
+
+Testbench giữ controller idle hoặc disabled để hardware không consume CMD/TX trong lúc kiểm tra. Sau đó fill CMD queue bằng các write vào `CMD_QUEUE_PORT` và fill TX queue bằng các write vào `PIO_DATA_PORT`. Khi mỗi queue đã full, testbench thử ghi thêm một command hoặc một TX DWORD.
+
+Kết quả mong đợi là write dư không được làm hỏng nội dung FIFO. Với CMD queue, staging hai DWORD phải giữ coherency: không được ghép nửa command cũ với nửa command mới, không duplicate descriptor, và không làm sai thứ tự command đã có. Với TX queue, pending write khi full phải được hold cho tới khi có space hoặc bị clear bởi software reset theo policy hiện tại; trong mọi trường hợp không được xuất hiện stale hoặc duplicate data sau recovery.
+
+Test này quan trọng vì các FIFO test block-level có thể force trực tiếp handshake nội bộ, nhưng software thật nhìn thấy FIFO thông qua CSR. Full-boundary ở CSR path còn có thêm staging/pending register nên cần test riêng.
 
 ## 4.3 PHY, Bus Conditions, and Timing
 
@@ -244,15 +284,39 @@ Phần 4.3 kiểm tra lớp bus/PHY và các điều kiện timing cơ bản c�
 
 Nếu 4.1 kiểm tra register và 4.2 kiểm tra FIFO, thì 4.3 kiểm tra phần DUT thật sự tương tác với hai dây bus `SCL` và `SDA`. Các test trong phần này đảm bảo controller nhìn thấy START/STOP đúng, tạo clock đúng timing, truyền/nhận bit đúng thứ tự, và chọn đúng chế độ open-drain hoặc push-pull theo từng phase.
 
+Thứ tự trình bày trong mục BUS được gom theo lớp kiểm tra: PHY input conditioning, bus monitor detection/filter/gating, SCL generation/timing, TX/RX bit primitive, rồi cuối cùng là OD/PP và pad/top-level wiring. ID testcase, assertion, coverpoint, và message trong vseq được reindex theo thứ tự này.
+
 ### BUS_001 - `phy_reset_and_sync`
 
 Test này kiểm tra reset và bộ đồng bộ 2 flip-flop trong `i3c_phy`.
 
 Tín hiệu `SCL` và `SDA` đến từ bên ngoài DUT, nên chúng là tín hiệu bất đồng bộ so với clock nội bộ của controller. Vì vậy PHY cần dùng synchronizer để đưa các tín hiệu này vào clock domain của DUT một cách ổn định.
 
-Testbench sẽ toggle input `SCL`/`SDA` quanh thời điểm reset, rồi quan sát tín hiệu đã sample ở phía controller.
+Testbench dùng `bus_phy_reset_and_sync_vseq` để force trực tiếp input PHY quanh reset:
+
+```text
+SCL/SDA = 00, assert hard reset
+release reset, vẫn giữ 00
+SCL/SDA = 10
+SCL/SDA = 01
+SCL/SDA = 11
+```
 
 Kết quả mong đợi là sau reset, giá trị sampled của `SCL` và `SDA` trở về mức high, vì bus idle của I3C/I2C là cả hai dây đều high. Sau vài chu kỳ latency của synchronizer, tín hiệu controller nhìn thấy phải ổn định và đúng với input.
+
+Pass/fail chính nằm trong `i3c_phy_sva`. Checker này kiểm tra từng tầng của synchronizer:
+
+```text
+SCL input ổn định => scl_ff1 giữ đúng giá trị sampled
+scl_ff2 <= scl_ff1
+SCL input ổn định qua cửa sổ đồng bộ => ctrl_scl_o đúng với input
+
+SDA input ổn định => sda_ff1 giữ đúng giá trị sampled
+sda_ff2 <= sda_ff1
+SDA input ổn định qua cửa sổ đồng bộ => ctrl_sda_o đúng với input
+```
+
+Các cover chính gồm `cp_bus001_reset_sets_sync_idle`, `cp_bus001_scl_two_cycle_settle`, `cp_bus001_sda_two_cycle_settle`, và các pattern `cp_bus001_sync_pattern_00/10/01/11`.
 
 Test này quan trọng vì nếu synchronizer sai, các block phía sau có thể phát hiện nhầm START/STOP hoặc đọc sai bit trên bus.
 
@@ -262,11 +326,19 @@ Test này kiểm tra phát hiện điều kiện START và STOP trên bus.
 
 Trong I3C/I2C, START xảy ra khi `SDA` chuyển từ high xuống low trong lúc `SCL` đang high. STOP xảy ra khi `SDA` chuyển từ low lên high trong lúc `SCL` đang high.
 
-Testbench sẽ drive các chuyển đổi hợp lệ trên `SDA` khi `SCL` high. Module bus monitor phải tạo pulse `start_det` hoặc `stop_det` đúng lúc.
+Testbench dùng vseq `bus_start_stop_detect_vseq` để drive trực tiếp input bus của monitor:
 
-Kết quả mong đợi là `start_det` chỉ pulse cho điều kiện START hợp lệ, và `stop_det` chỉ pulse cho điều kiện STOP hợp lệ. Nếu `SDA` đổi khi `SCL` low thì không được nhận nhầm là START/STOP.
+```text
+SCL high, SDA: 1 -> 0  => START hợp lệ
+SCL high, SDA: 0 -> 1  => STOP hợp lệ
+SCL low,  SDA đổi mức  => không phải START/STOP
+```
 
-Test này liên quan đến `bus_monitor`, `edge_detector`, và `stable_high_detector`.
+Kết quả mong đợi là START hợp lệ phải xuất hiện ở `state_o.start_det`, STOP hợp lệ phải xuất hiện ở `state_o.stop_det`, và cạnh SDA không được qualify bởi SCL stable-high thì không được latch candidate hoặc tạo trigger START/STOP.
+
+Pass/fail chính nằm trong `bus_monitor_sva`, với các assertion/cover như `ap_bus002_valid_start_reports_start`, `ap_bus002_valid_stop_reports_stop`, `ap_bus002_sda_fall_when_scl_not_high_no_start_candidate`, `ap_bus002_sda_rise_when_scl_not_high_no_stop_candidate`, `ap_bus002_rejected_falling_edge_no_start_trigger`, và `ap_bus002_rejected_rising_edge_no_stop_trigger`.
+
+Test này liên quan đến `bus_monitor`, `edge_detector`, `stable_high_detector`, và `bus_monitor_sva`.
 
 ### BUS_003 - `bus_repeated_start_detect`
 
@@ -274,49 +346,101 @@ Test này kiểm tra phát hiện repeated START, thường viết là `Sr`.
 
 Repeated START là một START mới xuất hiện khi bus đã có START trước đó nhưng chưa có STOP. Nó được dùng trong các transaction cần chuyển phase mà không thả bus, ví dụ direct CCC hoặc một số read flow.
 
-Testbench sẽ tạo một START trước, không tạo STOP, rồi tạo thêm một START nữa. DUT phải nhận ra đây là repeated START.
+Test này thuộc về `bus_monitor`. Mục tiêu không phải là kiểm tra `scl_generator` tạo Sr đúng timing; phần đó thuộc BUS_009. Ở BUS_003, testbench chỉ cần tạo waveform bus tối thiểu: START đầu tiên, sau đó không tạo STOP, rồi tạo một START thứ hai. START thứ hai này phải được monitor phân loại là repeated START.
 
-Kết quả mong đợi là `rstart_det` pulse đúng, và logic không nhầm repeated START với START đầu tiên. Điều này giúp controller phân biệt mở transaction mới với chuyển phase trong cùng transaction.
+Kết quả mong đợi là START đầu tiên pulse `start_det`, START thứ hai trước STOP pulse `rstart_det`, và hai pulse này không được lẫn nhau. Sau khi STOP xuất hiện, trạng thái "đã thấy START" phải bị clear, để START kế tiếp không bị phân loại nhầm thành repeated START.
 
-### BUS_004 - `scl_start_stop_timing`
+Implementation note: BUS_003 dùng vseq `bus_repeated_start_detect_vseq` để tạo directed waveform START -> Sr -> STOP. Checker chính nằm trong `bus_monitor_sva`, với các assertion/cover như `ap_bus003_first_start_classified_as_start`, `ap_bus003_repeated_start_classified_as_rstart`, `ap_bus003_stop_clears_rstart_detection`, và `cp_bus003_start_rstart_stop_sequence`.
+
+### BUS_004 - `bus_monitor_glitch_and_simultaneous_edge_filter`
+
+Test này kiểm tra bus monitor không báo nhầm START/STOP khi bus có glitch ngắn hoặc khi `SCL` và `SDA` đổi cùng lúc.
+
+Theo spec của `bus_monitor`, START/STOP không chỉ dựa vào việc `SDA` đổi khi `SCL` đang high ở một sample đơn lẻ. RTL dùng candidate latch và edge detector có delay `T_R`/`T_F`, nên một glitch ngắn hơn delay cấu hình không được tạo event hợp lệ.
+
+Testbench sẽ program `T_R` và `T_F` thành giá trị nonzero, enable bus monitor, rồi tạo các tình huống âm:
+
+```text
+SDA glitch low khi SCL high nhưng chưa đủ T_F
+SDA glitch high khi SCL high nhưng chưa đủ T_R
+SCL và SDA đổi cùng cycle
+```
+
+Kết quả mong đợi là không có pulse `start_det`, `stop_det`, hoặc `rstart_det` cho các tình huống trên. Nếu monitor đã latch candidate tạm thời, candidate đó phải được clear khi edge không được confirm. Sau các negative case, testbench tạo một START/STOP hợp lệ để chứng minh monitor vẫn hoạt động bình thường.
+
+Test này quan trọng vì bus thật có thể có cạnh gần nhau hoặc nhiễu ngắn. Nếu monitor báo nhầm START/STOP, controller có thể đổi state sai giữa transaction.
+
+### BUS_005 - `bus_monitor_enable_gating_and_edge_pulses`
+
+Test này kiểm tra hai behavior còn lại của `bus_monitor`: enable gating và độ rộng pulse của edge/event output.
+
+Đầu tiên testbench giữ monitor disabled, rồi drive các điều kiện START, STOP, và repeated START hợp lệ. Khi `enable_i=0`, monitor không được phát bất kỳ event pulse nào và các pending candidate phải bị clear.
+
+Sau đó testbench enable monitor và drive các cạnh `SCL`/`SDA` hợp lệ. Các output edge như `scl.pos_edge`, `scl.neg_edge`, `sda.pos_edge`, `sda.neg_edge` phải pulse đúng một cycle. Tương tự, `start_det`, `stop_det`, và `rstart_det` cũng phải pulse đúng một cycle cho mỗi event hợp lệ, không được giữ level nhiều cycle.
+
+Kết quả mong đợi là khi disabled thì hoàn toàn không có event; khi enabled thì mỗi cạnh/event hợp lệ tạo đúng một pulse một cycle. Không được có pulse trễ còn sót lại từ lúc monitor disabled.
+
+Test này quan trọng vì các block phía sau thường dùng event pulse để trigger FSM transition. Nếu pulse bị kéo dài hoặc rò qua lúc disabled, controller có thể chạy nhầm nhiều bước hoặc bắt đầu transaction ở trạng thái không hợp lệ.
+
+### BUS_006 - `scl_start_stop_timing`
 
 Test này kiểm tra timing khi DUT tạo START và STOP.
 
-Các timing CSR đã được program trước. Sau đó testbench yêu cầu START/STOP qua command flow bình thường hoặc bằng control block-level.
+START và STOP xuất hiện trong hầu hết transaction bình thường, ví dụ SDR write/read, CCC, DAA và I2C. Vì vậy test này không cần một vseq riêng để force block-level `scl_generator`.
 
-Kết quả mong đợi là thứ tự thay đổi của `SDA` và `SCL` phải đúng định nghĩa START/STOP, đồng thời delay giữa các bước phải khớp với giá trị counter đã program trong timing register.
+Checker chính nằm trong `scl_generator_sva`. Các vseq transaction hiện có tạo stimulus tự nhiên; SVA quan sát local FSM và counter load bên trong `scl_generator`.
 
-Ví dụ với START, `SDA` phải được kéo xuống khi `SCL` đang high, sau đó mới tiếp tục clock/data phase. Với STOP, `SDA` phải được thả lên high khi `SCL` đang high.
+Kết quả mong đợi cho START:
+
+- Khi có request START từ `Idle`, generator phải load `t_su_sta_i` và đi vào `GenerateStart`.
+- `GenerateStart` giữ `SCL=1`, `SDA=1` trong setup window.
+- `SdaFall` tạo START bằng cách kéo `SDA=0` khi `SCL=1`, rồi load `t_hd_sta_i`.
+- `HoldStart` giữ START đủ thời gian, sau đó load `active_t_low + t_f_i`, đi vào `DriveLow`, và pulse `done_o`.
+
+Kết quả mong đợi cho STOP:
+
+- STOP request phải đi vào `GenerateStop` và load low/fall delay.
+- `GenerateStop` giữ `SDA=0` trong lúc chuẩn bị release `SCL`.
+- Khi `SCL` đã high, generator load `t_su_sto_i` và đi qua `SclHighForStop`.
+- `SdaRise` tạo STOP bằng cách release `SDA=1` khi `SCL=1`, rồi load `t_bus_free_i`.
+- `BusFree` hết counter thì về `Idle` và pulse `done_o`.
 
 Test này quan trọng vì bus target sẽ dựa vào timing vật lý này để hiểu transaction.
 
-### BUS_005 - `scl_clock_low_high_timing`
+### BUS_007 - `scl_clock_low_high_timing`
 
 Test này kiểm tra chu kỳ low/high của clock `SCL`.
 
-Timing register có thể được program nhiều giá trị khác nhau như `t_low`, `t_high`, `t_r`, và `t_f`. Testbench chạy cả I3C SDR và I2C legacy transfer, rồi đo thời gian `SCL` ở low và high.
+Timing register có thể được program nhiều giá trị khác nhau như `t_low`, `t_low_od`, `t_high`, `t_r`, và `t_f`. Testbench dùng stimulus tập trung cho `scl_generator` để chạy nhiều timing profile: PP-low, PP-low bị kéo dài, OD-low, và profile tương đương I2C.
 
-Kết quả mong đợi là low/high period đo được phải bám theo các giá trị đã program. Nếu tăng `t_low`, thời gian `SCL` low phải tăng. Nếu tăng `t_high`, thời gian `SCL` high phải tăng.
+Kết quả mong đợi là generator chọn đúng timing source và load đúng counter:
 
-Test này liên quan đến `scl_generator` và `csr_registers`, vì register lưu timing còn generator dùng timing đó để tạo clock.
+- Khi `scl_use_od_low_i=0`, low delay dùng `t_low`.
+- Khi `scl_use_od_low_i=1`, low delay dùng `t_low_od`.
+- Khi kết thúc `DriveLow` và còn request clock, generator phải load `t_high + t_r` rồi đi qua `DriveHigh`.
+- Khi kết thúc `DriveHigh` và còn request clock, generator phải load `active_t_low + t_f` rồi quay lại `DriveLow`.
 
-### BUS_006 - `scl_waitcmd_stall_resume`
+Checker chính nằm trong `scl_generator_sva`, còn vseq `bus_scl_clock_low_high_timing_vseq` chỉ tạo các profile timing để cover cả low-mode PP và OD. Test này liên quan đến `scl_generator` và `csr_registers`, vì register lưu timing còn generator dùng timing đó để tạo clock.
 
-Test này kiểm tra việc stall clock khi controller phải chờ dữ liệu hoặc chờ chỗ trống trong FIFO.
+### BUS_008 - `scl_waitcmd_stall_resume`
 
-Các tình huống stall clock hợp lệ còn lại không bao gồm TX FIFO empty trong regular write. Với TX FIFO empty, controller xử lý như underflow và kết thúc transaction bằng RESP `Ovl`.
+Test này kiểm tra behavior `scl_generator` giữ `SCL` low khi đã tạo START xong nhưng chưa có command clock tiếp theo.
 
 ```text
-WaitCmd/backpressure: controller đang chờ command hoặc điều kiện backpressure được hỗ trợ
+WaitCmd hold/resume: no command -> hold SCL low, gen_clock_i -> resume clock
 ```
 
-Khi bị stall ở điều kiện hợp lệ, DUT được phép giữ `SCL` low để kéo dài transaction. Sau khi điều kiện stall được gỡ, controller phải resume hoặc terminate transaction theo đúng protocol.
+Với BUS_008, vseq chỉ cần tạo stimulus nhỏ cho `scl_generator`: pulse START, giữ `gen_clock_i=0` để generator đi vào `WaitCmd`, chờ một khoảng thời gian, rồi assert `gen_clock_i=1` để resume clock. Không cần transaction-level SDR read/write và không cần scoreboard FIFO.
 
-Kết quả mong đợi là `SCL` được giữ low trong thời gian chờ, rồi chạy tiếp mà không tạo thêm START/STOP ngoài ý muốn và không làm hỏng data.
+Checker chính nằm trong `scl_generator_sva`:
 
-Test này quan trọng vì backpressure FIFO là tình huống runtime thực tế, đặc biệt khi software hoặc testbench không cấp/đọc data kịp.
+- Khi `state_q == WaitCmd` và không có `gen_clock_i`, `gen_stop_i`, `gen_rstart_i`, `gen_idle_i`, FSM phải giữ `WaitCmd`.
+- Trong `WaitCmd`, `SCL` phải bị kéo low, `SDA` được release, và `done_o` không được assert.
+- Khi `gen_clock_i=1` trong `WaitCmd`, FSM phải resume qua `DriveLow` và load delay `active_t_low + t_f`.
 
-### BUS_007 - `scl_repeated_start_from_waitcmd`
+Test này quan trọng vì `WaitCmd` là điểm generator cố ý park bus low để higher-level controller quyết định bước tiếp theo. Nếu logic này sai, bus có thể release clock quá sớm hoặc không resume đúng khi command tiếp theo đến.
+
+### BUS_009 - `scl_repeated_start_from_waitcmd`
 
 Test này kiểm tra khả năng tạo repeated START khi clock đang bị giữ low hoặc đang ở trạng thái wait.
 
@@ -326,33 +450,39 @@ Testbench sẽ đưa controller vào flow ENTDAA hoặc directed CCC, sau đó y
 
 Kết quả mong đợi là repeated START được tạo hợp lệ, timing đúng, và controller không bị kẹt ở trạng thái chờ.
 
-### BUS_008 - `bus_tx_byte_and_bit_order`
+Implementation note: BUS_009 dùng vseq `bus_scl_repeated_start_from_waitcmd_vseq` để tạo stimulus đưa `scl_generator` vào `WaitCmd` rồi request `gen_rstart_i`. Checker chính là `scl_generator_sva`, với các assertion/cover như `ap_bus009_waitcmd_rstart_enters_generate_rstart`, `ap_bus009_generate_rstart_holds_scl_low`, `ap_bus009_rstart_sda_fall_drives_sr`, `cp_bus009_waitcmd_to_rstart`, và `cp_rstart_state_sequence`.
 
-Test này kiểm tra thứ tự bit khi DUT truyền data ra bus.
+### BUS_010 - `bus_tx_byte_and_bit_order`
+
+Test này kiểm tra thứ tự bit khi DUT truyền data ra bus ở mức bus primitive.
 
 Trong I3C/I2C, byte được truyền MSB-first, nghĩa là bit 7 đi trước, sau đó bit 6, ..., cuối cùng là bit 0.
 
-Testbench sẽ gửi các pattern dễ quan sát:
+Testbench gửi các pattern dễ quan sát:
 
 ```text
-00, FF, A5, 5A
+00, FF, A5, 96
 ```
 
-Các pattern `A5` và `5A` hữu ích vì bit 1/0 xen kẽ, giúp phát hiện lỗi đảo bit hoặc dịch sai thứ tự.
+Các pattern `A5` và `96` hữu ích vì bit 1/0 xen kẽ, giúp phát hiện lỗi đảo bit hoặc dịch sai thứ tự.
 
 Kết quả mong đợi là `bus_tx` serialize byte theo MSB-first. Với mỗi request truyền byte hoặc truyền bit đơn, `bus_tx_done_o` chỉ pulse một lần khi hoàn tất. Timing setup/hold của `SDA` so với `SCL` cũng phải đúng.
 
-### BUS_009 - `bus_rx_byte_and_bit_order`
+Test này được giữ trong BUS category vì nó tập trung vào behavior của TX bus path. Các SDRW transaction khác vẫn kiểm tra flow-level như length, continuation, DAT index, và response ordering.
 
-Test này kiểm tra thứ tự bit khi DUT nhận data từ bus.
+### BUS_011 - `bus_rx_byte_and_bit_order`
 
-Device model hoặc block-level stimulus sẽ drive `SDA` với các byte pattern và ACK/NACK bit. DUT phải deserialize các bit nhận được thành byte đúng theo MSB-first.
+Test này kiểm tra thứ tự bit khi DUT nhận data từ bus ở mức bus primitive.
 
-Ví dụ nếu target drive byte `8'hA5`, DUT phải reconstruct đúng `8'hA5`, không được thành `8'h5A` hoặc giá trị bị đảo bit.
+Device model drive `SDA` với các byte pattern và ACK/NACK bit. DUT phải deserialize các bit nhận được thành byte đúng theo MSB-first.
+
+Ví dụ nếu target drive byte `8'hA5`, DUT phải reconstruct đúng `8'hA5`, không được thành giá trị bị đảo bit hoặc shift sai.
 
 Với single-bit read như ACK/NACK hoặc T-bit, testplan yêu cầu bit đọc được nằm ở `bit[0]`. Ngoài ra mutual exclusion SVA phải pass, nghĩa là logic không được vừa read byte vừa read bit theo cách xung đột.
 
-### BUS_010 - `od_pp_phase_switch`
+Test này được giữ trong BUS category vì nó tập trung vào behavior của RX bus path. Các SDRR transaction khác vẫn kiểm tra flow-level như length, over-run termination, continuation, DAT index, và response ordering.
+
+### BUS_012 - `od_pp_phase_switch`
 
 Test này kiểm tra việc chọn chế độ open-drain hoặc push-pull theo từng phase của transaction.
 
@@ -369,7 +499,9 @@ Kết quả mong đợi là OD được dùng cho START/address/ACK/STOP và ENT
 
 Test này quan trọng vì chọn sai OD/PP có thể gây xung đột điện trên bus hoặc làm sai behavior so với protocol.
 
-### BUS_011 - `tb_pad_model_odpp_wiring`
+Implementation note: BUS_012 không cần vseq riêng. Stimulus đã có từ các vseq SDRW/SDRR, I2C, CCC, và ENTDAA hiện hữu; phần pass/fail chính nằm ở SVA `ap_sel_od_pp_matches_expected` trong `flow_active_sva`, với expectation tính theo state/phase/device type.
+
+### BUS_013 - `tb_pad_model_odpp_wiring`
 
 Test này kiểm tra pad model trong testbench sau khi DUT đã có `sda_oe_o` và `sel_od_pp_o`.
 
@@ -382,6 +514,22 @@ Kết quả mong đợi là `tb_i3c_top` chỉ drive SDA khi `sda_oe_o=1`. Khi `
 Ví dụ trong I3C write data phase, DUT có thể dùng push-pull và drive SDA trực tiếp. Nhưng trong I3C read data phase, target là bên drive data, nên DUT phải release SDA dù data phase đang là push-pull.
 
 Test này quan trọng vì nếu pad model drive SDA sai thời điểm, simulation có thể che mất lỗi thật hoặc tạo contention giả trên bus.
+
+Implementation note: BUS_013 dùng cả vseq và SVA. Vseq `bus_tb_pad_model_odpp_wiring_vseq` tạo I3C write/read traffic để exercise controller-drive, controller-release, và target-drive path. SVA `tb_pad_model_sva` là checker chính, với các hook `ap_bus013_if_exposes_dut_pad_signals`, `ap_bus013_no_unsafe_sda_contention`, và các cover `cp_bus013_*` để map rõ về testplan.
+
+### BUS_014 - `bus_i2c_od_only_check`
+
+Test này kiểm tra I2C legacy transfer không bao giờ bật push-pull mode.
+
+Trong thiết kế này, DAT entry có bit `device=1` được xem là I2C legacy target. Với I2C, controller phải giữ open-drain trong toàn bộ transaction: START, address, ACK, data byte, final NACK, và STOP. I2C không dùng push-pull data phase như I3C SDR.
+
+Testbench sẽ program một DAT entry là I2C device với static address hợp lệ, sau đó chạy cả I2C write và I2C read. Trong suốt transaction, testbench quan sát `sel_od_pp_o`, `sda_oe_o`, `sda_o`, và bus SDA thực tế.
+
+Kết quả mong đợi là `sel_od_pp_o` luôn bằng 0 trong toàn bộ I2C transaction. Khi DUT cần kéo SDA low, nó dùng open-drain low. Khi line cần high hoặc target drive ACK/data, DUT phải release SDA đúng lúc. Không được có phase nào DUT chuyển sang push-pull.
+
+Test này bổ sung cho `BUS_012`: `BUS_012` chứng minh I3C SDR có phase được phép dùng push-pull, còn `BUS_014` chứng minh I2C legacy không dùng push-pull. Hai test này tạo cross-coverage giữa OD/PP phase và device type.
+
+Implementation note: BUS_014 không cần vseq riêng. Stimulus I2C write/read đã có trong `i2c_regular_write_basic_vseq` và `i2c_regular_read_basic_vseq`; phần pass/fail chính được check bằng SVA `ap_bus014_i2c_regular_xfer_never_push_pull` trong `flow_active_sva` và top-level propagation SVA trong `i3c_controller_top_sva`.
 
 ## 4.4 I3C SDR Private Write
 
@@ -409,19 +557,9 @@ RESP length phải bằng số byte thật sự đã truyền. Test này quan tr
 
 Directed regression không chạy full length 65535 byte vì runtime cao. Case đó được giữ làm future stress/performance test; length 256 đã cover boundary lớn hơn với 64 DWORD liên tiếp trong regression thường.
 
-### SDRW_003 - `i3c_regular_write_data_patterns`
-
-Test này kiểm tra data integrity của write path với nhiều pattern khác nhau.
-
-Testbench sẽ gửi các pattern như toàn 0, toàn 1, walking-one, alternating, và random data. Target hoặc monitor sẽ quan sát byte xuất hiện trên bus.
-
-Kết quả mong đợi là dữ liệu target thấy trên bus phải khớp chính xác với dữ liệu đã nạp vào TX FIFO. Không được đảo bit, đảo byte, mất byte, hoặc lặp lại byte cũ.
-
-Test này giúp phát hiện lỗi trong `bus_tx_flow`, byte ordering, và scoreboard expectation.
-
 SDR write T-bit parity không còn là một directed test riêng. Behavior này được assert bằng SVA `ap_sdr_write_tbit_parity`, cover bằng `cp_sdr_write_tbit_parity`, `cp_sdr_write_tbit_parity_one`, và `cp_sdr_write_tbit_parity_zero`, rồi được exercise tự nhiên bởi các SDRW test có payload random/pattern.
 
-### SDRW_004 - `i3c_write_toc_zero`
+### SDRW_003 - `i3c_write_toc_zero`
 
 Test này kiểm tra behavior continuation của regular SDR I3C write khi command đầu tiên có `toc=0`.
 
@@ -439,11 +577,11 @@ Với `BROADCAST_ADDR_ENABLE=1`, command đầu tiên là private I3C transfer m
 
 RESP của cả hai command phải báo Success, TID phải khớp từng command, và length phải bằng số byte đã truyền. Bus không được idle giữa command thứ nhất và command thứ hai; idle chỉ được quan sát sau STOP cuối cùng.
 
-Trong negative subcase, command đầu tiên vẫn phải truyền đủ data/T-bit đã yêu cầu, sau đó controller phát STOP thay vì Repeated START. RESP phải báo `NotSupported` với length bằng số byte thật sự đã truyền. Khi `BROADCAST_ADDR_ENABLE=1`, chỉ transfer đầu tiên có broadcast-header preamble; không được phát một preamble rỗng hoặc treo bus khi không có continuation hợp lệ.
+Trong negative subcase, command đầu tiên vẫn phải truyền đủ data/T-bit đã yêu cầu, sau đó controller phát STOP thay vì Repeated START. RESP phải báo `Success` với length bằng số byte thật sự đã truyền. Khi `BROADCAST_ADDR_ENABLE=1`, chỉ transfer đầu tiên có broadcast-header preamble; không được phát một preamble rỗng hoặc treo bus khi không có continuation hợp lệ.
 
 Test này quan trọng vì `toc=0` ảnh hưởng trực tiếp đến ownership của bus và sequencing giữa nhiều SDR private transfer trong cùng một frame. Nếu controller tạo STOP quá sớm, transfer bị tách frame sai. Nếu controller không tạo được `Sr`, không lấy command kế tiếp đúng lúc, hoặc phát lại `0x7e` ở mỗi continuation, continuation flow sẽ sai so với semantics đã specification hóa.
 
-### SDRW_005 - `i3c_write_back_to_back`
+### SDRW_004 - `i3c_write_back_to_back`
 
 Test này kiểm tra nhiều regular write command chạy liên tiếp.
 
@@ -455,7 +593,7 @@ Mỗi RESP phải có TID và length khớp với command tương ứng. Scorebo
 
 Test này quan trọng vì hệ thống thực tế thường không chỉ chạy một command đơn lẻ. Back-to-back command giúp phát hiện lỗi state cleanup, FIFO pointer, và response ordering.
 
-### SDRW_006 - `i3c_write_multi_dat_idx`
+### SDRW_005 - `i3c_write_multi_dat_idx`
 
 Test này kiểm tra controller chọn đúng DAT entry khi regular SDR private write dùng `dev_idx` khác nhau.
 
@@ -509,21 +647,11 @@ Nói cách khác, requested length của command là giới hạn mà controller
 
 Test này quan trọng vì nếu controller đọc dư byte, RX FIFO sẽ chứa data ngoài mong muốn và response length sẽ không còn khớp với command.
 
-### SDRR_004 - `i3c_read_data_patterns`
-
-Test này kiểm tra data integrity của read path với nhiều pattern khác nhau.
-
-Target sequence sẽ drive các pattern như toàn 0, toàn 1, alternating, walking-one, và random byte pattern. Controller nhận data từ bus và ghi vào RX FIFO.
-
-Kết quả mong đợi là nội dung RX FIFO phải khớp chính xác với data target đã drive. Không được đảo bit, đảo byte, mất byte, duplicate byte, hoặc lẫn data từ transaction trước.
-
-Test này giúp phát hiện lỗi trong `i3c_driver`, `bus_rx_flow`, byte ordering, RX FIFO packing, và scoreboard expectation.
-
-### SDRR_005 - `i3c_read_toc_zero`
+### SDRR_004 - `i3c_read_toc_zero`
 
 Test này kiểm tra behavior continuation của regular SDR I3C read khi command đầu tiên có `toc=0`.
 
-Trong scope project hiện tại, `toc=0` continuation được định nghĩa cho SDR regular I3C private transfer, bao gồm cả write và read. Vì vậy read path cũng cần test riêng, không chỉ dựa vào `SDRW_004`.
+Trong scope project hiện tại, `toc=0` continuation được định nghĩa cho SDR regular I3C private transfer, bao gồm cả write và read. Vì vậy read path cũng cần test riêng, không chỉ dựa vào `SDRW_003`.
 
 Testbench queue hai command đến cùng I3C target. Command thứ nhất là regular read với `toc=0`, length 2 byte. Target trả về hai byte hợp lệ và T-bit cuối báo kết thúc đúng tại requested length. Command thứ hai là regular write với `toc=1`, length 2 byte, và command này đã nằm sẵn trong CMD FIFO trước khi read đầu tiên kết thúc.
 
@@ -533,7 +661,7 @@ RESP của read command phải báo Success với TID và length đúng. RESP c�
 
 Test này quan trọng vì read termination có thêm RX FIFO packing và T-bit semantics, nên không thể chỉ dùng write `toc=0` để kết luận read continuation đã đúng. Nếu controller flush RX data sai thời điểm, tạo STOP quá sớm, hoặc không tạo được `Sr`, response và bus sequencing đều có thể sai.
 
-### SDRR_006 - `i3c_read_back_to_back`
+### SDRR_005 - `i3c_read_back_to_back`
 
 Test này kiểm tra nhiều regular SDR private read được queue liên tiếp, tương tự coverage back-to-back của write path.
 
@@ -547,7 +675,7 @@ RESP metadata phải giữ đúng thứ tự command, đặc biệt là TID và 
 
 Test này quan trọng vì read back-to-back dùng RX FIFO và RESP FIFO nhiều hơn write path. Nếu controller pop command sai thời điểm, pack partial DWORD sai, hoặc không giữ boundary giữa các read, lỗi sẽ xuất hiện dưới dạng RX data bị trộn hoặc response không còn khớp với command.
 
-### SDRR_007 - `i3c_read_multi_dat_idx`
+### SDRR_006 - `i3c_read_multi_dat_idx`
 
 Test này kiểm tra regular SDR private read chọn đúng DAT entry khi command dùng nhiều `dev_idx`.
 
@@ -593,7 +721,7 @@ Immediate Data Transfer descriptor vẫn có field `toc`, nên testplan cần ki
 
 Với `toc=1`, kết quả mong đợi là controller tạo STOP ở cuối immediate transfer và RESP báo success nếu các phase trước đó đều hợp lệ.
 
-Với `toc=0`, test không nên tự suy ra một continuation hợp lệ như `SDRW_004`. Đây là clarification/negative case cho đến khi project spec định nghĩa policy. Policy được chấp nhận cho sign-off phải là một hành vi rõ ràng như reject/abort với error response hoặc force STOP; điểm quan trọng là controller không được để bus treo ở trạng thái không có STOP cũng không có `Sr`, và không được tự ý nối sang command kế tiếp bằng waveform sai.
+Với `toc=0`, test không nên tự suy ra một continuation hợp lệ như `SDRW_003`. Đây là clarification/negative case cho đến khi project spec định nghĩa policy. Policy được chấp nhận cho sign-off phải là một hành vi rõ ràng như reject/abort với error response hoặc force STOP; điểm quan trọng là controller không được để bus treo ở trạng thái không có STOP cũng không có `Sr`, và không được tự ý nối sang command kế tiếp bằng waveform sai.
 
 Test này quan trọng vì `toc` xuất hiện trong descriptor immediate, nhưng MIPI I3C spec chỉ định bus-level START, Repeated START và STOP, không định nghĩa trực tiếp khái niệm Immediate descriptor. Vì vậy test này dùng để khóa policy của project spec, còn test chứng minh `toc=0` continuation hợp lệ nằm ở regular SDR private transfer.
 
@@ -969,7 +1097,7 @@ Test này kiểm tra HC abort cho I3C SDR regular write/read, I2C regular write/
 
 Các case SDR gồm abort sớm, abort sau khi đã truyền hoặc commit ít nhất một DWORD, và `toc=0` nơi abort phải override continuation. Immediate case assert abort trong `I3CWriteImmediate` cho cả hai private-address mode và trong `I2CWriteImmediate`. Transfer hoàn tất tại protocol boundary đã định nghĩa, tạo STOP, không chain command kế tiếp, và RESP phải là `HcAborted` với TID, reserved bits và actual length đúng.
 
-Với I3C hoặc I2C regular write, HC abort không tự flush phần TX FIFO chưa được fetch; recovery sạch cần clear `HC_CONTROL[3]`, đợi idle và SW reset. Với regular read, software drain và kiểm tra RX data đã commit cùng RESP sau khi clear abort; test phải chạy được một read hợp lệ tiếp theo mà không SW reset. I2C read abort phải drive controller NACK ở byte cuối rồi STOP và luôn giữ OD mode.
+Với I3C hoặc I2C regular write, HC abort không tự flush phần TX FIFO chưa được fetch; recovery sạch cần clear `HC_CONTROL[29]` (ABORT), đợi idle và SW reset. Với regular read, software drain và kiểm tra RX data đã commit cùng RESP sau khi clear abort; test phải chạy được một read hợp lệ tiếp theo mà không SW reset. I2C read abort phải drive controller NACK ở byte cuối rồi STOP và luôn giữ OD mode.
 
 Với immediate transfer, payload nằm trong command descriptor và không dùng TX/RX FIFO. Sau khi clear abort và đọc RESP, queue đã sạch và một immediate transfer hợp lệ tiếp theo phải chạy thành công trước bất kỳ SW reset cleanup nào.
 
@@ -1017,7 +1145,7 @@ Test này quan trọng vì reset có thể xảy ra bất kỳ lúc nào trong h
 
 Test này làm rõ policy khi software reset được assert trong lúc controller đang bận.
 
-Testbench bắt đầu một transfer, sau đó ghi `HC_CONTROL[1]` khi FSM chưa idle.
+Testbench bắt đầu một transfer, sau đó ghi `RESET_CONTROL[0]` (SOFT_RST) khi FSM chưa idle.
 
 Theo testplan, nếu spec hiện tại xem behavior này là undefined thì testcase chỉ được dùng để ghi nhận spec gap và khuyến nghị software chỉ dùng software reset khi `FSM_IDLE=1`; nó không phải positive pass/fail dựa trên waveform hiện tại.
 
@@ -1337,15 +1465,15 @@ Test này quan trọng vì Hot-Join liên quan đến target tự yêu cầu tha
 
 ### NA_003 - `na_irq_no_positive_test`
 
-Test này document việc interrupt output chưa tồn tại.
+Test này document việc IRQ output chưa tồn tại.
 
-Reviewer inspect top-level port và CSR map. Thiết kế hiện tại không có IRQ output, interrupt enable register, hoặc interrupt status register riêng.
+Reviewer inspect top-level port và CSR map. Thiết kế hiện tại không có IRQ output pin, không có interrupt enable register, và không có interrupt-status CSR.
 
-Kết quả mong đợi là xác nhận status verification hiện tại chỉ đi qua `HC_STATUS`, `QUEUE_STATUS`, và RESP FIFO.
+Kết quả mong đợi là xác nhận không có positive IRQ assertion testcase trong sign-off hiện tại. Phần status verification đi qua `HC_STATUS`, `QUEUE_STATUS`, và RESP FIFO.
 
-Do không có interrupt interface, không có positive IRQ testcase trong sign-off hiện tại.
+Do không có IRQ interface, software phải poll status/response thay vì dựa vào IRQ output.
 
-Test này quan trọng vì nhiều controller thật có interrupt path. Với design hiện tại, software phải poll status/response thay vì dựa vào IRQ.
+Test này quan trọng vì nhiều controller thật có interrupt path. Nếu không document rõ, người đọc testplan có thể nhầm việc thiếu IRQ testcase là thiếu sót verification, trong khi đây là giới hạn scope của thiết kế hiện tại.
 
 ### NA_004 - `na_hdr_no_positive_test`
 

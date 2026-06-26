@@ -494,10 +494,6 @@ interface i3c_if (
     handoff_seen = 1'b0;
     fork
       begin
-        // Valid handoff. For a push-pull read bit, also require the controller to be
-        // in PP phase (sel_od_pp==1): during a STOP/Rstart frame flow_active forces
-        // sel_od_pp=0 yet may still release the pad (sda_oe==0, e.g. SdaRise), which
-        // must NOT be mistaken for a read-data handoff.
         if (pp_phase) wait (dut_sda_oe === 1'b0 && dut_sel_od_pp === 1'b1);
         else wait (dut_sda_oe === 1'b0);
         handoff_seen = 1'b1;
@@ -509,9 +505,6 @@ interface i3c_if (
     disable fork;
 
     if (!handoff_seen) begin
-      // SCL rose before a handoff: if the controller is in OD (sel_od_pp==0) on a PP
-      // read bit, it is framing a STOP/Rstart (controller owns SDA) -> relinquish
-      // quietly so the bus monitor observes the STOP. This is not an error.
       if (pp_phase && dut_sel_od_pp === 1'b0) begin
         `uvm_info(msg_id, $sformatf("Controller framing STOP/Rstart before %s; target releases SDA",
                                     phase), UVM_HIGH)
@@ -547,9 +540,7 @@ interface i3c_if (
     wait_for_i3c_target_sda_handoff("I3C address ACK/NACK slot", handoff_ok);
     if (!handoff_ok) return;
 
-    `uvm_info(msg_id,
-              $sformatf("device_i3c_send_addr_ack_handoff::Drive %s",
-                        ack ? "ACK" : "NACK"),
+    `uvm_info(msg_id, $sformatf("device_i3c_send_addr_ack_handoff::Drive %s", ack ? "ACK" : "NACK"),
               UVM_HIGH)
 
     wait (!scl_i);
@@ -560,9 +551,7 @@ interface i3c_if (
 
     #(tc.tSCO * 1ns);
     device_sda_o = 1'b1;
-    `uvm_info(msg_id,
-              "device_i3c_send_addr_ack_handoff::Released SDA after ACK handoff",
-              UVM_HIGH)
+    `uvm_info(msg_id, "device_i3c_send_addr_ack_handoff::Released SDA after ACK handoff", UVM_HIGH)
   endtask : device_i3c_send_addr_ack_handoff
 
   task automatic device_i3c_send_addr_ack_no_handoff(input i3c_timing_t tc, input bit ack);
@@ -571,22 +560,15 @@ interface i3c_if (
     wait_for_i3c_target_sda_handoff("I3C address ACK/NACK slot without handoff", handoff_ok);
     if (!handoff_ok) return;
 
-    `uvm_info(msg_id,
-              $sformatf("device_i3c_send_addr_ack_no_handoff::Drive %s",
-                        ack ? "ACK" : "NACK"),
-              UVM_HIGH)
+    `uvm_info(msg_id, $sformatf("device_i3c_send_addr_ack_no_handoff::Drive %s",
+                                ack ? "ACK" : "NACK"), UVM_HIGH)
 
     wait (!scl_i);
     device_sda_pp_en = 1'b0;
     device_sda_o = ack ? 1'b0 : 1'b1;
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C address ACK setup without handoff");
 
-    // The Target remains the SDA transmitter after this ACK. Keep the ACK value
-    // through the SCL High phase; the following Target-data helper changes SDA
-    // only after SCL falls. Releasing an ACK Low after tSCO while SCL is High
-    // would create a false STOP.
-    `uvm_info(msg_id,
-              "device_i3c_send_addr_ack_no_handoff::Hold SDA for following Target data",
+    `uvm_info(msg_id, "device_i3c_send_addr_ack_no_handoff::Hold SDA for following Target data",
               UVM_HIGH)
   endtask : device_i3c_send_addr_ack_no_handoff
 
@@ -612,9 +594,6 @@ interface i3c_if (
     time_check(tc.tSetupBit, 1'b1, scl_i, "I3C device bit setup");
     #(tc.tSCO * 1ns);
 
-    // The Target releases SDA to High-Z shortly after the SCL rising edge.
-    // Update the value and drive mode together so a Low T-bit is not
-    // accidentally retained as an Open-Drain Low for the rest of SCL High.
     {device_sda_pp_en, device_sda_o} = 2'b01;
 
     time_check(tc.tClockPulse - tc.tSCO, 1'b0, scl_i, "I3C device bit clock high pulse width");

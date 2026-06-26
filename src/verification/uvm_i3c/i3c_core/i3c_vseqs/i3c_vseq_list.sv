@@ -15,6 +15,7 @@
 `include "i3c_vseqs/csr_vseqs/csr_queue_status_flags_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_rx_resp_read_pop_vseq.sv"
 `include "i3c_vseqs/csr_vseqs/csr_unmapped_addr_no_side_effect_vseq.sv"
+`include "i3c_vseqs/csr_vseqs/csr_hc_abort_control_vseq.sv"
 
 // 4.2 FIFO and Queue Behavior
 `include "i3c_vseqs/fifo_vseqs/fifo_base_vseq.sv"
@@ -28,19 +29,18 @@
 `include "i3c_vseqs/bus_vseqs/bus_phy_reset_and_sync_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_start_stop_detect_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_repeated_start_detect_vseq.sv"
-`include "i3c_vseqs/bus_vseqs/bus_scl_start_stop_timing_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_monitor_glitch_and_simultaneous_edge_filter_vseq.sv"
+`include "i3c_vseqs/bus_vseqs/bus_monitor_enable_gating_and_edge_pulses_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_scl_clock_low_high_timing_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_scl_waitcmd_stall_resume_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_scl_repeated_start_from_waitcmd_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_tx_byte_and_bit_order_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_rx_byte_and_bit_order_vseq.sv"
-`include "i3c_vseqs/bus_vseqs/bus_od_pp_phase_switch_vseq.sv"
 `include "i3c_vseqs/bus_vseqs/bus_tb_pad_model_odpp_wiring_vseq.sv"
 
 // 4.4 I3C SDR Private Write
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_len_sweep_vseq.sv"
-`include "i3c_vseqs/sdr_write_vseqs/i3c_write_data_patterns_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_toc_zero_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_back_to_back_vseq.sv"
 `include "i3c_vseqs/sdr_write_vseqs/i3c_write_multi_dat_idx_vseq.sv"
@@ -49,7 +49,6 @@
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_len_sweep_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_target_more_than_requested_vseq.sv"
-`include "i3c_vseqs/sdr_read_vseqs/i3c_read_data_patterns_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_toc_zero_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_back_to_back_vseq.sv"
 `include "i3c_vseqs/sdr_read_vseqs/i3c_read_multi_dat_idx_vseq.sv"

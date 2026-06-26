@@ -46,10 +46,10 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
 
     cfg0 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRR_006 %s back_to_back[0]", private_addr_mode_name(broadcast_header_enable)
+            "SDRR_005 %s back_to_back[0]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrr006_%s_dev_seq0", private_addr_mode_name(broadcast_header_enable)
+            "sdrr005_%s_dev_seq0", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'h8),
         .dev_idx(5'd0),
@@ -66,10 +66,10 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
     );
     cfg1 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRR_006 %s back_to_back[1]", private_addr_mode_name(broadcast_header_enable)
+            "SDRR_005 %s back_to_back[1]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrr006_%s_dev_seq1", private_addr_mode_name(broadcast_header_enable)
+            "sdrr005_%s_dev_seq1", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'h9),
         .dev_idx(5'd0),
@@ -86,10 +86,10 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
     );
     cfg2 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRR_006 %s back_to_back[2]", private_addr_mode_name(broadcast_header_enable)
+            "SDRR_005 %s back_to_back[2]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrr006_%s_dev_seq2", private_addr_mode_name(broadcast_header_enable)
+            "sdrr005_%s_dev_seq2", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'hA),
         .dev_idx(5'd0),
@@ -129,11 +129,11 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
     read_response(resp2);
 
 
-    check_all_queues_empty("after SDRR_006 back_to_back");
+    check_all_queues_empty("after SDRR_005 back_to_back");
     disable_dut();
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRR_006 result: mode=%s queued_cmds=3 target_addr=0x%02h rx_words_drained={%0d,%0d,%0d} observed_rstart={%0b,%0b,%0b}",
+                  "SDRR_005 result: mode=%s queued_cmds=3 target_addr=0x%02h rx_words_drained={%0d,%0d,%0d} observed_rstart={%0b,%0b,%0b}",
                   private_addr_mode_name(broadcast_header_enable), dynamic_addr, rx_words0.size(),
                   rx_words1.size(), rx_words2.size(), dev_seq0.observed_rstart,
                   dev_seq1.observed_rstart, dev_seq2.observed_rstart), UVM_LOW)

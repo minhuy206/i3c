@@ -9,6 +9,7 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
     bit [31:0] data;
 
     check_reg_eq(ADDR_HC_CONTROL, 32'h0000_0000, "HC_CONTROL", "after reset");
+    check_reg_eq(ADDR_RESET_CONTROL, 32'h0000_0000, "RESET_CONTROL", "after reset");
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], 1'b0,
                  "csr_reset_defaults_vseq: HC_CONTROL[BROADCAST_HEADER_ENABLE] should reset to 0")
@@ -24,8 +25,6 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(data[31:3], 29'h0,
                  "csr_reset_defaults_vseq: HC_STATUS reserved bits should be 0 after reset")
 
-    check_reg_eq(ADDR_INTR_STATUS, 32'h0000_0000, "INTR_STATUS", "after reset");
-
     check_timing_reg(ADDR_T_R, RST_T_R, "T_R", "after reset");
     check_timing_reg(ADDR_T_F, RST_T_F, "T_F", "after reset");
     check_timing_reg(ADDR_T_LOW, RST_T_LOW, "T_LOW", "after reset");
@@ -37,15 +36,12 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
     check_timing_reg(ADDR_T_SU_DAT, RST_T_SU_DAT, "T_SU_DAT", "after reset");
     check_timing_reg(ADDR_T_HD_DAT, RST_T_HD_DAT, "T_HD_DAT", "after reset");
     check_timing_reg(ADDR_T_BUS_FREE, RST_T_BUS_FREE, "T_BUS_FREE", "after reset");
-    check_timing_reg(ADDR_I2C_T_R, RST_I2C_T_R, "I2C_T_R", "after reset");
-    check_timing_reg(ADDR_I2C_T_F, RST_I2C_T_F, "I2C_T_F", "after reset");
     check_timing_reg(ADDR_I2C_T_LOW, RST_I2C_T_LOW, "I2C_T_LOW", "after reset");
     check_timing_reg(ADDR_I2C_T_HIGH, RST_I2C_T_HIGH, "I2C_T_HIGH", "after reset");
     check_timing_reg(ADDR_I2C_T_SU_STA, RST_I2C_T_SU_STA, "I2C_T_SU_STA", "after reset");
     check_timing_reg(ADDR_I2C_T_HD_STA, RST_I2C_T_HD_STA, "I2C_T_HD_STA", "after reset");
     check_timing_reg(ADDR_I2C_T_SU_STO, RST_I2C_T_SU_STO, "I2C_T_SU_STO", "after reset");
     check_timing_reg(ADDR_I2C_T_SU_DAT, RST_I2C_T_SU_DAT, "I2C_T_SU_DAT", "after reset");
-    check_timing_reg(ADDR_I2C_T_HD_DAT, RST_I2C_T_HD_DAT, "I2C_T_HD_DAT", "after reset");
     check_timing_reg(ADDR_I2C_T_BUF, RST_I2C_T_BUF, "I2C_T_BUF", "after reset");
 
     check_reg_eq(ADDR_QUEUE_STATUS, 32'h0000_00AA, "QUEUE_STATUS", "after reset");

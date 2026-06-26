@@ -100,6 +100,8 @@ stateDiagram-v2
 | `NextTaskDecision` | `rx_req_bit_i`            | `ReadBit`          |
 | `NextTaskDecision` | neither                   | `Idle`             |
 
+**Global override:** after the per-state case above is evaluated, the FSM applies `if (~req) state_d = Idle;` (where `req = rx_req_bit_i | rx_req_byte_i`) unconditionally for every state. This means any state forces a transition to `Idle` whenever neither request is asserted, overriding whatever the case statement computed.
+
 ### 5.3. Output Logic
 
 | State              | rx_idle_o | rx_done_o                   | rx_bit_en | bit_counter_en |
@@ -142,7 +144,7 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
     rx_data <= '0;
   end else begin
     if (bit_counter_en) begin
-      if (rx_done) rx_data[6:0] <= {rx_data[5:0], sda_i};
+      if (rx_done) rx_data[6:0] <= {rx_data[5:0], rx_bit};
     end else begin
       rx_data <= '0;
     end
@@ -159,12 +161,12 @@ always_comb begin
   if (rx_req_bit_i) begin
     rx_data_o = {7'b0, rx_bit};        // Single bit in LSB
   end else begin
-    rx_data_o = {rx_data[6:0], sda_i}; // Full byte (combinational last bit)
+    rx_data_o = {rx_data[6:0], rx_bit}; // Full byte (registered last bit)
   end
 end
 ```
 
-The output uses combinational `sda_i` for the last bit to avoid an extra cycle of latency.
+The output uses the registered `rx_bit` for the last bit, consistent with the shift register in §5.5 — there is no combinational shortcut from `sda_i`.
 
 ## 6. Timing Requirements
 
@@ -179,7 +181,7 @@ The output uses combinational `sda_i` for the last bit to avoid an extra cycle o
 
 | Aspect                     | Reference                                                   | This Design                                                             |
 | -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `rx_req_bit` latch         | Stored in FF but uses `rx_req_bit_i` directly in output mux | Keep as-is (registered copy for FSM decisions, direct input for output) |
+| `rx_req_bit` latch         | Stored in FF but uses `rx_req_bit_i` directly in output mux | N/A — no `rx_req_bit` FF exists; `rx_req_bit_i` is used directly to select the mux path, and both paths use the registered `rx_bit` for data |
 | `scl_stable_high_i`        | Port exists but unused internally                           | Port retained for interface consistency                                 |
 
 ## 8. Error Handling
@@ -224,4 +226,4 @@ src/verification/uvm_i3c/
 
 - Unlike `bus_tx_flow` which has a sub-module (`bus_tx`) for bit-level timing, `bus_rx_flow` is self-contained. RX is simpler because the controller only needs to sample on SCL posedge — there are no setup/hold timing concerns on the receive side.
 - The `scl_stable_high_i` port exists in the interface but is not used in the current implementation. It is retained for forward compatibility.
-- The `rx_req_bit` FF registers the bit request but the FSM transition uses the registered copy while the output mux uses the direct input. This is intentional — the registered copy provides a stable signal for FSM decisions while the direct input ensures the output mux reflects the current request type.
+- The output mux (§5.6) selects between the single-bit and full-byte paths using `rx_req_bit_i` directly (no latching). Both paths assemble their data from the registered `rx_bit` signal, not the raw `sda_i` wire — there is no combinational shortcut through `sda_i` anywhere in the output path.

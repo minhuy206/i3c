@@ -354,15 +354,16 @@ class i3c_scoreboard extends uvm_scoreboard;
         end else begin
           case (item.addr)
             ADDR_HC_CONTROL: handle_hc_control_write(item.wdata);
+            ADDR_RESET_CONTROL: handle_reset_control_write(item.wdata);
             ADDR_CMD_QUEUE: handle_cmd_dword(item.wdata);
-            ADDR_TX_DATA: tx_data_queue.push_back(item.wdata);
+            ADDR_PIO_DATA_PORT: tx_data_queue.push_back(item.wdata);
             default: ;
           endcase
         end
       end else begin
         case (item.addr)
           ADDR_RESP: check_resp(item.rdata);
-          ADDR_RX_DATA: check_rx_data(item.rdata);
+          ADDR_PIO_DATA_PORT: check_rx_data(item.rdata);
           default: ;
         endcase
       end
@@ -372,9 +373,12 @@ class i3c_scoreboard extends uvm_scoreboard;
   function void handle_hc_control_write(bit [31:0] wdata);
     hc_abort_active = wdata[HC_CTRL_HC_ABORT_BIT];
     broadcast_header_enable = wdata[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
-    if (wdata[HC_CTRL_SW_RESET_BIT]) handle_sw_reset();
     if (hc_abort_active)
       `uvm_info(`gfn, "HC abort asserted: next write transaction will infer HcAborted", UVM_MEDIUM)
+  endfunction
+
+  function void handle_reset_control_write(bit [31:0] wdata);
+    if (wdata[RESET_CTRL_SOFT_RST_BIT]) handle_sw_reset();
   endfunction
 
   function void handle_sw_reset();
@@ -1431,11 +1435,13 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit inferred_tx_underflow;
     bit inferred_hc_abort;
     bit inferred_data_nack;
+    bit missing_continuation;
     i3c_resp_err_status_e resp_status;
 
     inferred_tx_underflow = 1'b0;
     inferred_hc_abort     = 1'b0;
     inferred_data_nack    = 1'b0;
+    missing_continuation  = 1'b0;
 
     if (exp.uses_tx_queue) begin
       if (item.num_data < exp.data_length) begin
@@ -1465,13 +1471,17 @@ class i3c_scoreboard extends uvm_scoreboard;
                    exp.data_length
                    ))
       end
+      missing_continuation = exp.target_is_i3c && !exp.toc && item.stop && !item.rstart &&
+                             !inferred_data_nack && !inferred_tx_underflow &&
+                             !inferred_hc_abort;
       resp_status = inferred_data_nack    ? I2cDataNackOrI3cBusAborted :
                     inferred_tx_underflow ? Ovl :
                     inferred_hc_abort     ? HcAborted : Success;
       record_pending_resp(1'b0, exp.tid, item.num_data, -1, resp_status);
     end
 
-    return inferred_tx_underflow || inferred_hc_abort || inferred_data_nack;
+    return inferred_tx_underflow || inferred_hc_abort || inferred_data_nack ||
+           missing_continuation;
   endfunction
 
   function bit check_immediate_write_txn(i3c_item item, exp_txn_t exp);

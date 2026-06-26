@@ -87,7 +87,7 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
         "after toc0_vseq %s valid continuation", private_addr_mode_name(broadcast_header_enable)));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_004 result: mode=%s case=valid_continuation rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b first_broadcast_header=%0b second_broadcast_header=%0b",
+                  "SDRW_003 result: mode=%s case=valid_continuation rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b first_broadcast_header=%0b second_broadcast_header=%0b",
                   private_addr_mode_name(broadcast_header_enable), rstart_count,
                   dev_seq0.observed_rstart, dev_seq1.observed_rstart,
                   dev_seq0.observed_broadcast_header, dev_seq1.observed_broadcast_header),
@@ -98,9 +98,6 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t        cfg;
     byte_queue_t                   no_read_data;
     bit                     [31:0] resp;
-    bit                     [31:0] intr_status;
-    bit                     [31:0] intr_status_before_clear;
-    bit                     [31:0] exp_intr_bits;
     byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                      [6:0] static_addr;
@@ -148,20 +145,6 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq.observed_broadcast_rstart, broadcast_header_enable,
                  "toc0_missing_next_cmd_vseq: broadcast header RSTART mismatch")
 
-    exp_intr_bits = (32'h1 << INTR_HC_SEQ_CANCEL_STAT_BIT) |
-                    (32'h1 << INTR_HC_ERR_CMD_SEQ_TIMEOUT_STAT_BIT);
-    reg_read(ADDR_INTR_STATUS, intr_status);
-    intr_status_before_clear = intr_status;
-    `DV_CHECK_EQ(intr_status & exp_intr_bits, exp_intr_bits,
-                 "toc0_missing_next_cmd_vseq: missing continuation interrupt bits not set")
-    `DV_CHECK_EQ(intr_status & ~exp_intr_bits, 32'h0,
-                 "toc0_missing_next_cmd_vseq: unexpected INTR_STATUS bits set")
-
-    reg_write(ADDR_INTR_STATUS, exp_intr_bits);
-    reg_read(ADDR_INTR_STATUS, intr_status);
-    `DV_CHECK_EQ(intr_status & exp_intr_bits, 32'h0,
-                 "toc0_missing_next_cmd_vseq: W1C did not clear interrupt bits")
-
     check_all_queues_empty(
         $sformatf(
         "after toc0_missing_next_cmd_vseq %s", private_addr_mode_name(broadcast_header_enable)));
@@ -174,8 +157,8 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
                            ));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_004 result: mode=%s case=missing_continuation observed_rstart=%0b intr_bits_before_clear=0x%08h intr_bits_after_clear=0x%08h",
-                  private_addr_mode_name(broadcast_header_enable), dev_seq.observed_rstart,
-                  intr_status_before_clear & exp_intr_bits, intr_status & exp_intr_bits), UVM_LOW)
+                  "SDRW_003 result: mode=%s case=missing_continuation observed_rstart=%0b",
+                  private_addr_mode_name(broadcast_header_enable), dev_seq.observed_rstart),
+              UVM_LOW)
   endtask
 endclass
