@@ -28,15 +28,12 @@ class csr_timing_rw_vseq extends csr_base_vseq;
           ADDR_T_BUS_FREE
       };
       bins i2c_timing_regs[] = {
-          ADDR_I2C_T_R,
-          ADDR_I2C_T_F,
           ADDR_I2C_T_LOW,
           ADDR_I2C_T_HIGH,
           ADDR_I2C_T_SU_STA,
           ADDR_I2C_T_HD_STA,
           ADDR_I2C_T_SU_STO,
           ADDR_I2C_T_SU_DAT,
-          ADDR_I2C_T_HD_DAT,
           ADDR_I2C_T_BUF
       };
     }
@@ -60,7 +57,7 @@ class csr_timing_rw_vseq extends csr_base_vseq;
 
   task body();
     bit [19:0] rand_value;
-    bit [11:0] timing_addr[21] = '{
+    bit [11:0] timing_addr[18] = '{
         ADDR_T_R,
         ADDR_T_F,
         ADDR_T_LOW,
@@ -72,18 +69,15 @@ class csr_timing_rw_vseq extends csr_base_vseq;
         ADDR_T_SU_DAT,
         ADDR_T_HD_DAT,
         ADDR_T_BUS_FREE,
-        ADDR_I2C_T_R,
-        ADDR_I2C_T_F,
         ADDR_I2C_T_LOW,
         ADDR_I2C_T_HIGH,
         ADDR_I2C_T_SU_STA,
         ADDR_I2C_T_HD_STA,
         ADDR_I2C_T_SU_STO,
         ADDR_I2C_T_SU_DAT,
-        ADDR_I2C_T_HD_DAT,
         ADDR_I2C_T_BUF
     };
-    string timing_reg[21] = '{
+    string timing_reg[18] = '{
         "T_R",
         "T_F",
         "T_LOW",
@@ -95,19 +89,16 @@ class csr_timing_rw_vseq extends csr_base_vseq;
         "T_SU_DAT",
         "T_HD_DAT",
         "T_BUS_FREE",
-        "I2C_T_R",
-        "I2C_T_F",
         "I2C_T_LOW",
         "I2C_T_HIGH",
         "I2C_T_SU_STA",
         "I2C_T_HD_STA",
         "I2C_T_SU_STO",
         "I2C_T_SU_DAT",
-        "I2C_T_HD_DAT",
         "I2C_T_BUF"
     };
 
-    bit [19:0] timing_reg_value[21] = '{
+    bit [19:0] timing_reg_value[18] = '{
         RST_T_R,
         RST_T_F,
         RST_T_LOW,
@@ -119,19 +110,16 @@ class csr_timing_rw_vseq extends csr_base_vseq;
         RST_T_SU_DAT,
         RST_T_HD_DAT,
         RST_T_BUS_FREE,
-        RST_I2C_T_R,
-        RST_I2C_T_F,
         RST_I2C_T_LOW,
         RST_I2C_T_HIGH,
         RST_I2C_T_SU_STA,
         RST_I2C_T_HD_STA,
         RST_I2C_T_SU_STO,
         RST_I2C_T_SU_DAT,
-        RST_I2C_T_HD_DAT,
         RST_I2C_T_BUF
     };
 
-    bit [19:0] expected_value[21];
+    bit [19:0] expected_value[18];
 
     foreach (timing_addr[i]) begin
       expected_value[i] = timing_reg_value[i];
@@ -172,8 +160,8 @@ class csr_timing_rw_vseq extends csr_base_vseq;
 
   endtask
 
-  task write_and_check_timing_reg(ref bit [11:0] timing_addr[21], ref string timing_reg[21],
-                                  ref bit [19:0] expected_value[21], input int index,
+  task write_and_check_timing_reg(ref bit [11:0] timing_addr[18], ref string timing_reg[18],
+                                  ref bit [19:0] expected_value[18], input int index,
                                   input bit [31:0] value, input string phase_name,
                                   input timing_value_kind_e value_kind);
     reg_write(timing_addr[index], value);
@@ -183,8 +171,8 @@ class csr_timing_rw_vseq extends csr_base_vseq;
     timing_rw_cg.sample(timing_addr[index], value_kind);
   endtask
 
-  task verify_all_timing_regs(ref bit [11:0] timing_addr[21], ref string timing_reg[21],
-                              ref bit [19:0] expected_value[21], input string ctxt);
+  task verify_all_timing_regs(ref bit [11:0] timing_addr[18], ref string timing_reg[18],
+                              ref bit [19:0] expected_value[18], input string ctxt);
     foreach (timing_addr[i]) begin
       check_timing_reg(timing_addr[i], expected_value[i], timing_reg[i], ctxt);
     end

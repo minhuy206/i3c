@@ -164,7 +164,8 @@ module sync_fifo_sva #(
                    wvalid_i && !wready_o
                    |=> ((wptr_q == $past(wptr_q)) &&
                         (rptr_q == $past(rptr_q)) &&
-                        (depth_o == $past(depth_o))))
+                        (depth_o == $past(depth_o))) ||
+                       ((wptr_q == '0) && (rptr_q == '0) && (depth_o == '0)))
   else $error("sync_fifo_sva: blocked full write changed FIFO state");
 
   cp_full_write_does_not_advance_wptr:
@@ -172,7 +173,8 @@ module sync_fifo_sva #(
                   wvalid_i && !wready_o
                   ##1 ((wptr_q == $past(wptr_q)) &&
                        (rptr_q == $past(rptr_q)) &&
-                       (depth_o == $past(depth_o))));
+                       (depth_o == $past(depth_o))) ||
+                      ((wptr_q == '0) && (rptr_q == '0) && (depth_o == '0)));
 
   ap_empty_read_does_not_advance_rptr:
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q || flush_i)

@@ -24,13 +24,14 @@ class csr_broadcast_header_control_vseq extends csr_base_vseq;
                  "CSR_003 reset: HC_CONTROL.ENABLE should reset to 0")
     `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], 1'b0,
                  "CSR_003 reset: BROADCAST_HEADER_ENABLE should reset to 0")
-    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0,
-                 "CSR_003 reset: HC_CONTROL.SW_RESET should read 0")
+    reg_read(ADDR_RESET_CONTROL, data);
+    `DV_CHECK_EQ(data[RESET_CTRL_SOFT_RST_BIT], 1'b0,
+                 "CSR_003 reset: RESET_CONTROL.SOFT_RST should read 0")
 
     fork
       check_no_host_start_until_event(control_check_done, "csr_broadcast_header_control_vseq");
       begin
-        reg_write(ADDR_HC_CONTROL, 32'h0000_0004);
+        reg_write(ADDR_HC_CONTROL, hc_control_value(.iba_include(1'b1)));
         reg_read(ADDR_HC_CONTROL, data);
         `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], 1'b0,
                      "CSR_003 set-only: BROADCAST_HEADER_ENABLE must not set ENABLE")

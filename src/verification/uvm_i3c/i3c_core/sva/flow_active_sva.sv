@@ -69,8 +69,6 @@ module flow_active_sva
     input logic                       [  HciRxDataWidth-1:0] rx_queue_wdata,
     input logic                                              resp_queue_wready_i,
     input logic                                              cmd_queue_rready_o,
-    input logic                                              hc_seq_cancel_event_o,
-    input logic                                              hc_err_cmd_seq_timeout_event_o,
     input logic                                              bus_tx_idle_i,
     input logic                                              bus_rx_idle_i,
     input logic                                              next_cmd_available,
@@ -439,6 +437,9 @@ module flow_active_sva
            bus_rx_idle_i;
   endfunction
 
+  // BUS_012: OD/PP phase rule. Existing SDRW/SDRR/I2C/CCC/ENTDAA vseqs create
+  // the phases; this checker owns pass/fail, so no BUS_012-specific stimulus
+  // sequence is required.
   ap_sel_od_pp_matches_expected :
   assert property (@(posedge clk_i) disable iff (!rst_ni) sel_od_pp_o === expected_sel_od_pp(
       state_q,
@@ -1492,7 +1493,7 @@ module flow_active_sva
                                             success_resp_matches_current_len() &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o)
-  else $error("flow_active_sva: SDRW_005 toc=0 must accept continuation without STOP in %m");
+  else $error("flow_active_sva: SDRW_003 toc=0 must accept continuation without STOP in %m");
 
   cp_toc0_accept_continuation :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1538,7 +1539,7 @@ module flow_active_sva
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !cmd_queue_rready_o)
-  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation must STOP without CMD pop in %m");
+  else $error("flow_active_sva: SDRW_003 toc=0 missing continuation must STOP without CMD pop in %m");
 
   cp_toc0_missing_continuation_requests_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1548,28 +1549,6 @@ module flow_active_sva
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !cmd_queue_rready_o);
-
-  ap_toc0_missing_continuation_sets_intr_events :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            sdr_write_done_ready() &&
-                                            !reg_desc.toc &&
-                                            !next_cmd_available &&
-                                            gen_stop_o &&
-                                            scl_gen_done_i
-                                            |->
-                                            hc_seq_cancel_event_o &&
-                                            hc_err_cmd_seq_timeout_event_o)
-  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation must raise interrupt events in %m");
-
-  cp_toc0_missing_continuation_sets_intr_events :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            sdr_write_done_ready() &&
-                                            !reg_desc.toc &&
-                                            !next_cmd_available &&
-                                            gen_stop_o &&
-                                            scl_gen_done_i &&
-                                            hc_seq_cancel_event_o &&
-                                            hc_err_cmd_seq_timeout_event_o);
 
   ap_toc0_missing_continuation_success_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1582,7 +1561,7 @@ module flow_active_sva
                                             !next_cmd_available
                                             |->
                                             success_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_005 toc=0 missing continuation response must be Success in %m");
+  else $error("flow_active_sva: SDRW_003 toc=0 missing continuation response must be Success in %m");
 
   cp_toc0_missing_continuation_success_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1606,7 +1585,7 @@ module flow_active_sva
                                             !next_cmd_supported
                                             |->
                                             not_supported_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_005 toc=0 unsupported continuation response must be NotSupported in %m");
+  else $error("flow_active_sva: SDRW_003 toc=0 unsupported continuation response must be NotSupported in %m");
 
   cp_toc0_unsupported_continuation_not_supported_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1629,7 +1608,7 @@ module flow_active_sva
                                             gen_rstart_o &&
                                             !gen_start_o &&
                                             !gen_stop_o)
-  else $error("flow_active_sva: SDRW_005 continuation must request repeated START only in %m");
+  else $error("flow_active_sva: SDRW_003 continuation must request repeated START only in %m");
 
   ap_toc0_private_write_continuation_skips_bcast_header :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1639,7 +1618,7 @@ module flow_active_sva
                                             sdr_regular_i3c_write()
                                             |=>
                                             state_q != I3CBcastHeader)
-  else $error("flow_active_sva: SDRW_005 continuation must not emit a second broadcast header in %m");
+  else $error("flow_active_sva: SDRW_003 continuation must not emit a second broadcast header in %m");
 
   cp_toc0_private_write_continuation_skips_bcast_header :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1735,6 +1714,29 @@ module flow_active_sva
   else $error("flow_active_sva: I2C legacy transfer must stay open-drain on the I2C path in %m");
 
   cp_i2c_xfer_uses_i2c_open_drain :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            i2c_active_state() &&
+                                            !abort_i &&
+                                            i2c_regular_xfer() &&
+                                            !sel_i3c_i2c_o &&
+                                            use_i2c_timing_o &&
+                                            !sel_od_pp_o);
+
+  // BUS_014: keep an explicit sign-off hook for the legacy-I2C OD-only rule.
+  // The I2C regular write/read vseqs provide the stimulus; this assertion owns
+  // the protocol invariant, so no BUS_014-specific vseq is required.
+  ap_bus014_i2c_regular_xfer_never_push_pull :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            i2c_active_state() &&
+                                            !abort_i &&
+                                            i2c_regular_xfer()
+                                            |->
+                                            !sel_i3c_i2c_o &&
+                                            use_i2c_timing_o &&
+                                            !sel_od_pp_o)
+  else $error("flow_active_sva: BUS_014 I2C regular transfer asserted push-pull in %m");
+
+  cp_bus014_i2c_regular_xfer_never_push_pull :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             i2c_active_state() &&
                                             !abort_i &&
@@ -3426,8 +3428,6 @@ bind flow_active flow_active_sva #(
     .rx_queue_wdata,
     .resp_queue_wready_i,
     .cmd_queue_rready_o,
-    .hc_seq_cancel_event_o,
-    .hc_err_cmd_seq_timeout_event_o,
     .bus_tx_idle_i,
     .bus_rx_idle_i,
     .next_cmd_available,

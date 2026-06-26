@@ -37,6 +37,7 @@ docs/spec_rtl_audit.md
 # Xcelium generated files
 xcelium.d/
 xcelium_fifo005.d/
+run.lnx8664.*.d
 cov_work/
 INCA_libs/
 xrun.history

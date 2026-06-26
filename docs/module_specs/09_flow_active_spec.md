@@ -184,8 +184,6 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 | ---------------------------------- | --------- | ----- | ------------------------------------- |
 | `i3c_fsm_en_i`                     | Input     | 1     | FSM enable (from CSR)                 |
 | `abort_i`                          | Input     | 1     | Request abort of an active transfer   |
-| `hc_seq_cancel_event_o`            | Output    | 1     | Command sequence cancellation event   |
-| `hc_err_cmd_seq_timeout_event_o`   | Output    | 1     | Missing/invalid continuation event    |
 | `i3c_fsm_idle_o`                   | Output    | 1     | FSM is idle                           |
 
 ## 5. Functional Description
@@ -625,7 +623,7 @@ end
 ### Scenarios
 
 1. **I3C Private Write (immediate):** Send 2-byte immediate write to I3C device with `broadcast_header_enable_i=0`; verify direct target address and response
-2. **I3C Private Write with broadcast header:** Enable `HC_CONTROL[2]`; verify `[S][0x7E+W][ACK][Sr][DA+W]...`
+2. **I3C Private Write with broadcast header:** Enable `HC_CONTROL[0]` (IBA_INCLUDE); verify `[S][0x7E+W][ACK][Sr][DA+W]...`
 3. **I3C Private Write (regular):** Send 8-byte write via TX FIFO; verify data integrity
 4. **I3C Private Read:** Read 4 bytes from I3C device; verify RX FIFO data and response
 5. **I2C Write (immediate):** Send immediate write to I2C legacy device; verify OD signaling

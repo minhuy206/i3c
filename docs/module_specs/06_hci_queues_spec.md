@@ -231,13 +231,12 @@ The queues are accessed via the CSR register interface at these offsets (see spe
 
 | Register         | Offset | Access | Description                                              |
 | ---------------- | ------ | ------ | -------------------------------------------------------- |
-| `CMD_QUEUE_PORT` | 0x100  | W      | Write CMD descriptor (2x 32-bit writes for 64-bit entry) |
-| `TX_DATA_PORT`   | 0x104  | W      | Write TX data DWORD                                      |
-| `RX_DATA_PORT`   | 0x108  | R      | Read RX data DWORD                                       |
-| `RESP_PORT`      | 0x10C  | R      | Read response descriptor                                 |
-| `QUEUE_STATUS`   | 0x110  | R      | Full/empty flags for all queues                          |
+| `CMD_QUEUE_PORT` | 0x080  | W      | Write CMD descriptor (2x 32-bit writes for 64-bit entry) |
+| `PIO_DATA_PORT`  | 0x088  | W/R    | Write TX data DWORD / read RX data DWORD                 |
+| `RESP_PORT`      | 0x084  | R      | Read response descriptor                                 |
+| `QUEUE_STATUS`   | 0x0B4  | R      | Full/empty flags for all queues                          |
 
-**CMD FIFO 64-bit write protocol:** Software writes DWORD0 first (offset 0x100), then DWORD1 (offset 0x100 again). The CSR module assembles the 64-bit entry and writes to CMD FIFO as a single transaction.
+**CMD FIFO 64-bit write protocol:** Software writes DWORD0 first (offset 0x080), then DWORD1 (offset 0x080 again). The CSR module assembles the 64-bit entry and writes to CMD FIFO as a single transaction.
 
 ## 9. Error Handling
 

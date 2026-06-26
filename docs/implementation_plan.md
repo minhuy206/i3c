@@ -159,17 +159,18 @@ Based on spec 07. Replaces the PeakRDL-generated CSR.
 
 **Register map:**
 
-| Address     | Name           | Access | Description                                |
-| ----------- | -------------- | ------ | ------------------------------------------ |
-| `0x000`     | HC_CONTROL     | RW     | [0]=ENABLE, [1]=SW_RESET (self-clear)      |
-| `0x004`     | HC_STATUS      | RO     | [0]=FSM_IDLE, [1]=CMD_FULL, [2]=RESP_EMPTY |
-| `0x010-030` | Timing (×9)    | RW     | 20-bit timing registers                    |
-| `0x100`     | CMD_QUEUE_PORT | WO     | 64-bit staging via 2× 32-bit writes        |
-| `0x104`     | TX_DATA_PORT   | WO     | Push to TX FIFO                            |
-| `0x108`     | RX_DATA_PORT   | RO     | Pop from RX FIFO                           |
-| `0x10C`     | RESP_PORT      | RO     | Pop from RESP FIFO                         |
-| `0x110`     | QUEUE_STATUS   | RO     | 8-bit FIFO flags                           |
-| `0x200-27C` | DAT[0..31]     | RW     | 32-bit device address table entries        |
+| Address       | Name           | Access | Description                                       |
+| ------------- | -------------- | ------ | ------------------------------------------------- |
+| `0x004`       | HC_CONTROL     | RW     | [0]=IBA_INCLUDE, [29]=ABORT, [31]=BUS_ENABLE      |
+| `0x010`       | RESET_CONTROL  | W/SC   | [0]=SOFT_RST (self-clearing pulse, flushes FIFOs) |
+| `0x014`       | HC_STATUS      | RO     | [0]=FSM_IDLE, [1]=CMD_FULL, [2]=RESP_EMPTY        |
+| `0x020`       | Unmapped       | -      | Reads return 0; writes ignored                    |
+| `0x080`       | CMD_QUEUE_PORT | WO     | 64-bit staging via 2× 32-bit writes               |
+| `0x084`       | RESP_PORT      | RO     | Pop from RESP FIFO                                |
+| `0x088`       | PIO_DATA_PORT  | RW     | Write → push TX FIFO; read → pop RX FIFO          |
+| `0x0B4`       | QUEUE_STATUS   | RO     | 8-bit FIFO flags                                  |
+| `0x32C-0x380` | Timing (×18)   | RW     | 20-bit timing registers (11 I3C + 7 I2C)          |
+| `0x400-47C`   | DAT[0..31]     | RW     | 32-bit device address table entries               |
 
 **Key implementation details:**
 

@@ -38,9 +38,9 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
     configure_multi_dat_targets(static_addr0, dynamic_addr0, static_addr1, dynamic_addr1);
 
     cfg0 = make_transfer_cfg(
-        .ctxt($sformatf("SDRW_006 %s DAT[0]", private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf("SDRW_005 %s DAT[0]", private_addr_mode_name(broadcast_header_enable))),
         .seq_name($sformatf(
-            "sdrw007_%s_dev_seq0", private_addr_mode_name(broadcast_header_enable)
+            "sdrw005_%s_dev_seq0", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'h9),
         .dev_idx(5'd0),
@@ -56,9 +56,9 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
     cfg1 = make_transfer_cfg(
-        .ctxt($sformatf("SDRW_006 %s DAT[1]", private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf("SDRW_005 %s DAT[1]", private_addr_mode_name(broadcast_header_enable))),
         .seq_name($sformatf(
-            "sdrw007_%s_dev_seq1", private_addr_mode_name(broadcast_header_enable)
+            "sdrw005_%s_dev_seq1", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'hB),
         .dev_idx(5'd1),
@@ -90,10 +90,10 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
     read_response(resp1);
 
     check_all_queues_empty(
-        $sformatf("after SDRW_006 %s multi DAT", private_addr_mode_name(broadcast_header_enable)));
+        $sformatf("after SDRW_005 %s multi DAT", private_addr_mode_name(broadcast_header_enable)));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_006 result: mode=%s case=multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} sampled_bytes={%0d,%0d}",
+                  "SDRW_005 result: mode=%s case=multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} sampled_bytes={%0d,%0d}",
                   private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
                   cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr,
                   dev_seq0.sampled_data.size(), dev_seq1.sampled_data.size()), UVM_LOW)
@@ -119,10 +119,10 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
 
     cfg0 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_006 %s toc0 DAT[0]", private_addr_mode_name(broadcast_header_enable)
+            "SDRW_005 %s toc0 DAT[0]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrw007_%s_toc0_dev_seq0", private_addr_mode_name(broadcast_header_enable)
+            "sdrw005_%s_toc0_dev_seq0", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'hC),
         .dev_idx(5'd0),
@@ -139,10 +139,10 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
     );
     cfg1 = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRW_006 %s toc0 DAT[1]", private_addr_mode_name(broadcast_header_enable)
+            "SDRW_005 %s toc0 DAT[1]", private_addr_mode_name(broadcast_header_enable)
         )),
         .seq_name($sformatf(
-            "sdrw007_%s_toc0_dev_seq1", private_addr_mode_name(broadcast_header_enable)
+            "sdrw005_%s_toc0_dev_seq1", private_addr_mode_name(broadcast_header_enable)
         )),
         .tid(4'hD),
         .dev_idx(5'd1),
@@ -166,10 +166,10 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
 
     check_all_queues_empty(
         $sformatf(
-        "after SDRW_006 %s toc0 multi-DAT", private_addr_mode_name(broadcast_header_enable)));
+        "after SDRW_005 %s toc0 multi-DAT", private_addr_mode_name(broadcast_header_enable)));
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRW_006 result: mode=%s case=toc0_multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b",
+                  "SDRW_005 result: mode=%s case=toc0_multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b",
                   private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
                   cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr, rstart_count,
                   dev_seq0.observed_rstart, dev_seq1.observed_rstart), UVM_LOW)

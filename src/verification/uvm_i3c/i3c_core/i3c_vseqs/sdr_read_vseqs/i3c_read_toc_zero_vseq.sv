@@ -77,7 +77,7 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
                  "read_toc0_vseq: second write should end with STOP")
 
     `uvm_info(`gfn, $sformatf(
-                  "SDRR_005 result: mode=%s rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b read_resp_len=%0d write_resp_len=%0d",
+                  "SDRR_004 result: mode=%s rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b read_resp_len=%0d write_resp_len=%0d",
                   private_addr_mode_name(broadcast_header_enable), rstart_count,
                   dev_seq0.observed_rstart, dev_seq1.observed_rstart, resp0[15:0],
                   resp1[15:0]), UVM_LOW)

@@ -64,16 +64,18 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
 
     wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
 
-    reg_write(ADDR_HC_CONTROL, {
-              28'h0, 1'b1  /*HC_ABORT*/, broadcast_header_enable, 1'b0  /*SW_RST*/, 1'b1  /*EN*/});
-    `uvm_info(`gfn, $sformatf("ERR_007 result: mode=%s abort_asserted=1 source=HC_CONTROL[3]",
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                                .iba_include(broadcast_header_enable),
+                                                .abort(1'b1)));
+    `uvm_info(`gfn, $sformatf("ERR_007 result: mode=%s abort_asserted=1 source=HC_CONTROL[29]",
                               private_addr_mode_name(broadcast_header_enable)), UVM_LOW)
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, broadcast_header_enable, 1'b0, 1'b1});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                                .iba_include(broadcast_header_enable)));
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
         $sformatf(
@@ -140,8 +142,9 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
         `uvm_error(`gfn, "ERR_007 deep: TX FIFO never consumed a word before timeout")
     end
 
-    reg_write(ADDR_HC_CONTROL, {
-              28'h0, 1'b1  /*HC_ABORT*/, broadcast_header_enable, 1'b0  /*SW_RST*/, 1'b1  /*EN*/});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                                .iba_include(broadcast_header_enable),
+                                                .abort(1'b1)));
     `uvm_info(`gfn, $sformatf(
                   "ERR_007 result: mode=%s case=deep_abort abort_asserted=1 tx_depth_before_abort=%0d",
                   private_addr_mode_name(broadcast_header_enable), tx_depth), UVM_LOW)
@@ -150,7 +153,8 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, broadcast_header_enable, 1'b0, 1'b1});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                                .iba_include(broadcast_header_enable)));
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
         $sformatf("ERR_007 %s deep: after recovery SW reset",
@@ -206,14 +210,16 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
 
     wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
 
-    reg_write(ADDR_HC_CONTROL, {
-              28'h0, 1'b1  /*HC_ABORT*/, broadcast_header_enable, 1'b0  /*SW_RST*/, 1'b1  /*EN*/});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                                .iba_include(broadcast_header_enable),
+                                                .abort(1'b1)));
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, {28'h0, 1'b0  /*abort off*/, broadcast_header_enable, 1'b0, 1'b1});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                                .iba_include(broadcast_header_enable)));
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
         $sformatf("ERR_007 %s toc0: after recovery SW reset",

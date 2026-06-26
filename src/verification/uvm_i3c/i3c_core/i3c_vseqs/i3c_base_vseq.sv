@@ -742,11 +742,12 @@ class i3c_base_vseq extends uvm_sequence;
   endtask
 
   virtual task enable_dut(bit broadcast_header_enable = 1'b0);
-    reg_write(ADDR_HC_CONTROL, {29'h0, broadcast_header_enable, 1'b0, 1'b1});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
+                                                .iba_include(broadcast_header_enable)));
   endtask
 
   virtual task disable_dut();
-    reg_write(ADDR_HC_CONTROL, {29'h0, 1'b0, 1'b0, 1'b0});
+    reg_write(ADDR_HC_CONTROL, hc_control_value());
   endtask
 
   virtual task request_sw_reset(bit keep_enabled = 1'b0);
@@ -756,17 +757,20 @@ class i3c_base_vseq extends uvm_sequence;
     poll_idle();
     reg_read(ADDR_HC_CONTROL, data);
     keep_broadcast_header_enable = data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
-    reg_write(ADDR_HC_CONTROL, {29'h0, keep_broadcast_header_enable, 1'b1, keep_enabled});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(keep_enabled),
+                                                .iba_include(keep_broadcast_header_enable)));
+    reg_write(ADDR_RESET_CONTROL, 32'h1 << RESET_CTRL_SOFT_RST_BIT);
     settle_cycles();
 
     reg_read(ADDR_HC_CONTROL, data);
     `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
                  $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
-    `DV_CHECK_EQ(data[HC_CTRL_SW_RESET_BIT], 1'b0, $sformatf("%s: SW_RESET should self-clear",
-                                                             get_type_name()))
     `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], keep_broadcast_header_enable,
                  $sformatf("%s: SW_RESET should preserve BROADCAST_HEADER_ENABLE config",
                            get_type_name()))
+    reg_read(ADDR_RESET_CONTROL, data);
+    `DV_CHECK_EQ(data[RESET_CTRL_SOFT_RST_BIT], 1'b0, $sformatf("%s: SOFT_RST should self-clear",
+                                                                get_type_name()))
   endtask
 
   virtual function string private_addr_mode_name(bit broadcast_header_enable);
@@ -789,11 +793,11 @@ class i3c_base_vseq extends uvm_sequence;
   endtask
 
   virtual task write_tx_data(bit [31:0] data);
-    reg_write(ADDR_TX_DATA, data);
+    reg_write(ADDR_PIO_DATA_PORT, data);
   endtask
 
   virtual task read_rx_data(output bit [31:0] data);
-    reg_read(ADDR_RX_DATA, data);
+    reg_read(ADDR_PIO_DATA_PORT, data);
   endtask
 
   virtual task read_rx_words(int unsigned data_length, output word_queue_t rx_words);

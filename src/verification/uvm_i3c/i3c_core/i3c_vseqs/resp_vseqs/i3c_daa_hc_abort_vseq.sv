@@ -210,8 +210,7 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task set_hc_abort(bit value);
-    reg_write(ADDR_HC_CONTROL,
-              {28'h0, value, 1'b0 /*BCAST_EN*/, 1'b0 /*SW_RST*/, 1'b1 /*EN*/});
+    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1), .abort(value)));
   endtask
 
   virtual task drain_daa_result();

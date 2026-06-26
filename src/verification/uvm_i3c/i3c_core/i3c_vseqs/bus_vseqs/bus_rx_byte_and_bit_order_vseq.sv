@@ -30,7 +30,7 @@ class bus_rx_byte_and_bit_order_vseq extends bus_base_vseq;
     end
 
     cfg = make_transfer_cfg(
-        .ctxt("BUS_009"),
+        .ctxt("BUS_011"),
         .seq_name("dev_seq"),
         .tid(4'd9),
         .dev_idx(5'd0),
@@ -47,7 +47,7 @@ class bus_rx_byte_and_bit_order_vseq extends bus_base_vseq;
     );
     run_read_stimulus(cfg, read_data, rx, resp, dev_seq);
 
-
+    `DV_CHECK_EQ(rx, exp_rx, "BUS_011 RX byte order mismatch")
   endtask
 
 endclass

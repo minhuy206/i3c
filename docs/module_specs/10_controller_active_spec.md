@@ -92,27 +92,22 @@ Passed through from `flow_active`: CMD read, TX read, RX write, RESP write — a
 | `t_su_dat_i`     | Input     | 20    | I3C data setup time                    |
 | `t_hd_dat_i`     | Input     | 20    | I3C data hold time                     |
 | `t_bus_free_i`   | Input     | 20    | I3C bus-free time after STOP           |
-| `i2c_t_r_i`      | Input     | 20    | I2C rise time                          |
-| `i2c_t_f_i`      | Input     | 20    | I2C fall time                          |
 | `i2c_t_low_i`    | Input     | 20    | I2C SCL LOW period                     |
 | `i2c_t_high_i`   | Input     | 20    | I2C SCL HIGH period                    |
 | `i2c_t_su_sta_i` | Input     | 20    | I2C START setup time                   |
 | `i2c_t_hd_sta_i` | Input     | 20    | I2C START hold time                    |
 | `i2c_t_su_sto_i` | Input     | 20    | I2C STOP setup time                    |
 | `i2c_t_su_dat_i` | Input     | 20    | I2C data setup time                    |
-| `i2c_t_hd_dat_i` | Input     | 20    | I2C data hold time                     |
 | `i2c_t_buf_i`    | Input     | 20    | I2C bus-free time after STOP           |
 
 ### Control / Status
 
 | Signal                             | Direction | Width | Description                                |
 | ---------------------------------- | --------- | ----- | ------------------------------------------ |
-| `ctrl_enable_i`                    | Input     | 1     | Controller enable (from CSR HC_CONTROL[0]) |
+| `ctrl_enable_i`                    | Input     | 1     | Controller enable (from CSR HC_CONTROL[31]) |
 | `broadcast_header_enable_i`        | Input     | 1     | Enable private-transfer broadcast header   |
 | `i3c_fsm_en_i`                     | Input     | 1     | FSM enable (from CSR)                      |
 | `abort_i`                          | Input     | 1     | Abort active transfer request              |
-| `hc_seq_cancel_event_o`            | Output    | 1     | Command sequence cancellation event        |
-| `hc_err_cmd_seq_timeout_event_o`   | Output    | 1     | Missing/invalid continuation event         |
 | `i3c_fsm_idle_o`                   | Output    | 1     | FSM idle status                            |
 
 ## 5. Functional Description

@@ -1,6 +1,5 @@
 module entdaa_fsm
-  import controller_pkg::Read;
-  import i3c_pkg::I3C_RSVD_ADDR;
+  import controller_pkg::Read, i3c_pkg::I3C_RSVD_ADDR;
 (
     input logic clk_i,
     input logic rst_ni,

@@ -38,7 +38,7 @@ class csr_sw_reset_flush_queues_vseq extends csr_base_vseq;
 
     check_blocked_tx_write_flush();
 
-    reg_read(ADDR_RX_DATA, data);
+    reg_read(ADDR_PIO_DATA_PORT, data);
     `DV_CHECK_EQ(data, 32'h0, "csr_sw_reset_flush_queues_vseq: empty RX_DATA read should return 0")
     reg_read(ADDR_RESP, data);
     `DV_CHECK_EQ(data, 32'h0, "csr_sw_reset_flush_queues_vseq: empty RESP read should return 0")
