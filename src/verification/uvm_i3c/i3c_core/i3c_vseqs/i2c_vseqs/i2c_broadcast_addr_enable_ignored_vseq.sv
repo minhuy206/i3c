@@ -106,22 +106,11 @@ class i2c_broadcast_addr_enable_ignored_vseq extends i3c_base_vseq;
   endtask
 
   virtual function void build_write_payload(ref byte_queue_t exp_data, ref word_queue_t tx_words);
-    exp_data.delete();
-    tx_words.delete();
-
-    for (int unsigned i = 0; i < DATA_LENGTH; i++) begin
-      exp_data.push_back(8'(8'ha0 + i));
-    end
-
-    pack_payload_words(exp_data, tx_words);
+    build_random_tx_words(DATA_LENGTH, exp_data, tx_words);
   endfunction
 
   virtual function void build_read_payload(ref byte_queue_t read_data);
-    read_data.delete();
-
-    for (int unsigned i = 0; i < DATA_LENGTH; i++) begin
-      read_data.push_back(8'(8'hb0 + i));
-    end
+    build_random_payload(DATA_LENGTH, read_data);
   endfunction
 
   virtual function string format_master_ack_sequence(i3c_device_response_seq dev_seq);

@@ -94,7 +94,7 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     );
 
     build_random_tx_words(cfg0.data_length + cfg1.data_length + cfg2.data_length, exp_data,
-                          tx_words);
+                              tx_words);
     start_back_to_back_device_responses(cfg0, cfg1, cfg2, dev_seq0, dev_seq1, dev_seq2);
 
     write_tx_words(tx_words);

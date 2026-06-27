@@ -34,7 +34,7 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
 
-    build_write_payload(sweep_idx, data_length, exp_data, tx_words);
+    build_write_payload(data_length, exp_data, tx_words);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("I2C_004 write len %0d", data_length)),
@@ -69,7 +69,7 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
 
-    build_read_payload(sweep_idx, data_length, read_data);
+    build_read_payload(data_length, read_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("I2C_004 read len %0d", data_length)),
@@ -98,25 +98,13 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
                   format_master_ack_sequence(dev_seq, data_length)), UVM_LOW)
   endtask
 
-  virtual function void build_write_payload(int unsigned sweep_idx, int unsigned data_length,
-                                            ref byte_queue_t exp_data, ref word_queue_t tx_words);
-    exp_data.delete();
-    tx_words.delete();
-
-    for (int unsigned i = 0; i < data_length; i++) begin
-      exp_data.push_back(8'(8'h30 + (sweep_idx * 8) + i));
-    end
-
-    pack_payload_words(exp_data, tx_words);
+  virtual function void build_write_payload(int unsigned data_length, ref byte_queue_t exp_data,
+                                            ref word_queue_t tx_words);
+    build_random_tx_words(data_length, exp_data, tx_words);
   endfunction
 
-  virtual function void build_read_payload(int unsigned sweep_idx, int unsigned data_length,
-                                           ref byte_queue_t read_data);
-    read_data.delete();
-
-    for (int unsigned i = 0; i < data_length; i++) begin
-      read_data.push_back(8'(8'h70 + (sweep_idx * 8) + i));
-    end
+  virtual function void build_read_payload(int unsigned data_length, ref byte_queue_t read_data);
+    build_random_payload(data_length, read_data);
   endfunction
 
   virtual function string format_master_ack_sequence(i3c_device_response_seq dev_seq,

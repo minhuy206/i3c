@@ -7,8 +7,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
   localparam int unsigned DATA_LENGTH = 8;
   localparam int unsigned DATA_LENGTH_DEEP = 16;
 
-  localparam bit [3:0] FSM_FETCH_TX_DATA = 4'd7;
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd12;
+  localparam bit [3:0] FSM_FETCH_TX_DATA = 4'd6;
+  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
 
   function new(string name = "i2c_regular_abort_vseq");
     super.new(name);
@@ -37,7 +37,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     i3c_device_response_seq dev_seq;
     int unsigned            tx_depth;
 
-    build_payload_words(8'h40, DATA_LENGTH, exp_data, tx_words);
+    build_payload_words(DATA_LENGTH, exp_data, tx_words);
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
@@ -85,7 +85,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     i3c_device_response_seq dev_seq;
     int unsigned            tx_depth;
 
-    build_payload_words(8'h60, DATA_LENGTH_DEEP, exp_data, tx_words);
+    build_payload_words(DATA_LENGTH_DEEP, exp_data, tx_words);
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
@@ -129,7 +129,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     bit              [31:0] resp;
     i3c_device_response_seq dev_seq;
 
-    build_payload_words(8'h80, DATA_LENGTH, exp_data, tx_words);
+    build_payload_words(DATA_LENGTH, exp_data, tx_words);
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
@@ -173,7 +173,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     i3c_device_response_seq dev_seq;
     int unsigned            rx_depth;
 
-    build_payload(8'ha0, DATA_LENGTH, read_data);
+    build_payload(DATA_LENGTH, read_data);
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
@@ -217,7 +217,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     i3c_device_response_seq dev_seq;
     int unsigned            rx_depth;
 
-    build_payload(8'hc0, DATA_LENGTH_DEEP, read_data);
+    build_payload(DATA_LENGTH_DEEP, read_data);
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
@@ -257,7 +257,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     bit              [31:0] resp;
     i3c_device_response_seq dev_seq;
 
-    build_payload(8'he0, DATA_LENGTH, read_data);
+    build_payload(DATA_LENGTH, read_data);
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
@@ -328,7 +328,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     bit              [31:0] resp;
     i3c_device_response_seq dev_seq;
 
-    read_data.push_back(8'h5A);
+    build_random_payload(1, read_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("ERR_007 %s read recovery without SW reset", case_name)),
@@ -365,18 +365,13 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     write_dat_entry(I2C_DEV_IDX, I2C_STATIC_ADDR, I3C_DYNAMIC_ADDR, 1'b1);
   endtask
 
-  virtual function void build_payload(bit [7:0] base_byte, int unsigned data_length,
-                                      ref byte_queue_t data);
-    data.delete();
-    for (int unsigned i = 0; i < data_length; i++) begin
-      data.push_back(8'(base_byte + i));
-    end
+  virtual function void build_payload(int unsigned data_length, ref byte_queue_t data);
+    build_random_payload(data_length, data);
   endfunction
 
-  virtual function void build_payload_words(bit [7:0] base_byte, int unsigned data_length,
-                                            ref byte_queue_t data, ref word_queue_t words);
-    build_payload(base_byte, data_length, data);
-    pack_payload_words(data, words);
+  virtual function void build_payload_words(int unsigned data_length, ref byte_queue_t data,
+                                            ref word_queue_t words);
+    build_random_tx_words(data_length, data, words);
   endfunction
 
   virtual task wait_for_tx_depth_below(int unsigned initial_depth, output int unsigned tx_depth,

@@ -13,7 +13,7 @@ The `entdaa_controller` module is the master-side ENTDAA loop manager. It drives
 3. Delegate the per-device round to `entdaa_fsm` (which sends `0x7E+R`, receives 64 PID/BCR/DCR bits, sends `Addr+P`, reads ACK)
 4. Collect results and loop until all `dev_count` devices are addressed or no device responds
 
-`entdaa_controller` is activated exclusively by `flow_active` for `AddressAssignment` command descriptors. **ENEC and DISEC are handled entirely by `flow_active`** via `I3CWriteImmediate` and do not go through this module.
+`entdaa_controller` is activated exclusively by `flow_active` for `AddressAssignment` command descriptors. **ENEC and DISEC are handled entirely by `flow_active`** via `IssueImmediateCcc` and do not go through this module.
 
 See `08b_entdaa_fsm_spec.md` for the per-device round FSM.
 
@@ -262,7 +262,7 @@ Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` wi
 | Location                        | `controller_standby_i3c.sv` (target/standby path)                       | `controller_active` (master path — new module)                    |
 | CCCs handled                    | 40+ CCCs (23 FSM states, both broadcast and direct)                     | ENTDAA only (7 FSM states)                                        |
 | Perspective                     | Target receives CCC commands from a master                              | Master issues ENTDAA; manages per-device loop                     |
-| ENEC/DISEC                      | Full FSM dispatch                                                       | Handled by `flow_active` (`I3CWriteImmediate`), not this module   |
+| ENEC/DISEC                      | Full FSM dispatch                                                       | Handled by `flow_active` (`IssueImmediateCcc`), not this module   |
 | HDR mode                        | `ent_hdr_*` outputs, `is_in_hdr_mode_i`                                 | Removed (SDR only)                                                |
 | CSR side-effects                | MWL, MRL, DASA, AASA, RSTACT, GETCAPS, etc.                             | Removed entirely                                                  |
 | DAT integration                 | None                                                                    | DAT read port for address lookup per round                        |

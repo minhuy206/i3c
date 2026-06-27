@@ -211,15 +211,6 @@ class i3c_base_vseq extends uvm_sequence;
     return cmd;
   endfunction
 
-  virtual function bit [31:0] pack_bytes_to_word(byte_queue_t data);
-    bit [31:0] word;
-
-    word = '0;
-    for (int i = 0; (i < data.size()) && (i < 4); i++) begin
-      word[(i*8)+:8] = data[i];
-    end
-    return word;
-  endfunction
 
   virtual function void pack_payload_words(byte_queue_t exp_data, ref word_queue_t words);
     bit [31:0] word;
@@ -254,9 +245,9 @@ class i3c_base_vseq extends uvm_sequence;
     write_dat_entry(index, static_addr, dynamic_addr, 1'b0);
   endtask
 
-  virtual function i3c_seq_item randomize_sdrw_item(
-      string name = "sdrw_item", int unsigned payload_len = 0, bit [6:0] avoid_static_addr = 7'h7e,
-      bit [6:0] avoid_dynamic_addr = 7'h7e);
+  virtual function i3c_seq_item randomize_transfer_item(
+      string name = "transfer_item", int unsigned payload_len = 0,
+      bit [6:0] avoid_static_addr = 7'h7e, bit [6:0] avoid_dynamic_addr = 7'h7e);
     i3c_seq_item item;
 
     item = i3c_seq_item::type_id::create(name);
@@ -275,8 +266,8 @@ class i3c_base_vseq extends uvm_sequence;
       input bit [6:0] avoid_static_addr = 7'h7e, input bit [6:0] avoid_dynamic_addr = 7'h7e);
     i3c_seq_item item;
 
-    item = randomize_sdrw_item($sformatf("sdrw_dat_target_%0d_item", index), 0, avoid_static_addr,
-                               avoid_dynamic_addr);
+    item = randomize_transfer_item($sformatf("dat_target_%0d_item", index), 0,
+                                   avoid_static_addr, avoid_dynamic_addr);
     static_addr = item.static_addr;
     dynamic_addr = item.addr;
     configure_i3c_dat_target(index, static_addr, dynamic_addr);
@@ -285,30 +276,14 @@ class i3c_base_vseq extends uvm_sequence;
   virtual function void build_random_payload(int unsigned data_length, ref byte_queue_t data);
     i3c_seq_item item;
 
-    item = randomize_sdrw_item("sdrw_payload_item", data_length);
+    item = randomize_transfer_item("payload_item", data_length);
     data = item.data;
   endfunction
 
   virtual function void build_random_tx_words(int unsigned data_length, ref byte_queue_t exp_data,
                                               ref word_queue_t tx_words);
-    i3c_seq_item item;
-
-    item = randomize_sdrw_item("sdrw_tx_words_item", data_length);
-    exp_data = item.data;
+    build_random_payload(data_length, exp_data);
     pack_payload_words(exp_data, tx_words);
-  endfunction
-
-  virtual function void unpack_payload_words(word_queue_t words, int unsigned data_length,
-                                             ref byte_queue_t data);
-    data.delete();
-    for (int unsigned i = 0; (i < data_length) && (i < words.size() * 4); i++) begin
-      int unsigned word_idx;
-      int unsigned byte_idx;
-
-      word_idx = i / 4;
-      byte_idx = i % 4;
-      data.push_back(words[word_idx][(byte_idx*8)+:8]);
-    end
   endfunction
 
   virtual function void build_sdr_data_pattern_payload(int unsigned pattern_idx,
@@ -742,8 +717,8 @@ class i3c_base_vseq extends uvm_sequence;
   endtask
 
   virtual task enable_dut(bit broadcast_header_enable = 1'b0);
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
-                                                .iba_include(broadcast_header_enable)));
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(1'b1), .iba_include(broadcast_header_enable)));
   endtask
 
   virtual task disable_dut();
@@ -757,8 +732,8 @@ class i3c_base_vseq extends uvm_sequence;
     poll_idle();
     reg_read(ADDR_HC_CONTROL, data);
     keep_broadcast_header_enable = data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(keep_enabled),
-                                                .iba_include(keep_broadcast_header_enable)));
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(keep_enabled), .iba_include(keep_broadcast_header_enable)));
     reg_write(ADDR_RESET_CONTROL, 32'h1 << RESET_CTRL_SOFT_RST_BIT);
     settle_cycles();
 

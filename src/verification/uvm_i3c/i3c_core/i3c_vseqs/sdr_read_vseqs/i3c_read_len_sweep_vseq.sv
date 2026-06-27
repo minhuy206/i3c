@@ -10,27 +10,29 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
   task body();
     int unsigned lengths[NUM_LENGTHS] = '{1, 2, 3, 4, 5, 7, 8, 16};
     bit broadcast_modes[2] = '{1'b0, 1'b1};
+    bit [6:0] static_addr;
+    bit [6:0] dynamic_addr;
 
     foreach (broadcast_modes[mode_idx]) begin
       enable_dut(broadcast_modes[mode_idx]);
-      write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+      randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
       foreach (lengths[sweep_idx]) begin
-        run_len_case(sweep_idx, lengths[sweep_idx], broadcast_modes[mode_idx]);
+        run_len_case(sweep_idx, lengths[sweep_idx], broadcast_modes[mode_idx], dynamic_addr);
       end
     end
 
   endtask
 
   virtual task run_len_case(int unsigned sweep_idx, int unsigned data_length,
-                            bit broadcast_header_enable);
+                            bit broadcast_header_enable, bit [6:0] dynamic_addr);
     transfer_stimulus_cfg_t        cfg;
     byte_queue_t                   read_data;
     word_queue_t                   rx_words;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
 
-    build_payload(sweep_idx, data_length, read_data);
+    build_payload(data_length, read_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -41,7 +43,7 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
         )),
         .tid(4'(sweep_idx + 1)),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -63,13 +65,8 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
                   ((data_length + 3) / 4), resp[15:0]), UVM_LOW)
   endtask
 
-  virtual function void build_payload(int unsigned sweep_idx, int unsigned data_length,
-                                      ref byte_queue_t read_data);
-    read_data.delete();
-
-    for (int unsigned i = 0; i < data_length; i++) begin
-      read_data.push_back(8'(8'h40 + (sweep_idx * 8) + i));
-    end
+  virtual function void build_payload(int unsigned data_length, ref byte_queue_t read_data);
+    build_random_payload(data_length, read_data);
   endfunction
 
 endclass

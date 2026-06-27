@@ -59,11 +59,7 @@ class i2c_regular_read_basic_vseq extends i3c_base_vseq;
   endtask
 
   virtual function void build_payload(int unsigned data_length, ref byte_queue_t read_data);
-    read_data.delete();
-
-    for (int unsigned i = 0; i < data_length; i++) begin
-      read_data.push_back(8'(8'h82 + i));
-    end
+    build_random_payload(data_length, read_data);
   endfunction
 
   virtual function string format_master_ack_sequence(i3c_device_response_seq dev_seq,

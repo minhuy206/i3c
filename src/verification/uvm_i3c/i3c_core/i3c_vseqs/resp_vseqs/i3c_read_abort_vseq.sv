@@ -4,7 +4,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
   localparam int unsigned DATA_LENGTH = 8;
   localparam int unsigned DATA_LENGTH_DEEP = 16;
 
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd12;
+  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
 
   function new(string name = "i3c_read_abort_vseq");
     super.new(name);

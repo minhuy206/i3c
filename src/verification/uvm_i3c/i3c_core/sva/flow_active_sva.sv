@@ -11,6 +11,7 @@ module flow_active_sva
   import i3c_pkg::HcAborted;
   import i3c_pkg::I3C_RSVD_ADDR;
   import i3c_pkg::I3cShortReadErr;
+  import i3c_pkg::I2cDataNackOrI3cBusAborted;
   import i3c_pkg::NotSupported;
   import i3c_pkg::Ovl;
   import i3c_pkg::Success;
@@ -48,6 +49,8 @@ module flow_active_sva
     input logic                                              short_read_q,
     input logic                                              addr_nack_q,
     input logic                                              data_nack_q,
+    input logic                                              daa_nack_error_q,
+    input logic                                              not_supported_q,
     input logic                                              addr_after_rstart_q,
     input logic                                              next_start_is_rstart_q,
     input logic                                              cont_pending_q,
@@ -77,6 +80,7 @@ module flow_active_sva
     input logic                                              bus_tx_req_bit,
     input logic                                              bus_rx_req_byte,
     input logic                                              bus_rx_req_bit,
+    input logic                                              bus_rx_req_bit_handoff,
     input logic                       [                 7:0] bus_tx_req_value,
     input logic                       [                 7:0] current_tx_byte,
     input logic                       [                31:0] rx_dword_q,
@@ -97,15 +101,14 @@ module flow_active_sva
   localparam logic [3:0] FetchDAT = 4'd2;
   localparam logic [3:0] WaitDAT = 4'd3;
   localparam logic [3:0] I3CBcastHeader = 4'd4;
-  localparam logic [3:0] I3CWriteImmediate = 4'd5;
-  localparam logic [3:0] I2CWriteImmediate = 4'd6;
-  localparam logic [3:0] FetchTxData = 4'd7;
-  localparam logic [3:0] InitI3CWrite = 4'd8;
-  localparam logic [3:0] InitI3CRead = 4'd9;
-  localparam logic [3:0] InitI2CWrite = 4'd10;
-  localparam logic [3:0] InitI2CRead = 4'd11;
-  localparam logic [3:0] IssueCmd = 4'd12;
-  localparam logic [3:0] WriteResp = 4'd13;
+  localparam logic [3:0] IssueImmediateCcc = 4'd5;
+  localparam logic [3:0] FetchTxData = 4'd6;
+  localparam logic [3:0] InitI3CWrite = 4'd7;
+  localparam logic [3:0] InitI3CRead = 4'd8;
+  localparam logic [3:0] InitI2CWrite = 4'd9;
+  localparam logic [3:0] InitI2CRead = 4'd10;
+  localparam logic [3:0] IssueCmd = 4'd11;
+  localparam logic [3:0] WriteResp = 4'd12;
 
   localparam logic [7:0] PhaseStart = 8'd0;
   localparam logic [7:0] PhaseAddr = 8'd1;
@@ -222,7 +225,7 @@ module flow_active_sva
       expected_sel_od_pp = 1'b0;
     end else begin
       unique case (state)
-        I3CWriteImmediate: begin
+        IssueImmediateCcc: begin
           expected_sel_od_pp = expected_imm_sel_od_pp(desc, phase, addr_after_rstart);
         end
 
@@ -275,7 +278,7 @@ module flow_active_sva
         expected_scl_use_od_low = 1'b1;
       end else if (state == I3CBcastHeader) begin
         expected_scl_use_od_low = !expected_sel;
-      end else if (state == I3CWriteImmediate) begin
+      end else if (state == IssueImmediateCcc) begin
         expected_scl_use_od_low = !expected_sel;
       end else if (state == InitI3CWrite) begin
         expected_scl_use_od_low = !expected_sel;
@@ -305,6 +308,44 @@ module flow_active_sva
 
   function automatic logic i2c_regular_xfer();
     return i2c_regular_write() || i2c_regular_read();
+  endfunction
+
+  function automatic logic i3c_immediate_private_write();
+    return (cmd_attr == ImmediateDataTransfer) && !imm_desc.cp && !dat_entry.device;
+  endfunction
+
+  function automatic logic i2c_immediate_write();
+    return (cmd_attr == ImmediateDataTransfer) && !imm_desc.cp && dat_entry.device;
+  endfunction
+
+  function automatic logic imm_private_active_state();
+    return (cmd_attr == ImmediateDataTransfer) &&
+           !imm_desc.cp &&
+           ((state_q == InitI3CWrite) ||
+            (state_q == InitI2CWrite) ||
+            (state_q == IssueCmd));
+  endfunction
+
+  function automatic logic imm_active_state();
+    return (cmd_attr == ImmediateDataTransfer) &&
+           ((imm_desc.cp && (state_q == IssueImmediateCcc)) ||
+            (!imm_desc.cp && imm_private_active_state()));
+  endfunction
+
+  function automatic logic direct_ccc_target_addr_nack();
+    return (cmd_attr == ImmediateDataTransfer) &&
+           imm_desc.cp &&
+           imm_desc.cmd[7] &&
+           ((imm_desc.cmd == 8'h80) || (imm_desc.cmd == 8'h81)) &&
+           issue_phase_q >= 8'd8;
+  endfunction
+
+  function automatic logic legal_imm_private_addr_rstart();
+    return state_q == InitI3CWrite &&
+           i3c_immediate_private_write() &&
+           issue_phase_q == PhaseStart &&
+           next_start_is_rstart_q &&
+           !addr_after_rstart_q;
   endfunction
 
   function automatic logic i2c_active_state();
@@ -372,6 +413,14 @@ module flow_active_sva
   function automatic logic short_read_resp_matches_current_len();
     return resp_queue_wvalid &&
            (resp_queue_wdata[31:28] == I3cShortReadErr) &&
+           (resp_queue_wdata[27:24] == cmd_tid) &&
+           (resp_queue_wdata[23:16] == 8'h00) &&
+           (resp_queue_wdata[15:0] == resp_data_len_q);
+  endfunction
+
+  function automatic logic data_nack_resp_matches_current_len();
+    return resp_queue_wvalid &&
+           (resp_queue_wdata[31:28] == I2cDataNackOrI3cBusAborted) &&
            (resp_queue_wdata[27:24] == cmd_tid) &&
            (resp_queue_wdata[23:16] == 8'h00) &&
            (resp_queue_wdata[15:0] == resp_data_len_q);
@@ -927,6 +976,126 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                           state_q == WriteResp &&
                                           sdr_regular_i3c_write() &&
+                                          addr_nack_q &&
+                                          addr_nack_resp_matches());
+
+  // ERR_003: a NACK on the shared 7'h7E+W broadcast-header frame stops the
+  // transfer before any command-specific phase and reports AddrHeader.
+  ap_bcast_header_nack_sample_no_followup :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == I3CBcastHeader &&
+                                                issue_phase_q == PhaseAddrAck &&
+                                                bus_rx_done_i &&
+                                                bus_rx_data_i[0]
+                                                |->
+                                                !gen_rstart_o &&
+                                                !bus_tx_req_byte &&
+                                                !bus_tx_req_bit &&
+                                                !bus_rx_req_byte)
+  else $error("flow_active_sva: broadcast-header NACK sample must not overlap a follow-up bus phase in %m");
+
+  cp_bcast_header_nack_sample_no_followup :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == I3CBcastHeader &&
+                                                issue_phase_q == PhaseAddrAck &&
+                                                bus_rx_done_i &&
+                                                bus_rx_data_i[0] &&
+                                                !gen_rstart_o &&
+                                                !bus_tx_req_byte &&
+                                                !bus_tx_req_bit &&
+                                                !bus_rx_req_byte);
+
+  ap_bcast_header_nack_stops_no_followup :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == I3CBcastHeader &&
+                                                addr_nack_q
+                                                |->
+                                                gen_stop_o &&
+                                                !gen_rstart_o &&
+                                                !bus_tx_req_byte &&
+                                                !bus_tx_req_bit &&
+                                                !bus_rx_req_byte &&
+                                                !bus_rx_req_bit)
+  else $error("flow_active_sva: broadcast-header NACK must STOP without command-specific follow-up in %m");
+
+  cp_bcast_header_nack_stops_no_followup :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == I3CBcastHeader &&
+                                                addr_nack_q &&
+                                                gen_stop_o &&
+                                                !gen_rstart_o &&
+                                                !bus_tx_req_byte &&
+                                                !bus_tx_req_bit &&
+                                                !bus_rx_req_byte &&
+                                                !bus_rx_req_bit);
+
+  ap_bcast_header_nack_eventually_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == I3CBcastHeader &&
+                                                addr_nack_q
+                                                |->
+                                                ##[1:AddrNackRespTimeoutCycles]
+                                                (state_q == WriteResp &&
+                                                 addr_nack_resp_matches()))
+  else $error("flow_active_sva: broadcast-header NACK did not produce bounded AddrHeader response in %m");
+
+  cp_bcast_header_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == I3CBcastHeader &&
+                                                addr_nack_q
+                                                ##[1:AddrNackRespTimeoutCycles]
+                                                state_q == WriteResp &&
+                                                addr_nack_resp_matches());
+
+  // ERR_002/ERR_003: every address/header NACK response uses the common
+  // AddrHeader/TID/reserved-zero/len0 encoding. Class-specific covers below
+  // make the ERR_002 I2C, immediate, and direct-CCC target cases visible.
+  ap_addr_nack_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                                state_q == WriteResp &&
+                                                addr_nack_q
+                                                |->
+                                                addr_nack_resp_matches())
+  else $error("flow_active_sva: address NACK response descriptor mismatch in %m");
+
+  cp_addr_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                          state_q == WriteResp &&
+                                          addr_nack_q &&
+                                          addr_nack_resp_matches());
+
+  cp_i2c_write_addr_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                          state_q == WriteResp &&
+                                          i2c_regular_write() &&
+                                          addr_nack_q &&
+                                          addr_nack_resp_matches());
+
+  cp_i2c_read_addr_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                          state_q == WriteResp &&
+                                          i2c_regular_read() &&
+                                          addr_nack_q &&
+                                          addr_nack_resp_matches());
+
+  cp_i3c_imm_addr_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                          state_q == WriteResp &&
+                                          i3c_immediate_private_write() &&
+                                          addr_nack_q &&
+                                          addr_nack_resp_matches());
+
+  cp_i2c_imm_addr_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                          state_q == WriteResp &&
+                                          i2c_immediate_write() &&
+                                          addr_nack_q &&
+                                          addr_nack_resp_matches());
+
+  cp_direct_ccc_target_addr_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                          state_q == WriteResp &&
+                                          direct_ccc_target_addr_nack() &&
                                           addr_nack_q &&
                                           addr_nack_resp_matches());
 
@@ -2239,12 +2408,12 @@ module flow_active_sva
                                             rx_queue_wvalid);
 
   // ----------------------------------------------------------------------
-  // I2C_005 — data-byte NACK stops the write
+  // ERR_004 — I2C regular write data-byte NACK
   //
   // A NACK sampled on a data byte's ACK sub-phase is latched, and from then on
   // the write requests STOP and drives no further data byte: only the bytes
-  // beyond the NACKed position are dropped (I2C policy). The data-NACK RESP
-  // encoding itself is owned by ERR_003.
+  // beyond the NACKed position are dropped (I2C policy). The data-NACK RESP is
+  // I2cDataNackOrI3cBusAborted with the actual bytes fully clocked.
   // ----------------------------------------------------------------------
   ap_i2c_write_data_nack_latches :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2293,6 +2462,30 @@ module flow_active_sva
                                             !bus_tx_req_byte &&
                                             !bus_tx_req_bit);
 
+  ap_data_nack_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            data_nack_q &&
+                                            !addr_nack_q
+                                            |->
+                                            data_nack_resp_matches_current_len())
+  else $error("flow_active_sva: data NACK response status/length mismatch in %m");
+
+  cp_data_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            data_nack_q &&
+                                            !addr_nack_q &&
+                                            data_nack_resp_matches_current_len());
+
+  cp_i2c_write_data_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_write() &&
+                                            data_nack_q &&
+                                            !addr_nack_q &&
+                                            data_nack_resp_matches_current_len());
+
   // ----------------------------------------------------------------------
   // I2C_006 — FM-equivalent timing selection (SVA-only, no vseq)
   //
@@ -2328,17 +2521,19 @@ module flow_active_sva
   // Only the OD/PP phasing of immediate transfers is asserted today (via
   // ap_sel_od_pp_matches_expected / expected_imm_sel_od_pp). These add inline
   // byte integrity, dtt>4 / toc=0 NotSupported rejection, Success/length, the
-  // I2C-immediate data-NACK boundary, and the HC-abort flow. RESP encodings for
-  // data NACK and abort stay owned by ERR_003 / ERR_012 — only their data/flow
-  // boundaries are asserted here; NotSupported is owned by IMM_002/IMM_003.
+  // I2C-immediate data-NACK boundary, and the HC-abort flow. ERR_004 owns the
+  // data-NACK response encoding; abort response encoding is owned by ERR_012.
+  // NotSupported is owned by IMM_002/IMM_003.
   // ----------------------------------------------------------------------
 
   // IMM_001/002/003: I3C immediate inline bytes are driven in descriptor order.
   ap_i3c_imm_data_byte_matches_desc :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
+                                            !dat_entry.device &&
+                                            !abort_i &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
                                             issue_phase_q[0] &&
@@ -2354,9 +2549,10 @@ module flow_active_sva
 
   cp_i3c_imm_data_byte_matches_desc :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
+                                            !dat_entry.device &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
                                             issue_phase_q[0] &&
@@ -2370,9 +2566,10 @@ module flow_active_sva
   // IMM_001/002/003: I3C immediate T-bit parity for each inline byte.
   ap_i3c_imm_tbit_parity :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
+                                            !dat_entry.device &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0] &&
@@ -2387,9 +2584,10 @@ module flow_active_sva
 
   cp_i3c_imm_tbit_parity :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
+                                            !dat_entry.device &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0] &&
@@ -2402,7 +2600,10 @@ module flow_active_sva
   // IMM_004: I2C immediate address byte = {static_address, W}.
   ap_i2c_imm_addr_uses_static_address :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == InitI2CWrite &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte
                                             |->
@@ -2412,7 +2613,10 @@ module flow_active_sva
 
   cp_i2c_imm_addr_uses_static_address :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == InitI2CWrite &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte &&
                                             bus_tx_req_value === {dat_entry.static_address, Write});
@@ -2420,8 +2624,11 @@ module flow_active_sva
   // IMM_004: I2C immediate inline bytes are driven in descriptor order.
   ap_i2c_imm_data_byte_matches_desc :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
+                                            !abort_i &&
                                             !addr_nack_q &&
                                             !data_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
@@ -2437,8 +2644,10 @@ module flow_active_sva
 
   cp_i2c_imm_data_byte_matches_desc :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
                                             !addr_nack_q &&
                                             !data_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
@@ -2532,6 +2741,34 @@ module flow_active_sva
                                             invalid_addr_assign_desc() &&
                                             not_supported_resp_matches_current_len());
 
+  // ERR_001 / DAA_001: successful ENTDAA responses use the common Success/TID/length
+  // encoding. The length is the number of committed DAA result bytes.
+  ap_daa_success_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            !invalid_addr_assign_desc() &&
+                                            !addr_nack_q &&
+                                            !daa_nack_error_q &&
+                                            !rx_overflow_q &&
+                                            !not_supported_q &&
+                                            !hc_aborted_q
+                                            |->
+                                            success_resp_matches_current_len())
+  else $error("flow_active_sva: ENTDAA success response status/length mismatch in %m");
+
+  cp_daa_success_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            !invalid_addr_assign_desc() &&
+                                            !addr_nack_q &&
+                                            !daa_nack_error_q &&
+                                            !rx_overflow_q &&
+                                            !not_supported_q &&
+                                            !hc_aborted_q &&
+                                            success_resp_matches_current_len());
+
   // IMM_003: toc=0 immediate still sends all dtt bytes, then NotSupported.
   ap_imm_toc0_not_supported_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2564,19 +2801,19 @@ module flow_active_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
-                                            (state_q == I3CWriteImmediate ||
-                                             state_q == I2CWriteImmediate)
+                                            imm_private_active_state()
                                             |->
-                                            !gen_rstart_o)
+                                            (!gen_rstart_o ||
+                                             legal_imm_private_addr_rstart()))
   else $error("flow_active_sva: immediate transfer must not emit a continuation Repeated START in %m");
 
   cp_imm_no_continuation_rstart :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
-                                            (state_q == I3CWriteImmediate ||
-                                             state_q == I2CWriteImmediate) &&
-                                            !gen_rstart_o);
+                                            imm_private_active_state() &&
+                                            (!gen_rstart_o ||
+                                             legal_imm_private_addr_rstart()));
 
   // IMM_001/003(toc=1)/004: successful immediate response with correct length.
   ap_imm_success_resp :
@@ -2609,11 +2846,13 @@ module flow_active_sva
                                             !rx_overflow_q &&
                                             success_resp_matches_current_len());
 
-  // IMM_005: I2C immediate data NACK is latched from the ACK sub-phase...
+  // ERR_004: I2C immediate data NACK is latched from the ACK sub-phase...
   ap_i2c_imm_data_nack_latches :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
                                             !data_nack_q &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
@@ -2628,8 +2867,10 @@ module flow_active_sva
 
   cp_i2c_imm_data_nack_latches :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
                                             !data_nack_q &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
@@ -2641,11 +2882,13 @@ module flow_active_sva
                                             ##1
                                             data_nack_q);
 
-  // IMM_005: ...and then STOP is generated with no further inline byte sent.
+  // ERR_004: ...and then STOP is generated with no further inline byte sent.
   ap_i2c_imm_data_nack_stops_no_more_data :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
                                             data_nack_q
                                             |->
                                             gen_stop_o &&
@@ -2655,38 +2898,45 @@ module flow_active_sva
 
   cp_i2c_imm_data_nack_stops_no_more_data :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I2CWriteImmediate &&
+                                            state_q == IssueCmd &&
                                             cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            dat_entry.device &&
                                             data_nack_q &&
                                             gen_stop_o &&
                                             !bus_tx_req_byte &&
                                             !bus_tx_req_bit);
 
+  cp_i2c_imm_data_nack_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_immediate_write() &&
+                                            data_nack_q &&
+                                            !addr_nack_q &&
+                                            data_nack_resp_matches_current_len());
+
   // IMM_006: HC abort during immediate data phase sets hc_aborted...
   ap_imm_abort_sets_hc_aborted :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            abort_i &&
-                                            (state_q == I3CWriteImmediate ||
-                                             state_q == I2CWriteImmediate)
+                                            $rose(abort_i) &&
+                                            imm_active_state()
                                             |=>
                                             hc_aborted_q)
   else $error("flow_active_sva: HC abort in immediate data phase must set hc_aborted in %m");
 
   cp_imm_abort_sets_hc_aborted :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            abort_i &&
-                                            (state_q == I3CWriteImmediate ||
-                                             state_q == I2CWriteImmediate)
+                                            $rose(abort_i) &&
+                                            imm_active_state()
                                             ##1
                                             hc_aborted_q);
 
   // IMM_006: ...and forces STOP (never a continuation RSTART) with no further data.
   ap_imm_abort_stops_no_continuation :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            abort_i &&
-                                            (state_q == I3CWriteImmediate ||
-                                             state_q == I2CWriteImmediate)
-                                            |->
+                                            $rose(abort_i) &&
+                                            imm_active_state()
+                                            |-> ##[0:512]
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !bus_tx_req_byte &&
@@ -2695,9 +2945,9 @@ module flow_active_sva
 
   cp_imm_abort_stops_no_continuation :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            abort_i &&
-                                            (state_q == I3CWriteImmediate ||
-                                             state_q == I2CWriteImmediate) &&
+                                            $rose(abort_i) &&
+                                            imm_active_state()
+                                            ##[0:512]
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !bus_tx_req_byte &&
@@ -2706,15 +2956,14 @@ module flow_active_sva
   cp_imm_abort_reaches_writeresp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             abort_i &&
-                                            (state_q == I3CWriteImmediate ||
-                                             state_q == I2CWriteImmediate)
+                                            imm_active_state()
                                             ##[1:512]
                                             state_q == WriteResp &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             hc_aborted_q);
 
   // IMM_001/002: private-start prefix selection — broadcast-header detour only
-  // when enabled, straight to I3CWriteImmediate otherwise (cp_private_start_prefix).
+  // when enabled, straight to InitI3CWrite otherwise (cp_private_start_prefix).
   cp_imm_bcast_header_path :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WaitDAT &&
@@ -2739,7 +2988,7 @@ module flow_active_sva
                                             imm_desc.dtt <= 3'd4 &&
                                             !dat_read_valid_hw_o
                                             ##1
-                                            state_q == I3CWriteImmediate);
+                                            state_q == InitI3CWrite);
 
   // IMM_001/002: the broadcast header (when taken) drives the 0x7E reserved
   // address, not a target address — confirms the 7E+W preamble.
@@ -2763,7 +3012,7 @@ module flow_active_sva
   // repeated START, and reports the event byte count on success.
   ap_ccc002_enec_opcode :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd3
                                             |->
@@ -2774,7 +3023,7 @@ module flow_active_sva
 
   cp_ccc002_enec_opcode :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd3 &&
                                             bus_tx_req_byte &&
@@ -2783,7 +3032,7 @@ module flow_active_sva
 
   ap_ccc002_enec_opcode_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd4
                                             |->
@@ -2794,7 +3043,7 @@ module flow_active_sva
 
   cp_ccc002_enec_opcode_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd4 &&
                                             bus_tx_req_bit &&
@@ -2803,7 +3052,7 @@ module flow_active_sva
 
   ap_ccc002_enec_event_byte :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd5
                                             |->
@@ -2814,7 +3063,7 @@ module flow_active_sva
 
   cp_ccc002_enec_event_byte :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd5 &&
                                             bus_tx_req_byte &&
@@ -2823,7 +3072,7 @@ module flow_active_sva
 
   ap_ccc002_enec_event_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd6
                                             |->
@@ -2835,7 +3084,7 @@ module flow_active_sva
 
   cp_ccc002_enec_event_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             issue_phase_q == 8'd6 &&
                                             bus_tx_req_bit &&
@@ -2845,7 +3094,7 @@ module flow_active_sva
 
   ap_ccc002_enec_no_rstart :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active()
                                             |->
                                             !gen_rstart_o)
@@ -2853,7 +3102,7 @@ module flow_active_sva
 
   cp_ccc002_enec_no_rstart :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_enec_active() &&
                                             !gen_rstart_o);
 
@@ -2883,7 +3132,7 @@ module flow_active_sva
   // repeated START, and reports the event byte count on success.
   ap_ccc003_disec_opcode :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd3
                                             |->
@@ -2894,7 +3143,7 @@ module flow_active_sva
 
   cp_ccc003_disec_opcode :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd3 &&
                                             bus_tx_req_byte &&
@@ -2903,7 +3152,7 @@ module flow_active_sva
 
   ap_ccc003_disec_opcode_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd4
                                             |->
@@ -2914,7 +3163,7 @@ module flow_active_sva
 
   cp_ccc003_disec_opcode_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd4 &&
                                             bus_tx_req_bit &&
@@ -2923,7 +3172,7 @@ module flow_active_sva
 
   ap_ccc003_disec_event_byte :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd5
                                             |->
@@ -2934,7 +3183,7 @@ module flow_active_sva
 
   cp_ccc003_disec_event_byte :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd5 &&
                                             bus_tx_req_byte &&
@@ -2943,7 +3192,7 @@ module flow_active_sva
 
   ap_ccc003_disec_event_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd6
                                             |->
@@ -2955,7 +3204,7 @@ module flow_active_sva
 
   cp_ccc003_disec_event_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             issue_phase_q == 8'd6 &&
                                             bus_tx_req_bit &&
@@ -2965,7 +3214,7 @@ module flow_active_sva
 
   ap_ccc003_disec_no_rstart :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active()
                                             |->
                                             !gen_rstart_o)
@@ -2973,7 +3222,7 @@ module flow_active_sva
 
   cp_ccc003_disec_no_rstart :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_broadcast_disec_active() &&
                                             !gen_rstart_o);
 
@@ -3004,7 +3253,7 @@ module flow_active_sva
   // Events byte, then STOPs and reports the event byte count on success.
   ap_ccc004_direct_enec_opcode :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd3
                                             |->
@@ -3015,7 +3264,7 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_opcode :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd3 &&
                                             bus_tx_req_byte &&
@@ -3024,7 +3273,7 @@ module flow_active_sva
 
   ap_ccc004_direct_enec_opcode_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd4
                                             |->
@@ -3035,7 +3284,7 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_opcode_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd4 &&
                                             bus_tx_req_bit &&
@@ -3044,7 +3293,7 @@ module flow_active_sva
 
   ap_ccc004_direct_enec_rstart :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd5
                                             |->
@@ -3055,7 +3304,7 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_rstart :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd5 &&
                                             gen_rstart_o &&
@@ -3064,7 +3313,7 @@ module flow_active_sva
 
   ap_ccc004_direct_enec_target_addr :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd6
                                             |->
@@ -3075,7 +3324,7 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_target_addr :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd6 &&
                                             bus_tx_req_byte &&
@@ -3084,11 +3333,12 @@ module flow_active_sva
 
   ap_ccc004_direct_enec_target_ack_sample :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd7
                                             |->
-                                            bus_rx_req_bit &&
+                                            bus_rx_req_bit_handoff &&
+                                            !bus_rx_req_bit &&
                                             !bus_rx_req_byte &&
                                             !bus_tx_req_byte &&
                                             !bus_tx_req_bit)
@@ -3096,17 +3346,18 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_target_ack_sample :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd7 &&
-                                            bus_rx_req_bit &&
+                                            bus_rx_req_bit_handoff &&
+                                            !bus_rx_req_bit &&
                                             !bus_rx_req_byte &&
                                             !bus_tx_req_byte &&
                                             !bus_tx_req_bit);
 
   ap_ccc004_direct_enec_event_byte :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd8
                                             |->
@@ -3117,7 +3368,7 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_event_byte :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd8 &&
                                             bus_tx_req_byte &&
@@ -3126,7 +3377,7 @@ module flow_active_sva
 
   ap_ccc004_direct_enec_event_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd9
                                             |->
@@ -3138,7 +3389,7 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_event_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd9 &&
                                             bus_tx_req_bit &&
@@ -3148,7 +3399,7 @@ module flow_active_sva
 
   ap_ccc004_direct_enec_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd10
                                             |->
@@ -3159,7 +3410,7 @@ module flow_active_sva
 
   cp_ccc004_direct_enec_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_enec_active() &&
                                             issue_phase_q == 8'd10 &&
                                             gen_stop_o &&
@@ -3193,7 +3444,7 @@ module flow_active_sva
   // Events byte, then STOPs and reports the event byte count on success.
   ap_ccc005_direct_disec_opcode :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd3
                                             |->
@@ -3204,7 +3455,7 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_opcode :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd3 &&
                                             bus_tx_req_byte &&
@@ -3213,7 +3464,7 @@ module flow_active_sva
 
   ap_ccc005_direct_disec_opcode_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd4
                                             |->
@@ -3224,7 +3475,7 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_opcode_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd4 &&
                                             bus_tx_req_bit &&
@@ -3233,7 +3484,7 @@ module flow_active_sva
 
   ap_ccc005_direct_disec_rstart :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd5
                                             |->
@@ -3244,7 +3495,7 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_rstart :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd5 &&
                                             gen_rstart_o &&
@@ -3253,7 +3504,7 @@ module flow_active_sva
 
   ap_ccc005_direct_disec_target_addr :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd6
                                             |->
@@ -3264,7 +3515,7 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_target_addr :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd6 &&
                                             bus_tx_req_byte &&
@@ -3273,11 +3524,12 @@ module flow_active_sva
 
   ap_ccc005_direct_disec_target_ack_sample :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd7
                                             |->
-                                            bus_rx_req_bit &&
+                                            bus_rx_req_bit_handoff &&
+                                            !bus_rx_req_bit &&
                                             !bus_rx_req_byte &&
                                             !bus_tx_req_byte &&
                                             !bus_tx_req_bit)
@@ -3285,17 +3537,18 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_target_ack_sample :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd7 &&
-                                            bus_rx_req_bit &&
+                                            bus_rx_req_bit_handoff &&
+                                            !bus_rx_req_bit &&
                                             !bus_rx_req_byte &&
                                             !bus_tx_req_byte &&
                                             !bus_tx_req_bit);
 
   ap_ccc005_direct_disec_event_byte :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd8
                                             |->
@@ -3306,7 +3559,7 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_event_byte :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd8 &&
                                             bus_tx_req_byte &&
@@ -3315,7 +3568,7 @@ module flow_active_sva
 
   ap_ccc005_direct_disec_event_tbit :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd9
                                             |->
@@ -3327,7 +3580,7 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_event_tbit :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd9 &&
                                             bus_tx_req_bit &&
@@ -3337,7 +3590,7 @@ module flow_active_sva
 
   ap_ccc005_direct_disec_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd10
                                             |->
@@ -3348,7 +3601,7 @@ module flow_active_sva
 
   cp_ccc005_direct_disec_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == I3CWriteImmediate &&
+                                            state_q == IssueImmediateCcc &&
                                             ccc_direct_disec_active() &&
                                             issue_phase_q == 8'd10 &&
                                             gen_stop_o &&
@@ -3407,6 +3660,8 @@ bind flow_active flow_active_sva #(
     .short_read_q,
     .addr_nack_q,
     .data_nack_q,
+    .daa_nack_error_q,
+    .not_supported_q,
     .addr_after_rstart_q,
     .next_start_is_rstart_q,
     .cont_pending_q,
@@ -3436,6 +3691,7 @@ bind flow_active flow_active_sva #(
     .bus_tx_req_bit,
     .bus_rx_req_byte,
     .bus_rx_req_bit,
+    .bus_rx_req_bit_handoff,
     .bus_tx_req_value,
     .current_tx_byte,
     .rx_dword_q,

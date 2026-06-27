@@ -6,7 +6,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
   // Deep abort: fires after >=1 TX word consumed (>=4 bytes sent), tests SW reset flushes TX FIFO.
   localparam int unsigned DATA_LENGTH_DEEP = 16;
 
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd12;
+  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
 
   function new(string name = "i3c_write_abort_vseq");
     super.new(name);
