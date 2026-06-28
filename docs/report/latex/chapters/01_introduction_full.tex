@@ -1,0 +1,162 @@
+% =====================================================================
+%  Chapter 1 — Introduction  (FULL PROSE)
+%  Submission-ready written form of the section-level brief in
+%  chapters/01_introduction.tex (kept unchanged) and ../draft/ch01_introduction.md.
+%  Sources: thesis_writing_plan.md §3 (Ch.1), improvements.md, supervisor outline PDF,
+%  MIPI I3C Basic v1.1.1. Ground-truth = current RTL/UVM (code wins over stale text):
+%  realised flow is Xcelium + UVM 1.2 + SimVision; FPGA is future work only.
+%
+%  NOTE: not yet \include{}d in report.tex (the brief 01_introduction is). To compile
+%  this version, swap that \include line to chapters/01_introduction_full.
+% =====================================================================
+\chapter{Introduction}
+\label{ch:intro-full}
+
+\section{I3C in SoC Trends and Motivation}
+\label{sec:intro-motivation}
+
+Modern systems-on-chip (SoCs) and embedded platforms aggregate an ever-growing number of sensors,
+actuators, and housekeeping peripherals around a small set of low-pin-count serial buses. For more than
+three decades the Inter-Integrated Circuit (\iic{}) bus has been the default interconnect for this role:
+it needs only two wires, addresses multiple devices, and is backed by an enormous catalogue of
+off-the-shelf parts. As device counts and sampling rates rise, however, its open-drain signalling caps
+the practical clock rate and wastes static power, its manufacture-fixed addresses collide, and its lack
+of a native interrupt forces wasteful polling --- limitations examined in
+\cref{sec:bg-i2c}.
+
+The MIPI Alliance introduced I3C (Improved Inter-Integrated Circuit) to lift these limitations while
+preserving \iic{}'s two-wire simplicity and pin compatibility. The MIPI I3C Basic v1.1.1
+specification~\cite{mipi_i3c_basic} --- the target standard of this thesis --- adds push-pull Single
+Data Rate (SDR) signalling at up to \SI{12.5}{\mega\hertz}, run-time Dynamic Address Assignment (DAA),
+and (in the full specification) In-Band Interrupts, while remaining backward compatible so that legacy
+\iic{} Targets can share the same two wires as native I3C Targets.
+
+These properties have made I3C a fast-growing choice for the sensor and peripheral fabric of contemporary
+SoCs, and they make an I3C controller a compelling design exercise: it spans the full front-end
+digital-IC pipeline, from reading a protocol specification, through register-transfer-level (RTL) design
+of the protocol engine, to functional verification in a methodology-driven testbench. A
+\emph{simplified, single-Controller} design is therefore an ideal, self-contained vehicle for studying
+that pipeline end to end, which is the motivation for this thesis. \Cref{fig:soc-context} places such a
+controller in its system context.
+
+\begin{figure}[!htb]\centering
+  \begin{tikzpicture}[
+      font=\sffamily\small,
+      block/.style={draw, thick, rounded corners, fill=blue!8,
+                    minimum width=2.8cm, minimum height=1.2cm, align=center},
+      target/.style={draw, thick, rounded corners,
+                     minimum width=2.4cm, minimum height=1cm, align=center},
+      wire/.style={thick},
+      dot/.style={circle, fill=black, inner sep=1.2pt},
+    ]
+    % --- SoC interior: processor + controller ---
+    \node[block] (cpu) at (0,0) {Application\\Processor};
+    \node[block, fill=blue!18] (ctrl) at (5,0) {I3C Active\\Controller};
+    \draw[wire] (cpu.east) -- (ctrl.west)
+      node[midway, above=2pt, font=\scriptsize] {register bus};
+
+    % --- SoC enclosure ---
+    \node[draw, thick, dashed, rounded corners, fit=(cpu)(ctrl),
+          inner sep=14pt] (soc) {};
+    \node[anchor=north east, font=\itshape, inner sep=4pt] at (soc.north east) {SoC};
+
+    % --- shared two-wire bus ---
+    \coordinate (busL) at (-2.6,-3);
+    \coordinate (busR) at (8.1,-3);
+    \draw[wire] (busL) -- (busR);
+    \node[anchor=south west, font=\scriptsize, inner sep=2pt] at (busL) {SCL / SDA};
+
+    % --- controller drop to bus ---
+    \draw[wire] (ctrl.south) -- (ctrl.south|-busL) coordinate (cdrop);
+    \node[dot] at (cdrop) {};
+
+    % --- target devices hanging off the bus ---
+    \node[target, fill=green!12]  (t1) at (0,-4.7) {I3C\\Target 1};
+    \node[target, fill=green!12]  (t2) at (3,-4.7) {I3C\\Target 2};
+    \node[target, fill=orange!16] (t3) at (6,-4.7) {Legacy \iic{}\\Target};
+    \foreach \t in {t1,t2,t3}{%
+      \draw[wire] (\t.north) -- (\t.north|-busL) coordinate (\t d);
+      \node[dot] at (\t d) {};
+    }
+  \end{tikzpicture}
+  \caption{I3C in an SoC context: an application processor and an integrated I3C Active
+    Controller, the controller driving native I3C Target devices and a legacy \iic{} Target
+    device over a single shared two-wire (SCL/SDA) bus.}
+  \label{fig:soc-context}
+\end{figure}
+
+\section{Problem Statement and Objectives}
+\label{sec:intro-problem}
+
+Although the I3C specification is freely available, learning the protocol \emph{from a production design}
+is difficult. The open-source CHIPS Alliance \texttt{i3c-core}~\cite{chipsalliance_i3c} is a full-featured,
+Host-Controller-Interface (HCI) compliant implementation integrated into the Caliptra root-of-trust
+subsystem. Its production scope and platform integration make it a useful reference but obscure the
+protocol path for study; in addition, several command-issue paths in its central finite-state machine
+(FSM) remain as \texttt{TODO} stubs. Chapter~3 explains the qualitative design boundary derived from this
+baseline, while Chapter~5 reports the quantitative comparison.
+
+The objective of this thesis is therefore to derive, from that reference, a substantially simplified
+single-Controller (Active Controller) design that (i)~retains the essential I3C SDR feature set,
+(ii)~\emph{completes} the command FSM the reference leaves unfinished, and (iii)~is verified to work in a
+modern, methodology-driven testbench. Concretely, the design targets the following deliverables: SDR
+private write, read, and Immediate Data Transfer; \iic{} Fast-Mode legacy traffic on the same bus; ENTDAA
+dynamic address assignment; the ENEC and DISEC Common Command Codes (CCCs); and a software-visible 32-bit
+register interface --- all exercised by a reusable verification environment and a categorised regression
+suite.
+
+The methodology is a \emph{study-and-improve} flow rather than a clean-sheet design: the MIPI I3C Basic
+specification and the reference architecture are studied first; the relevant subset is then re-implemented
+and simplified in synthesisable SystemVerilog RTL; and the result is verified functionally in a Universal
+Verification Methodology (UVM) 1.2 environment~\cite{uvm12} running on the Cadence Xcelium simulator, with
+waveform debugging in SimVision. FPGA prototyping, listed as an optional step in the project outline, is
+not undertaken in this work and is recorded only as future work (see the Conclusion). The resulting
+controller and verification environment are evaluated against these objectives in \cref{ch:results}; this
+introduction deliberately does not repeat the changing regression and implementation metrics reported
+there. The precise scope of this work --- the functional requirements, the timing targets, and the
+deliberate out-of-scope exclusions and their rationale --- is specified authoritatively in
+\cref{ch:background-requirements} and is not duplicated here, so that later requirement changes cannot
+produce a second, conflicting scope list.
+
+\section{Contributions}
+\label{sec:intro-contrib}
+
+The contributions of this thesis are threefold. They are stated leading with the \emph{design} result
+rather than a headline size figure; the quantitative code-size comparison with the reference --- and the
+caveat that it follows largely from the exclusions defined in \cref{sec:req-oos} --- is reported once, in
+\cref{ch:results}, where it can be presented with its full context.
+
+\begin{enumerate}
+  \item \textbf{A complete command FSM.} The flagship \texttt{flow_active} command FSM is implemented in
+  full as a \FlowStateCount-state machine that drives SDR write, read, and immediate transfers, \iic{} legacy
+  transfers, ENTDAA, and the abort path. This completes the command-issue paths that the
+  CHIPS Alliance reference left as unimplemented \texttt{TODO} stubs (8 of its command-FSM states), so
+  that every supported transaction can be followed end to end through the design.
+
+  \item \textbf{A compact, studyable single-Controller design.} The controller spans the full stack ---
+  from the physical (PHY) layer, through the protocol engine, to the register layer --- while retaining
+  SDR, \iic{} Fast-Mode, and ENTDAA functionality. The reproducible size comparison is reserved for
+  \cref{ch:results}.
+
+  \item \textbf{A dual-agent UVM 1.2 verification environment.} A reusable testbench drives the design
+  through two agents --- a register agent for the 32-bit host interface and an I3C Target agent for the
+  bus --- and cross-checks behaviour with a scoreboard and SystemVerilog Assertions (SVA).
+
+\end{enumerate}
+
+\section{Thesis Organisation}
+\label{sec:intro-organisation}
+
+The remainder of this thesis is organised as follows. \Cref{ch:background-requirements} (Theoretical
+Background and System Requirements) establishes the I3C and \iic{} protocol foundations and the UVM
+methodology, then states the functional, performance, and verification requirements that bound the
+design. \Cref{ch:architecture-rtl} (Architecture and RTL Design) is the flagship implementation chapter,
+presenting the three-layer architecture and the RTL of each subsystem, culminating in the
+\FlowStateCount-state \texttt{flow_active} command FSM. \Cref{ch:verif-method} (Verification Methodology
+and UVM Environment) describes the directed-plus-coverage strategy and the dual-agent UVM environment
+that exercises the design. \Cref{ch:results} (Results and Evaluation) reports the implementation metrics,
+regression results, waveform evidence, and the comparison with the reference design, and
+\cref{ch:conclusion} (Conclusion and Future Work) summarises the outcomes, the limitations, and the
+future-work roadmap. Supporting reference material --- the register map, descriptor formats, FSM state
+tables, the CCC table, regression logs, build-and-run instructions, and a glossary --- is collected in the
+appendices.

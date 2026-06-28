@@ -8,10 +8,12 @@ module flow_active_sva
   import i3c_pkg::AddressAssignment;
   import i3c_pkg::addr_assign_desc_t;
   import i3c_pkg::AddrHeader;
+  import i3c_pkg::CCC_ENTDAA;
   import i3c_pkg::HcAborted;
   import i3c_pkg::I3C_RSVD_ADDR;
   import i3c_pkg::I3cShortReadErr;
   import i3c_pkg::I2cDataNackOrI3cBusAborted;
+  import i3c_pkg::Nack;
   import i3c_pkg::NotSupported;
   import i3c_pkg::Ovl;
   import i3c_pkg::Success;
@@ -20,6 +22,7 @@ module flow_active_sva
   import i3c_pkg::immediate_data_trans_desc_t;
   import i3c_pkg::regular_trans_desc_t;
   import i3c_pkg::RegularTransfer;
+  import i3c_pkg::sdr0;
 #(
     parameter int HciCmdDataWidth = 64,
     parameter int HciTxDataWidth = 32,
@@ -31,6 +34,7 @@ module flow_active_sva
     input logic                                              clk_i,
     input logic                                              rst_ni,
     input logic                       [                 3:0] state_q,
+    input logic                       [                 3:0] state_d,
     input logic                                              sel_od_pp_o,
     input logic                                              sel_i3c_i2c_o,
     input logic                                              use_i2c_timing_o,
@@ -54,6 +58,8 @@ module flow_active_sva
     input logic                                              addr_after_rstart_q,
     input logic                                              next_start_is_rstart_q,
     input logic                                              cont_pending_q,
+    input logic                                              active_wroc,
+    input logic                                              completion_error_q,
     input logic                                              broadcast_header_enable_i,
     input logic                       [                 3:0] cmd_tid,
     input logic                                              gen_start_o,
@@ -66,6 +72,9 @@ module flow_active_sva
     input logic                                              tx_queue_rready_o,
     input logic                                              tx_underflow_q,
     input logic                                              rx_overflow_q,
+    input logic                                              daa_wr_busy_q,
+    input logic                                              entdaa_stop_req_q,
+    input logic                                              read_takeover_pending_q,
     input logic                                              rx_queue_full_i,
     input logic                                              rx_queue_wvalid,
     input logic                                              rx_queue_wready_i,
@@ -115,6 +124,37 @@ module flow_active_sva
   localparam logic [7:0] PhaseAddrAck = 8'd2;
   localparam logic [7:0] PhaseDataStart = 8'd3;
   localparam int unsigned AddrNackRespTimeoutCycles = 256;
+
+  covergroup err009_abort_cg @(posedge clk_i);
+    option.per_instance = 1;
+
+    cp_abort_entry_state: coverpoint state_q iff (rst_ni && abort_i) {
+      bins idle_holdoff[] = {Idle, WaitForCmd};
+      bins active[] = {FetchDAT, WaitDAT, I3CBcastHeader, IssueImmediateCcc, FetchTxData,
+                       InitI3CWrite, InitI3CRead, InitI2CWrite, InitI2CRead, IssueCmd};
+    }
+
+    cp_abort_stop_state: coverpoint state_q iff (rst_ni && hc_aborted_q && gen_stop_o) {
+      bins preamble[] = {FetchDAT, WaitDAT, I3CBcastHeader, FetchTxData,
+                         InitI3CWrite, InitI3CRead, InitI2CWrite, InitI2CRead};
+      bins ccc = {IssueImmediateCcc};
+      bins data = {IssueCmd};
+    }
+
+    cp_resp_err_priority: coverpoint resp_queue_wdata[31:28]
+        iff (rst_ni && state_q == WriteResp && hc_aborted_q &&
+             (addr_nack_q || data_nack_q || daa_nack_error_q || rx_overflow_q ||
+              tx_underflow_q || short_read_q || not_supported_q)) {
+      bins addr_header = {AddrHeader};
+      bins data_nack = {I2cDataNackOrI3cBusAborted};
+      bins daa_nack = {Nack};
+      bins overflow = {Ovl};
+      bins short_read = {I3cShortReadErr};
+      bins not_supported = {NotSupported};
+    }
+  endgroup
+
+  err009_abort_cg err009_abort_cov = new();
 
   function automatic logic phase_in_data_pairs(
       input logic [7:0] phase, input logic [7:0] first_phase, input logic [2:0] byte_count);
@@ -310,6 +350,14 @@ module flow_active_sva
     return i2c_regular_write() || i2c_regular_read();
   endfunction
 
+  function automatic logic regular_fifo_write();
+    return sdr_regular_i3c_write() || i2c_regular_write();
+  endfunction
+
+  function automatic logic regular_fifo_read();
+    return sdr_regular_i3c_read() || i2c_regular_read();
+  endfunction
+
   function automatic logic i3c_immediate_private_write();
     return (cmd_attr == ImmediateDataTransfer) && !imm_desc.cp && !dat_entry.device;
   endfunction
@@ -373,9 +421,9 @@ module flow_active_sva
   endfunction
 
   function automatic logic [1:0] expected_rx_byte_idx_after_tbit(
-      input logic [1:0] idx, input logic [15:0] remaining_len, input logic rx_ready,
-      input logic rx_full);
-    if ((remaining_len == 16'h1) && rx_ready && !rx_full) begin
+      input logic [1:0] idx, input logic [15:0] remaining_len, input logic target_end,
+      input logic rx_ready, input logic rx_full);
+    if (((remaining_len == 16'h1) || target_end) && rx_ready && !rx_full) begin
       expected_rx_byte_idx_after_tbit = 2'h0;
     end else begin
       expected_rx_byte_idx_after_tbit = expected_next_rx_byte_idx(idx);
@@ -434,7 +482,7 @@ module flow_active_sva
            (resp_queue_wdata[15:0] == resp_data_len_q);
   endfunction
 
-  function automatic logic tx_underflow_resp_matches_current_len();
+  function automatic logic ovl_resp_matches_current_len();
     return resp_queue_wvalid &&
            (resp_queue_wdata[31:28] == Ovl) &&
            (resp_queue_wdata[27:24] == cmd_tid) &&
@@ -455,8 +503,115 @@ module flow_active_sva
 
     dat_end = {1'b0, aa_desc.dev_idx} + {2'b00, aa_desc.dev_count};
     return !aa_desc.toc || !aa_desc.wroc || (aa_desc.dev_count == 4'd0) ||
-           (dat_end > DatDepth);
+           (dat_end > DatDepth) || (aa_desc.cmd != CCC_ENTDAA);
   endfunction
+
+  function automatic logic supported_immediate_ccc();
+    return (imm_desc.cmd == 8'h00) || (imm_desc.cmd == 8'h01) ||
+           (imm_desc.cmd == 8'h80) || (imm_desc.cmd == 8'h81);
+  endfunction
+
+  function automatic logic invalid_cmd_desc();
+    unique case (cmd_attr)
+      RegularTransfer: begin
+        return reg_desc.cp || (reg_desc.mode != sdr0);
+      end
+      ImmediateDataTransfer: begin
+        return imm_desc.rnw || (imm_desc.mode != sdr0) || (imm_desc.dtt > 3'd4) ||
+               (imm_desc.cp && !supported_immediate_ccc());
+      end
+      AddressAssignment: begin
+        return invalid_addr_assign_desc();
+      end
+      default: begin
+        return 1'b1;
+      end
+    endcase
+  endfunction
+
+  function automatic logic [2:0] addr_assign_invalid_kind();
+    logic [5:0] dat_end;
+
+    dat_end = {1'b0, aa_desc.dev_idx} + {2'b00, aa_desc.dev_count};
+    if (!aa_desc.toc) begin
+      return 3'd1;
+    end else if (!aa_desc.wroc) begin
+      return 3'd2;
+    end else if (aa_desc.dev_count == 4'd0) begin
+      return 3'd3;
+    end else if (dat_end > DatDepth) begin
+      return 3'd4;
+    end
+    return 3'd0;
+  endfunction
+
+  covergroup err011_addr_assign_desc_cg @(posedge clk_i);
+    option.per_instance = 1;
+
+    cp_addr_assign_desc: coverpoint addr_assign_invalid_kind()
+        iff (rst_ni && state_q == FetchDAT && cmd_attr == AddressAssignment &&
+             invalid_addr_assign_desc()) {
+      bins toc_zero = {3'd1};
+      bins wroc_zero = {3'd2};
+      bins dev_count_zero = {3'd3};
+      bins dat_span_overflow = {3'd4};
+    }
+
+    cp_resp_err: coverpoint resp_queue_wdata[31:28]
+        iff (rst_ni && state_q == WriteResp && cmd_attr == AddressAssignment &&
+             invalid_addr_assign_desc()) {
+      bins not_supported = {NotSupported};
+    }
+
+    cp_tid: coverpoint (resp_queue_wdata[27:24] == cmd_tid)
+        iff (rst_ni && state_q == WriteResp && cmd_attr == AddressAssignment &&
+             invalid_addr_assign_desc()) {
+      bins tid_match = {1'b1};
+    }
+
+    cp_resp_len: coverpoint resp_queue_wdata[15:0]
+        iff (rst_ni && state_q == WriteResp && cmd_attr == AddressAssignment &&
+             invalid_addr_assign_desc()) {
+      bins zero = {16'h0000};
+    }
+
+    cp_no_bus_activity: coverpoint (!dat_read_valid_hw_o && !gen_start_o && !gen_rstart_o &&
+                                    !gen_stop_o && !bus_tx_req_byte && !bus_tx_req_bit &&
+                                    !bus_rx_req_byte && !bus_rx_req_bit &&
+                                    !bus_rx_req_bit_handoff)
+        iff (rst_ni && state_q == FetchDAT && cmd_attr == AddressAssignment &&
+             invalid_addr_assign_desc()) {
+      bins silent = {1'b1};
+    }
+  endgroup
+
+  err011_addr_assign_desc_cg err011_addr_assign_desc_cov = new();
+
+  covergroup err010_invalid_cmd_cg @(posedge clk_i);
+    option.per_instance = 1;
+
+    cp_invalid_cmd: coverpoint cmd_attr iff (rst_ni && state_q == FetchDAT &&
+                                              invalid_cmd_desc()) {
+      bins regular = {3'b000};
+      bins immediate = {3'b001};
+      bins address_assignment = {3'b010};
+      bins combo = {3'b011};
+      bins unsupported_direct_or_internal[] = {[3'b100:3'b111]};
+    }
+
+    cp_imm: coverpoint {imm_desc.cp, imm_desc.rnw, imm_desc.mode}
+        iff (rst_ni && state_q == FetchDAT && cmd_attr == ImmediateDataTransfer &&
+             invalid_cmd_desc());
+
+    cp_unsupported_cmd: coverpoint imm_desc.cmd
+        iff (rst_ni && state_q == FetchDAT && cmd_attr == ImmediateDataTransfer &&
+             imm_desc.cp && invalid_cmd_desc()) {
+      bins broadcast = {[8'h02:8'h7f]};
+      bins direct = {[8'h82:8'hff]};
+    }
+  endgroup
+
+  err010_invalid_cmd_cg err010_invalid_cmd_cov = new();
 
   function automatic logic sdr_write_active_state();
     return (state_q == InitI3CWrite) ||
@@ -479,6 +634,7 @@ module flow_active_sva
            sdr_regular_i3c_read() &&
            !addr_nack_q &&
            !short_read_q &&
+           !rx_overflow_q &&
            (remaining_len_q == 16'h0) &&
            (rx_byte_idx_q == 2'd0) &&
            (issue_phase_q > PhaseAddrAck) &&
@@ -486,11 +642,153 @@ module flow_active_sva
            bus_rx_idle_i;
   endfunction
 
+  function automatic logic higher_priority_error_present();
+    return addr_nack_q || data_nack_q || daa_nack_error_q || rx_overflow_q ||
+           tx_underflow_q || short_read_q || not_supported_q;
+  endfunction
+
+  function automatic logic [3:0] prioritized_error_status();
+    if (addr_nack_q) begin
+      return AddrHeader;
+    end else if (data_nack_q) begin
+      return I2cDataNackOrI3cBusAborted;
+    end else if (daa_nack_error_q) begin
+      return Nack;
+    end else if (rx_overflow_q || tx_underflow_q) begin
+      return Ovl;
+    end else if (short_read_q) begin
+      return I3cShortReadErr;
+    end else begin
+      return NotSupported;
+    end
+  endfunction
+
+  ap_abort_idle_blocks_command :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitForCmd &&
+                                            abort_i &&
+                                            next_cmd_available
+                                            |->
+                                            !cmd_queue_rready_o && !gen_start_o)
+  else $error("flow_active_sva: HC abort held at idle must block command acceptance in %m");
+
+  cp_abort_idle_blocks_command :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WaitForCmd &&
+                                            abort_i &&
+                                            next_cmd_available &&
+                                            !cmd_queue_rready_o && !gen_start_o);
+
+  ap_abort_error_priority_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            hc_aborted_q &&
+                                            higher_priority_error_present()
+                                            |->
+                                            resp_queue_wvalid &&
+                                            (resp_queue_wdata[31:28] ==
+                                             prioritized_error_status()) &&
+                                            (resp_queue_wdata[27:24] == cmd_tid) &&
+                                            (resp_queue_wdata[23:16] == 8'h00) &&
+                                            (resp_queue_wdata[15:0] == resp_data_len_q))
+  else $error("flow_active_sva: higher-priority error must override HcAborted response in %m");
+
+  cp_abort_error_priority_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            hc_aborted_q &&
+                                            higher_priority_error_present() &&
+                                            resp_queue_wvalid &&
+                                            (resp_queue_wdata[31:28] ==
+                                             prioritized_error_status()) &&
+                                            (resp_queue_wdata[27:24] == cmd_tid) &&
+                                            (resp_queue_wdata[23:16] == 8'h00) &&
+                                            (resp_queue_wdata[15:0] == resp_data_len_q));
+
+  ap_regular_write_abort_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == RegularTransfer &&
+                                            cmd_dir == Write &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present()
+                                            |->
+                                            hc_aborted_resp_matches_current_len())
+  else $error("flow_active_sva: HC-aborted regular write response mismatch in %m");
+
+  cp_regular_write_abort_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == RegularTransfer &&
+                                            cmd_dir == Write &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present() &&
+                                            hc_aborted_resp_matches_current_len());
+
+  ap_immediate_abort_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present()
+                                            |->
+                                            hc_aborted_resp_matches_current_len())
+  else $error("flow_active_sva: HC-aborted immediate response mismatch in %m");
+
+  cp_immediate_abort_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            !imm_desc.cp &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present() &&
+                                            hc_aborted_resp_matches_current_len());
+
+  ap_ccc_abort_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            imm_desc.cp &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present()
+                                            |->
+                                            hc_aborted_resp_matches_current_len())
+  else $error("flow_active_sva: HC-aborted CCC response mismatch in %m");
+
+  cp_ccc_abort_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == ImmediateDataTransfer &&
+                                            imm_desc.cp &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present() &&
+                                            hc_aborted_resp_matches_current_len());
+
+  ap_daa_abort_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present()
+                                            |->
+                                            hc_aborted_resp_matches_current_len())
+  else $error("flow_active_sva: HC-aborted ENTDAA response mismatch in %m");
+
+  cp_daa_abort_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            hc_aborted_q &&
+                                            !higher_priority_error_present() &&
+                                            hc_aborted_resp_matches_current_len());
+
   // BUS_012: OD/PP phase rule. Existing SDRW/SDRR/I2C/CCC/ENTDAA vseqs create
   // the phases; this checker owns pass/fail, so no BUS_012-specific stimulus
   // sequence is required.
   ap_sel_od_pp_matches_expected :
-  assert property (@(posedge clk_i) disable iff (!rst_ni) sel_od_pp_o === expected_sel_od_pp(
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+      !$changed(abort_i) |-> sel_od_pp_o === expected_sel_od_pp(
       state_q,
       cmd_attr,
       cmd_dir,
@@ -543,6 +841,7 @@ module flow_active_sva
 
   ap_scl_use_od_low_matches_expected :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   !$changed(abort_i) |->
                    scl_use_od_low_o === expected_scl_use_od_low(
       state_q,
       cmd_attr,
@@ -729,7 +1028,7 @@ module flow_active_sva
   ap_fetch_tx_empty_latches_underflow :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             tx_queue_empty_i &&
                                             !tx_underflow_q
                                             |=>
@@ -739,7 +1038,7 @@ module flow_active_sva
   cp_fetch_tx_empty_latches_underflow :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             tx_queue_empty_i &&
                                             !tx_underflow_q
                                             ##1
@@ -748,7 +1047,7 @@ module flow_active_sva
   ap_fetch_tx_underflow_no_tx_pop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             (tx_queue_empty_i || tx_underflow_q)
                                             |->
                                             !tx_queue_rready_o)
@@ -757,14 +1056,14 @@ module flow_active_sva
   cp_fetch_tx_underflow_no_tx_pop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             (tx_queue_empty_i || tx_underflow_q) &&
                                             !tx_queue_rready_o);
 
   ap_fetch_tx_valid_enters_issue :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             !tx_underflow_q &&
                                             !tx_queue_empty_i &&
                                             tx_queue_rvalid_i
@@ -775,7 +1074,7 @@ module flow_active_sva
   cp_fetch_tx_valid_enters_issue :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             !tx_underflow_q &&
                                             !tx_queue_empty_i &&
                                             tx_queue_rvalid_i
@@ -785,7 +1084,7 @@ module flow_active_sva
   ap_tx_underflow_requests_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             (tx_queue_empty_i || tx_underflow_q)
                                             |->
                                             gen_stop_o &&
@@ -796,7 +1095,7 @@ module flow_active_sva
   cp_tx_underflow_requests_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             (tx_queue_empty_i || tx_underflow_q) &&
                                             gen_stop_o &&
                                             !bus_tx_req_byte &&
@@ -805,7 +1104,7 @@ module flow_active_sva
   ap_tx_underflow_stop_to_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             tx_underflow_q &&
                                             scl_stop_done_q
                                             |=>
@@ -815,7 +1114,7 @@ module flow_active_sva
   cp_tx_underflow_stop_to_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchTxData &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             tx_underflow_q &&
                                             scl_stop_done_q
                                             ##1
@@ -824,18 +1123,213 @@ module flow_active_sva
   ap_tx_underflow_resp_ovl :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
-                                            sdr_regular_i3c_write() &&
+                                            regular_fifo_write() &&
                                             tx_underflow_q
                                             |->
-                                            tx_underflow_resp_matches_current_len())
+                                            ovl_resp_matches_current_len())
   else $error("flow_active_sva: TX underflow response descriptor must be Ovl with current length in %m");
 
   cp_tx_underflow_resp_ovl :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
+                                            regular_fifo_write() &&
+                                            tx_underflow_q &&
+                                            ovl_resp_matches_current_len());
+
+  cp_i3c_tx_underflow_resp_ovl :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
                                             sdr_regular_i3c_write() &&
                                             tx_underflow_q &&
-                                            tx_underflow_resp_matches_current_len());
+                                            ovl_resp_matches_current_len());
+
+  cp_i2c_tx_underflow_resp_ovl :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_write() &&
+                                            tx_underflow_q &&
+                                            ovl_resp_matches_current_len());
+
+  // ERR_007: a rejected RX commit latches overflow. Once latched, no more
+  // read data or continuation command may be accepted; termination proceeds
+  // through read takeover when required and then forces STOP.
+  ap_rx_commit_reject_latches_overflow :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            regular_fifo_read() &&
+                                            !rx_overflow_q &&
+                                            rx_queue_wvalid &&
+                                            (!rx_queue_wready_i || rx_queue_full_i)
+                                            |=>
+                                            rx_overflow_q)
+  else $error("flow_active_sva: rejected regular-read RX commit did not latch overflow in %m");
+
+  cp_rx_commit_reject_latches_overflow :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            regular_fifo_read() &&
+                                            !rx_overflow_q &&
+                                            rx_queue_wvalid &&
+                                            (!rx_queue_wready_i || rx_queue_full_i)
+                                            ##1
+                                            rx_overflow_q);
+
+  cp_rx_partial_dword_commit_overflow :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            regular_fifo_read() &&
+                                            rx_byte_idx_q != 2'd3 &&
+                                            rx_queue_wvalid &&
+                                            (!rx_queue_wready_i || rx_queue_full_i)
+                                            ##1
+                                            rx_overflow_q);
+
+  ap_read_rx_overflow_blocks_data_and_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            regular_fifo_read() &&
+                                            rx_overflow_q
+                                            |->
+                                            !bus_rx_req_byte &&
+                                            !bus_rx_req_bit &&
+                                            !bus_rx_req_bit_handoff &&
+                                            !cmd_queue_rready_o)
+  else $error("flow_active_sva: RX overflow must block more read data and continuation in %m");
+
+  cp_read_rx_overflow_blocks_data_and_continuation :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            regular_fifo_read() &&
+                                            rx_overflow_q &&
+                                            !bus_rx_req_byte &&
+                                            !bus_rx_req_bit &&
+                                            !bus_rx_req_bit_handoff &&
+                                            !cmd_queue_rready_o);
+
+  ap_read_rx_overflow_requests_stop :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            regular_fifo_read() &&
+                                            rx_overflow_q &&
+                                            !read_takeover_pending_q &&
+                                            bus_tx_idle_i &&
+                                            bus_rx_idle_i
+                                            |->
+                                            gen_stop_o &&
+                                            !cmd_queue_rready_o)
+  else $error("flow_active_sva: RX overflow must force STOP after bus ownership is available in %m");
+
+  cp_read_rx_overflow_requests_stop :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            regular_fifo_read() &&
+                                            rx_overflow_q &&
+                                            !read_takeover_pending_q &&
+                                            bus_tx_idle_i &&
+                                            bus_rx_idle_i &&
+                                            gen_stop_o &&
+                                            !cmd_queue_rready_o);
+
+  ap_i2c_read_full_commit_boundary_nacks :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            rx_byte_idx_q == 2'd3 &&
+                                            (!rx_queue_wready_i || rx_queue_full_i)
+                                            |->
+                                            bus_tx_req_bit &&
+                                            bus_tx_req_value[0] == NACK)
+  else $error("flow_active_sva: I2C RX overflow boundary must drive NACK in %m");
+
+  cp_i2c_read_full_commit_boundary_nacks :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            i2c_regular_read() &&
+                                            !rx_overflow_q &&
+                                            remaining_len_q > 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            rx_byte_idx_q == 2'd3 &&
+                                            (!rx_queue_wready_i || rx_queue_full_i) &&
+                                            bus_tx_req_bit &&
+                                            bus_tx_req_value[0] == NACK);
+
+  ap_entdaa_commit_reject_latches_overflow_and_stops :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            cmd_attr == AddressAssignment &&
+                                            daa_wr_busy_q &&
+                                            (!rx_queue_wready_i || rx_queue_full_i)
+                                            |->
+                                            gen_stop_o
+                                            ##1
+                                            rx_overflow_q && entdaa_stop_req_q)
+  else $error("flow_active_sva: rejected ENTDAA result commit must latch overflow and stop in %m");
+
+  cp_entdaa_commit_reject_latches_overflow_and_stops :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            cmd_attr == AddressAssignment &&
+                                            daa_wr_busy_q &&
+                                            (!rx_queue_wready_i || rx_queue_full_i) &&
+                                            gen_stop_o
+                                            ##1
+                                            rx_overflow_q && entdaa_stop_req_q);
+
+  ap_entdaa_overflow_blocks_result_write :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            cmd_attr == AddressAssignment &&
+                                            rx_overflow_q
+                                            |->
+                                            !rx_queue_wvalid)
+  else $error("flow_active_sva: ENTDAA overflow must block further result writes in %m");
+
+  cp_entdaa_overflow_blocks_result_write :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            cmd_attr == AddressAssignment &&
+                                            rx_overflow_q &&
+                                            !rx_queue_wvalid);
+
+  ap_ovl_resp_matches_current_len :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            (tx_underflow_q || rx_overflow_q)
+                                            |->
+                                            ovl_resp_matches_current_len())
+  else $error("flow_active_sva: Ovl response status/TID/reserved/length mismatch in %m");
+
+  cp_ovl_resp_matches_current_len :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            (tx_underflow_q || rx_overflow_q) &&
+                                            ovl_resp_matches_current_len());
+
+  cp_i3c_read_rx_overflow_resp_ovl :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            sdr_regular_i3c_read() &&
+                                            rx_overflow_q &&
+                                            ovl_resp_matches_current_len());
+
+  cp_i2c_read_rx_overflow_resp_ovl :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            i2c_regular_read() &&
+                                            rx_overflow_q &&
+                                            ovl_resp_matches_current_len());
+
+  cp_entdaa_rx_overflow_resp_ovl :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            rx_overflow_q &&
+                                            ovl_resp_matches_current_len());
 
   ap_init_i3c_write_no_tx_pop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1103,6 +1597,7 @@ module flow_active_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_write() &&
+                                            !invalid_cmd_desc() &&
                                             reg_desc.toc &&
                                             !addr_nack_q &&
                                             !tx_underflow_q &&
@@ -1115,6 +1610,7 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_write() &&
+                                            !invalid_cmd_desc() &&
                                             reg_desc.toc &&
                                             !addr_nack_q &&
                                             !tx_underflow_q &&
@@ -1235,8 +1731,8 @@ module flow_active_sva
                                             bus_rx_done_i
                                             |=>
                                             rx_byte_idx_q == expected_rx_byte_idx_after_tbit(
-      $past(rx_byte_idx_q), $past(remaining_len_q), $past(rx_queue_wready_i),
-      $past(rx_queue_full_i)
+      $past(rx_byte_idx_q), $past(remaining_len_q), !$past(bus_rx_data_i[0]),
+      $past(rx_queue_wready_i), $past(rx_queue_full_i)
   ) && remaining_len_q == ($past(
       remaining_len_q
   ) - 16'h1) && resp_data_len_q == ($past(
@@ -1281,6 +1777,92 @@ module flow_active_sva
                                             bus_rx_data_i[0] == 1'b0
                                             ##1
                                             short_read_q);
+
+  cp_sdr_read_one_byte_short :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            !short_read_q &&
+                                            !abort_i &&
+                                            remaining_len_q == 16'h2 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            bus_rx_data_i[0] == 1'b0
+                                            ##1
+                                            short_read_q);
+
+  ap_sdr_read_short_commits_received_word_and_stops :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            !short_read_q &&
+                                            !abort_i &&
+                                            remaining_len_q > 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            bus_rx_data_i[0] == 1'b0 &&
+                                            rx_queue_wready_i &&
+                                            !rx_queue_full_i
+                                            |->
+                                            rx_queue_wvalid &&
+                                            rx_queue_wdata === rx_dword_q &&
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !cmd_queue_rready_o)
+  else
+    $error(
+        "flow_active_sva: short read must commit received data and force STOP without continuation in %m"
+    );
+
+  cp_sdr_read_short_commits_received_word_and_stops :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            !short_read_q &&
+                                            !abort_i &&
+                                            remaining_len_q > 16'h1 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            !issue_phase_q[0] &&
+                                            bus_rx_done_i &&
+                                            bus_rx_data_i[0] == 1'b0 &&
+                                            rx_queue_wready_i &&
+                                            !rx_queue_full_i &&
+                                            rx_queue_wvalid &&
+                                            rx_queue_wdata === rx_dword_q &&
+                                            gen_stop_o &&
+                                            !gen_rstart_o &&
+                                            !cmd_queue_rready_o
+                                            ##1
+                                            short_read_q);
+
+  ap_sdr_read_short_blocks_more_data_and_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            short_read_q
+                                            |->
+                                            !bus_rx_req_byte &&
+                                            !bus_rx_req_bit &&
+                                            !bus_rx_req_bit_handoff &&
+                                            !cmd_queue_rready_o &&
+                                            !gen_rstart_o)
+  else
+    $error(
+        "flow_active_sva: latched short read must block further data and continuation in %m"
+    );
+
+  cp_sdr_read_short_blocks_more_data_and_continuation :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            sdr_regular_i3c_read() &&
+                                            short_read_q &&
+                                            !bus_rx_req_byte &&
+                                            !bus_rx_req_bit &&
+                                            !bus_rx_req_bit_handoff &&
+                                            !cmd_queue_rready_o &&
+                                            !gen_rstart_o);
 
   ap_sdr_read_target_continue_at_requested_len :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1363,6 +1945,7 @@ module flow_active_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_read() &&
+                                            !invalid_cmd_desc() &&
                                             !addr_nack_q &&
                                             !short_read_q &&
                                             !rx_overflow_q &&
@@ -1375,6 +1958,7 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_read() &&
+                                            !invalid_cmd_desc() &&
                                             !addr_nack_q &&
                                             !short_read_q &&
                                             !rx_overflow_q &&
@@ -1574,9 +2158,10 @@ module flow_active_sva
                                             !reg_desc.toc &&
                                             next_cmd_available &&
                                             next_cmd_supported &&
-                                            resp_queue_wready_i
+                                            (!reg_desc.wroc || resp_queue_wready_i)
                                             |->
-                                            success_resp_matches_current_len() &&
+                                            ((reg_desc.wroc && success_resp_matches_current_len()) ||
+                                             (!reg_desc.wroc && !resp_queue_wvalid)) &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o)
   else $error("flow_active_sva: SDR read toc=0 must accept continuation without STOP in %m");
@@ -1587,8 +2172,9 @@ module flow_active_sva
                                             !reg_desc.toc &&
                                             next_cmd_available &&
                                             next_cmd_supported &&
-                                            resp_queue_wready_i &&
-                                            success_resp_matches_current_len() &&
+                                            (!reg_desc.wroc || resp_queue_wready_i) &&
+                                            ((reg_desc.wroc && success_resp_matches_current_len()) ||
+                                             (!reg_desc.wroc && !resp_queue_wvalid)) &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o);
 
@@ -1628,6 +2214,7 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             sdr_read_done_ready() &&
                                             !reg_desc.toc &&
+                                            reg_desc.wroc &&
                                             next_cmd_available &&
                                             next_cmd_supported &&
                                             resp_queue_wready_i &&
@@ -1657,9 +2244,10 @@ module flow_active_sva
                                             !reg_desc.toc &&
                                             next_cmd_available &&
                                             next_cmd_supported &&
-                                            resp_queue_wready_i
+                                            (!reg_desc.wroc || resp_queue_wready_i)
                                             |->
-                                            success_resp_matches_current_len() &&
+                                            ((reg_desc.wroc && success_resp_matches_current_len()) ||
+                                             (!reg_desc.wroc && !resp_queue_wvalid)) &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o)
   else $error("flow_active_sva: SDRW_003 toc=0 must accept continuation without STOP in %m");
@@ -1670,8 +2258,9 @@ module flow_active_sva
                                             !reg_desc.toc &&
                                             next_cmd_available &&
                                             next_cmd_supported &&
-                                            resp_queue_wready_i &&
-                                            success_resp_matches_current_len() &&
+                                            (!reg_desc.wroc || resp_queue_wready_i) &&
+                                            ((reg_desc.wroc && success_resp_matches_current_len()) ||
+                                             (!reg_desc.wroc && !resp_queue_wvalid)) &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o);
 
@@ -1683,7 +2272,7 @@ module flow_active_sva
                                               !reg_desc.toc &&
                                               next_cmd_available &&
                                               next_cmd_supported &&
-                                              resp_queue_wready_i)
+                                              (!reg_desc.wroc || resp_queue_wready_i))
                                             |->
                                             !cmd_queue_rready_o)
   else $error("flow_active_sva: SDR write must not pop CMD FIFO except accepted continuation in %m");
@@ -1696,7 +2285,7 @@ module flow_active_sva
                                               !reg_desc.toc &&
                                               next_cmd_available &&
                                               next_cmd_supported &&
-                                              resp_queue_wready_i) &&
+                                              (!reg_desc.wroc || resp_queue_wready_i)) &&
                                             !cmd_queue_rready_o);
 
   ap_toc0_missing_continuation_requests_stop :
@@ -1719,7 +2308,7 @@ module flow_active_sva
                                             !gen_rstart_o &&
                                             !cmd_queue_rready_o);
 
-  ap_toc0_missing_continuation_success_resp :
+  ap_toc0_missing_continuation_not_supported_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_write() &&
@@ -1729,10 +2318,10 @@ module flow_active_sva
                                             !hc_aborted_q &&
                                             !next_cmd_available
                                             |->
-                                            success_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_003 toc=0 missing continuation response must be Success in %m");
+                                            not_supported_resp_matches_current_len())
+  else $error("flow_active_sva: SDRW_003 toc=0 missing continuation response must be NotSupported in %m");
 
-  cp_toc0_missing_continuation_success_resp :
+  cp_toc0_missing_continuation_not_supported_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_write() &&
@@ -1741,7 +2330,7 @@ module flow_active_sva
                                             !tx_underflow_q &&
                                             !hc_aborted_q &&
                                             !next_cmd_available &&
-                                            success_resp_matches_current_len());
+                                            not_supported_resp_matches_current_len());
 
   ap_toc0_unsupported_continuation_not_supported_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2047,7 +2636,9 @@ module flow_active_sva
                                             !hc_aborted_q &&
                                             remaining_len_q > 16'h1 &&
                                             issue_phase_q > PhaseAddrAck &&
-                                            !issue_phase_q[0]
+                                            !issue_phase_q[0] &&
+                                            !(rx_byte_idx_q == 2'd3 &&
+                                              (!rx_queue_wready_i || rx_queue_full_i))
                                             |->
                                             bus_tx_req_bit &&
                                             !bus_tx_req_byte &&
@@ -2065,6 +2656,8 @@ module flow_active_sva
                                             remaining_len_q > 16'h1 &&
                                             issue_phase_q > PhaseAddrAck &&
                                             !issue_phase_q[0] &&
+                                            !(rx_byte_idx_q == 2'd3 &&
+                                              (!rx_queue_wready_i || rx_queue_full_i)) &&
                                             bus_tx_req_bit &&
                                             bus_tx_req_value === ACK);
 
@@ -2202,8 +2795,8 @@ module flow_active_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == IssueCmd &&
                                             i2c_regular_read() &&
-                                            read_abort_term_q
-                                            |->
+                                            $rose(read_abort_term_q)
+                                            |-> ##[0:4]
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !bus_tx_req_bit &&
@@ -2214,7 +2807,8 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == IssueCmd &&
                                             i2c_regular_read() &&
-                                            read_abort_term_q &&
+                                            $rose(read_abort_term_q)
+                                            ##[0:4]
                                             gen_stop_o &&
                                             !gen_rstart_o &&
                                             !bus_tx_req_bit &&
@@ -2244,6 +2838,7 @@ module flow_active_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             i2c_regular_write() &&
+                                            !invalid_cmd_desc() &&
                                             reg_desc.toc &&
                                             !addr_nack_q &&
                                             !data_nack_q &&
@@ -2258,6 +2853,7 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             i2c_regular_write() &&
+                                            !invalid_cmd_desc() &&
                                             reg_desc.toc &&
                                             !addr_nack_q &&
                                             !data_nack_q &&
@@ -2272,6 +2868,7 @@ module flow_active_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             i2c_regular_read() &&
+                                            !invalid_cmd_desc() &&
                                             reg_desc.toc &&
                                             !addr_nack_q &&
                                             !rx_overflow_q &&
@@ -2285,6 +2882,7 @@ module flow_active_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             i2c_regular_read() &&
+                                            !invalid_cmd_desc() &&
                                             reg_desc.toc &&
                                             !addr_nack_q &&
                                             !rx_overflow_q &&
@@ -2659,30 +3257,54 @@ module flow_active_sva
       imm_desc, issue_phase_q
   ));
 
-  // IMM_002 (negative): dtt>4 is rejected in WaitDAT before any bus activity.
-  ap_imm_dtt_gt4_rejected_in_waitdat :
+  // ERR_010: every unsupported descriptor is rejected in FetchDAT before DAT or bus activity.
+  ap_invalid_cmd_rejected_before_access :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == WaitDAT &&
-                                            cmd_attr == ImmediateDataTransfer &&
-                                            !dat_read_valid_hw_o &&
-                                            !cont_pending_q &&
-                                            imm_desc.dtt > 3'd4
+                                            state_q == FetchDAT &&
+                                            invalid_cmd_desc()
                                             |->
-                                            (!gen_start_o &&
+                                            (!dat_read_valid_hw_o &&
+                                             !gen_start_o &&
+                                             !gen_rstart_o &&
+                                             !gen_stop_o &&
                                              !bus_tx_req_byte &&
-                                             !bus_tx_req_bit)
+                                             !bus_tx_req_bit &&
+                                             !bus_rx_req_byte &&
+                                             !bus_rx_req_bit &&
+                                             !bus_rx_req_bit_handoff)
                                             ##1 state_q == WriteResp)
-  else $error("flow_active_sva: immediate dtt>4 must be rejected in WaitDAT without bus activity in %m");
+  else $error("flow_active_sva: invalid command must be rejected before DAT or bus activity in %m");
 
-  cp_imm_dtt_gt4_rejected_in_waitdat :
+  cp_invalid_cmd_rejected_before_access :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == WaitDAT &&
-                                            cmd_attr == ImmediateDataTransfer &&
+                                            state_q == FetchDAT &&
+                                            invalid_cmd_desc() &&
                                             !dat_read_valid_hw_o &&
-                                            !cont_pending_q &&
-                                            imm_desc.dtt > 3'd4
-                                            ##1
-                                            state_q == WriteResp);
+                                            !gen_start_o &&
+                                            !gen_rstart_o &&
+                                            !gen_stop_o &&
+                                            !bus_tx_req_byte &&
+                                            !bus_tx_req_bit &&
+                                            !bus_rx_req_byte &&
+                                            !bus_rx_req_bit &&
+                                            !bus_rx_req_bit_handoff
+                                            ##1 state_q == WriteResp);
+
+  ap_invalid_cmd_not_supported_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            invalid_cmd_desc()
+                                            |->
+                                            not_supported_resp_matches_current_len() &&
+                                            (resp_queue_wdata[15:0] == 16'h0000))
+  else $error("flow_active_sva: invalid command response must be NotSupported with length 0 in %m");
+
+  cp_invalid_cmd_not_supported_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            invalid_cmd_desc() &&
+                                            not_supported_resp_matches_current_len() &&
+                                            (resp_queue_wdata[15:0] == 16'h0000));
 
   // IMM_002 (negative): the dtt>4 response descriptor is NotSupported (len 0).
   ap_imm_dtt_gt4_not_supported_resp :
@@ -2701,7 +3323,7 @@ module flow_active_sva
                                             imm_desc.dtt > 3'd4 &&
                                             not_supported_resp_matches_current_len());
 
-  // DAA_007 / ERR_016: reject invalid AddressAssignment descriptors before DAT or bus access.
+  // DAA_007 / ERR_011: reject invalid AddressAssignment descriptors before DAT or bus access.
   ap_addr_assign_invalid_rejected_before_access :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchDAT &&
@@ -2821,6 +3443,7 @@ module flow_active_sva
                                             state_q == WriteResp &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
+                                            !invalid_cmd_desc() &&
                                             imm_desc.toc &&
                                             imm_desc.dtt <= 3'd4 &&
                                             !addr_nack_q &&
@@ -2837,6 +3460,7 @@ module flow_active_sva
                                             state_q == WriteResp &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
+                                            !invalid_cmd_desc() &&
                                             imm_desc.toc &&
                                             imm_desc.dtt <= 3'd4 &&
                                             !addr_nack_q &&
@@ -3630,6 +4254,202 @@ module flow_active_sva
                                             resp_queue_wdata[23:16] == 8'h00 &&
                                             resp_queue_wdata[15:0] == 16'd1);
 
+  // ERR_008: RESP FIFO backpressure holds both success and error descriptors in
+  // WriteResp. The descriptor stays stable until one ready/valid handshake, then
+  // the FSM exits so the same command cannot enqueue a duplicate response.
+  ap_resp_full_success_holds_pending_write :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            active_wroc &&
+                                            !completion_error_q &&
+                                            !resp_queue_wready_i
+                                            |->
+                                            state_d == WriteResp &&
+                                            resp_queue_wvalid)
+  else $error("flow_active_sva: full RESP FIFO must stall a successful response in WriteResp in %m");
+
+  cp_resp_full_success_holds_pending_write :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            active_wroc &&
+                                            !completion_error_q &&
+                                            !resp_queue_wready_i &&
+                                            state_d == WriteResp &&
+                                            resp_queue_wvalid);
+
+  ap_resp_full_error_holds_pending_write :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            completion_error_q &&
+                                            !resp_queue_wready_i
+                                            |->
+                                            state_d == WriteResp &&
+                                            resp_queue_wvalid)
+  else $error("flow_active_sva: full RESP FIFO must stall an error response in WriteResp in %m");
+
+  cp_resp_full_error_holds_pending_write :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            completion_error_q &&
+                                            !resp_queue_wready_i &&
+                                            state_d == WriteResp &&
+                                            resp_queue_wvalid);
+
+  ap_resp_full_keeps_descriptor_stable :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            !resp_queue_wready_i
+                                            |=>
+                                            state_q == WriteResp &&
+                                            resp_queue_wvalid &&
+                                            $stable(resp_queue_wdata))
+  else $error("flow_active_sva: pending response descriptor changed under RESP backpressure in %m");
+
+  cp_resp_full_keeps_descriptor_stable :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            !resp_queue_wready_i
+                                            ##1
+                                            state_q == WriteResp &&
+                                            resp_queue_wvalid &&
+                                            $stable(resp_queue_wdata));
+
+  ap_resp_backpressure_release_writes_once :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            resp_queue_wvalid &&
+                                            resp_queue_wready_i &&
+                                            $past(state_q == WriteResp &&
+                                                  !resp_queue_wready_i)
+                                            |=>
+                                            state_q == Idle &&
+                                            !resp_queue_wvalid)
+  else $error("flow_active_sva: released response must handshake once then exit WriteResp in %m");
+
+  cp_resp_backpressure_release_writes_once :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            resp_queue_wvalid &&
+                                            resp_queue_wready_i &&
+                                            $past(state_q == WriteResp &&
+                                                  !resp_queue_wready_i)
+                                            ##1
+                                            state_q == Idle &&
+                                            !resp_queue_wvalid);
+
+  // ERR_012: WROC suppresses successful responses, never suppresses errors,
+  // and removes RESP FIFO backpressure from successful toc=0 continuations.
+  ap_wroc0_success_suppresses_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (state_q == IssueCmd ||
+                                             state_q == IssueImmediateCcc) &&
+                                            !active_wroc &&
+                                            !completion_error_q &&
+                                            (state_d == Idle || state_d == WriteResp)
+                                            |->
+                                            state_d == Idle && !resp_queue_wvalid)
+  else $error("flow_active_sva: successful wroc=0 completion must suppress RESP in %m");
+
+  cp_wroc0_success_suppresses_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (state_q == IssueCmd ||
+                                             state_q == IssueImmediateCcc) &&
+                                            !active_wroc &&
+                                            !completion_error_q &&
+                                            state_d == Idle &&
+                                            !resp_queue_wvalid);
+
+  ap_wroc1_success_enters_write_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (state_q == IssueCmd ||
+                                             state_q == IssueImmediateCcc) &&
+                                            active_wroc &&
+                                            !completion_error_q &&
+                                            (state_d == Idle || state_d == WriteResp)
+                                            |->
+                                            state_d == WriteResp
+                                            ##1
+                                            state_q == WriteResp && resp_queue_wvalid)
+  else $error("flow_active_sva: successful wroc=1 completion must write RESP in %m");
+
+  cp_wroc1_success_enters_write_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (state_q == IssueCmd ||
+                                             state_q == IssueImmediateCcc) &&
+                                            active_wroc &&
+                                            !completion_error_q &&
+                                            state_d == WriteResp
+                                            ##1
+                                            state_q == WriteResp && resp_queue_wvalid);
+
+  ap_wroc0_error_override_writes_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q != WriteResp &&
+                                            !active_wroc &&
+                                            completion_error_q &&
+                                            (state_d == Idle || state_d == WriteResp)
+                                            |->
+                                            state_d == WriteResp
+                                            ##1
+                                            state_q == WriteResp && resp_queue_wvalid)
+  else $error("flow_active_sva: wroc=0 must not suppress an error response in %m");
+
+  cp_wroc0_error_override_writes_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q != WriteResp &&
+                                            !active_wroc &&
+                                            completion_error_q &&
+                                            state_d == WriteResp
+                                            ##1
+                                            state_q == WriteResp && resp_queue_wvalid);
+
+  ap_wroc0_continuation_ignores_resp_ready :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (sdr_write_done_ready() || sdr_read_done_ready()) &&
+                                            !reg_desc.toc &&
+                                            !reg_desc.wroc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported
+                                            |->
+                                            cmd_queue_rready_o &&
+                                            !resp_queue_wvalid &&
+                                            !gen_stop_o)
+  else $error("flow_active_sva: wroc=0 continuation must not depend on RESP ready in %m");
+
+  cp_wroc0_continuation_ignores_resp_ready :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (sdr_write_done_ready() || sdr_read_done_ready()) &&
+                                            !reg_desc.toc &&
+                                            !reg_desc.wroc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            !resp_queue_wready_i &&
+                                            cmd_queue_rready_o &&
+                                            !resp_queue_wvalid &&
+                                            !gen_stop_o);
+
+  ap_wroc1_continuation_waits_for_resp_ready :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (sdr_write_done_ready() || sdr_read_done_ready()) &&
+                                            !reg_desc.toc &&
+                                            reg_desc.wroc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            !resp_queue_wready_i
+                                            |->
+                                            !cmd_queue_rready_o)
+  else $error("flow_active_sva: wroc=1 continuation must wait for RESP ready in %m");
+
+  cp_wroc1_continuation_waits_for_resp_ready :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            (sdr_write_done_ready() || sdr_read_done_ready()) &&
+                                            !reg_desc.toc &&
+                                            reg_desc.wroc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            !resp_queue_wready_i &&
+                                            !cmd_queue_rready_o);
+
 endmodule
 
 bind flow_active flow_active_sva #(
@@ -3642,6 +4462,7 @@ bind flow_active flow_active_sva #(
     .clk_i,
     .rst_ni,
     .state_q,
+    .state_d,
     .sel_od_pp_o,
     .sel_i3c_i2c_o,
     .use_i2c_timing_o,
@@ -3665,6 +4486,8 @@ bind flow_active flow_active_sva #(
     .addr_after_rstart_q,
     .next_start_is_rstart_q,
     .cont_pending_q,
+    .active_wroc,
+    .completion_error_q,
     .broadcast_header_enable_i,
     .cmd_tid,
     .gen_start_o,
@@ -3677,6 +4500,9 @@ bind flow_active flow_active_sva #(
     .tx_queue_rready_o,
     .tx_underflow_q,
     .rx_overflow_q,
+    .daa_wr_busy_q,
+    .entdaa_stop_req_q,
+    .read_takeover_pending_q,
     .rx_queue_full_i,
     .rx_queue_wvalid,
     .rx_queue_wready_i,

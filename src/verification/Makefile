@@ -94,19 +94,22 @@ DAA_REGRESSION_SEQS ?= \
 ERR_REGRESSION_SEQS ?= \
 	i3c_private_addr_nack_resp_vseq \
 	i3c_broadcast_header_nack_resp_vseq \
-	i3c_read_tbit_no_parity_resp_vseq \
 	i3c_read_short_target_end_vseq \
-	i3c_ovl_resp_vseq \
 	i3c_write_tx_fifo_underflow_vseq \
 	i3c_read_rx_fifo_full_overflow_vseq \
 	i3c_entdaa_rx_fifo_partial_overflow_vseq \
+	i3c_resp_fifo_full_backpressure_vseq \
 	i3c_write_abort_vseq \
 	i3c_read_abort_vseq \
 	i3c_imm_data_nack_i2c_vseq \
 	i3c_imm_abort_vseq \
 	i2c_data_nack_write_vseq \
 	i2c_regular_abort_vseq \
-	i3c_daa_hc_abort_vseq
+	i3c_daa_hc_abort_vseq \
+	i3c_hc_abort_policy_vseq \
+	i3c_wroc_policy_vseq \
+	i3c_invalid_descriptor_attr_vseq \
+	i3c_entdaa_invalid_descriptor_resp_vseq
 
 compile:
 	$(SIMULATOR) -compile -elaborate \

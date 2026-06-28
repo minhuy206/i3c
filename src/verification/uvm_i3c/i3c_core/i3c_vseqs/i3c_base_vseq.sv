@@ -684,7 +684,7 @@ class i3c_base_vseq extends uvm_sequence;
   virtual task backdoor_set_fifo_level(queue_hdl_paths_t paths, int unsigned count);
     hdl_deposit_checked(paths.rptr_path, '0);
     hdl_deposit_checked(paths.wptr_path, count);
-    if (paths.name == "RX") begin
+    if ((paths.name == "RX") || (paths.name == "RESP")) begin
       uvm_component  comp;
       i3c_scoreboard scb;
 
@@ -692,7 +692,11 @@ class i3c_base_vseq extends uvm_sequence;
       if (!$cast(scb, comp)) begin
         `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", get_type_name()))
       end
-      scb.set_rx_fifo_level_unknown(count, get_type_name());
+      if (paths.name == "RX") begin
+        scb.set_rx_fifo_level_unknown(count, get_type_name());
+      end else begin
+        scb.set_resp_fifo_level_unknown(count, get_type_name());
+      end
     end
   endtask
 

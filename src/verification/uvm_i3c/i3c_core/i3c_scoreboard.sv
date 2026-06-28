@@ -10,6 +10,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [6:0] addr;
     bit       rnw;
     bit       toc;
+    bit       wroc;
     bit       uses_tx_queue;
     bit       is_immediate;
     int       data_length;
@@ -61,6 +62,8 @@ class i3c_scoreboard extends uvm_scoreboard;
   exp_rx_data_t exp_rx_data_queue[$];
   pending_resp_t pending_resp_queue[$];
   dat_model_entry_t dat_model[DAT_DEPTH];
+
+  int unsigned unknown_resp_fifo_words;
 
   bit got_dw0;
   bit [31:0] cmd_dw0;
@@ -386,6 +389,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     tx_data_queue.delete();
     exp_rx_data_queue.delete();
     pending_resp_queue.delete();
+    unknown_resp_fifo_words = 0;
     got_dw0 = 1'b0;
     cmd_dw0 = '0;
     pending_private_transfer = 1'b0;
@@ -417,6 +421,28 @@ class i3c_scoreboard extends uvm_scoreboard;
               ), UVM_MEDIUM)
   endfunction
 
+  function bit invalid_cmd_descriptor(bit [63:0] raw_desc);
+    regular_trans_desc_t        reg_desc;
+    immediate_data_trans_desc_t imm_desc;
+    addr_assign_desc_t          daa_desc;
+    int unsigned                dat_end;
+
+    reg_desc = regular_trans_desc_t'(raw_desc);
+    imm_desc = immediate_data_trans_desc_t'(raw_desc);
+    daa_desc = addr_assign_desc_t'(raw_desc);
+    dat_end  = int'(daa_desc.dev_idx) + int'(daa_desc.dev_count);
+
+    case (raw_desc[2:0])
+      3'b000: return reg_desc.cp || (reg_desc.mode != sdr0);
+      3'b001: return imm_desc.rnw || (imm_desc.mode != sdr0) || (imm_desc.dtt > 3'd4) ||
+                    (imm_desc.cp && !((imm_desc.cmd == 8'h00) || (imm_desc.cmd == 8'h01) ||
+                                      (imm_desc.cmd == 8'h80) || (imm_desc.cmd == 8'h81)));
+      3'b010: return !daa_desc.toc || !daa_desc.wroc || (daa_desc.dev_count == 4'd0) ||
+                    (dat_end > DAT_DEPTH) || (daa_desc.cmd != CCC_ENTDAA);
+      default: return 1'b1;
+    endcase
+  endfunction
+
   function void handle_cmd_dword(bit [31:0] wdata);
     regular_trans_desc_t        reg_desc;
     immediate_data_trans_desc_t imm_desc;
@@ -436,8 +462,23 @@ class i3c_scoreboard extends uvm_scoreboard;
     daa_desc                        = addr_assign_desc_t'({wdata, cmd_dw0});
     target_is_i3c                   = is_i3c_device(reg_desc.dev_idx);
 
+    if (invalid_cmd_descriptor({wdata, cmd_dw0})) begin
+      record_pending_resp(reg_desc.rnw, reg_desc.tid, 0, -1, NotSupported);
+      `uvm_info(`gfn, $sformatf(
+                "CMD rejected before DAT/bus activity: attr=0x%0h mode=0x%0h cp=%0b rnw=%0b cmd=0x%02h tid=0x%0h",
+                cmd_dw0[2:0],
+                reg_desc.mode,
+                reg_desc.cp,
+                reg_desc.rnw,
+                reg_desc.cmd,
+                reg_desc.tid
+                ), UVM_MEDIUM)
+      return;
+    end
+
     exp.tid                         = reg_desc.tid;
     exp.toc                         = reg_desc.toc;
+    exp.wroc                        = reg_desc.wroc;
     exp.addr                        = get_device_addr(reg_desc.dev_idx);
     exp.is_ccc                      = 1'b0;
     exp.uses_tx_queue               = 1'b0;
@@ -460,15 +501,7 @@ class i3c_scoreboard extends uvm_scoreboard;
       end
       ImmediateDataTransfer: begin
         exp.is_immediate = 1'b1;
-        if (imm_desc.dtt > 3'd4) begin
-          record_pending_resp(imm_desc.rnw, reg_desc.tid, 0, -1, NotSupported);
-          `uvm_info(
-              `gfn,
-              $sformatf(
-                  "CMD queued: ImmediateDataTransfer dtt=%0d > 4 rejected -> modeled NotSupported, no bus txn expected (tid=0x%0h)",
-                  imm_desc.dtt, reg_desc.tid), UVM_MEDIUM)
-          return;
-        end
+        exp.wroc         = imm_desc.wroc;
         if (imm_desc.cp && is_enec_disec_ccc(imm_desc.cmd)) begin
           exp.addr        = 7'h7e;
           exp.rnw         = 1'b0;
@@ -485,17 +518,7 @@ class i3c_scoreboard extends uvm_scoreboard;
         end
       end
       AddressAssignment: begin
-        if (!daa_desc.toc || !daa_desc.wroc || (daa_desc.dev_count == 4'd0) ||
-            ((int'(daa_desc.dev_idx) + int'(daa_desc.dev_count)) > DAT_DEPTH)) begin
-          record_pending_resp(1'b0, daa_desc.tid, 0, -1, NotSupported);
-          `uvm_info(
-              `gfn,
-              $sformatf(
-                  "CMD queued: AddressAssignment rejected before bus activity (dev_idx=%0d dev_count=%0d toc=%0b wroc=%0b tid=0x%0h)",
-                  daa_desc.dev_idx, daa_desc.dev_count, daa_desc.toc, daa_desc.wroc,
-                  daa_desc.tid), UVM_MEDIUM)
-          return;
-        end
+        exp.wroc = daa_desc.wroc;
         // ENTDAA always broadcasts to 0x7E; exp.ccc is already set from reg_desc.cmd.
         exp.addr          = 7'h7e;
         exp.rnw           = 1'b0;
@@ -588,6 +611,14 @@ class i3c_scoreboard extends uvm_scoreboard;
   function void check_resp(bit [31:0] rdata);
     i3c_response_desc_t resp;
 
+    if (unknown_resp_fifo_words > 0) begin
+      unknown_resp_fifo_words--;
+      `uvm_info(`gfn, $sformatf(
+                "RESP FIFO backdoor word consumed: rdata=0x%08h remaining_unknown=%0d",
+                rdata, unknown_resp_fifo_words), UVM_MEDIUM)
+      return;
+    end
+
     if (pending_resp_queue.size() > 0) begin
       check_pending_resp(rdata);
       return;
@@ -630,6 +661,17 @@ class i3c_scoreboard extends uvm_scoreboard;
               )
               ), UVM_MEDIUM)
     pending_resp_queue.push_back(pending);
+  endfunction
+
+  function bit response_expected(bit wroc, i3c_resp_err_status_e resp_status);
+    return wroc || (resp_status != Success);
+  endfunction
+
+  function void set_resp_fifo_level_unknown(int unsigned count, string ctxt);
+    unknown_resp_fifo_words = count;
+    `uvm_info(`gfn, $sformatf(
+              "%s: RESP FIFO scoreboard model set to %0d unknown word(s)", ctxt, count),
+              UVM_MEDIUM)
   endfunction
 
   function void check_pending_resp(bit [31:0] rdata);
@@ -1135,11 +1177,22 @@ class i3c_scoreboard extends uvm_scoreboard;
     end
     `DV_CHECK_EQ(item.stop, 1'b1, "CCC should end with STOP")
 
+    if (!is_entdaa && hc_abort_active && item.stop) begin
+      resp_status = HcAborted;
+      if (is_direct_ccc && (direct_idx >= 0)) begin
+        resp_len = direct_item.num_data;
+      end else begin
+        resp_len = item.num_data;
+      end
+    end
+
     // NACK (AddrHeader) wins over toc=0 (NotSupported); toc=0 without NACK is rejected by RTL.
     if (resp_status == Success && !exp.toc) begin
       resp_status = NotSupported;
     end
-    record_pending_resp(1'b0, exp.tid, resp_len, -1, resp_status);
+    if (response_expected(exp.wroc, resp_status)) begin
+      record_pending_resp(1'b0, exp.tid, resp_len, -1, resp_status);
+    end
 
     begin
       string expected_ccc_name;
@@ -1251,7 +1304,12 @@ class i3c_scoreboard extends uvm_scoreboard;
     `uvm_info(`gfn, $sformatf("CHECK READ DATA"), UVM_MEDIUM)
     if (enqueue_rx_word_expectations(item, exp, read_id)) resp_status = Ovl;
     handle_read_end(item, exp, resp_status, expected_rstart, expected_stop, txn_aborted);
-    record_pending_resp(1'b1, exp.tid, item.num_data, read_id, resp_status);
+    if ((resp_status == Success) && !exp.toc && item.stop && !txn_aborted) begin
+      resp_status = NotSupported;
+    end
+    if (response_expected(exp.wroc, resp_status)) begin
+      record_pending_resp(1'b1, exp.tid, item.num_data, read_id, resp_status);
+    end
     `uvm_info(`gfn, $sformatf(
               "RX DATA: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
               exp.tid,
@@ -1476,8 +1534,11 @@ class i3c_scoreboard extends uvm_scoreboard;
                              !inferred_hc_abort;
       resp_status = inferred_data_nack    ? I2cDataNackOrI3cBusAborted :
                     inferred_tx_underflow ? Ovl :
-                    inferred_hc_abort     ? HcAborted : Success;
-      record_pending_resp(1'b0, exp.tid, item.num_data, -1, resp_status);
+                    inferred_hc_abort     ? HcAborted :
+                    missing_continuation  ? NotSupported : Success;
+      if (response_expected(exp.wroc, resp_status)) begin
+        record_pending_resp(1'b0, exp.tid, item.num_data, -1, resp_status);
+      end
     end
 
     return inferred_tx_underflow || inferred_hc_abort || inferred_data_nack ||
@@ -1529,7 +1590,9 @@ class i3c_scoreboard extends uvm_scoreboard;
       resp_status = inferred_data_nack ? I2cDataNackOrI3cBusAborted :
                     inferred_hc_abort  ? HcAborted : Success;
     end
-    record_pending_resp(1'b0, exp.tid, item.num_data, -1, resp_status);
+    if (response_expected(exp.wroc, resp_status)) begin
+      record_pending_resp(1'b0, exp.tid, item.num_data, -1, resp_status);
+    end
 
     `uvm_info(`gfn, $sformatf(
               "IMM DATA: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",

@@ -577,7 +577,7 @@ Với `BROADCAST_ADDR_ENABLE=1`, command đầu tiên là private I3C transfer m
 
 RESP của cả hai command phải báo Success, TID phải khớp từng command, và length phải bằng số byte đã truyền. Bus không được idle giữa command thứ nhất và command thứ hai; idle chỉ được quan sát sau STOP cuối cùng.
 
-Trong negative subcase, command đầu tiên vẫn phải truyền đủ data/T-bit đã yêu cầu, sau đó controller phát STOP thay vì Repeated START. RESP phải báo `Success` với length bằng số byte thật sự đã truyền. Khi `BROADCAST_ADDR_ENABLE=1`, chỉ transfer đầu tiên có broadcast-header preamble; không được phát một preamble rỗng hoặc treo bus khi không có continuation hợp lệ.
+Trong negative subcase, command đầu tiên vẫn phải truyền đủ data/T-bit đã yêu cầu, sau đó controller phát STOP thay vì Repeated START. RESP phải báo `NotSupported` với length bằng số byte thật sự đã truyền, kể cả khi command đặt `wroc=0`, vì missing continuation là error. Khi `BROADCAST_ADDR_ENABLE=1`, chỉ transfer đầu tiên có broadcast-header preamble; không được phát một preamble rỗng hoặc treo bus khi không có continuation hợp lệ.
 
 Test này quan trọng vì `toc=0` ảnh hưởng trực tiếp đến ownership của bus và sequencing giữa nhiều SDR private transfer trong cùng một frame. Nếu controller tạo STOP quá sớm, transfer bị tách frame sai. Nếu controller không tạo được `Sr`, không lấy command kế tiếp đúng lúc, hoặc phát lại `0x7e` ở mỗi continuation, continuation flow sẽ sai so với semantics đã specification hóa.
 
@@ -1057,35 +1057,33 @@ Test này quan trọng vì data NACK khác với address NACK. Nếu report sai 
 
 Test này kiểm tra response khi I3C target kết thúc read sớm.
 
-Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M < N`, rồi báo end bằng T-bit theo read semantics.
+Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M < N`, rồi báo end bằng T-bit theo read semantics. Các case phủ đủ vị trí kết thúc trong một DWORD và có riêng boundary `M = N - 1` để kiểm tra lỗi off-by-one giữa short read và read đủ chiều dài.
 
-Test chạy `i3c_read_short_target_end_vseq` trong cả hai private-address mode, qua nhiều partial-DWORD boundary và một subcase `toc=0`.
+Test chạy `i3c_read_short_target_end_vseq` trong cả hai private-address mode, qua mọi partial-DWORD packing position và một subcase `toc=0` có command hợp lệ xếp sau.
 
-RESP phải báo error `I3cShortReadErr`. TID phải khớp command, reserved bits phải bằng 0, và length trong response phải phản ánh số byte thật sự đã nhận, không phải requested length `N`.
+RX FIFO phải commit đúng các byte đã nhận, các byte padding phải bằng 0 và không được nhận thêm data sau T-bit kết thúc. Short read phải ép STOP, không phát continuation Repeated START và không consume command sau như một continuation. RESP phải báo error `I3cShortReadErr`. TID phải khớp command, reserved bits phải bằng 0, và length trong response phải phản ánh số byte thật sự đã nhận, không phải requested length `N`.
 
 Test này quan trọng vì short read không nhất thiết là bus corruption. Nó là một tình huống protocol cần report chính xác để software biết có bao nhiêu data hợp lệ trong RX FIFO.
 
-### ERR_006 - `i3c_read_tbit_no_parity_resp`
+### ERR_006 - `covered_by_sva_no_vseq`
 
-Test này kiểm tra response classification và end-of-data handling của T-bit cuối trong I3C SDR read, thay cho standalone SDR read no-parity case cũ.
+ERR_006 được cover bằng SVA, không cần vseq riêng. Các SDR read vseq hiện có đã tạo đúng stimulus cần thiết trong quá trình regression.
 
 Trong read phase, T-bit do target gửi không phải parity của data byte. Theo MIPI I3C SDR read semantics, khi target gửi T-bit bằng 0 thì đó là tín hiệu end-of-data.
 
-Testbench chạy `i3c_read_tbit_no_parity_resp_vseq`, trong đó final T-bit bằng 0 đúng tại requested length, trong cả hai private-address mode.
+`i3c_device_response_seq` mặc định phát T-bit bằng 0 sau byte cuối. `i3c_read_vseq` và `i3c_read_len_sweep_vseq` chạy read đủ requested length trong cả hai private-address mode, nên các test functional này tự nhiên kích hoạt ERR_006. Đặc biệt, length sweep đã bao gồm length 5 từng dùng trong standalone vseq cũ.
 
-Kết quả mong đợi là controller xem T-bit này là kết thúc data hợp lệ, không đọc thêm byte giả, và drain các queue sạch sau khi transaction hoàn tất. Controller cũng không được báo `Parity` response chỉ vì final T-bit bằng 0. RESP phải là `Success`, TID phải khớp command, reserved bits phải bằng 0, và length phải bằng requested length.
+`ap_sdr_read_target_end_at_requested_len` kiểm tra final T-bit bằng 0 làm remaining length về 0 mà không set short read. `ap_sdr_read_success_resp_len` kiểm tra RESP là `Success`, đúng TID, reserved bằng 0 và length bằng số byte đã nhận. `cp_sdr_read_final_tbit_end_policy` cover chuỗi end-to-end từ final T-bit bằng 0, STOP hợp lệ, đến Success RESP. Vì response được yêu cầu chính xác là `Success`, trường hợp này cũng không thể bị phân loại thành `Parity`.
 
-Test này quan trọng vì nếu controller diễn giải sai T-bit read phase, các read transaction hợp lệ có thể bị đọc dư byte, kết thúc sai flow, hoặc bị báo sai nguyên nhân lỗi.
+Các functional vseq và scoreboard tiếp tục kiểm tra RX data, số byte quan sát được và queue drain. SVA chịu trách nhiệm trực tiếp cho semantic của final T-bit và response classification, tránh duy trì một vseq trùng lặp.
 
 ### ERR_007 - `resp_ovl_error`
 
-Test này kiểm tra response khi transfer kết thúc bằng overflow/underflow class `Ovl`.
+Test này kiểm tra response khi transfer I3C/I2C hoặc ENTDAA kết thúc bằng FIFO overflow/underflow class `Ovl`. Không dùng umbrella sequence; từng vseq chuyên biệt chịu trách nhiệm cho một boundary rõ ràng.
 
-Testbench chạy `i3c_write_tx_fifo_underflow_vseq`, `i3c_read_rx_fifo_full_overflow_vseq`, và `i3c_entdaa_rx_fifo_partial_overflow_vseq`: regular write thiếu TX data, regular read khi RX FIFO full hoặc chỉ còn một slot, các biến thể `toc=0`, và ENTDAA khi RX FIFO không còn đủ chỗ để lưu trọn DAA result.
+`i3c_write_tx_fifo_underflow_vseq` chạy regular write I3C và I2C khi TX FIFO rỗng hoàn toàn, chỉ có một DWORD, hoặc data đến trễ. I3C được chạy với cả hai chế độ có/không có broadcast-header preamble. Các case phủ `toc=0/1`; case `toc=0` phải có command tiếp theo thực sự nằm trong queue để chứng minh underflow ép STOP và không consume command đó như continuation. RESP length là số byte đã truyền trước khi thiếu data. Sau khi FSM idle, SW reset loại bỏ residual hoặc late TX data, rồi một FIFO-backed write hợp lệ phải thành công.
 
-Kết quả mong đợi là RESP báo error `Ovl`. TID phải khớp command, reserved bits phải bằng 0, và length phải bằng số byte thật sự đã xử lý hoặc commit: số byte đã truyền trước TX underflow, số byte đã nhận/quan sát trước RX overflow, hoặc số byte DAA result đã ghi được vào RX FIFO.
-
-TX underflow recovery cần đợi FSM idle rồi SW reset nếu còn residual hoặc late TX data. RX overflow không bắt buộc SW reset: software drain các RX word đã được preserve và RESP trước khi chạy command mới.
+`i3c_read_rx_fifo_full_overflow_vseq` chạy regular read I3C và I2C với RX FIFO đầy, chỉ còn một DWORD trống, và RX FIFO đầy tại partial-DWORD length 1, 2, hoặc 3. Length trong RESP là số byte đã nhận trên bus đến commit bị reject, kể cả khi DWORD cuối không được lưu. Không được ghi garbage vào RX FIFO, không được nhận thêm data sau khi latch overflow, và `toc=0` không được tạo continuation. Với I2C, nếu byte vừa nhận hoàn tất một DWORD mà RX FIFO không thể accept, controller phải phát NACK tại ACK/NACK bit của byte đó rồi STOP. Sau khi drain RX/RESP, một I3C read và một I2C read hợp lệ phải thành công mà không cần SW reset.
 
 Với ENTDAA, một DAA result của design này cần 3 DWORD trong RX FIFO:
 
@@ -1093,75 +1091,92 @@ Với ENTDAA, một DAA result của design này cần 3 DWORD trong RX FIFO:
 - word 1: `{PID[15:0], BCR, DCR}`
 - word 2: `{25'h0, DA[6:0]}`
 
-Testbench chạy 3 subcase: RX FIFO còn 0 slot, 1 slot, và 2 slot trước khi DAA result được ghi. Controller không được silently drop DAA result rồi vẫn trả `Success`. RESP length phải lần lượt là 0, 4, hoặc 8 byte tương ứng với số DWORD đã commit được. Các word đã prefill trong RX FIFO phải giữ nguyên, và những DAA result DWORD đã commit được phải đúng format đã document. ENTDAA overflow recovery chỉ cần drain prefilled RX word, committed DAA result word và RESP; không cần SW reset.
+`i3c_entdaa_rx_fifo_partial_overflow_vseq` chạy 3 subcase: RX FIFO còn 0, 1, hoặc 2 slot trước khi DAA result được ghi. Controller không được silently drop DAA result rồi vẫn trả `Success`. RESP length phải lần lượt là 0, 4, hoặc 8 byte tương ứng với số DWORD đã commit. Các word prefill phải giữ nguyên và các DAA-result DWORD đã commit phải đúng format. Sau khi drain RX/RESP, một ENTDAA hợp lệ phải thành công mà không cần SW reset.
+
+`flow_active_sva` kiểm tra độc lập việc reject RX/ENTDAA commit phải latch overflow, chặn thêm data hoặc result write, ép STOP, chặn continuation, kiểm tra I2C NACK tại full-DWORD boundary, và kiểm tra RESP `Ovl` có TID/reserved/actual-length đúng. Coverage được tách theo I3C/I2C TX underflow, I3C/I2C RX overflow, partial DWORD và ENTDAA overflow bằng các cover `cp_*_ovl` tương ứng trong test plan.
 
 Test này quan trọng vì `Ovl` là error in-scope của FIFO boundary path. Software cần phân biệt nó với address NACK và short read để biết lỗi đến từ producer/consumer FIFO thay vì target không phản hồi.
 
 ### ERR_008 - `resp_fifo_full_backpressure`
 
-Test này kiểm tra trường hợp RESP FIFO full khi controller cần ghi response.
+`i3c_resp_fifo_full_backpressure_vseq` kiểm tra hai nguồn response bắt buộc: regular write thành công với `wroc=1`, và immediate command có `wroc=0` nhưng bị address NACK nên error phải override WROC. Trước mỗi command, testbench backdoor-fill đủ 8 entry của RESP FIFO bằng các pattern phân biệt được và đồng bộ scoreboard để các entry synthetic không bị hiểu nhầm là response của command đang chạy.
 
-Testbench làm RESP FIFO full trước khi một transaction hoàn tất. Sau đó cho transaction đi đến phase ghi response, rồi drain RESP FIFO để tạo chỗ trống.
+Khi transaction hoàn tất, test giữ FIFO full thêm nhiều cycle và kiểm tra FSM vẫn ở `WriteResp`, `resp_hw_wvalid` vẫn bằng 1, `resp_hw_wdata` không đổi, write-ready vẫn bằng 0, pointer/depth không đổi, và toàn bộ 8 entry cũ không bị overwrite.
 
-Kết quả mong đợi là FSM phải chờ an toàn ở response write phase. Controller không được drop response, không được ghi đè response cũ, và không được tạo nhiều response duplicate cho cùng một command.
+Sau đó software pop đúng một entry để tạo một slot. Pending response phải được ghi đúng một lần vào slot đó và FSM trở về idle. Test drain toàn bộ FIFO để kiểm tra 7 entry cũ còn lại vẫn đúng thứ tự, response mới nằm cuối queue với status/TID/length chính xác, và FIFO cuối cùng empty. Depth phải trở lại 8 ngay sau chuỗi một-pop/một-write; nếu response bị drop hoặc duplicate thì kiểm tra depth và thứ tự drain sẽ fail.
 
-Sau khi RESP FIFO có chỗ trống, đúng một response phải được ghi vào FIFO.
+`flow_active_sva` kiểm tra độc lập bốn invariant bằng `cp_resp_full_success_holds_pending_write`, `cp_resp_full_error_holds_pending_write`, `cp_resp_full_keeps_descriptor_stable`, và `cp_resp_backpressure_release_writes_once`. Trường hợp success `wroc=0` không phụ thuộc RESP FIFO thuộc ERR_012, không lặp lại ở đây.
 
 Test này quan trọng vì software có thể đọc response chậm hơn tốc độ controller hoàn tất command. Backpressure ở RESP FIFO phải được xử lý như một phần của flow control bình thường.
 
 ### ERR_009 - `resp_hc_abort_error`
 
-Test này kiểm tra HC abort cho I3C SDR regular write/read, I2C regular write/read, immediate transfer và ENTDAA bằng `i3c_write_abort_vseq`, `i3c_read_abort_vseq`, `i2c_regular_abort_vseq`, `i3c_imm_abort_vseq` và `i3c_daa_hc_abort_vseq`.
+Test này kiểm tra HC abort cho I3C SDR regular write/read, I2C regular write/read, immediate transfer, CCC ENEC broadcast/direct và ENTDAA bằng `i3c_write_abort_vseq`, `i3c_read_abort_vseq`, `i2c_regular_abort_vseq`, `i3c_imm_abort_vseq`, `i3c_daa_hc_abort_vseq` và `i3c_hc_abort_policy_vseq`.
 
 Các case SDR gồm abort sớm, abort sau khi đã truyền hoặc commit ít nhất một DWORD, và `toc=0` nơi abort phải override continuation. Immediate case assert abort trong data phase `IssueCmd` cho private I3C/I2C. Transfer hoàn tất tại protocol boundary đã định nghĩa, tạo STOP, không chain command kế tiếp, và RESP phải là `HcAborted` với TID, reserved bits và actual length đúng.
 
-Với I3C hoặc I2C regular write, HC abort không tự flush phần TX FIFO chưa được fetch; recovery sạch cần clear `HC_CONTROL[29]` (ABORT), đợi idle và SW reset. Với regular read, software drain và kiểm tra RX data đã commit cùng RESP sau khi clear abort; test phải chạy được một read hợp lệ tiếp theo mà không SW reset. I2C read abort phải drive controller NACK ở byte cuối rồi STOP và luôn giữ OD mode.
+Với I3C hoặc I2C regular write, HC abort không tự flush phần TX FIFO chưa được fetch; recovery sạch cần clear `HC_CONTROL[29]` (ABORT), đợi idle và SW reset. Với regular read, software drain và kiểm tra RX data đã commit cùng RESP sau khi clear abort; cả I3C và I2C đều chạy một read hợp lệ tiếp theo mà không SW reset. I2C read abort phải drive controller NACK ở byte cuối rồi STOP và luôn giữ OD mode.
 
 Với immediate transfer, payload nằm trong command descriptor và không dùng TX/RX FIFO. Sau khi clear abort và đọc RESP, queue đã sạch và một immediate transfer hợp lệ tiếp theo phải chạy thành công trước bất kỳ SW reset cleanup nào.
 
-Với ENTDAA, test assert HC abort trong lúc nhận PID/BCR/DCR, trong assigned-address phase, và sau một round đã hoàn tất. RESP phải là `HcAborted` với TID, reserved bits và actual length đúng. Nếu đã có DAA result được commit vào RX FIFO, software drain phần result đó cùng RESP, clear abort, và một ENTDAA hợp lệ tiếp theo phải chạy thành công không cần SW reset.
+Với ENTDAA, test assert HC abort trong lúc nhận PID/BCR/DCR, trong assigned-address phase, và sau một round đã hoàn tất. RESP phải là `HcAborted` với TID, reserved bits và actual length đúng. Nếu đã có DAA result được commit vào RX FIFO, software drain phần result đó cùng RESP, clear abort, và sau **mỗi** abort point đều chạy một ENTDAA hợp lệ thành công không cần SW reset.
+
+`i3c_hc_abort_policy_vseq` bổ sung ba policy case còn thiếu. Khi ABORT được giữ ở idle và CMD đã queue, controller không được pop CMD, phát START hoặc tạo RESP; sau khi clear ABORT, chính CMD đó phải chạy thành công. Trong normal CCC, test abort ENEC broadcast và direct sau khi data byte/T-bit đã hoàn tất, kiểm tra STOP, RESP `HcAborted` exact và một CCC recovery thành công không SW reset. Priority case tạo broadcast-header NACK rồi assert ABORT trong lúc STOP đang xử lý; RESP phải giữ `AddrHeader`, vì lỗi địa chỉ có priority cao hơn `HcAborted`.
+
+Coverage được implement trực tiếp bằng `cp_abort_entry_state`, `cp_abort_stop_state`, `cp_resp_err_priority`, `cp_daa_abort_point` và các assertion/cover pair `cp_abort_idle_blocks_command`, `cp_abort_error_priority_resp`, `cp_regular_write_abort_resp`, `cp_immediate_abort_resp`, `cp_ccc_abort_resp`, `cp_daa_abort_resp` cùng các read-abort cover hiện có.
 
 Test này quan trọng vì abort là error path có thể để lại dữ liệu hợp lệ lẫn residual queue state; recovery policy phải phân biệt rõ write và read.
 
 ### ERR_010 - `invalid_descriptor_attr`
 
-Test này kiểm tra behavior khi command descriptor có attr hoặc mode không được hỗ trợ.
+`i3c_invalid_descriptor_attr_vseq` kiểm tra policy từ chối tập trung của `flow_active`. Controller chỉ hỗ trợ DAT-format `RegularTransfer`, `ImmediateDataTransfer`, `AddressAssignment` và chỉ hỗ trợ mode `sdr0`. `ComboTransfer`, attr direct/internal `100..111`, mọi mode khác SDR0, Regular có `cp=1`, Immediate có `rnw=1` hoặc `dtt>4`, immediate CCC ngoài ENEC/DISEC `00/01/80/81`, và AddressAssignment có opcode khác ENTDAA `07` đều không hợp lệ.
 
-Testbench ghi trực tiếp các descriptor như `ComboTransfer`, reserved attr, HDR mode values, hoặc invalid mode encodings vào CMD queue.
+Test ghi trực tiếp từng descriptor vào CMD queue, bao gồm một case `wroc=0`. Từ lúc command được nhận đến khi FSM trở lại idle, test theo dõi các tín hiệu nội bộ để chứng minh `dat_read_valid_hw_o`, START, repeated START, STOP và toàn bộ bus TX/RX request không bao giờ được assert.
 
-Kết quả mong đợi là controller không được gây queue corruption, không được tạo pop/push bất hợp lệ, và không được treo vô hạn mà không được document. Protocol behavior cụ thể cần được specification hóa trước khi sign-off.
+Mỗi case phải tạo đúng một RESP `NotSupported` với TID khớp descriptor, reserved bits bằng 0 và length bằng 0. Error response không bị suppress bởi `wroc=0`. Sau khi đọc RESP, cả bốn queue phải sạch; test chạy ngay một Immediate SDR0 hợp lệ không SW reset để chứng minh FSM và queue phục hồi hoàn toàn.
 
-Nếu project spec chưa định nghĩa đầy đủ validation cho descriptor, test phải ghi nhận spec gap và đề xuất enhancement hoặc software restriction.
+`flow_active_sva` kiểm tra độc lập bằng `cp_invalid_cmd_rejected_before_access` và `cp_invalid_cmd_not_supported_resp`. Covergroup phân loại stimulus bằng `cp_invalid_cmd`, `cp_imm` và `cp_unsupported_cmd`.
 
-Test này quan trọng vì command descriptor là input từ software. Một descriptor sai không nên làm hỏng internal state hoặc phá toàn bộ controller.
+Policy này cố ý nghiêm ngặt hơn upstream `i3c-core`: upstream định nghĩa attr `100..111` cho direct/internal descriptor, nhưng simplified controller không implement các layout đó; upstream cũng chưa từ chối mọi unsupported CCC trước bus. Vì vậy project này trả `NotSupported` thay vì alias, stall hoặc phát frame một phần.
+
+Test này quan trọng vì command descriptor là input từ software. Descriptor sai phải bị cô lập trước khi tác động DAT, bus hoặc data FIFO.
 
 ### ERR_011 - `entdaa_invalid_descriptor_resp`
 
 Test này kiểm tra response khi software issue `AddressAssignment`/ENTDAA descriptor sai format.
 
-Các subcase chính là:
+`i3c_entdaa_invalid_descriptor_resp_vseq` chạy bốn subcase độc lập:
 
 - `toc=0`, `wroc=1`, `dev_count=1`
 - `toc=1`, `wroc=0`, `dev_count=1`
 - `toc=1`, `wroc=1`, `dev_count=0`
+- `dev_idx=31`, `dev_count=2` khi `DatDepth=32`
 
 Theo policy hiện tại, các descriptor này bị reject ngay trong `FetchDAT`, trước khi controller đọc DAT hoặc phát bất kỳ frame ENTDAA nào. Cùng policy này cũng áp dụng cho descriptor có `dev_idx+dev_count>DatDepth`.
 
-Kết quả mong đợi là không có START, không có broadcast header `7'h7E+W`, không có CCC opcode ENTDAA `8'h07`, và không có DAA round `7'h7E+R`. Controller chỉ ghi đúng một RESP với status `NotSupported`, TID khớp command, reserved bits bằng 0, và length bằng 0.
+Kết quả mong đợi là không có DAT read, START/RSTART/STOP, bus TX/RX request, broadcast header `7'h7E+W`, CCC opcode ENTDAA `8'h07`, hoặc DAA-controller activation. Controller chỉ ghi đúng một RESP với status `NotSupported`, TID khớp command, reserved bits bằng 0, và length bằng 0.
 
-Test này nên nằm trong error category, không nằm trong CCC/DAA happy-path, vì mục tiêu chính là kiểm tra error response và pre-bus rejection của command descriptor sai. Sau subcase lỗi, testbench nên chạy thêm một command hợp lệ để chứng minh queue/FSM không bị corrupt.
+Sau mỗi subcase lỗi, test chạy một Immediate SDR0 hợp lệ không cần SW reset để chứng minh queue/FSM không bị corrupt. `flow_active_sva` kiểm tra độc lập bằng `cp_addr_assign_invalid_rejected_before_access` và `cp_addr_assign_invalid_not_supported_resp`; covergroup ERR_011 phân loại đủ bốn nguyên nhân bằng `cp_addr_assign_desc` và cover response/TID/length/bus silence.
 
-### ERR_012 - `immediate_wroc_policy`
+Test này nằm trong error category, không nằm trong CCC/DAA happy-path, vì mục tiêu chính là kiểm tra error response và pre-bus rejection của command descriptor sai.
 
-Test này document gap của field `wroc` trong command descriptor.
+### ERR_012 - `wroc_policy`
 
-Testbench issue các immediate hoặc regular command với `wroc=0` và `wroc=1`.
+Test này là positive sign-off coverage cho field `wroc` (response on completion) trong command descriptor.
 
-Theo RTL hiện tại, `flow_active.sv` luôn assert `resp_queue_wvalid` trong state `WriteResp` và không đọc field `wroc`, nên controller luôn ghi RESP descriptor dù `wroc=0`.
+`i3c_wroc_policy_vseq` issue các regular, immediate và immediate-CCC command thành công với cả `wroc=0` và `wroc=1`; trộn hai policy trong cùng command stream; chạy continuation `toc=0,wroc=0`; giữ RESP FIFO full để chứng minh command không phụ thuộc RESP backpressure; và tạo address NACK trên command `wroc=0` để kiểm tra error override.
 
-Kết quả mong đợi hiện tại không phải positive sign-off coverage. Test phải ghi nhận đây là design/spec gap cho đến khi project spec quyết định có implement `wroc=0` để suppress RESP write hay ràng buộc software luôn dùng `wroc=1`.
+Policy mong đợi là:
 
-Test này quan trọng vì `wroc` là field software-visible. Nếu behavior không được định nghĩa rõ, software có thể kỳ vọng không có response trong khi RTL vẫn tạo response, làm lệch queue accounting.
+- Command thành công với `wroc=1` ghi đúng một RESP `Success` với TID và actual length đúng.
+- Command thành công với `wroc=0` không ghi RESP.
+- Continuation hợp lệ `toc=0,wroc=1` chỉ accept command kế tiếp khi RESP FIFO ready; với `wroc=0`, controller accept continuation mà không phụ thuộc RESP FIFO, kể cả khi FIFO full.
+- Mọi error vẫn ghi RESP bất kể `wroc`, bao gồm address/data NACK, underflow/overflow, short read, HC abort, invalid descriptor và missing/unsupported continuation. Missing/unsupported continuation trả `NotSupported`.
+- `AddressAssignment` không tham gia suppression policy: `wroc=0` vẫn là descriptor không hợp lệ và được cover bởi ERR_011.
+
+Scoreboard lưu `wroc` trong expected transaction và chỉ queue expected response cho success khi `wroc=1`; error luôn queue expected response. Các SVA `ap_wroc0_success_suppresses_resp`, `ap_wroc1_success_enters_write_resp`, `ap_wroc0_error_override_writes_resp`, `ap_wroc0_continuation_ignores_resp_ready` và `ap_wroc1_continuation_waits_for_resp_ready` kiểm tra policy độc lập với vseq.
+
+Test này quan trọng vì software dùng số RESP để quản lý queue accounting. Suppression sai có thể tạo RESP thừa; suppress nhầm error có thể làm software mất hoàn toàn trạng thái lỗi của transaction.
 
 ### ERR_013 - `reset_during_idle`
 

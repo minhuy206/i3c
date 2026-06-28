@@ -24,7 +24,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
 
     `uvm_info(
         `gfn,
-        "ERR_007 conclusion: legacy I2C RegularTransfer write/read abort preserves pre-abort data and SW reset flushes residual queues",
+        "ERR_009 conclusion: legacy I2C RegularTransfer write/read abort preserves pre-abort data and SW reset flushes residual queues",
         UVM_LOW)
   endtask
 
@@ -41,7 +41,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
-        .ctxt("ERR_007 write early abort"),
+        .ctxt("ERR_009 write early abort"),
         .seq_name("i2c006_write_early_dev_seq"),
         .tid(4'd6),
         .dev_idx(I2C_DEV_IDX[4:0]),
@@ -72,7 +72,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     finish_write_abort_case(cfg, exp_data, resp, dev_seq, "early_abort");
 
     `uvm_info(`gfn, $sformatf(
-                  "ERR_007 write result: case=early_abort resp=0x%08h sampled_bytes=%0d tx_depth_before_abort=%0d",
+                  "ERR_009 write result: case=early_abort resp=0x%08h sampled_bytes=%0d tx_depth_before_abort=%0d",
                   resp, dev_seq.sampled_data.size(), tx_depth), UVM_LOW)
   endtask
 
@@ -89,7 +89,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
-        .ctxt("ERR_007 write deep abort"),
+        .ctxt("ERR_009 write deep abort"),
         .seq_name("i2c006_write_deep_dev_seq"),
         .tid(4'd7),
         .dev_idx(I2C_DEV_IDX[4:0]),
@@ -117,7 +117,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     finish_write_abort_case(cfg, exp_data, resp, dev_seq, "deep_abort");
 
     `uvm_info(`gfn, $sformatf(
-                  "ERR_007 write result: case=deep_abort resp=0x%08h sampled_bytes=%0d tx_depth_before_abort=%0d",
+                  "ERR_009 write result: case=deep_abort resp=0x%08h sampled_bytes=%0d tx_depth_before_abort=%0d",
                   resp, dev_seq.sampled_data.size(), tx_depth), UVM_LOW)
   endtask
 
@@ -133,7 +133,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
-        .ctxt("ERR_007 write toc0 abort"),
+        .ctxt("ERR_009 write toc0 abort"),
         .seq_name("i2c006_write_toc0_dev_seq"),
         .tid(4'd8),
         .dev_idx(I2C_DEV_IDX[4:0]),
@@ -159,10 +159,10 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
 
     finish_write_abort_case(cfg, exp_data, resp, dev_seq, "toc0_abort");
     `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b0,
-                 "ERR_007 write toc0 abort must end with STOP, not continuation RSTART")
+                 "ERR_009 write toc0 abort must end with STOP, not continuation RSTART")
 
     `uvm_info(`gfn, $sformatf(
-                  "ERR_007 write result: case=toc0_abort resp=0x%08h sampled_bytes=%0d observed_rstart=%0b",
+                  "ERR_009 write result: case=toc0_abort resp=0x%08h sampled_bytes=%0d observed_rstart=%0b",
                   resp, dev_seq.sampled_data.size(), dev_seq.observed_rstart), UVM_LOW)
   endtask
 
@@ -177,7 +177,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
-        .ctxt("ERR_007 read early abort"),
+        .ctxt("ERR_009 read early abort"),
         .seq_name("i2c006_read_early_dev_seq"),
         .tid(4'd9),
         .dev_idx(I2C_DEV_IDX[4:0]),
@@ -206,7 +206,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     finish_read_abort_case(cfg, read_data, resp, dev_seq, "early_abort");
 
     `uvm_info(`gfn, $sformatf(
-                  "ERR_007 read result: case=early_abort resp=0x%08h resp_len=%0d rx_depth_before_abort=%0d observed_rstart=%0b",
+                  "ERR_009 read result: case=early_abort resp=0x%08h resp_len=%0d rx_depth_before_abort=%0d observed_rstart=%0b",
                   resp, resp[15:0], rx_depth, dev_seq.observed_rstart), UVM_LOW)
   endtask
 
@@ -221,7 +221,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
-        .ctxt("ERR_007 read deep abort"),
+        .ctxt("ERR_009 read deep abort"),
         .seq_name("i2c006_read_deep_dev_seq"),
         .tid(4'd10),
         .dev_idx(I2C_DEV_IDX[4:0]),
@@ -247,7 +247,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     finish_read_abort_case(cfg, read_data, resp, dev_seq, "deep_abort");
 
     `uvm_info(`gfn, $sformatf(
-                  "ERR_007 read result: case=deep_abort resp=0x%08h resp_len=%0d rx_depth_before_abort=%0d observed_rstart=%0b",
+                  "ERR_009 read result: case=deep_abort resp=0x%08h resp_len=%0d rx_depth_before_abort=%0d observed_rstart=%0b",
                   resp, resp[15:0], rx_depth, dev_seq.observed_rstart), UVM_LOW)
   endtask
 
@@ -261,7 +261,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     setup_i2c_target();
 
     cfg = make_transfer_cfg(
-        .ctxt("ERR_007 read toc0 abort"),
+        .ctxt("ERR_009 read toc0 abort"),
         .seq_name("i2c006_read_toc0_dev_seq"),
         .tid(4'd11),
         .dev_idx(I2C_DEV_IDX[4:0]),
@@ -287,7 +287,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     finish_read_abort_case(cfg, read_data, resp, dev_seq, "toc0_abort");
 
     `uvm_info(`gfn, $sformatf(
-                  "ERR_007 read result: case=toc0_abort resp=0x%08h resp_len=%0d observed_rstart=%0b",
+                  "ERR_009 read result: case=toc0_abort resp=0x%08h resp_len=%0d observed_rstart=%0b",
                   resp, resp[15:0], dev_seq.observed_rstart), UVM_LOW)
   endtask
 
@@ -301,7 +301,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
 
     clear_hc_abort();
     request_sw_reset(.keep_enabled(1'b1));
-    check_all_queues_empty($sformatf("after ERR_007 %s", case_name));
+    check_all_queues_empty($sformatf("after ERR_009 %s", case_name));
   endtask
 
   virtual task finish_read_abort_case(transfer_stimulus_cfg_t cfg, byte_queue_t read_data,
@@ -315,10 +315,10 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     drain_read_abort_rx(resp);
 
     clear_hc_abort();
-    check_all_queues_empty($sformatf("before ERR_007 %s read recovery transfer", case_name));
+    check_all_queues_empty($sformatf("before ERR_009 %s read recovery transfer", case_name));
     run_read_recovery_case(case_name);
     request_sw_reset(.keep_enabled(1'b1));
-    check_all_queues_empty($sformatf("after ERR_007 %s", case_name));
+    check_all_queues_empty($sformatf("after ERR_009 %s", case_name));
   endtask
 
   virtual task run_read_recovery_case(string case_name);
@@ -331,7 +331,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     build_random_payload(1, read_data);
 
     cfg = make_transfer_cfg(
-        .ctxt($sformatf("ERR_007 %s read recovery without SW reset", case_name)),
+        .ctxt($sformatf("ERR_009 %s read recovery without SW reset", case_name)),
         .seq_name($sformatf("i2c006_%s_read_recovery_dev_seq", case_name)),
         .tid(4'hE),
         .dev_idx(I2C_DEV_IDX[4:0]),

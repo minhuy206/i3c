@@ -1,0 +1,470 @@
+\chapter{Theoretical Background and System Requirements}
+\label{ch:background-requirements}
+
+% Consolidated chapter (department-compliant 6-chapter layout): folds the former
+% Ch.2 (Theoretical Background) + Ch.3 (System Requirements) into one chapter.
+% The theoretical basis comes first; the requirements/spec content is folded in as
+% the closing sections.
+%
+% MIPI-compliance gate (2026-06-24): every protocol claim below was cross-checked
+% against the official MIPI I3C Basic v1.1.1 specification (docs/mipi_i3c_spec.*).
+% SDR ceiling 12.5 MHz, Table 87 timing minimums (24/24/3/12 ns), broadcast 7'h7E,
+% the three bus conditions, and the ENEC/DISEC/ENTDAA command codes all match.
+
+This chapter establishes the protocol and methodology foundations on which the rest of
+the thesis builds, and then folds those foundations into the concrete, testable
+requirements that the design of \cref{ch:architecture-rtl} satisfies and the verification
+environment of \cref{ch:verif-method} checks. Part~A reviews the protocol theory --- the
+\iic{} bus the design must remain compatible with, the MIPI I3C Basic Single Data Rate
+(SDR) mode it implements, the bus conditions and signalling phases, dynamic address
+assignment, the supported Common Command Codes, and the Universal Verification
+Methodology (UVM) used to verify it. Part~B then states the functional requirements, the
+deliberate out-of-scope exclusions, the performance targets, the software-visible
+register interface, and the verification closure criteria.
+
+% ===========================================================================
+% PART A --- Theoretical Background
+% ===========================================================================
+\section*{Part A\quad Theoretical Background}
+\addcontentsline{toc}{section}{Part A --- Theoretical Background}
+
+\section{\iic{} recap}
+\label{sec:bg-i2c}
+
+The Inter-Integrated Circuit (\iic{}) bus is a two-wire, multi-drop serial interconnect
+comprising a serial clock line (SCL) and a serial data line (SDA). Both lines are
+\emph{open-drain} (OD): every device can only pull a line Low, and a passive pull-up
+resistor returns it High, so the bus behaves as a wired-AND of all attached drivers.
+A transfer is framed between a START condition (SDA driven Low while SCL is High) and a
+STOP condition (SDA released High while SCL is High). After START the controller shifts
+out a 9-bit address byte --- a 7-bit target address followed by a read/not-write (RnW)
+bit, most-significant bit first --- and the addressed target answers with an
+acknowledge (ACK) by pulling SDA Low during the ninth clock; an unanswered byte reads
+back as a not-acknowledge (NACK). Data then flows in 8-bit bytes, each followed by an
+ACK/NACK, until a STOP closes the frame. A target that cannot keep pace may hold SCL Low
+(clock stretching) to stall the controller.
+
+Three properties of this model limit \iic{} as device counts and data rates rise, and I3C
+is designed to remove them: the open-drain pull-ups cap the practical clock rate and waste
+static power; addresses are fixed at manufacture, so two parts that share an address
+cannot coexist on one bus; and the bus has no native interrupt, forcing the controller to
+poll. These limitations motivate the push-pull signalling, dynamic addressing, and
+in-band interrupts introduced next.
+
+\section{MIPI I3C Basic v1.1.1 (SDR, frame format)}
+\label{sec:bg-i3c-sdr}
+
+I3C (Improved Inter-Integrated Circuit) preserves the two-wire SCL/SDA topology and the
+START/STOP framing of \iic{}, but adds a \SI{1.8}{\volt} LV-CMOS \emph{push-pull} (PP)
+data phase that actively drives the bus in both directions, raising the Single Data Rate
+(SDR) clock ceiling to \SI{12.5}{\mega\hertz}~\cite{mipi_i3c_basic}. The address and
+arbitration phases remain open-drain for backward compatibility (\cref{sec:bg-odpp});
+only the data phase switches to push-pull.
+
+I3C reserves the broadcast address \texttt{7'h7E}, which the controller uses both to mark
+the start of native I3C activity on a mixed bus and to carry Common Command Codes
+(\cref{sec:bg-ccc}). Two SDR frame shapes carry private data between the controller and a
+target. In an \textbf{SDR private write}, the controller issues a START (optionally
+preceded by the \texttt{7E} broadcast header), addresses the target with RnW${=}0$, and
+then transmits data bytes in the push-pull phase; each byte is followed by a
+\emph{Transition Bit} (T-Bit) whose value is the \emph{odd parity} of the byte, letting
+the target detect a corrupted byte. In an \textbf{SDR private read}, the controller
+addresses the target with RnW${=}1$ and the target drives the data bytes; here the T-Bit
+carries \emph{end-of-data} signalling rather than parity --- the target holds it High
+while more bytes follow and drives it Low on the final byte, after which the controller
+issues a STOP or Repeated START. This dual role of the T-Bit (parity on writes,
+end-of-data on reads), summarised in \cref{fig:sdr-frames}, is central to the bus-level
+serialisers described in \cref{ch:architecture-rtl}.
+
+\begin{figure}[!htb]
+\centering
+\begin{tikzpicture}[
+  every node/.style={font=\footnotesize},
+  field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
+                inner xsep=4pt, align=center},
+  od/.style={field, fill=blue!10},
+  pp/.style={field, fill=orange!18},
+  cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+  rowlbl/.style={font=\footnotesize\bfseries, anchor=east},
+  drv/.style={font=\scriptsize\itshape, text=black!70},
+]
+
+% ---------------- SDR private write (0x7E header enabled) ----------------
+\begin{scope}[start chain=w going right, node distance=-\pgflinewidth]
+  \node[cond, on chain=w] (w0) at (0,0) {S};
+  \node[od,   on chain=w]        {7E\,$+$\,W};
+  \node[od,   on chain=w]        {ACK};
+  \node[cond, on chain=w]        {Sr};
+  \node[pp,   on chain=w]        {addr\,$+$\,W};
+  \node[od,   on chain=w]        {ACK};
+  \node[pp,   on chain=w]        {Data\,0};
+  \node[pp,   on chain=w]        {T};
+  \node[pp,   on chain=w]        {$\cdots$};
+  \node[pp,   on chain=w]        {Data\,$N\!-\!1$};
+  \node[pp,   on chain=w]        {T};
+  \node[cond, on chain=w] (wN)   {P};
+\end{scope}
+\node[rowlbl, left=5pt of w0] {Write};
+\path (w0.south west) -- (wN.south east)
+      node[drv, midway, below=2.5pt] {controller drives the data bytes \,$\bullet$\, T $=$ odd parity of the byte};
+
+% ---------------- SDR private read (0x7E header enabled) ----------------
+\begin{scope}[start chain=r going right, node distance=-\pgflinewidth]
+  \node[cond, on chain=r] (r0) at (0,-2.5) {S};
+  \node[od,   on chain=r]        {7E\,$+$\,W};
+  \node[od,   on chain=r]        {ACK};
+  \node[cond, on chain=r]        {Sr};
+  \node[pp,   on chain=r]        {addr\,$+$\,R};
+  \node[od,   on chain=r]        {ACK};
+  \node[pp,   on chain=r]        {Data\,0};
+  \node[pp,   on chain=r]        {T$=$1};
+  \node[pp,   on chain=r]        {$\cdots$};
+  \node[pp,   on chain=r]        {Data\,$N\!-\!1$};
+  \node[pp,   on chain=r]        {T$=$0};
+  \node[cond, on chain=r] (rN)   {P};
+\end{scope}
+\node[rowlbl, left=5pt of r0] {Read};
+\path (r0.south west) -- (rN.south east)
+      node[drv, midway, below=2.5pt] {target drives the data bytes \,$\bullet$\, T $=$ end-of-data (1 $=$ more bytes, 0 $=$ last byte)};
+
+% ---------------- legend ----------------
+\begin{scope}[every node/.style={font=\scriptsize}, node distance=3pt]
+  \node[cond, minimum width=6mm, minimum height=4mm] (lg0) at (0,-4.35) {};
+  \node[right=of lg0] (lg0t) {S\,/\,Sr\,/\,P (bus condition)};
+  \node[od, minimum width=6mm, minimum height=4mm, right=12pt of lg0t] (lg1) {};
+  \node[right=of lg1] (lg1t) {Open-drain};
+  \node[pp, minimum width=6mm, minimum height=4mm, right=12pt of lg1t] (lg2) {};
+  \node[right=of lg2] {Push-pull};
+\end{scope}
+\end{tikzpicture}
+\caption{SDR private write and read frame formats (with the \texttt{0x7E} broadcast header
+enabled).}
+\label{fig:sdr-frames}
+\end{figure}
+
+\section{Bus conditions (START / Repeated START / STOP)}
+\label{sec:bg-bus-conditions}
+
+Three edge conditions delimit and chain transfers. A \textbf{START} (S) is an SDA
+falling edge while SCL is High; a \textbf{STOP} (P) is an SDA rising edge while SCL is
+High; and a \textbf{Repeated START} (Sr) is a START issued without an intervening STOP,
+used to chain phases --- for example to switch from the open-drain broadcast header to the
+push-pull data phase, or to turn the bus around between a write and a read.
+
+The MIPI specification further defines three \emph{distinct} idle conditions that this
+thesis is careful not to conflate~\cite{mipi_i3c_basic}. The \textbf{Bus Free Condition}
+(\S5.1.3.2.1) is the interval after a STOP and before the next START, sustained for at
+least $t_{\mathrm{CAS}}$; the \textbf{Bus Available Condition} (\S5.1.3.2.2) is a Bus Free
+Condition sustained for at least $t_{\mathrm{AVAL}}$, during which a target may request to
+drive the bus; and the \textbf{Bus Idle Condition} (\S5.1.3.2.3) is a longer interval
+(at least $t_{\mathrm{IDLE}}$) required before a Hot-Join request. This controller
+generates START/Sr/STOP and detects the Bus Free Condition before initiating a transfer;
+it does not use the Bus Available or Bus Idle conditions, because the events that need
+them (target-initiated START, Hot-Join) are out of scope. The bus monitor and SCL
+generator that realise these conditions are detailed in \cref{ch:architecture-rtl}.
+
+\figph{Bus conditions}{START / Repeated START (Sr) / STOP --- SDA edge relative to SCL High}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/bus_conditions.json)}
+
+\section{Open-drain versus push-pull signalling}
+\label{sec:bg-odpp}
+
+I3C uses two electrical signalling modes on the same wires and switches between them within
+a single transfer. The \textbf{acknowledge bits and the arbitrated address phases stay
+open-drain}: the bus is released to be pulled High and any device may pull it Low, which
+preserves \iic{}-style wired-AND arbitration, lets legacy \iic{} targets participate, and
+makes the bit-by-bit ENTDAA arbitration of \cref{sec:bg-entdaa} possible. Once the
+controller has won the bus, the \textbf{data phase --- and any address it drives after a
+Repeated START --- switch to push-pull}, where the active driver sources and sinks current
+directly; this removes the RC time constant of the pull-up and is what permits the
+\SI{12.5}{\mega\hertz} SDR rate.
+
+The boundary is crossed at a Repeated START, where the controller turns the bus from the
+open-drain \texttt{0x7E} header to push-pull for the address and data that follow, while the
+ACK/NACK bits remain open-drain (\cref{fig:sdr-frames}). In the RTL this mode select is
+exposed as a single signal, \texttt{sel_od_pp} (\texttt{1}${=}$push-pull,
+\texttt{0}${=}$open-drain), whose detailed switching behaviour is described in
+\cref{ch:architecture-rtl}.
+
+\figph{Open-drain vs push-pull phases}
+  {OD 7E-header/ACK vs PP address+data; OD$\rightarrow$PP boundary at Sr; \texttt{sel_od_pp} select}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/od_vs_pp.json)}
+
+\section{Dynamic Address Assignment via ENTDAA}
+\label{sec:bg-entdaa}
+
+I3C replaces \iic{}'s fixed addressing with run-time Dynamic Address Assignment (DAA),
+which eliminates address collisions and supports devices that share a part number. This
+design implements DAA through the ENTDAA (Enter Dynamic Address Assignment) procedure from
+the controller's perspective. The controller issues a START followed by the broadcast
+address \texttt{7'h7E}${+}$W and the ENTDAA Common Command Code (\texttt{0x07}); it then
+enters a loop, issuing a Repeated START and \texttt{7'h7E}${+}$R for each round. Every
+not-yet-addressed target answers by streaming its unique 64-bit identity ---
+a 48-bit Provisioned ID (PID), an 8-bit Bus Characteristics Register (BCR), and an 8-bit
+Device Characteristics Register (DCR) --- most-significant bit first, with no ACK between
+fields.
+
+Because the identity stream is open-drain and wired-AND, it doubles as an arbitration
+mechanism: when several targets respond at once, a target that drives a logic~1 but reads
+back a~0 on SDA has lost to a lower-valued identity and withdraws, so exactly one target
+wins each round. The controller then sends that winner a 7-bit dynamic address plus a
+parity bit, the target ACKs, and the loop repeats until a round goes unanswered, at which
+point a STOP closes the procedure. The assigned addresses are recorded in a 32-entry
+Device Address Table (DAT). \Cref{ch:architecture-rtl} realises this as a two-FSM
+subsystem --- a loop manager and a per-round arbitration FSM.
+
+\figph{ENTDAA arbitration}
+  {7E+W, ACK, ENTDAA CCC, then per-target: Sr, 7E+R, 64-bit PID+BCR+DCR, dyn-addr+parity,
+   ACK; loop until no response, then P}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/entdaa_arbitration.json)}
+
+\section{Common Command Codes (CCC) overview}
+\label{sec:bg-ccc}
+
+Common Command Codes (CCCs) are standardised commands the controller issues after the
+\texttt{7'h7E} broadcast header to configure and manage targets. They come in two framings.
+A \textbf{Broadcast CCC} is addressed to all targets at once
+(\texttt{[S]} \texttt{[7E+W]} \texttt{[CCC]} \dots\ \texttt{[P]}); a \textbf{Direct CCC}
+targets one device by following the code with a Repeated START and that device's address
+(\texttt{[S]} \texttt{[7E+W]} \texttt{[CCC]} \texttt{[Sr]} \texttt{[addr+RnW]} \dots\
+\texttt{[P]}).
+
+Of the full CCC catalogue, this design implements only the essential subset needed to
+bring up and manage an SDR bus, summarised in \cref{tab:ccc-supported}. ENTDAA
+(\texttt{0x07}, broadcast) drives dynamic address assignment; ENEC (\texttt{0x00}
+broadcast / \texttt{0x80} direct) and DISEC (\texttt{0x01} broadcast / \texttt{0x81}
+direct) enable and disable target-generated events. All other CCCs are out of scope
+(\cref{sec:req-oos}).
+
+\begin{table}[!htb]\centering
+  \caption{Common Command Codes implemented in this design.}
+  \label{tab:ccc-supported}
+  \small
+  \begin{tabular}{@{}llcl@{}}
+    \toprule
+    \textbf{CCC} & \textbf{Framing} & \textbf{Code} & \textbf{Purpose} \\
+    \midrule
+    ENTDAA & Broadcast        & \texttt{0x07} & Enter dynamic address assignment \\
+    ENEC   & Broadcast        & \texttt{0x00} & Enable target events (all targets) \\
+    DISEC  & Broadcast        & \texttt{0x01} & Disable target events (all targets) \\
+    ENEC   & Direct           & \texttt{0x80} & Enable target events (one target) \\
+    DISEC  & Direct           & \texttt{0x81} & Disable target events (one target) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\figph{CCC frame formats}{Broadcast CCC vs Direct CCC framing}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/ccc_frame.json)}
+
+\section{I3C-versus-\iic{} comparison}
+\label{sec:bg-comparison}
+
+\Cref{tab:i3c-vs-i2c} consolidates the differences introduced above into a feature matrix
+and marks which rows fall within this design's scope. The headline gains are a
+$\sim$12.5$\times$ data-rate increase from push-pull signalling, collision-free dynamic
+addressing, and lower static power from the absence of board-level pull-up current --- all
+while remaining backward compatible with legacy \iic{} Fast-Mode traffic on the same two
+wires. The SDR push-pull and \iic{} Fast-Mode timing parameters the controller's programmable
+timing must satisfy --- the SDR values from MIPI I3C Basic Table~87 and the Fast-Mode values
+from the \iic{} legacy timing table~\cite{mipi_i3c_basic} --- are summarised together with the
+implementation's reset defaults in \cref{tab:perf-targets} (\cref{sec:req-performance}).
+
+\begin{table}[!htb]\centering
+  \caption{I3C-versus-\iic{} feature matrix. The final column marks coverage in this design.}
+  \label{tab:i3c-vs-i2c}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.21\textwidth}
+                     >{\raggedright\arraybackslash}p{0.27\textwidth}
+                     >{\raggedright\arraybackslash}p{0.30\textwidth}
+                     >{\raggedright\arraybackslash}p{0.12\textwidth}@{}}
+    \toprule
+    \textbf{Feature} & \textbf{\iic{} (Fm / Fm+)} & \textbf{I3C SDR} & \textbf{In scope} \\
+    \midrule
+    Max SCL frequency   & \SI{400}{\kilo\hertz} (Fm) / \SI{1}{\mega\hertz} (Fm+) & \SI{12.5}{\mega\hertz} (push-pull) & Yes (Fm) \\
+    Signalling          & Open-drain only            & Open-drain (addr/arb) + push-pull (data) & Yes \\
+    Addressing          & 7-bit static               & 7-bit dynamic            & Yes \\
+    Address assignment  & Fixed / software config    & Dynamic (ENTDAA)         & Yes \\
+    Bus pull-up         & External board resistors   & Controller-provided; no external resistor & Yes \\
+    Clock stretching    & Target may stretch SCL     & Targets cannot; controller may stall clock & N/A \\
+    Error detection     & ACK/NACK only              & ACK/NACK + T-Bit parity ($+$ CRC in HDR) & Parity yes; CRC no \\
+    In-Band Interrupt   & None (polling)             & IBI supported            & No \\
+    Hot-Join            & None                       & Supported                & No \\
+    CCCs                & None                       & Broadcast / Direct command set & Subset only \\
+    Backward compat.    & ---                        & Legacy \iic{} on same bus & Yes \\
+    Wire count          & 2 (SCL + SDA)              & 2 (SCL + SDA)            & Yes \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{UVM 1.2 methodology overview}
+\label{sec:bg-uvm}
+
+The design is verified with Universal Verification Methodology (UVM) 1.2, a standardised
+SystemVerilog class library for reusable, layered verification environments~\cite{uvm12}.
+A UVM test selects a scenario, sequences generate transaction items, and agents translate
+those items into interface activity while monitors reconstruct observed transactions.
+Transaction-Level Modelling (TLM) analysis ports distribute observations to scoreboards
+and coverage collectors without tightly coupling the components. This vocabulary is the
+background needed for the verification requirements below; the project-specific topology,
+agents, scoreboard connections, configuration, and execution flow are owned by
+\cref{ch:verif-method} and are not repeated here.
+
+% ===========================================================================
+% PART B --- System Requirements and Specifications
+% ===========================================================================
+\section*{Part B\quad System Requirements and Specifications}
+\addcontentsline{toc}{section}{Part B --- System Requirements and Specifications}
+
+\section{Functional requirements}
+\label{sec:req-functional}
+
+The behaviours the controller must implement are enumerated as testable line items in
+\cref{tab:func-req}; each is exercised by at least one directed virtual sequence in
+\cref{ch:verif-method} and cross-checked by the scoreboard. The list spans the full SDR
+data path (private write, read, and immediate transfers), legacy \iic{} Fast-Mode
+interoperability, the bus-condition and signalling machinery, dynamic address assignment,
+the supported CCCs, and the software-visible reporting path.
+
+\begin{table}[!htb]\centering
+  \caption{Functional requirements.}
+  \label{tab:func-req}
+  \small
+  \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.78\textwidth}@{}}
+    \toprule
+    \textbf{ID} & \textbf{Requirement} \\
+    \midrule
+    FR-1  & SDR private write: push-pull data phase with per-byte T-Bit odd parity \\
+    FR-2  & SDR private read: target-driven data with T-Bit end-of-data signalling \\
+    FR-3  & Immediate Data Transfer: up to four inline bytes carried in the command descriptor \\
+    FR-4  & \iic{} Fast-Mode legacy write (\SI{400}{\kilo\hertz}, fixed timing) \\
+    FR-5  & \iic{} Fast-Mode legacy read \\
+    FR-6  & Generate START, Repeated START (Sr), and STOP conditions \\
+    FR-7  & Detect the Bus Free Condition before initiating a transfer \\
+    FR-8  & Open-drain$\leftrightarrow$push-pull phase switching via \texttt{sel_od_pp} \\
+    FR-9  & ENTDAA multi-target DAA loop, backed by a 32-entry Device Address Table (DAT) \\
+    FR-10 & ENEC / DISEC in both broadcast and direct framings \\
+    FR-11 & 32-bit register read/write contract (command staging, data buffers) \\
+    FR-12 & Response Queue reporting (error-status code and data length per command) \\
+    FR-13 & RX Data Buffer reporting of received read data to host software \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Out-of-scope features}
+\label{sec:req-oos}
+
+To keep the design feasible within a 10-credit project, several self-contained slices of
+the I3C specification are deliberately excluded. Each exclusion in \cref{tab:oos} removes a
+feature not required to demonstrate a complete, correct SDR data path with legacy
+interoperability; several are revisited as future work in \cref{ch:conclusion}. These are
+design decisions, consistent with the scope stated in \cref{ch:intro-full}.
+
+\begin{table}[!htb]\centering
+  \caption{Out-of-scope features and rationale.}
+  \label{tab:oos}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.34\textwidth}
+                     >{\raggedright\arraybackslash}p{0.58\textwidth}@{}}
+    \toprule
+    \textbf{Feature} & \textbf{Rationale for exclusion} \\
+    \midrule
+    In-Band Interrupt (IBI)            & Event-reporting feature; polling-free operation not required to prove the SDR data path \\
+    Hot-Join                           & Run-time device insertion; needs the Bus Idle Condition, not used here \\
+    HDR modes (DDR / TSP / TSL)        & Higher-rate modes beyond the mandatory SDR mode \\
+    \iic{} Fast-Mode Plus (\SI{1}{\mega\hertz}) & Fast-Mode (\SI{400}{\kilo\hertz}) is sufficient for legacy interoperability \\
+    Secondary / multi-controller       & Single Active-Controller role only; no controller hand-off \\
+    Target (slave) mode                & Controller-only design \\
+    Bus recovery                       & Error-recovery escalation beyond the in-scope error reporting \\
+    Full HCI compliance / DCT          & Replaced by a simplified 32-bit register interface \\
+    All other CCCs                     & Only ENTDAA, ENEC, and DISEC are implemented \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Performance targets}
+\label{sec:req-performance}
+
+The controller targets an SDR push-pull SCL of up to \SI{12.5}{\mega\hertz} and a legacy
+\iic{} Fast-Mode SCL of \SI{400}{\kilo\hertz}, both kept within the MIPI I3C Basic Table~87
+and \iic{} Fast-Mode limits (SDR $t_{\mathrm{LOW}}, t_{\mathrm{HIGH}} \ge \SI{24}{\nano\second}$,
+$t_{\mathrm{SU,DAT}} \ge \SI{3}{\nano\second}$, $t_{\mathrm{SCO}} \le \SI{12}{\nano\second}$).
+Because SCL is generated by counting system-clock cycles, the design runs in a single clock
+domain at a minimum of \SI{333}{\mega\hertz} (a \SI{3}{\nano\second} period; the testbench
+clocks the DUT at exactly this rate). This rate is set by the target clock-to-data-out budget:
+$t_{\mathrm{SCO,max}} = 4 \times T_{\mathrm{sys}} = 4 \times \SI{3}{\nano\second} =
+\SI{12}{\nano\second}$, which meets the \SI{12}{\nano\second} specification maximum.
+
+SCL timing is not hard-wired but is programmable through control/status registers (CSRs);
+the SCL Low and High phases are loaded from per-mode count registers, so software can
+retune the bus without RTL changes. \Cref{tab:perf-targets} lists the reset-default counts
+taken directly from the RTL register file. Separate Low-period counts exist for the
+push-pull data phase and the slower open-drain address phase
+($t_{\mathrm{LOW,OD}}$), and a separate set of counts governs \iic{} Fast-Mode. The
+defaults are chosen to sit within the spec ceilings with margin; the achieved frequency
+follows from the loaded counts and the system-clock period.
+
+\begin{table}[!htb]\centering
+  \caption{Performance targets and reset-default timing-CSR counts (in system-clock cycles
+  at \SI{3}{\nano\second}).}
+  \label{tab:perf-targets}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.40\textwidth} l r@{}}
+    \toprule
+    \textbf{Target / parameter} & \textbf{CSR} & \textbf{Default} \\
+    \midrule
+    System clock (single domain)        & ---              & $\ge$\SI{333}{\mega\hertz} \\
+    SDR SCL ceiling                     & ---              & $\le$\SI{12.5}{\mega\hertz} \\
+    \iic{}-Fm SCL ceiling               & ---              & \SI{400}{\kilo\hertz} \\
+    \addlinespace
+    SDR SCL Low (push-pull)             & \texttt{T\_LOW}     & 16 \\
+    SDR SCL Low (open-drain addr phase) & \texttt{T\_LOW\_OD} & 67 \\
+    SDR SCL High                        & \texttt{T\_HIGH}    & 11 \\
+    SDR rise / fall                     & \texttt{T\_R} / \texttt{T\_F} & 4 / 4 \\
+    \iic{}-Fm SCL Low / High            & \texttt{I2C\_T\_LOW} / \texttt{I2C\_T\_HIGH} & 534 / 300 \\
+    \iic{}-Fm rise / fall               & \texttt{I2C\_T\_R} / \texttt{I2C\_T\_F} & 100 / 100 \\
+    \addlinespace
+    Device Address Table entries        & \texttt{DAT\_DEPTH}  & 32 \\
+    CMD/TX/RX/RESP FIFO depth (each)     & \texttt{*\_FIFO\_DEPTH} & 64 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Software-visible interface (32-bit register bus)}
+\label{sec:req-swif}
+
+The controller is exposed to host software through a deliberately simple 32-bit register
+interface --- not AXI4 or AHB-Lite as in the reference design --- chosen to keep the focus
+on protocol behaviour rather than bus-adapter logic. A write presents an address, write
+data, and a write-enable in one cycle (\texttt{reg_addr_i[11:0]} ${+}$
+\texttt{reg_wdata_i[31:0]} ${+}$ \texttt{reg_wen_i}); a read presents an address and a
+read-enable and receives data with a ready handshake (\texttt{reg_addr_i[11:0]} ${+}$
+\texttt{reg_ren_i} $\rightarrow$ \texttt{reg_rdata_o[31:0]} ${+}$ \texttt{reg_ready_o}).
+
+Above this register contract sit the transaction-staging structures: a command is staged
+as a two-DWORD command descriptor before being pushed into the command queue; write
+payload is written through a TX data-buffer window and read payload is retrieved through an
+RX data-buffer window; and each completed command produces a response descriptor in the
+response queue. The full register map and descriptor layouts are deferred to the
+appendices and detailed in \cref{ch:architecture-rtl}.
+
+\figph{Register-bus read/write protocol}
+  {single-cycle write handshake + read-with-ready timing on the 32-bit register bus}
+  {csr\_registers.sv}{WaveDrom / TikZ timing}
+
+\section{Verification requirements}
+\label{sec:req-verification}
+
+Verification is considered closed when: every directed virtual sequence in its functional
+category passes; the scoreboard's cross-checks of command, response, receive-data, CSR, and
+DAT state are clean; the SystemVerilog Assertions (SVA) bound into the testbench remain
+silent; and the categorised regression targets run green. A key part of this contract is that
+the scoreboard checks the controller against \emph{exactly} the set of response error-status
+codes the design is required to generate --- no more and no less. That \texttt{ERR\_STATUS}
+encoding, with the codes this SDR-only design actually emits marked as generated, is presented
+alongside the command FSM that produces it in \cref{ch:architecture-rtl}
+(\cref{tab:err-status}); the HDR-only codes (\texttt{Crc}, \texttt{Parity}, \texttt{Frame})
+are declared for interface compatibility but never produced. One distinction is part of the
+verification contract because its two codes are easy to swap: \texttt{Nack} (\texttt{0x5}) is
+reserved for the ENTDAA path where a dynamic address is rejected twice (retry exhausted),
+\emph{not} for a data NACK, whereas a data-phase NACK or a bus abort returns
+\texttt{I2cDataNackOrI3cBusAborted} (\texttt{0x9}).

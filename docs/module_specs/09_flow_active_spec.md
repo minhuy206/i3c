@@ -7,7 +7,7 @@
 > Resolved review notes (audited against RTL):
 > - ENTDAA no-device response policy: **Aligned.** No-device → `Success`, length 0, matching §8. `Nack` is reserved for the DAA-reject-after-retry case (`daa_nack_error_q`), not the no-device case.
 > - CCC phase OD/PP and ACK/T-bit wording: **Aligned.** Confirmed correct as written in §5.2 sub-cases B/C.
-> - `WriteResp` ready/valid wording: **Resolved.** `resp_queue_wvalid_o` is asserted unconditionally in `WriteResp` and the state is held until `resp_queue_wready_i` (standard valid-before-ready); see §5.2.
+> - `WriteResp` ready/valid wording: **Resolved.** Commands enter `WriteResp` only when a response is required. Within `WriteResp`, `resp_queue_wvalid_o` is asserted unconditionally and the state is held until `resp_queue_wready_i` (standard valid-before-ready); see §5.2.
 
 ## 1. Purpose
 
@@ -20,7 +20,7 @@ The `flow_active` module is the **central command processor** of the I3C control
 5. Generating response descriptors to the RESP FIFO
 6. Accumulating errors during transactions
 
-This is the **most critical module** in the design. The reference has 8 out of 14 states unimplemented (TODO). This design implements all 14 states.
+This is the **most critical module** in the design. The reference has 8 out of 13 states unimplemented (TODO). This design implements all 13 states.
 
 ## 2. Dependencies
 
@@ -231,28 +231,30 @@ stateDiagram-v2
 
     WaitForCmd --> FetchDAT: cmd available
 
-    FetchDAT --> WaitDAT: dat_read_valid_hw_q=1
+    FetchDAT --> WriteResp: invalid descriptor (NotSupported, no DAT/bus access)
+    FetchDAT --> WaitDAT: valid descriptor, dat_read_valid_hw_q=1
 
-    WaitDAT --> InitI2CWrite: q=0, I2C + Immediate/Regular/Combo Write
+    WaitDAT --> InitI2CWrite: q=0, I2C + Immediate/Regular Write
     WaitDAT --> I3CBcastHeader: q=0, I3C + broadcast_header_enable_i (private) or CCC/ENTDAA
-    WaitDAT --> InitI3CWrite: q=0, private I3C Immediate/Regular/Combo Write, no broadcast header
-    WaitDAT --> InitI3CRead: q=0, I3C Regular/Combo + Read, no broadcast header
-    WaitDAT --> InitI2CWrite: q=0, I2C Regular/Combo + Write
-    WaitDAT --> InitI2CRead: q=0, I2C Regular/Combo + Read
-    WaitDAT --> WriteResp: invalid AddressAssignment descriptor (NotSupported)
+    WaitDAT --> InitI3CWrite: q=0, private I3C Immediate/Regular Write, no broadcast header
+    WaitDAT --> InitI3CRead: q=0, I3C Regular + Read, no broadcast header
+    WaitDAT --> InitI2CWrite: q=0, I2C Regular + Write
+    WaitDAT --> InitI2CRead: q=0, I2C Regular + Read
 
     I3CBcastHeader --> IssueImmediateCcc: bcast_header_next_q=BcastHeaderBroadcastCCC/DirectCCC
     I3CBcastHeader --> IssueCmd: bcast_header_next_q=BcastHeaderEntdaa
-    I3CBcastHeader --> InitI3CWrite: bcast_header_next_q=BcastHeaderPrivate, Immediate/Regular/Combo Write
-    I3CBcastHeader --> InitI3CRead: bcast_header_next_q=BcastHeaderPrivate, Regular/Combo Read
+    I3CBcastHeader --> InitI3CWrite: bcast_header_next_q=BcastHeaderPrivate, Immediate/Regular Write
+    I3CBcastHeader --> InitI3CRead: bcast_header_next_q=BcastHeaderPrivate, Regular Read
 
-    IssueImmediateCcc --> WriteResp: transfer complete
+    IssueImmediateCcc --> WriteResp: transfer complete, wroc=1
+    IssueImmediateCcc --> Idle: successful transfer complete, wroc=0
 
     FetchTxData --> IssueCmd: data fetched
     FetchTxData --> WriteResp: TX FIFO empty, STOP complete, RESP Ovl
 
     IssueCmd --> FetchTxData: need more TX data
-    IssueCmd --> WriteResp: transfer complete, or HC-abort STOP complete
+    IssueCmd --> WriteResp: transfer complete with wroc=1, or any error
+    IssueCmd --> Idle: successful transfer complete with wroc=0
     IssueCmd --> FetchDAT: toc=0 continuation — next queued command accepted in-line (accept_continuation_cmd), no return to Idle
 
     InitI3CWrite --> FetchTxData: regular/combo I3C write address phase complete
@@ -267,7 +269,7 @@ stateDiagram-v2
     IssueCmd --> IssueCmd: HC abort (abort_i) on active I3C/I2C read — STOP deferred to next T-Bit/ACK boundary (abort_active_state/abort_stop_now/abort_stop_required), then terminates via the FetchTxData/WriteResp edges above
 ```
 
-### 5.2. State Descriptions (All 14 States)
+### 5.2. State Descriptions (All 13 States)
 
 #### Idle (State 0) — IMPLEMENTED in reference
 
@@ -284,9 +286,10 @@ stateDiagram-v2
 
 #### FetchDAT (State 2) — IMPLEMENTED in reference
 
-- **Purpose:** Assert DAT read request; hold `dat_read_valid_hw_o = 1` for 2 cycles so the CSR FF can latch `dat_mem[dat_index]` into `dat_rdata_o`
-- **Outputs:** `dat_read_valid_hw_o = 1`, `dat_index_hw_o = dev_index`
-- **Transition:** → `WaitDAT` unconditionally when `dat_read_valid_hw_q = 1`
+- **Purpose:** Validate the complete command descriptor before any DAT or bus access. A supported descriptor then asserts the DAT read request long enough for the CSR FF to latch `dat_mem[dat_index]` into `dat_rdata_o`.
+- **Invalid descriptor:** Set `not_supported_q`, keep DAT/bus request outputs low, and transition directly to `WriteResp`. The response is `NotSupported`, preserves TID, and has length 0 regardless of WROC.
+- **Supported descriptor outputs:** `dat_read_valid_hw_o = 1`, `dat_index_hw_o = dev_index`
+- **Supported descriptor transition:** → `WaitDAT` when `dat_read_valid_hw_q = 1`
 
 #### WaitDAT (State 3) — new (M-6 fix)
 
@@ -297,8 +300,7 @@ stateDiagram-v2
   - Immediate CCC (`cp = 1`) → `I3CBcastHeader`
   - Private immediate I3C (`cp = 0`) → `I3CBcastHeader` when `broadcast_header_enable_i = 1`; otherwise `InitI3CWrite`. Immediate transfers do not support continuation via `toc = 0`.
   - Legacy I2C immediate → `InitI2CWrite`
-  - `cmd_attr == AddressAssignment` with `toc=1`, `wroc=1`, `dev_count>0`, and `dev_idx+dev_count<=DatDepth` → `I3CBcastHeader` (ENTDAA)
-  - Invalid `AddressAssignment` (`toc=0`, `wroc=0`, `dev_count=0`, or `dev_idx+dev_count>DatDepth`) → `WriteResp` with `NotSupported` before DAT access or bus activity
+  - Valid `cmd_attr == AddressAssignment` → `I3CBcastHeader` (ENTDAA); descriptor validation already occurred in `FetchDAT`
   - Private regular I3C write/read → `I3CBcastHeader` only when `broadcast_header_enable_i = 1` and this is not a continuation; otherwise `InitI3CWrite`/`InitI3CRead`
   - Legacy I2C regular write/read → `InitI2CWrite`/`InitI2CRead`
 - **Timing cost:** +2 cycles vs original FetchDAT direct dispatch (negligible vs SCL timing)
@@ -341,8 +343,8 @@ stateDiagram-v2
 6. Generate STOP (if `toc`)
 
 - **No Repeated START or device address.** Only the broadcast address and ACK are Open-Drain; CCC payload bytes and their T-bits are Push-Pull.
-- **DTT policy:** The current implementation accepts only `dtt <= 4` for all Immediate Data Transfer descriptors. For ENEC/DISEC, legal `dtt` values do not select the event-byte count; exactly one Target Events byte is sent from `def_or_data_byte1`. `dtt > 4` is rejected before bus activity with a `NotSupported` response.
-- **ENTDAA descriptor policy:** `AddressAssignment` descriptors with `toc=0`, `wroc=0`, `dev_count=0`, or `dev_idx+dev_count>DatDepth` are rejected in `FetchDAT` before any DAT read, START, or `7'h7E` broadcast header. The range sum is widened before comparison so an index near the end of DAT cannot wrap. The response status is `NotSupported` with length 0.
+- **DTT policy:** The current implementation accepts only `dtt <= 4` for all Immediate Data Transfer descriptors. For ENEC/DISEC, legal `dtt` values do not select the event-byte count; exactly one Target Events byte is sent from `def_or_data_byte1`. `dtt > 4` is rejected in `FetchDAT` before DAT or bus activity with a `NotSupported` response.
+- **ENTDAA descriptor policy:** `AddressAssignment` descriptors require `cmd=8'h07`, `toc=1`, `wroc=1`, `dev_count>0`, and `dev_idx+dev_count<=DatDepth`. Violations are rejected in `FetchDAT` before any DAT read, START, or `7'h7E` broadcast header. The range sum is widened before comparison so an index near the end of DAT cannot wrap. The response status is `NotSupported` with length 0.
 
 **Sub-case C — Direct CCC (`cp = 1`, `cmd[7] = 1`, e.g. ENEC 0x80, DISEC 0x81):**
 
@@ -428,14 +430,18 @@ stateDiagram-v2
   - For each byte in `tx_dword`: send via `bus_tx_flow` with T-bit (odd parity)
   - Read ACK after address byte
   - Decrement `remaining_len_q` counter
-  - When DWORD exhausted: → `FetchTxData` for more, or → `WriteResp` when done
+  - When DWORD exhausted: → `FetchTxData` for more; on successful completion, → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`
 - **Actions (Read):**
   - Enable clock generation
   - Receive bytes via `bus_rx_flow`, check T-bit
   - Drive ACK/NACK (ACK if more data expected, NACK on last byte)
   - Accumulate into 32-bit DWORD, push to RX FIFO when full
   - If RX FIFO cannot accept a committed DWORD, latch `rx_overflow` and terminate with `Ovl`
-  - When `data_length` reached or target signals end (T-bit=0): → `WriteResp` with `I3cShortReadErr` if fewer bytes than requested
+  - For an I2C read, when the received byte completes a DWORD that RX FIFO cannot
+    accept, drive NACK in that byte's controller-owned ACK/NACK slot, then STOP.
+    The rejected DWORD is not stored, while response `data_length` includes all bytes
+    received through that rejected commit boundary.
+  - When `data_length` is reached successfully: → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`; target early termination (T-bit=0 before the requested length) always → `WriteResp` with `I3cShortReadErr`
   - **Controller read takeover / abort (MIPI I3C Basic v1.1.1 §5.1.2.3.4):** once the
     target has ACKed a read address it drives SDA push-pull, so the controller may only
     retake the bus at a **T-Bit** (9th bit), where the target parks SDA to High-Z. The
@@ -474,6 +480,7 @@ stateDiagram-v2
 #### WriteResp (State 12) — IMPLEMENTED in reference
 
 - **Purpose:** Generate response descriptor and push to RESP FIFO
+- **Entry policy:** successful regular, immediate, and immediate-CCC commands enter this state only when their active descriptor has `wroc=1`. Any error enters this state regardless of `wroc`. `AddressAssignment.wroc=0` remains an invalid descriptor and is rejected with `NotSupported`.
 - **Outputs:**
 
   ```systemverilog
@@ -485,6 +492,8 @@ stateDiagram-v2
 - **Actions:** Assert `resp_queue_wvalid_o` unconditionally (standard valid-before-ready); the state is held until `resp_queue_wready_i` is asserted
 - **Transition:** → `Idle` when `resp_queue_wready_i` (response written)
 
+For a supported regular `toc=0` continuation, the completed command is reported before the next command is accepted only when `wroc=1`; therefore acceptance waits for `resp_queue_wready_i`. With `wroc=0`, no response is generated and the next supported command is accepted without RESP FIFO dependency. A missing or unsupported continuation terminates with STOP and a `NotSupported` response regardless of WROC.
+
 ### 5.3. Command Descriptor Parsing
 
 The 64-bit command descriptor is parsed based on the `attr` field (bits [2:0]):
@@ -495,6 +504,14 @@ assign cmd_tid  = cmd_desc[6:3];
 assign dev_index = cmd_desc[20:16];
 assign cmd_dir  = cmd_desc[29] ? Read : Write;
 ```
+
+Before DAT access, `invalid_cmd_desc()` applies the implemented-subset policy:
+
+- Only DAT-format `RegularTransfer` (`000`), `ImmediateDataTransfer` (`001`), and `AddressAssignment` (`010`) are supported. `ComboTransfer` (`011`) and direct/internal attribute values `100` through `111` return `NotSupported`.
+- Only `mode=sdr0` is supported for regular and immediate transfers. `sdr1` through `sdr4`, both HDR values, and `reserved` return `NotSupported`.
+- Regular transfers require `cp=0`. Immediate transfers require `rnw=0`, `dtt<=4`, and, when `cp=1`, opcode `00`, `01`, `80`, or `81`.
+- AddressAssignment requires opcode ENTDAA (`07`) in addition to its format/range checks.
+- Every invalid descriptor is rejected before DAT or bus activity and writes one length-zero `NotSupported` response even when `wroc=0`.
 
 **Immediate Data Transfer (`attr = 3'b001`):**
 
@@ -625,8 +642,8 @@ end
 7. **I2C Read:** Read from I2C device; verify data in RX FIFO
 8. **ENTDAA:** Execute ENTDAA via valid AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx
 9. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, legal dtt<=4; verify [S][0x7E+W][ACK][0x00][T][TargetEvents][T][P] frame
-10. **CCC ENEC dtt>4 rejection:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5..7; verify no bus frame and response `NotSupported` with length 0
-11. **ENTDAA invalid descriptor rejection:** AddressAssignment with `toc=0`, `wroc=0`, `dev_count=0`, or `dev_idx+dev_count>DatDepth`; verify no DAT read or bus frame and response `NotSupported` with length 0
+10. **CCC ENEC dtt>4 rejection:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5..7; verify no DAT read, no bus frame, and response `NotSupported` with length 0
+11. **Invalid descriptor rejection:** Sweep unsupported attributes/modes, Immediate `rnw=1`/`dtt>4`, unsupported immediate CCC opcodes, Regular `cp=1`, and AddressAssignment with a non-ENTDAA opcode; separately cover AddressAssignment `toc=0`, `wroc=0`, `dev_count=0`, and a DAT span beyond `DatDepth`; verify no DAT read or bus frame, exact `NotSupported` response, and successful recovery without reset
 12. **CCC DISEC direct:** ImmediateDataTransfer with cp=1, cmd=0x81; verify [S][0x7E+W][ACK][0x81][T][Sr][DA+W][ACK][DefByte][T][P] frame
 13. **TX FIFO underflow:** Large write with insufficient TX FIFO data; verify STOP and response `Ovl`
 14. **RX FIFO overflow:** Large read with full RX FIFO; verify response `Ovl`
@@ -634,13 +651,17 @@ end
 16. **Address NACK:** Target NACKs address; verify `AddrHeader` error in response
 17. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` in response
 18. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
-17. **Multiple commands:** Enqueue 3 commands; verify all execute sequentially with correct responses
-18. **Back-to-back transfers:** No idle gap between commands; verify performance
+19. **RESP FIFO backpressure:** Fill RESP, complete both a successful `wroc=1` command and an error-producing `wroc=0` command, then release one slot; verify `WriteResp` and descriptor stability while blocked, preserved FIFO contents, and exactly one appended response after release
+20. **WROC policy:** For regular, immediate, and immediate-CCC commands, verify successful `wroc=0` completion suppresses RESP, `wroc=1` writes RESP, errors override `wroc=0`, and a `wroc=0` continuation runs while RESP is full
+21. **Multiple commands:** Enqueue 3 commands; verify all execute sequentially with policy-correct responses
+22. **Back-to-back transfers:** No idle gap between commands; verify performance
 
 ### Corner Cases
 
 - Empty CMD FIFO when FSM enabled (stays in WaitForCmd)
-- RESP FIFO full when writing response (stays in WriteResp until space available)
+- HC abort held in `WaitForCmd` with a queued command (CMD remains pending; no START or RESP until software clears abort)
+- HC abort during regular, immediate, normal CCC, or ENTDAA execution (finish the defined protocol boundary, force STOP, and emit `HcAborted` unless an already-latched higher-priority error is present)
+- RESP FIFO full when a response is required (stays in WriteResp until space is available); successful `wroc=0` commands bypass WriteResp
 - Zero-length transfer (`data_length = 0`)
 - Maximum-length transfer (`data_length = 65535`)
 

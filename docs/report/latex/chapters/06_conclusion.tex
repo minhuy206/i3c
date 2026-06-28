@@ -1,0 +1,34 @@
+\chapter{Conclusion and Future Work}
+\label{ch:conclusion}
+
+% DRAFT BRIEF: write last; quick if the Results chapter is solid.
+% Sources: all chapters, out-of-scope list, improvements.md Phase-2 notes.
+
+\section{Summary of contributions}
+\brief{Recap the headline contributions, led by the design result rather than the size
+figure: all \FlowStateCount{} \texttt{flow_active} states completed; a compact, studyable controller (PHY to
+protocol to register) retaining SDR + \iic{} + ENTDAA; working dual-agent UVM 1.2 environment
+with scoreboard + SVA; first ENTDAA-capable Active Controller in the lab. Refer to the quantitative
+comparison in \cref{ch:results} without repeating its volatile counts or percentage. Tie each contribution
+back to its chapter.}
+
+\section{Lessons learned}
+\brief{Reflective notes: spec-vs-code drift (code-wins policy); educational value of a
+hand-written CSR vs auto-gen; value of directed-first bring-up; single-counter SCL timing
+tradeoff; FSM-diagram-first documentation workflow.}
+
+\section{Limitations}
+\brief{State the evidenced limits once: the verified scenario and coverage boundary from
+\cref{ch:results}, remaining assertion or stimulus gaps, the single-Target assumptions, excluded protocol
+features, and the absence of FPGA validation. Separate limitations of the implemented system from limits
+of the evaluation.}
+
+\section{Future work}
+\brief{Prioritised roadmap: (1) verification breadth --- broader constrained-random stimulus and
+extending the existing functional-coverage model to full-protocol closure, broader
+CCC/ENTDAA/\iic{}/error-injection vseqs toward the $\sim$105-case testplan;
+(2) protocol features --- In-Band Interrupt (IBI), HDR, Secondary Controller, Target mode, bus recovery;
+(3) FPGA validation on a target board is left as future work (the single FPGA line, per
+settled decision).}
+
+\tabph{Future-work roadmap}{phase1_spec_v2.md out-of-scope list}

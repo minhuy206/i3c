@@ -1,0 +1,521 @@
+\chapter{Cơ sở lý thuyết và yêu cầu hệ thống}
+\label{ch:background-requirements}
+
+% Chương hợp nhất (bố cục 6 chương theo quy định của khoa): gộp Ch.2 (Cơ sở lý thuyết)
+% và Ch.3 (Yêu cầu hệ thống) cũ thành một chương. Cơ sở lý thuyết đặt trước; phần
+% yêu cầu/đặc tả được gộp vào làm các mục cuối.
+%
+% MIPI-compliance gate (2026-06-24): mọi phát biểu về giao thức bên dưới đã được đối chiếu
+% với đặc tả chính thức MIPI I3C Basic v1.1.1 (docs/mipi_i3c_spec.*). Trần SDR 12.5 MHz,
+% các tối thiểu thời gian Bảng 87 (24/24/3/12 ns), broadcast 7'h7E, ba điều kiện bus, và các
+% mã lệnh ENEC/DISEC/ENTDAA đều khớp.
+
+Chương này thiết lập nền tảng về giao thức và phương pháp luận mà phần còn lại của khóa
+luận dựa trên đó, rồi gộp những nền tảng ấy thành các yêu cầu cụ thể, kiểm thử được mà
+thiết kế ở \cref{ch:architecture-rtl} thỏa mãn và môi trường kiểm chứng ở
+\cref{ch:verif-method} kiểm tra. Phần~A trình bày lý thuyết giao thức --- bus \iic{} mà
+thiết kế phải giữ tương thích, chế độ MIPI I3C Basic Single Data Rate (SDR) mà nó hiện
+thực, các điều kiện bus và các pha tín hiệu, cơ chế gán địa chỉ động, các Common Command
+Code được hỗ trợ, và phương pháp Universal Verification Methodology (UVM) dùng để kiểm
+chứng. Phần~B sau đó phát biểu các yêu cầu chức năng, những phần cố ý nằm ngoài phạm vi,
+các mục tiêu hiệu năng, giao diện thanh ghi mà phần mềm nhìn thấy, và tiêu chí đóng (closure)
+của việc kiểm chứng.
+
+% ===========================================================================
+% PHẦN A --- Cơ sở lý thuyết
+% ===========================================================================
+\section*{Phần A\quad Cơ sở lý thuyết}
+\addcontentsline{toc}{section}{Phần A --- Cơ sở lý thuyết}
+
+\section{Tổng quan lại về \iic{}}
+\label{sec:bg-i2c}
+
+Bus Inter-Integrated Circuit (\iic{}) là một liên kết nối tiếp hai dây, multi-drop, gồm một
+đường xung clock nối tiếp (SCL) và một đường dữ liệu nối tiếp (SDA). Cả hai đường đều ở chế
+độ \emph{open-drain} (OD): mỗi thiết bị chỉ có thể kéo đường xuống mức Low, còn một điện trở
+pull-up thụ động kéo nó trở lại mức High, nên bus hoạt động như một wired-AND của tất cả các
+bộ điều khiển đang lái. Một phiên truyền được đóng khung giữa điều kiện START (SDA bị kéo Low
+khi SCL đang High) và điều kiện STOP (SDA được nhả lên High khi SCL đang High). Sau START, bộ
+điều khiển dịch ra một byte địa chỉ 9 bit --- 7 bit địa chỉ target theo sau bởi một bit
+read/not-write (RnW), bit có trọng số cao nhất đi trước --- và target được địa chỉ trả lời
+bằng một acknowledge (ACK) qua việc kéo SDA Low trong xung clock thứ chín; một byte không được
+đáp ứng sẽ đọc về thành not-acknowledge (NACK). Dữ liệu sau đó chảy theo từng byte 8 bit, mỗi
+byte kèm một ACK/NACK, cho tới khi một STOP đóng khung lại. Một target không theo kịp có thể
+giữ SCL ở mức Low (clock stretching) để chặn bộ điều khiển lại.
+
+Ba đặc tính của mô hình này giới hạn \iic{} khi số thiết bị và tốc độ dữ liệu tăng lên, và
+I3C được thiết kế để loại bỏ chúng: các pull-up open-drain giới hạn tốc độ clock thực dụng và
+lãng phí công suất tĩnh; địa chỉ được cố định khi sản xuất, nên hai linh kiện trùng địa chỉ
+không thể cùng tồn tại trên một bus; và bus không có ngắt gốc, buộc bộ điều khiển phải polling.
+Những giới hạn này là động lực cho tín hiệu push-pull, gán địa chỉ động, và in-band interrupt
+được giới thiệu tiếp sau đây.
+
+\section{MIPI I3C Basic v1.1.1 (SDR, định dạng khung)}
+\label{sec:bg-i3c-sdr}
+
+I3C (Improved Inter-Integrated Circuit) giữ lại tô-pô hai dây SCL/SDA và khung START/STOP của
+\iic{}, nhưng bổ sung một pha dữ liệu \emph{push-pull} (PP) LV-CMOS \SI{1.8}{\volt} chủ động
+lái bus theo cả hai chiều, nâng trần clock Single Data Rate (SDR) lên
+\SI{12.5}{\mega\hertz}~\cite{mipi_i3c_basic}. Các pha địa chỉ và phân xử (arbitration) vẫn ở
+open-drain để tương thích ngược (\cref{sec:bg-odpp}); chỉ pha dữ liệu chuyển sang push-pull.
+
+I3C dành riêng địa chỉ broadcast \texttt{7'h7E}, mà bộ điều khiển dùng vừa để đánh dấu khởi
+đầu hoạt động I3C gốc trên một bus hỗn hợp, vừa để mang các Common Command Code
+(\cref{sec:bg-ccc}). Hai dạng khung SDR mang dữ liệu riêng (private) giữa bộ điều khiển và một
+target. Trong \textbf{SDR private write}, bộ điều khiển phát một START (có thể đứng trước bởi
+broadcast header \texttt{7E}), địa chỉ target với RnW${=}0$, rồi truyền các byte dữ liệu ở pha
+push-pull; mỗi byte theo sau bởi một \emph{Transition Bit} (T-Bit) có giá trị là \emph{parity
+lẻ} của byte đó, giúp target phát hiện một byte bị hỏng. Trong \textbf{SDR private read}, bộ
+điều khiển địa chỉ target với RnW${=}1$ và target lái các byte dữ liệu; lúc này T-Bit mang tín
+hiệu \emph{end-of-data} thay vì parity --- target giữ nó ở High khi còn byte tiếp theo và lái
+nó về Low ở byte cuối cùng, sau đó bộ điều khiển phát một STOP hoặc Repeated START. Vai trò kép
+này của T-Bit (parity khi ghi, end-of-data khi đọc), được tóm tắt trong \cref{fig:sdr-frames},
+là trung tâm của các bộ serialiser mức bit được mô tả ở \cref{ch:architecture-rtl}.
+
+\begin{figure}[!htb]
+\centering
+\begin{tikzpicture}[
+  every node/.style={font=\footnotesize},
+  field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
+                inner xsep=4pt, align=center},
+  od/.style={field, fill=blue!10},
+  pp/.style={field, fill=orange!18},
+  cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+  rowlbl/.style={font=\footnotesize\bfseries, anchor=east},
+  drv/.style={font=\scriptsize\itshape, text=black!70},
+]
+
+% ---------------- SDR private write (0x7E header enabled) ----------------
+\begin{scope}[start chain=w going right, node distance=-\pgflinewidth]
+  \node[cond, on chain=w] (w0) at (0,0) {S};
+  \node[od,   on chain=w]        {7E\,$+$\,W};
+  \node[od,   on chain=w]        {ACK};
+  \node[cond, on chain=w]        {Sr};
+  \node[pp,   on chain=w]        {addr\,$+$\,W};
+  \node[od,   on chain=w]        {ACK};
+  \node[pp,   on chain=w]        {Data\,0};
+  \node[pp,   on chain=w]        {T};
+  \node[pp,   on chain=w]        {$\cdots$};
+  \node[pp,   on chain=w]        {Data\,$N\!-\!1$};
+  \node[pp,   on chain=w]        {T};
+  \node[cond, on chain=w] (wN)   {P};
+\end{scope}
+\node[rowlbl, left=5pt of w0] {Ghi};
+\path (w0.south west) -- (wN.south east)
+      node[drv, midway, below=2.5pt] {bộ điều khiển lái các byte dữ liệu \,$\bullet$\, T $=$ parity lẻ của byte};
+
+% ---------------- SDR private read (0x7E header enabled) ----------------
+\begin{scope}[start chain=r going right, node distance=-\pgflinewidth]
+  \node[cond, on chain=r] (r0) at (0,-2.5) {S};
+  \node[od,   on chain=r]        {7E\,$+$\,W};
+  \node[od,   on chain=r]        {ACK};
+  \node[cond, on chain=r]        {Sr};
+  \node[pp,   on chain=r]        {addr\,$+$\,R};
+  \node[od,   on chain=r]        {ACK};
+  \node[pp,   on chain=r]        {Data\,0};
+  \node[pp,   on chain=r]        {T$=$1};
+  \node[pp,   on chain=r]        {$\cdots$};
+  \node[pp,   on chain=r]        {Data\,$N\!-\!1$};
+  \node[pp,   on chain=r]        {T$=$0};
+  \node[cond, on chain=r] (rN)   {P};
+\end{scope}
+\node[rowlbl, left=5pt of r0] {Đọc};
+\path (r0.south west) -- (rN.south east)
+      node[drv, midway, below=2.5pt] {target lái các byte dữ liệu \,$\bullet$\, T $=$ end-of-data (1 $=$ còn byte, 0 $=$ byte cuối)};
+
+% ---------------- legend ----------------
+\begin{scope}[every node/.style={font=\scriptsize}, node distance=3pt]
+  \node[cond, minimum width=6mm, minimum height=4mm] (lg0) at (0,-4.35) {};
+  \node[right=of lg0] (lg0t) {S\,/\,Sr\,/\,P (điều kiện bus)};
+  \node[od, minimum width=6mm, minimum height=4mm, right=12pt of lg0t] (lg1) {};
+  \node[right=of lg1] (lg1t) {Open-drain};
+  \node[pp, minimum width=6mm, minimum height=4mm, right=12pt of lg1t] (lg2) {};
+  \node[right=of lg2] {Push-pull};
+\end{scope}
+\end{tikzpicture}
+\caption{Định dạng khung SDR private write và private read (với broadcast header
+\texttt{0x7E} được bật).}
+\label{fig:sdr-frames}
+\end{figure}
+
+\section{Các điều kiện bus (START / Repeated START / STOP)}
+\label{sec:bg-bus-conditions}
+
+Ba điều kiện cạnh (edge) phân định và nối các phiên truyền. Một \textbf{START} (S) là cạnh
+xuống của SDA khi SCL đang High; một \textbf{STOP} (P) là cạnh lên của SDA khi SCL đang High;
+và một \textbf{Repeated START} (Sr) là một START được phát mà không có STOP xen giữa, dùng để
+nối các pha --- ví dụ để chuyển từ broadcast header open-drain sang pha dữ liệu push-pull, hoặc
+để đảo chiều bus giữa một lần ghi và một lần đọc.
+
+Đặc tả MIPI còn định nghĩa ba điều kiện rảnh (idle) \emph{khác nhau} mà khóa luận này cẩn thận
+không nhập nhằng~\cite{mipi_i3c_basic}. \textbf{Bus Free Condition} (\S5.1.3.2.1) là khoảng sau
+một STOP và trước START kế tiếp, kéo dài ít nhất $t_{\mathrm{CAS}}$; \textbf{Bus Available
+Condition} (\S5.1.3.2.2) là một Bus Free Condition kéo dài ít nhất $t_{\mathrm{AVAL}}$, trong đó
+một target có thể yêu cầu lái bus; và \textbf{Bus Idle Condition} (\S5.1.3.2.3) là một khoảng
+dài hơn (ít nhất $t_{\mathrm{IDLE}}$) cần có trước một yêu cầu Hot-Join. Bộ điều khiển này tạo
+ra START/Sr/STOP và phát hiện Bus Free Condition trước khi khởi tạo một phiên truyền; nó không
+dùng Bus Available hay Bus Idle Condition, vì các sự kiện cần đến chúng (START khởi tạo từ
+target, Hot-Join) nằm ngoài phạm vi. Bus monitor và SCL generator hiện thực các điều kiện này
+được trình bày chi tiết ở \cref{ch:architecture-rtl}.
+
+\figph{Các điều kiện bus}{START / Repeated START (Sr) / STOP --- cạnh SDA so với SCL High}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/bus_conditions.json)}
+
+\section{Tín hiệu open-drain so với push-pull}
+\label{sec:bg-odpp}
+
+I3C dùng hai chế độ tín hiệu điện trên cùng các dây và chuyển qua lại giữa chúng ngay trong một
+phiên truyền. \textbf{Các bit acknowledge và các pha địa chỉ có phân xử giữ ở open-drain}: bus
+được nhả ra để bị kéo lên High và bất kỳ thiết bị nào cũng có thể kéo nó Low, điều này giữ lại
+phân xử kiểu wired-AND của \iic{}, cho phép các target \iic{} hợp pháp tham gia, và làm cho phân
+xử ENTDAA theo từng bit ở \cref{sec:bg-entdaa} khả thi. Một khi bộ điều khiển đã thắng bus,
+\textbf{pha dữ liệu --- và mọi địa chỉ mà nó lái sau một Repeated START --- chuyển sang
+push-pull}, nơi bộ lái đang hoạt động cấp và rút dòng trực tiếp; điều này loại bỏ hằng số thời
+gian RC của pull-up và chính là thứ cho phép tốc độ SDR \SI{12.5}{\mega\hertz}.
+
+Ranh giới được vượt qua tại một Repeated START: broadcast header \texttt{0x7E} và ACK của nó
+được gửi open-drain, và tại Sr bộ điều khiển xoay bus sang push-pull, nên địa chỉ target theo
+sau và tất cả các byte dữ liệu được lái push-pull trong khi các bit ACK/NACK vẫn ở open-drain
+(\cref{fig:sdr-frames}). Khi broadcast header bị tắt, bộ điều khiển thay vào đó gửi địa chỉ
+target ở open-drain ngay sau START --- không có Repeated START --- và chỉ chuyển sang push-pull
+cho pha dữ liệu. Trong RTL, lựa chọn chế độ này được phơi bày như một tín hiệu duy nhất,
+\texttt{sel_od_pp} (\texttt{1}${=}$push-pull, \texttt{0}${=}$open-drain), được lái vào lớp PHY
+(\cref{ch:architecture-rtl}).
+
+\figph{Các pha open-drain so với push-pull}
+  {OD 7E-header/ACK so với PP địa chỉ+dữ liệu; ranh giới OD$\rightarrow$PP tại Sr; lựa chọn \texttt{sel_od_pp}}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/od_vs_pp.json)}
+
+\section{Gán địa chỉ động qua ENTDAA}
+\label{sec:bg-entdaa}
+
+I3C thay cơ chế địa chỉ cố định của \iic{} bằng Dynamic Address Assignment (DAA) lúc chạy, qua
+đó loại bỏ va chạm địa chỉ và hỗ trợ các thiết bị dùng chung mã linh kiện. Thiết kế này hiện
+thực DAA thông qua thủ tục ENTDAA (Enter Dynamic Address Assignment) từ góc nhìn của bộ điều
+khiển. Bộ điều khiển phát một START theo sau bởi địa chỉ broadcast \texttt{7'h7E}${+}$W và
+Common Command Code ENTDAA (\texttt{0x07}); sau đó nó vào một vòng lặp, phát một Repeated START
+và \texttt{7'h7E}${+}$R cho mỗi vòng. Mỗi target chưa được gán địa chỉ trả lời bằng cách dòng
+ra danh tính 64 bit duy nhất của nó --- một Provisioned ID (PID) 48 bit, một Bus Characteristics
+Register (BCR) 8 bit, và một Device Characteristics Register (DCR) 8 bit --- bit trọng số cao
+nhất đi trước, không có ACK giữa các trường.
+
+Vì dòng danh tính ở open-drain và wired-AND, nó đồng thời đóng vai trò cơ chế phân xử: khi nhiều
+target đáp ứng cùng lúc, một target lái logic~1 nhưng đọc về~0 trên SDA tức là đã thua một danh
+tính có giá trị nhỏ hơn và rút lui, nên đúng một target thắng mỗi vòng. Bộ điều khiển sau đó gửi
+cho người thắng một địa chỉ động 7 bit kèm một bit parity, target ACK, và vòng lặp lặp lại cho
+tới khi một vòng không có đáp ứng, lúc đó một STOP đóng thủ tục lại. Các địa chỉ đã gán được ghi
+vào một Device Address Table (DAT) 32 mục. \Cref{ch:architecture-rtl} hiện thực điều này thành
+một phân hệ hai FSM --- một bộ quản lý vòng lặp và một FSM phân xử theo từng vòng.
+
+\figph{Phân xử ENTDAA}
+  {7E+W, ACK, ENTDAA CCC, rồi theo từng target: Sr, 7E+R, PID+BCR+DCR 64-bit, dyn-addr+parity,
+   ACK; lặp tới khi không còn đáp ứng, rồi P}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/entdaa_arbitration.json)}
+
+\section{Tổng quan Common Command Code (CCC)}
+\label{sec:bg-ccc}
+
+Common Command Code (CCC) là các lệnh chuẩn hóa mà bộ điều khiển phát sau broadcast header
+\texttt{7'h7E} để cấu hình và quản lý các target. Chúng có hai dạng khung. Một \textbf{Broadcast
+CCC} gửi tới tất cả các target cùng lúc (\texttt{[S]} \texttt{[7E+W]} \texttt{[CCC]} \dots\
+\texttt{[P]}); một \textbf{Direct CCC} nhắm tới một thiết bị bằng cách theo sau mã lệnh là một
+Repeated START và địa chỉ của thiết bị đó (\texttt{[S]} \texttt{[7E+W]} \texttt{[CCC]}
+\texttt{[Sr]} \texttt{[addr+RnW]} \dots\ \texttt{[P]}).
+
+Trong toàn bộ danh mục CCC, thiết kế này chỉ hiện thực tập con thiết yếu cần để khởi động và
+quản lý một bus SDR, được tóm tắt trong \cref{tab:ccc-supported}. ENTDAA (\texttt{0x07},
+broadcast) điều khiển việc gán địa chỉ động; ENEC (\texttt{0x00} broadcast / \texttt{0x80}
+direct) và DISEC (\texttt{0x01} broadcast / \texttt{0x81} direct) bật và tắt các sự kiện do
+target tạo ra. Mọi CCC khác đều nằm ngoài phạm vi (\cref{sec:req-oos}).
+
+\begin{table}[!htb]\centering
+  \caption{Các Common Command Code được hiện thực trong thiết kế này.}
+  \label{tab:ccc-supported}
+  \small
+  \begin{tabular}{@{}llcl@{}}
+    \toprule
+    \textbf{CCC} & \textbf{Dạng khung} & \textbf{Mã} & \textbf{Mục đích} \\
+    \midrule
+    ENTDAA & Broadcast        & \texttt{0x07} & Vào chế độ gán địa chỉ động \\
+    ENEC   & Broadcast        & \texttt{0x00} & Bật sự kiện target (tất cả target) \\
+    DISEC  & Broadcast        & \texttt{0x01} & Tắt sự kiện target (tất cả target) \\
+    ENEC   & Direct           & \texttt{0x80} & Bật sự kiện target (một target) \\
+    DISEC  & Direct           & \texttt{0x81} & Tắt sự kiện target (một target) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\figph{Định dạng khung CCC}{Khung Broadcast CCC so với Direct CCC}
+  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/ccc_frame.json)}
+
+\section{So sánh I3C với \iic{}}
+\label{sec:bg-comparison}
+
+\Cref{tab:i3c-vs-i2c} tổng hợp các khác biệt giới thiệu ở trên thành một ma trận tính năng và
+đánh dấu những hàng thuộc phạm vi của thiết kế này. Các lợi ích nổi bật là tốc độ dữ liệu tăng
+$\sim$12.5$\times$ nhờ tín hiệu push-pull, gán địa chỉ động không va chạm, và công suất tĩnh
+thấp hơn do không có dòng pull-up ở mức bo mạch --- tất cả trong khi vẫn tương thích ngược với
+lưu lượng \iic{} Fast-Mode hợp pháp trên cùng hai dây. \Cref{tab:timing-params} sau đó liệt kê
+các tham số thời gian SDR push-pull và \iic{} Fast-Mode mà phần định thời lập trình được của bộ
+điều khiển phải thỏa mãn; các giá trị SDR lấy từ Bảng~87 của MIPI I3C Basic và các giá trị
+Fast-Mode lấy từ bảng định thời \iic{} hợp pháp~\cite{mipi_i3c_basic}.
+
+\begin{table}[!htb]\centering
+  \caption{Ma trận tính năng I3C so với \iic{}. Cột cuối đánh dấu mức độ bao phủ trong thiết kế này.}
+  \label{tab:i3c-vs-i2c}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.21\textwidth}
+                     >{\raggedright\arraybackslash}p{0.27\textwidth}
+                     >{\raggedright\arraybackslash}p{0.30\textwidth}
+                     >{\raggedright\arraybackslash}p{0.12\textwidth}@{}}
+    \toprule
+    \textbf{Tính năng} & \textbf{\iic{} (Fm / Fm+)} & \textbf{I3C SDR} & \textbf{Trong phạm vi} \\
+    \midrule
+    Tần số SCL tối đa   & \SI{400}{\kilo\hertz} (Fm) / \SI{1}{\mega\hertz} (Fm+) & \SI{12.5}{\mega\hertz} (push-pull) & Có (Fm) \\
+    Tín hiệu            & Chỉ open-drain             & Open-drain (addr/arb) + push-pull (data) & Có \\
+    Địa chỉ             & 7-bit tĩnh                 & 7-bit động               & Có \\
+    Cách gán địa chỉ    & Cố định / cấu hình phần mềm & Động (ENTDAA)            & Có \\
+    Pull-up bus         & Điện trở ngoài trên bo     & Bộ điều khiển cung cấp; không cần điện trở ngoài & Có \\
+    Clock stretching    & Target có thể kéo dài SCL  & Target không thể; bộ điều khiển có thể chặn clock & Không áp dụng \\
+    Phát hiện lỗi       & Chỉ ACK/NACK               & ACK/NACK + parity T-Bit ($+$ CRC ở HDR) & Parity có; CRC không \\
+    In-Band Interrupt   & Không (polling)            & Hỗ trợ IBI               & Không \\
+    Hot-Join            & Không                      & Hỗ trợ                   & Không \\
+    CCC                 & Không                      & Tập lệnh Broadcast / Direct & Chỉ tập con \\
+    Tương thích ngược   & ---                        & \iic{} hợp pháp trên cùng bus & Có \\
+    Số dây              & 2 (SCL + SDA)              & 2 (SCL + SDA)            & Có \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[!htb]\centering
+  \caption{Các tham số thời gian SDR push-pull và \iic{} Fast-Mode (giá trị tối thiểu trừ khi ghi chú khác).}
+  \label{tab:timing-params}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.34\textwidth} l r r l@{}}
+    \toprule
+    \textbf{Tham số} & \textbf{Ký hiệu} & \textbf{I3C SDR} & \textbf{\iic{}-Fm} & \textbf{Đơn vị} \\
+    \midrule
+    Tần số SCL (tối đa)            & $f_{\mathrm{SCL}}$  & 12.5 (điển hình) & 400  & \si{\kilo\hertz}/\si{\mega\hertz} \\
+    Chu kỳ SCL Low                 & $t_{\mathrm{LOW}}$  & 24   & 1300 & \si{\nano\second} \\
+    Chu kỳ SCL High                & $t_{\mathrm{HIGH}}$ & 24   & 600  & \si{\nano\second} \\
+    Thời gian setup dữ liệu        & $t_{\mathrm{SU,DAT}}$ & 3  & 100  & \si{\nano\second} \\
+    Thời gian hold dữ liệu         & $t_{\mathrm{HD,DAT}}$ & 0  & 0    & \si{\nano\second} \\
+    Setup START                    & $t_{\mathrm{SU,STA}}$ & --- & 600 & \si{\nano\second} \\
+    Hold START                     & $t_{\mathrm{HD,STA}}$ & --- & 600 & \si{\nano\second} \\
+    Setup STOP                     & $t_{\mathrm{SU,STO}}$ & 12 & ---  & \si{\nano\second} \\
+    Clock-to-data ra (target, tối đa)& $t_{\mathrm{SCO}}$  & 12   & ---  & \si{\nano\second} \\
+    Bus free                       & $t_{\mathrm{CAS}}$/$t_{\mathrm{BUF}}$ & 38 & 1300 & \si{\nano\second} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Tổng quan phương pháp UVM 1.2}
+\label{sec:bg-uvm}
+
+Thiết kế được kiểm chứng trong một testbench dựng bằng Universal Verification Methodology (UVM)
+1.2, một thư viện lớp SystemVerilog chuẩn hóa để xây dựng các môi trường kiểm chứng phân lớp,
+tái sử dụng được~\cite{uvm12}. UVM tổ chức một testbench thành một cây phân cấp các thành phần.
+Một \texttt{uvm\_test} chọn kịch bản để chạy (chọn lúc chạy qua \texttt{+UVM\_TESTNAME}, nên các
+kịch bản không cần biên dịch lại) và tạo một \texttt{uvm\_env}, chứa hạ tầng kiểm chứng tái sử
+dụng được: một hoặc nhiều \emph{agent}, một scoreboard, và các bộ thu coverage. Mỗi
+\texttt{uvm\_agent} gói ba thành phần con --- một \emph{driver} biến các giao dịch trừu tượng
+thành hoạt động mức chân (pin) trên một virtual interface, một \emph{monitor} quan sát các chân
+và tái dựng các giao dịch, và một \emph{sequencer} điều phối dòng các phần tử kích thích
+(stimulus) từ các sequence tới driver.
+
+Kích thích được mô tả tách rời với cấu trúc: một \texttt{uvm\_sequence} sinh ra các giao dịch
+\texttt{uvm\_sequence\_item} và phát chúng qua một sequencer, nên cùng một môi trường có thể chạy
+nhiều kịch bản khác nhau. Các thành phần giao tiếp qua các analysis port theo \emph{Transaction-Level
+Modelling} (TLM) --- một monitor phát quảng bá mỗi giao dịch bắt được trên một
+\texttt{uvm\_analysis\_port}, port này tỏa ra tới scoreboard và các bộ thu coverage mà bên sản
+xuất không cần biết bên tiêu thụ là ai. Hai dịch vụ nữa gắn kết môi trường lại: \texttt{uvm\_config\_db}
+truyền cấu hình (các handle virtual-interface, các knob) xuống cây phân cấp theo tên phân cấp, và
+\emph{factory} (\texttt{type\_id::create}) tạo các thành phần và giao dịch một cách gián tiếp để
+có thể ghi đè kiểu mà không phải sửa testbench. Các cơ chế này là nền tảng cho môi trường hai
+agent được mô tả ở \cref{ch:verif-method}.
+
+\figph{Phân lớp testbench UVM}
+  {test $\rightarrow$ env $\rightarrow$ agent (driver/monitor/sequencer); các analysis port TLM
+   tới scoreboard/coverage; config\_db và factory}{Accellera UVM 1.2}{TikZ}
+
+% ===========================================================================
+% PHẦN B --- Yêu cầu và đặc tả hệ thống
+% ===========================================================================
+\section*{Phần B\quad Yêu cầu và đặc tả hệ thống}
+\addcontentsline{toc}{section}{Phần B --- Yêu cầu và đặc tả hệ thống}
+
+\section{Yêu cầu chức năng}
+\label{sec:req-functional}
+
+Các hành vi mà bộ điều khiển phải hiện thực được liệt kê thành các hạng mục kiểm thử được trong
+\cref{tab:func-req}; mỗi hạng mục được thực thi bởi ít nhất một virtual sequence có chủ đích ở
+\cref{ch:verif-method} và được scoreboard đối chiếu chéo. Danh sách trải khắp toàn bộ đường dữ
+liệu SDR (private write, read, và immediate transfer), khả năng phối hợp với \iic{} Fast-Mode hợp
+pháp, cơ chế điều kiện bus và tín hiệu, gán địa chỉ động, các CCC được hỗ trợ, và đường báo cáo
+mà phần mềm nhìn thấy.
+
+\begin{table}[!htb]\centering
+  \caption{Yêu cầu chức năng.}
+  \label{tab:func-req}
+  \small
+  \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.78\textwidth}@{}}
+    \toprule
+    \textbf{ID} & \textbf{Yêu cầu} \\
+    \midrule
+    FR-1  & SDR private write: pha dữ liệu push-pull với parity lẻ T-Bit theo từng byte \\
+    FR-2  & SDR private read: dữ liệu do target lái với tín hiệu end-of-data của T-Bit \\
+    FR-3  & Immediate Data Transfer: tối đa bốn byte inline mang trong command descriptor \\
+    FR-4  & \iic{} Fast-Mode legacy write (\SI{400}{\kilo\hertz}, định thời cố định) \\
+    FR-5  & \iic{} Fast-Mode legacy read \\
+    FR-6  & Tạo các điều kiện START, Repeated START (Sr), và STOP \\
+    FR-7  & Phát hiện Bus Free Condition trước khi khởi tạo một phiên truyền \\
+    FR-8  & Chuyển pha open-drain$\leftrightarrow$push-pull qua \texttt{sel_od_pp} \\
+    FR-9  & Vòng lặp DAA đa target ENTDAA, hậu thuẫn bởi Device Address Table (DAT) 32 mục \\
+    FR-10 & ENEC / DISEC ở cả hai dạng khung broadcast và direct \\
+    FR-11 & Hợp đồng đọc/ghi thanh ghi 32-bit (staging lệnh, buffer dữ liệu) \\
+    FR-12 & Báo cáo Response Queue (mã trạng thái lỗi và độ dài dữ liệu cho mỗi lệnh) \\
+    FR-13 & RX Data Buffer báo cáo dữ liệu đọc nhận được tới phần mềm host \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Các tính năng ngoài phạm vi}
+\label{sec:req-oos}
+
+Để giữ thiết kế khả thi trong một đồ án 10 tín chỉ, một vài lát cắt độc lập của đặc tả I3C được
+cố ý loại trừ. Mỗi loại trừ trong \cref{tab:oos} bỏ đi một tính năng không cần để chứng minh một
+đường dữ liệu SDR đầy đủ, chính xác cùng khả năng phối hợp với thiết bị hợp pháp; một số được bàn
+lại như hướng phát triển ở \cref{ch:conclusion}. Đây là các quyết định thiết kế, nhất quán với
+phạm vi nêu ở \cref{ch:intro-full}.
+
+\begin{table}[!htb]\centering
+  \caption{Các tính năng ngoài phạm vi và lý do.}
+  \label{tab:oos}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.34\textwidth}
+                     >{\raggedright\arraybackslash}p{0.58\textwidth}@{}}
+    \toprule
+    \textbf{Tính năng} & \textbf{Lý do loại trừ} \\
+    \midrule
+    In-Band Interrupt (IBI)            & Tính năng báo sự kiện; vận hành không-polling không cần để chứng minh đường dữ liệu SDR \\
+    Hot-Join                           & Cắm thiết bị lúc chạy; cần Bus Idle Condition, không dùng ở đây \\
+    Các chế độ HDR (DDR / TSP / TSL)   & Các chế độ tốc độ cao hơn ngoài chế độ SDR bắt buộc \\
+    \iic{} Fast-Mode Plus (\SI{1}{\mega\hertz}) & Fast-Mode (\SI{400}{\kilo\hertz}) đã đủ cho khả năng phối hợp hợp pháp \\
+    Secondary / multi-controller       & Chỉ vai trò Active-Controller đơn; không có chuyển giao bộ điều khiển \\
+    Chế độ Target (slave)              & Thiết kế chỉ làm controller \\
+    Bus recovery                       & Leo thang khôi phục lỗi vượt quá phần báo lỗi trong phạm vi \\
+    Tuân thủ HCI đầy đủ / DCT          & Thay bằng giao diện thanh ghi 32-bit đơn giản hóa \\
+    Mọi CCC khác                       & Chỉ ENTDAA, ENEC, và DISEC được hiện thực \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Mục tiêu hiệu năng}
+\label{sec:req-performance}
+
+Bộ điều khiển nhắm tới SCL push-pull SDR tối đa \SI{12.5}{\mega\hertz} và SCL \iic{} Fast-Mode
+hợp pháp \SI{400}{\kilo\hertz}, cả hai đều giữ ở mức hoặc dưới các trần đặc tả của
+\cref{tab:timing-params}. Vì SCL được tạo bằng cách đếm chu kỳ clock hệ thống, thiết kế chạy
+trong một miền clock đơn ở tối thiểu \SI{333}{\mega\hertz} (chu kỳ \SI{3}{\nano\second};
+testbench cấp clock cho DUT đúng tốc độ này). Tốc độ này được đặt bởi ngân sách clock-to-data-out
+của target: $t_{\mathrm{SCO,max}} = 4 \times T_{\mathrm{sys}} = 4 \times \SI{3}{\nano\second} =
+\SI{12}{\nano\second}$, đáp ứng giá trị tối đa \SI{12}{\nano\second} của \cref{tab:timing-params}.
+
+Định thời SCL không cố định cứng mà lập trình được qua các control/status register (CSR); pha
+Low và High của SCL được nạp từ các thanh ghi đếm theo từng chế độ, nên phần mềm có thể tinh
+chỉnh bus mà không cần đổi RTL. \Cref{tab:perf-targets} liệt kê các giá trị đếm mặc định khi reset
+lấy trực tiếp từ register file của RTL. Có các giá trị đếm chu kỳ Low riêng cho pha dữ liệu
+push-pull và pha địa chỉ open-drain chậm hơn ($t_{\mathrm{LOW,OD}}$), và một tập đếm riêng chi
+phối \iic{} Fast-Mode. Các mặc định được chọn để nằm trong các trần đặc tả với biên dự phòng;
+tần số đạt được suy ra từ các giá trị đếm đã nạp và chu kỳ clock hệ thống.
+
+\begin{table}[!htb]\centering
+  \caption{Mục tiêu hiệu năng và giá trị đếm CSR định thời mặc định khi reset (theo chu kỳ
+  clock hệ thống ở \SI{3}{\nano\second}).}
+  \label{tab:perf-targets}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.40\textwidth} l r@{}}
+    \toprule
+    \textbf{Mục tiêu / tham số} & \textbf{CSR} & \textbf{Mặc định} \\
+    \midrule
+    Clock hệ thống (miền đơn)            & ---              & $\ge$\SI{333}{\mega\hertz} \\
+    Trần SCL SDR                        & ---              & $\le$\SI{12.5}{\mega\hertz} \\
+    Trần SCL \iic{}-Fm                  & ---              & \SI{400}{\kilo\hertz} \\
+    \addlinespace
+    SCL Low SDR (push-pull)             & \texttt{T\_LOW}     & 16 \\
+    SCL Low SDR (pha địa chỉ open-drain)& \texttt{T\_LOW\_OD} & 67 \\
+    SCL High SDR                        & \texttt{T\_HIGH}    & 11 \\
+    Rise / fall SDR                     & \texttt{T\_R} / \texttt{T\_F} & 4 / 4 \\
+    SCL Low / High \iic{}-Fm            & \texttt{I2C\_T\_LOW} / \texttt{I2C\_T\_HIGH} & 534 / 300 \\
+    Rise / fall \iic{}-Fm               & \texttt{I2C\_T\_R} / \texttt{I2C\_T\_F} & 100 / 100 \\
+    \addlinespace
+    Số mục Device Address Table         & \texttt{DAT\_DEPTH}  & 32 \\
+    Độ sâu FIFO CMD/TX/RX/RESP (mỗi cái) & \texttt{*\_FIFO\_DEPTH} & 64 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Giao diện phần mềm nhìn thấy (bus thanh ghi 32-bit)}
+\label{sec:req-swif}
+
+Bộ điều khiển được phơi bày cho phần mềm host qua một giao diện thanh ghi 32-bit cố ý đơn giản
+--- không phải AXI4 hay AHB-Lite như trong thiết kế tham chiếu --- được chọn để tập trung vào
+hành vi giao thức hơn là logic bộ chuyển đổi bus. Một lần ghi đưa ra một địa chỉ, dữ liệu ghi, và
+một write-enable trong một chu kỳ (\texttt{reg_addr_i[11:0]} ${+}$ \texttt{reg_wdata_i[31:0]}
+${+}$ \texttt{reg_wen_i}); một lần đọc đưa ra một địa chỉ và một read-enable rồi nhận dữ liệu
+kèm một bắt tay ready (\texttt{reg_addr_i[11:0]} ${+}$ \texttt{reg_ren_i} $\rightarrow$
+\texttt{reg_rdata_o[31:0]} ${+}$ \texttt{reg_ready_o}).
+
+Bên trên hợp đồng thanh ghi này là các cấu trúc staging giao dịch: một lệnh được staging thành
+một command descriptor hai DWORD trước khi được đẩy vào command queue; payload ghi được viết qua
+một cửa sổ TX data-buffer và payload đọc được lấy qua một cửa sổ RX data-buffer; và mỗi lệnh hoàn
+tất tạo ra một response descriptor trong response queue. Bản đồ thanh ghi đầy đủ và các bố cục
+descriptor được dời sang phần phụ lục và trình bày chi tiết ở \cref{ch:architecture-rtl}.
+
+\figph{Giao thức đọc/ghi bus thanh ghi}
+  {bắt tay ghi một chu kỳ + định thời đọc-kèm-ready trên bus thanh ghi 32-bit}
+  {csr\_registers.sv}{WaveDrom / TikZ timing}
+
+\section{Yêu cầu kiểm chứng}
+\label{sec:req-verification}
+
+Việc kiểm chứng được xem là đóng (closed) khi: mọi virtual sequence có chủ đích trong danh mục
+chức năng của nó đều pass; các đối chiếu chéo của scoreboard về trạng thái command, response,
+receive-data, CSR, và DAT đều sạch; các SystemVerilog Assertion (SVA) gắn vào testbench vẫn im
+lặng; và các mục tiêu regression được phân loại chạy xanh. Một phần then chốt của hợp đồng này là
+scoreboard kiểm tra bộ điều khiển so với \emph{đúng} tập mã trạng thái lỗi mà thiết kế được yêu
+cầu tạo ra --- không nhiều hơn cũng không ít hơn.
+
+\Cref{tab:err-codes} liệt kê cách mã hóa error-status của response. Bảng liệt kê khớp với định
+nghĩa HCI/TCRI để tương thích, nhưng chỉ những mã được đánh dấu \emph{được tạo} là do thiết kế
+chỉ-SDR này phát ra và do đó nằm trong hợp đồng kiểm chứng. Các mã chỉ-HDR (\texttt{Crc},
+\texttt{Parity}, \texttt{Frame}) được khai báo nhưng không bao giờ được tạo, vì các chế độ HDR
+nằm ngoài phạm vi. Hai mã cần lưu ý vì vai trò của chúng dễ bị hoán đổi: \texttt{Nack}
+(\texttt{0x5}) dành cho đường ENTDAA khi một địa chỉ động bị từ chối hai lần (hết lượt retry),
+\emph{không phải} cho một NACK dữ liệu; mã thực sự được trả về cho một NACK pha dữ liệu hoặc một
+bus abort là \texttt{I2cDataNackOrI3cBusAborted} (\texttt{0x9}). Phân biệt này chính là điều mà
+logic ánh xạ response của command FSM thực thi ở \cref{ch:architecture-rtl}.
+
+\begin{table}[!htb]\centering
+  \caption{Các mã error-status của response. Chỉ các mã \emph{được tạo} nằm trong hợp đồng
+  kiểm chứng.}
+  \label{tab:err-codes}
+  \small
+  \begin{tabular}{@{}c l >{\raggedright\arraybackslash}p{0.44\textwidth} c@{}}
+    \toprule
+    \textbf{Mã} & \textbf{Tên} & \textbf{Ý nghĩa} & \textbf{Được tạo} \\
+    \midrule
+    \texttt{0x0} & \texttt{Success}                    & Không lỗi                                       & Có \\
+    \texttt{0x1} & \texttt{Crc}                        & Lỗi CRC (chế độ HDR)                            & Không \\
+    \texttt{0x2} & \texttt{Parity}                     & Sai parity T-Bit (chế độ HDR)                   & Không \\
+    \texttt{0x3} & \texttt{Frame}                      & Vi phạm khung (chế độ HDR)                      & Không \\
+    \texttt{0x4} & \texttt{AddrHeader}                 & NACK address-header                             & Có \\
+    \texttt{0x5} & \texttt{Nack}                       & Địa chỉ DAA bị từ chối hai lần (hết retry ENTDAA) & Có \\
+    \texttt{0x6} & \texttt{Ovl}                        & Tràn / cạn FIFO                                 & Có \\
+    \texttt{0x7} & \texttt{I3cShortReadErr}            & Target kết thúc đọc sớm (T-Bit${=}0$ trước độ dài) & Có \\
+    \texttt{0x8} & \texttt{HcAborted}                  & Host-controller yêu cầu abort                   & Có \\
+    \texttt{0x9} & \texttt{I2cDataNackOrI3cBusAborted} & NACK pha dữ liệu \iic{} hoặc abort bus I3C       & Có \\
+    \texttt{0xA} & \texttt{NotSupported}               & Loại lệnh không hỗ trợ                          & Có \\
+    \bottomrule
+  \end{tabular}
+\end{table}

@@ -1,0 +1,57 @@
+\chapter{Introduction}
+\label{ch:intro}
+
+% DRAFT BRIEF: keep under ~8 pages; frame topic, justify, declare scope, preview
+% structure. Defer architectural detail to Ch.4. Attribute CHIPS Alliance i3c-core
+% (commit SHA). Sources: outline PDF, improvements.md, phase1_spec_v2.md.
+
+\section{I3C in SoC trends and motivation}
+\brief{Establish why I3C matters: modern SoCs aggregate many sensors/peripherals over
+slow two-wire buses; \iic{} is ubiquitous but limited (Open Drain (OD) speed ceiling, Static
+Address only, no In-Band Interrupt, pull-up power). MIPI I3C Basic answers these (Push-Pull (PP)
+SDR up to \SI{12.5}{\mega\hertz} here, Dynamic Address Assignment) while staying backward-compatible
+with legacy \iic{} Targets on the same bus. Motivate a simplified single-Controller design
+as a self-contained front-end digital-IC design exercise (RTL to UVM).}
+
+\figph{I3C in an SoC context}
+  {application processor + I3C Controller driving mixed I3C/\iic{} Target devices on one bus}
+  {conceptual}{TikZ block diagram}
+
+\section{Problem statement and objectives}
+\brief{Problem: the CHIPS Alliance \texttt{i3c-core} reference is a full-featured
+($\sim$25k-line) HCI-compliant design that is hard to study and leaves several
+\texttt{flow_active} FSM states as TODO. Objective: derive a substantially simplified
+single-Controller design that completes all \FlowStateCount{}
+\texttt{flow_active} states, then verify it in a dual-agent UVM 1.2 environment.
+Deliverables: SDR write/read/immediate + \iic{}-FM + ENTDAA + ENEC/DISEC plus a regression suite.}
+
+\section{Scope and constraints}
+\brief{In scope: SDR private write/read, Immediate Data Transfer ($\le 4$ inline bytes),
+\iic{} Fast-Mode \SI{400}{\kilo\hertz} legacy traffic, START / Repeated START (Sr) / STOP +
+Bus Free Condition handling, OD/PP switching, ENTDAA Dynamic Address Assignment, ENEC/DISEC CCCs,
+32-bit register interface, 32-entry Device Address Table (DAT), four sync FIFOs. Out of scope
+(deliberate): In-Band Interrupt (IBI), Hot-Join, HDR, \iic{} FM+, Secondary Controller
+(multi-Controller), Target mode, bus recovery, full HCI / Device Characteristics Table (DCT),
+other CCCs. Constraint: single clock domain, $\ge \SI{333}{\mega\hertz}$ system clock to meet SCL timing.}
+
+\tabph{In-scope vs out-of-scope summary}{phase1_spec_v2.md, scope analysis}
+
+\section{Contributions}
+\brief{Headline contributions (refine numbers after Ch.9), led by the design result rather than
+the size figure: (1) all \FlowStateCount{} \texttt{flow_active} states implemented vs the reference's TODO paths;
+(2) a compact, studyable single-Controller design (PHY to protocol to register layers, $\sim$2k lines)
+retaining SDR + \iic{}-FM + ENTDAA after deliberately scoping out IBI/HDR/Secondary-Controller/Target-mode ---
+the LoC figure and its scope caveat are reported once, in Ch.9, not headlined here; (3) dual-agent
+UVM 1.2 environment (register agent + I3C Target agent) with scoreboard + SVA; (4) first ENTDAA-capable
+Active Controller built in the lab.}
+
+\tabph{Contributions summary}{refine after Ch.9}
+
+\section{Thesis organisation}
+\brief{One short paragraph per chapter (2--10) mapping the reading path: Background,
+Requirements, Architecture, RTL, Verification methodology, UVM environment, Results,
+Conclusion. Note Ch.8 (FPGA) is omitted and appears only as future work.}
+
+\figph{Thesis-organisation roadmap}
+  {chapter dependency / reading-order flow (Theory to RTL to UVM to Results)}
+  {conceptual}{TikZ}

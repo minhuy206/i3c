@@ -33,6 +33,16 @@ docs/spec_rtl_audit.md
 *.glg
 *.glo
 *.gls
+*.acn
+*.acr
+*.alg
+*.ist
+*-blx.bib
+docs/report/latex/*.pdf
+/docs/report/*.pdf
+docs/report/latex/report_vi.fdb_latexmk
+docs/report/latex/report_vi.fls
+docs/report/latex/report_vi.run.xml
 
 # Xcelium generated files
 xcelium.d/
@@ -48,7 +58,6 @@ xrun.key
 *.diag
 docs/verification_specs/04b_i3c_driver_instruction.md
 docs/verification_specs/04c_i3c_monitor_instruction.md
-docs/report
 docs/rtl_design_review.md
 docs/dut_i3c_write_immediate_flow.md
 docs/toc0_sdr_regular_continuation_plan.md

@@ -1,0 +1,619 @@
+% =====================================================================
+%  Chapter 3 — Architecture and RTL Design  (FULL PROSE) ★ flagship
+%  Submission-ready written form of the section-level scaffold previously in
+%  this file and ../draft/ch03_architecture_rtl.md.
+%  Ground truth = current RTL (src/rtl/**) + module specs (docs/module_specs/**);
+%  code wins over stale planning docs. Protocol facts cross-checked against the
+%  official MIPI I3C Basic v1.1.1 spec (MIPI gate: Ch.3 PASS 2026-06-28).
+%  Page-budget policy (thesis_writing_plan.md §2.4/§3): inline = architecture
+%  narrative + flagship flow_active FSM + key diagrams + <=30-line snippets +
+%  one representative state table; full CSR map -> App. A, full descriptor/port
+%  lists -> App. B, full state tables -> App. C. No LoC/result tables here.
+% =====================================================================
+\chapter{Architecture and RTL Design}
+\label{ch:architecture-rtl}
+
+This chapter presents the implemented controller, the flagship contribution of the thesis. It is
+organised in two parts. \emph{Part~A} builds a system-level mental model: the three-layer
+architecture, the top-level module hierarchy, the end-to-end transaction dataflow, the clock and
+reset conventions, the design boundary derived qualitatively from the CHIPS Alliance
+\texttt{i3c-core} reference~\cite{chipsalliance_i3c}, the queue and descriptor formats, and the
+error-handling model. \emph{Part~B} then walks through the register-transfer-level (RTL) design of
+each subsystem in turn, culminating in the central \FlowStateCount-state \texttt{flow_active} command
+finite-state machine (FSM). Throughout, the protocol facts follow the MIPI I3C Basic
+v1.1.1 specification~\cite{mipi_i3c_basic}; quantitative size and result metrics are deferred to
+\cref{ch:results} so that this chapter stays focused on structure and behaviour. To keep the chapter
+within budget, the largest reference tables --- the complete register map, the full descriptor
+bit-field layouts, the full per-module port lists, and the exhaustive state-transition tables --- are
+relocated to the appendices and cited inline with a representative excerpt.
+
+% ---------------------------------------------------------------------------
+% PART A --- Overall Architecture Design
+% ---------------------------------------------------------------------------
+
+\section{Three-layer architecture}
+\label{sec:arch-three-layer}
+
+The controller is organised as three concentric layers, each with a single responsibility, so that
+the protocol path can be studied without the distractions of bus-interconnect adapters or
+technology-specific pad cells. \Cref{fig:arch-three-layer} shows the layering.
+
+\begin{enumerate}
+  \item \textbf{Host/register layer.} The hand-written control and status register (CSR) file
+  (\texttt{csr_registers}) exposes a simple 32-bit register interface to software, and the four
+  Host-Controller-Interface (HCI) queues (\texttt{hci_queues}) buffer commands, transmit data,
+  receive data, and responses. This layer turns asynchronous software activity into the steady stream
+  of descriptors and data words that the protocol engine consumes.
+  \item \textbf{Controller/protocol layer.} The protocol engine (\texttt{controller_active}) wraps the
+  command FSM (\texttt{flow_active}), the clock generator (\texttt{scl_generator}), the byte/bit
+  serialisers (\texttt{bus_tx_flow}, \texttt{bus_tx}, \texttt{bus_rx_flow}), the bus-condition monitor
+  (\texttt{bus_monitor}), and the dynamic-address-assignment subsystem
+  (\texttt{entdaa_controller}, \texttt{entdaa_fsm}). It is the only layer that understands the I3C and
+  \iic{} frame structure.
+  \item \textbf{PHY layer.} The physical-interface shim (\texttt{i3c_phy}) provides two-flip-flop
+  metastability synchronisation on the incoming \texttt{scl}/\texttt{sda} lines and the open-drain (OD)
+  / push-pull (PP) output drivers. It contains no pad primitives, so the design remains technology
+  independent and simulatable without a foundry library.
+\end{enumerate}
+
+The guiding philosophy is deliberate simplicity: a \emph{single clock domain}, a \emph{single command
+authority} (the \texttt{flow_active} FSM, which is the sole originator of bus activity for ordinary
+transfers), and a clean separation between the software-visible contract and the protocol timing. This
+philosophy is what makes the design tractable as a study vehicle, and it motivates most of the
+reference-derived decisions discussed in \cref{sec:arch-boundary}.
+
+\figphl{fig:arch-three-layer}{Three-layer architecture of the I3C Active Controller}
+  {host/register layer (CSR + HCI queues), controller/protocol layer (controller_active and children),
+   and PHY layer (i3c_phy), with the register bus on one side and the SCL/SDA pads on the other}
+  {conceptual (docs/module\_specs/11)}{TikZ}
+
+\section{Top module and block diagram}
+\label{sec:arch-top-block}
+
+The synthesis top, \texttt{i3c_controller_top}, instantiates exactly four children, mirroring the three
+layers: \texttt{u_csr} (\texttt{csr_registers}), \texttt{u_queues} (\texttt{hci_queues}),
+\texttt{u_ctrl} (\texttt{controller_active}, which in turn instantiates the protocol children), and
+\texttt{u_phy} (\texttt{i3c_phy}). \Cref{fig:arch-top-block} shows the full instance hierarchy and the
+top-level port groups.
+
+At the boundary, the top module presents three port groups. The \emph{register bus} carries
+\texttt{reg_addr_i[11:0]}, \texttt{reg_wdata_i[31:0]}, \texttt{reg_wen_i}, \texttt{reg_ren_i},
+\texttt{reg_rdata_o[31:0]}, and \texttt{reg_ready_o}. The \emph{bus pads} carry the synchronised inputs
+\texttt{scl_i}/\texttt{sda_i} and the active-low open-drain outputs
+\texttt{scl_o}/\texttt{sda_o}/\texttt{sda_oe_o} together with \texttt{sel_od_pp_o}. The remaining ports
+are the system \texttt{clk_i} and the active-low asynchronous reset \texttt{rst_ni}. Internally, the
+top wires the CSR to the queues on the software side (command and transmit are written by software and
+read by hardware; receive and response are written by hardware and read by software), the queues to the
+protocol engine on the hardware side, the shared 1-cycle-latency Device Address Table (DAT) read port
+to \texttt{controller_active}, and the eighteen timing-parameter buses (nine I3C and nine \iic{} values)
+from the CSR to the protocol engine.
+
+\figphl{fig:arch-top-block}{Top-level block diagram and instance hierarchy of \texttt{i3c\_controller\_top}}
+  {i3c\_controller\_top instantiating u\_csr, u\_queues, u\_ctrl (flow\_active, scl\_generator,
+   bus\_tx\_flow/bus\_tx, bus\_rx\_flow, bus\_monitor, entdaa\_controller/entdaa\_fsm), u\_phy, with
+   register-bus, queue, DAT, timing, and pad connections}
+  {src/rtl/i3c\_controller\_top.sv}{TikZ}
+
+\section{Transaction dataflow}
+\label{sec:arch-dataflow}
+
+\Cref{fig:arch-dataflow} traces the canonical write and read paths end to end, which is the most useful
+way to understand how the layers cooperate.
+
+\paragraph{Write path.} Software assembles a 64-bit command descriptor by writing
+\texttt{CMD\_QUEUE\_PORT} twice: the first write stages the low DWORD, the second write supplies the
+high DWORD and pushes the combined 64-bit descriptor into the command queue. For data-bearing
+transfers, software also writes the payload words to \texttt{PIO\_DATA\_PORT}, which feeds the transmit
+queue. The \texttt{flow_active} FSM pops the descriptor, fetches the addressed DAT entry through the
+hardware read port, drives the address and data phases through \texttt{bus_tx_flow} and
+\texttt{scl_generator} (multiplexed by \texttt{controller_active}) out to \texttt{i3c_phy} and the pads,
+and finally writes a response descriptor into the response queue, which software reads back through
+\texttt{RESP\_PORT}.
+
+\paragraph{Read path.} The read path is identical up to the address phase; thereafter
+\texttt{flow_active} enables \texttt{bus_rx_flow}, which samples \texttt{sda} on each SCL rising edge,
+assembles bytes, and packs them into 32-bit words that are committed to the receive queue. Software
+drains the receive queue through \texttt{PIO\_DATA\_PORT} and reads the terminating response descriptor
+from \texttt{RESP\_PORT}.
+
+The dynamic-address-assignment (ENTDAA) flow is a third path: \texttt{flow_active} issues the broadcast
+header and the ENTDAA Common Command Code (CCC), then hands the bus to the ENTDAA subsystem, which runs
+the per-Target arbitration loop and streams each enumerated device's identification word back through
+the receive queue (\cref{sec:rtl-entdaa}).
+
+\figphl{fig:arch-dataflow}{End-to-end transaction dataflow for the write and read paths}
+  {host -> command queue -> flow\_active -> DAT fetch -> bus\_tx\_flow/bus\_rx\_flow -> scl\_generator
+   -> PHY -> pads, and the return path to the response queue / receive queue}
+  {conceptual (docs/module\_specs/11)}{TikZ}
+
+\section{Clock, reset, and signal conventions}
+\label{sec:arch-clk-reset}
+
+The entire controller runs in a \emph{single clock domain} on \texttt{clk_i}. Because all bus timing is
+counted in system-clock cycles (\cref{sec:rtl-csr}), the design needs a fast reference: the default
+timing values assume a system clock of \SI{333.333}{\mega\hertz}, which is the minimum that lets the
+single-counter generator resolve the SDR \SI{12.5}{\mega\hertz} push-pull period and the sub-cycle
+setup and hold windows with integer counts. Reset is the active-low, asynchronously asserted
+\texttt{rst_ni}; every sequential block follows the \texttt{always_ff~@(posedge~clk_i~or~negedge~rst_ni)}
+idiom so that reset takes effect immediately and release is synchronous.
+
+Two distinct reset mechanisms coexist. The hardware reset \texttt{rst_ni} returns all state to its
+initial value. A separate \emph{software reset} --- \texttt{RESET\_CONTROL[0]}, a self-clearing pulse
+--- synchronously flushes the four HCI queues and the CSR command/transmit staging registers without
+disturbing the protocol FSM; software is expected to assert it only while the controller reports idle.
+
+Inputs from the bus are metastability-hardened before use. \Cref{fig:arch-clk-reset} shows the chain:
+\texttt{i3c_phy} provides a two-flip-flop synchroniser on each of \texttt{scl} and \texttt{sda}, and
+\texttt{bus_monitor} adds one further capture flop before its edge detectors, giving three flops of
+latency between a pad transition and the first combinational use of the synchronised value.
+
+The signal-naming conventions used throughout the RTL are: the suffix \texttt{\_i} for inputs and
+\texttt{\_o} for outputs; FIFO and serialiser handshakes as \texttt{*\_valid}/\texttt{*\_ready} pairs
+(an action occurs only when both are asserted); active-low open-drain bus outputs
+\texttt{scl_o}/\texttt{sda_o} with their output-enable \texttt{sda_oe_o}; and the phase selector
+\texttt{sel_od_pp_o}, where \texttt{1} selects push-pull signalling for the data phase and \texttt{0}
+selects open-drain signalling for the address and acknowledge phases.
+
+\figphl{fig:arch-clk-reset}{Single clock domain, asynchronous active-low reset, and the input
+   synchroniser chain}
+  {clk\_i domain; rst\_ni async-low; i3c\_phy 2FF synchroniser + bus\_monitor capture flop (3 flops);
+   software-reset flush of FIFOs and CMD/TX staging}
+  {src/rtl/phy/i3c\_phy.sv, src/rtl/ctrl/bus\_monitor.sv}{TikZ}
+
+\section{Reference-derived design boundary and decisions}
+\label{sec:arch-boundary}
+
+The design is not a clean-sheet effort but a deliberate simplification of the open-source CHIPS Alliance
+\texttt{i3c-core}~\cite{chipsalliance_i3c}, a full Host-Controller-Interface implementation integrated
+into a root-of-trust subsystem. \Cref{fig:arch-chips-ref} sketches the reference architecture and marks
+what this thesis retains, adapts, and excludes; the quantitative size comparison is reported once, in
+\cref{ch:results}.
+
+\emph{Retained}, because they are the essence of I3C as a study target: SDR private write, read, and
+Immediate Data Transfer; legacy \iic{} Fast-Mode traffic on the same two wires~\cite{nxp_i2c}; dynamic
+address assignment via ENTDAA; and the ENEC/DISEC broadcast and direct CCCs. \emph{Adapted}, to keep the
+software contract and the timing explicit: the auto-generated register file is replaced by a hand-written
+one with a simple address/data bus instead of AXI/AHB adapters; the DAT is narrowed to 32 bits and 32
+entries and the separate Device Characteristics Table is removed (software retains the Provisioned ID,
+Bus Characteristics Register, and Device Characteristics Register after enumeration); a single shared
+counter generates all bus timing instead of an array of parallel timers; the open-drain bus is modelled
+with an output-enable convention rather than instantiated pads; and ENTDAA is re-expressed entirely from
+the \emph{Controller's} perspective, completing command-issue paths that the reference leaves as
+unimplemented \texttt{TODO} stubs. \emph{Excluded}, as out of scope: In-Band Interrupts, the High-Data-Rate
+modes, multi-controller / secondary-controller operation, and Target mode. These cross-cutting decisions
+recur in the module walkthrough of Part~B and are not repeated there.
+
+\figphl{fig:arch-chips-ref}{CHIPS Alliance \texttt{i3c-core} reference architecture and the simplified
+   design boundary}
+  {reference HCI stack with retained (SDR/\iic{}-FM/ENTDAA/CCC), adapted (hand-written CSR, 32-bit DAT,
+   single-counter timing, OE-based OD modelling, Controller-side ENTDAA), and excluded (IBI/HDR/multi-master/Target) blocks}
+  {docs/improvements.md, CLAUDE.md}{TikZ}
+
+\section{Queue, DAT, and descriptor formats}
+\label{sec:arch-formats}
+
+The software/hardware contract is carried by four queues, one address table, and a small set of
+descriptors. \Cref{tab:queue-dat-overview} summarises the formats at overview resolution; the complete
+bit-field layouts are tabulated in \cref{app:descriptors}.
+
+\begin{table}[!htb]\centering
+  \caption{Queue, DAT, and descriptor format overview. Full bit-field layouts appear in
+    \cref{app:descriptors}.}
+  \label{tab:queue-dat-overview}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.27\textwidth}
+                     c c
+                     >{\raggedright\arraybackslash}p{0.40\textwidth}@{}}
+    \toprule
+    \textbf{Structure} & \textbf{Width} & \textbf{Depth} & \textbf{Role} \\
+    \midrule
+    Command queue        & 64-bit & 64 & Command descriptors (two software DWORD writes per entry) \\
+    Transmit data buffer & 32-bit & 64 & Outgoing data words \\
+    Receive data buffer  & 32-bit & 64 & Incoming data words \\
+    Response queue       & 32-bit & 64 & Response descriptors (one per completed transfer) \\
+    Device Address Table & 32-bit & 32 & Maps a device index to its I3C dynamic and \iic{} static address \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Each command descriptor's three least-significant bits select its \emph{attribute}: a regular transfer,
+an immediate data transfer (up to four in-line data bytes, no transmit-queue traffic), or an address
+assignment (ENTDAA). A fourth combo-transfer encoding exists in the type package but is rejected as
+unsupported by the FSM's descriptor validator. The DAT entry, shown below, is the narrowed 32-bit form:
+bit~31 marks an \iic{} legacy device, bits~22:16 hold the I3C dynamic address, and bits~6:0 hold the
+\iic{} static address.
+
+\begin{lstlisting}[language=Verilog,caption={Simplified 32-bit DAT entry (\texttt{controller\_pkg.sv}).},label={lst:dat-entry}]
+typedef struct packed {
+  logic       device;           // [31]    1 = I2C legacy device
+  logic [7:0] reserved_30_23;   // [30:23] Reserved
+  logic [6:0] dynamic_address;  // [22:16] I3C dynamic address
+  logic [8:0] reserved_15_7;    // [15:7]  Reserved
+  logic [6:0] static_address;   // [6:0]   I2C static address
+} dat_entry_t;
+\end{lstlisting}
+
+The response descriptor is a single 32-bit word: a 4-bit error-status field in the most-significant
+nibble, the 4-bit transaction identifier copied from the command, and the 16-bit count of payload bytes
+actually transferred. Its error field is the subject of the next section.
+
+\section{Error-handling model}
+\label{sec:arch-errors}
+
+Errors are detected at several points in the protocol path --- a NACKed address or data byte, a transmit
+underflow, a receive overflow, a short read, an unsupported descriptor, a repeatedly rejected dynamic
+address, or a host-requested abort --- but they are \emph{consolidated in one place}. The
+\texttt{flow_active} FSM latches each condition in a dedicated sticky flag during the transfer and, on
+entering the terminal \texttt{WriteResp} state, maps the highest-priority flag to the 4-bit
+\texttt{ERR\_STATUS} field of the response descriptor. The encoding follows the HCI/TCRI controller
+interface convention (Table~11 of that interface), not a MIPI protocol clause; \cref{tab:err-status}
+lists the full enumeration and marks the subset the controller actually generates, and
+\cref{lst:err-map} shows the priority-ordered mapping function.
+
+\begin{table}[!htb]\centering
+  \caption{Response-descriptor \texttt{ERR\_STATUS} encoding. ``Gen.'' marks the codes this controller
+    generates; the remaining codes are defined by the interface but not produced by the supported
+    feature set.}
+  \label{tab:err-status}
+  \small
+  \begin{tabular}{@{}c l c >{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
+    \toprule
+    \textbf{Code} & \textbf{Name} & \textbf{Gen.} & \textbf{Meaning} \\
+    \midrule
+    0x0 & \texttt{Success}                    & \textbullet & Transfer completed without error \\
+    0x1 & \texttt{Crc}                        &            & CRC error (HDR; not supported) \\
+    0x2 & \texttt{Parity}                     &            & Parity error (not generated) \\
+    0x3 & \texttt{Frame}                      &            & Framing error (not generated) \\
+    0x4 & \texttt{AddrHeader}                 & \textbullet & Address-header byte NACKed \\
+    0x5 & \texttt{Nack}                       & \textbullet & ENTDAA dynamic address repeatedly rejected \\
+    0x6 & \texttt{Ovl}                        & \textbullet & Receive overflow or transmit underflow \\
+    0x7 & \texttt{I3cShortReadErr}            & \textbullet & Target ended an I3C read early \\
+    0x8 & \texttt{HcAborted}                  & \textbullet & Transfer terminated by a host abort \\
+    0x9 & \texttt{I2cDataNackOrI3cBusAborted} & \textbullet & \iic{} data byte NACKed / I3C bus abort \\
+    0xA & \texttt{NotSupported}               & \textbullet & Descriptor invalid or feature unsupported \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{lstlisting}[language=Verilog,caption={Priority-ordered error consolidation in \texttt{flow\_active.sv}.},label={lst:err-map}]
+function automatic i3c_resp_err_status_e map_resp_err_status();
+  if      (addr_nack_q)      return AddrHeader;                 // 0x4
+  else if (data_nack_q)      return I2cDataNackOrI3cBusAborted; // 0x9
+  else if (daa_nack_error_q) return Nack;                       // 0x5
+  else if (rx_overflow_q ||
+           tx_underflow_q)   return Ovl;                        // 0x6
+  else if (short_read_q)     return I3cShortReadErr;            // 0x7
+  else if (not_supported_q)  return NotSupported;               // 0xA
+  else if (hc_aborted_q)     return HcAborted;                  // 0x8
+  else                       return Success;                    // 0x0
+endfunction
+\end{lstlisting}
+
+Centralising error reporting in the command FSM keeps the rest of the protocol path free of
+error-formatting logic: the serialisers and the clock generator simply report events, and the FSM
+decides how a transfer ends.
+
+% ---------------------------------------------------------------------------
+% PART B --- RTL Design and Implementation (flagship)
+% Per-module pattern: role / interface / FSM or datapath / key decision.
+% ---------------------------------------------------------------------------
+
+\section{PHY (\texttt{i3c\_phy})}
+\label{sec:rtl-phy}
+
+\textbf{Role.} The PHY shim is the only module that touches the pads. On the input side it provides a
+two-flip-flop synchroniser for \texttt{scl_i} and \texttt{sda_i}, both resetting to logic high to match
+the idle (released) bus. On the output side it forwards the controller's driven value
+\texttt{ctrl_sda_i}, its output enable \texttt{ctrl_sda_oe_i}, the clock \texttt{ctrl_scl_i}, and the
+phase selector to the pad signals \texttt{sda_o}/\texttt{sda_oe_o}/\texttt{scl_o}/\texttt{sel_od_pp_o}.
+
+\textbf{Key decision.} The PHY contains \emph{no} technology-specific pad primitives. Open-drain
+behaviour is expressed purely through the output-enable convention (\cref{sec:rtl-controller-active}),
+which keeps the design synthesis-target-agnostic and lets the testbench model the wired-AND bus with an
+ordinary signal. The synchroniser depth (two flops here, plus one capture flop in
+\texttt{bus_monitor}) is the project's metastability budget.
+
+\section{CSR register file and Device Address Table (\texttt{csr\_registers})}
+\label{sec:rtl-csr}
+
+\textbf{Role.} The CSR module is the software-visible face of the controller: a hand-written 32-bit
+register file plus the 32-entry DAT, the command/transmit staging logic, and the read/write multiplexers
+for the four queue ports. \textbf{Interface.} It speaks the simple register bus of
+\cref{sec:arch-top-block}; both register reads and the hardware DAT read are registered, giving one cycle
+of latency. \textbf{Map.} The roughly two dozen registers fall into the groups summarised in
+\cref{tab:csr-summary}; the complete bit-field map, including all eighteen timing registers and their
+reset values, is given in \cref{app:csr}.
+
+\begin{table}[!htb]\centering
+  \caption{CSR register groups (overview). The full bit-field map is in \cref{app:csr}.}
+  \label{tab:csr-summary}
+  \small
+  \begin{tabular}{@{}l l >{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
+    \toprule
+    \textbf{Offset(s)} & \textbf{Group} & \textbf{Function} \\
+    \midrule
+    0x004, 0x010, 0x014 & Control/status & \texttt{HC\_CONTROL} (enable, abort), \texttt{RESET\_CONTROL} (soft reset), live \texttt{HC\_STATUS} \\
+    0x080--0x0B4        & Queue ports    & \texttt{CMD\_QUEUE\_PORT}, \texttt{RESP\_PORT}, \texttt{PIO\_DATA\_PORT}, \texttt{QUEUE\_STATUS} \\
+    0x32C--0x380        & Timing (×18)   & Nine I3C and nine \iic{} timing parameters, in system-clock cycles \\
+    0x400--0x47C        & DAT[0..31]     & 32 device-address-table entries (\cref{lst:dat-entry}) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{Key decisions.} Two are worth highlighting. First, the command port assembles a 64-bit
+descriptor from two consecutive 32-bit writes: the first stages the low DWORD, the second supplies the
+high DWORD and pushes the entry. Second, back-pressure is explicit and non-lossy --- when the command
+or transmit FIFO is full, the CSR captures one pending write, holds its valid/data, and deasserts
+\texttt{ready_o} until the FIFO accepts it, so no software write is silently dropped. Reading an empty
+receive or response port returns zero without popping the FIFO. Writing the register file by hand (rather
+than generating it from a register-description language, as the reference does) is the single decision
+that most improves study-ability, because the entire software contract is one readable
+\texttt{case} statement.
+
+\section{HCI queues (\texttt{hci\_queues} / \texttt{sync\_fifo})}
+\label{sec:rtl-fifo}
+
+\textbf{Role.} \texttt{hci_queues} instantiates the four buffers of \cref{tab:queue-dat-overview} from a
+single generic \texttt{sync_fifo} primitive: the 64-bit command queue and the three 32-bit data/response
+queues, each 64 entries deep, all flushed together by the software reset. \textbf{Datapath.} The
+\texttt{sync_fifo} is a classic single-clock circular buffer with one guard bit on each pointer; full and
+empty are distinguished by comparing the guard bits, and the \texttt{*\_valid}/\texttt{*\_ready}
+handshake gates every push and pop.
+
+\textbf{Key decision.} The FIFO depth is constrained to a power of two by an \emph{elaboration-time}
+assertion (\cref{lst:fifo-assert}) rather than by run-time logic. This turns an illegal parameterisation
+into a compile-time failure --- the basis of test case FIFO\_005, which deliberately elaborates a
+depth-3 FIFO and passes only if this fatal fires --- and lets the pointer arithmetic stay a simple binary
+increment with no modulo.
+
+\begin{lstlisting}[language=Verilog,caption={Power-of-two depth contract enforced at elaboration (\texttt{sync\_fifo.sv}).},label={lst:fifo-assert}]
+initial begin
+  assert (Depth == (1 << PtrW))
+  else $fatal(1, "sync_fifo: Depth (%0d) must be a power of 2", Depth);
+end
+\end{lstlisting}
+
+\section{Bus monitor (\texttt{bus\_monitor})}
+\label{sec:rtl-bus-monitor}
+
+\textbf{Role.} \texttt{bus_monitor} watches the synchronised \texttt{scl}/\texttt{sda} lines and reports
+the bus conditions the protocol needs: START, Repeated START (Sr), STOP, and the per-line edge and
+stability flags, all packed into a \texttt{bus_state_t}. \textbf{Datapath.} It captures the inputs once
+more (the third synchroniser flop), then drives four \texttt{edge_detector} instances (SCL/SDA rising and
+falling) and three \texttt{stable_high_detector} instances (SDA high, SCL high, SCL low). A START
+candidate is an SDA falling edge while SCL is stably high; a STOP candidate is an SDA rising edge while
+SCL is stably high; the candidate is only confirmed once the delayed edge detector agrees, which rejects
+a data-bit transition during SCL-low from being mis-reported after SCL rises.
+
+\textbf{Key decision.} START and Repeated START share the same electrical signature, so the monitor
+distinguishes them with a small piece of state: once a START has been seen and not yet followed by a
+STOP, any further START is reported as a Repeated START. This single bit is what lets the ENTDAA and
+combined-transfer logic downstream reason about frame boundaries correctly.
+
+\section{SCL generator (\texttt{scl\_generator})}
+\label{sec:rtl-scl}
+
+\textbf{Role.} \texttt{scl_generator} is the controller's clock and bus-condition engine. Its 14-state
+FSM (\cref{fig:scl-fsm}) produces the SCL waveform during data phases and the carefully sequenced
+SDA/SCL edges for START, Repeated START, STOP, and the post-STOP bus-free interval.
+
+\textbf{Datapath --- the single-counter strategy.} Rather than instantiate a separate timer per timing
+parameter, the generator keeps \emph{one} down-counter, \texttt{tcount}, and reloads it from the
+appropriate CSR timing value as it walks through its states (\texttt{DriveLow}, \texttt{DriveHigh}, the
+START/STOP setup and hold states, \texttt{BusFree}, and so on). The open-drain SCL-low period is selected
+by \texttt{scl_use_od_low_i} so that the slower open-drain address phase and the faster push-pull data
+phase use different low times from the same counter. This single-counter scheme is a deliberate area
+simplification over the reference's parallel timers.
+
+\textbf{Key decision.} The Repeated START needed to restart a frame --- for a read takeover or a direct
+CCC --- is requested through one input, \texttt{gen_rstart_i}, with a companion fast-path
+\texttt{takeover_i} that routes the FSM straight to \texttt{RstartSdaFall} when the command engine needs
+to seize SDA for a read. The chapter describes only this implemented request/handoff path; there are no
+other restart entry points.
+
+\figphl{fig:scl-fsm}{\texttt{scl\_generator} 14-state FSM}
+  {Idle, GenerateStart, SdaFall, HoldStart, DriveLow, DriveHigh, WaitCmd, GenerateRstart,
+   SclHighForRstart, RstartSdaFall, GenerateStop, SclHighForStop, SdaRise, BusFree, with the
+   single-counter reload edges}
+  {src/rtl/ctrl/scl\_generator.sv (state\_e)}{TikZ automata}
+
+\section{TX/RX serialisers (\texttt{bus\_tx}, \texttt{bus\_tx\_flow}, \texttt{bus\_rx\_flow})}
+\label{sec:rtl-serdes}
+
+\textbf{Role.} Three small FSMs move bytes and bits between the command engine and the bus.
+\texttt{bus_tx_flow} (four states: \texttt{Idle}, \texttt{DriveByte}, \texttt{DriveBit},
+\texttt{NextTaskDecision}) accepts a byte- or bit-level transmit request and walks it out one bit per SCL
+period; it delegates the actual per-bit edge timing to \texttt{bus_tx} (five states: \texttt{Idle},
+\texttt{AwaitClockNegedge}, \texttt{SetupData}, \texttt{TransmitData}, \texttt{HoldData}), which honours
+the data setup and hold windows. \texttt{bus_rx_flow} (four states: \texttt{Idle}, \texttt{ReadByte},
+\texttt{ReadBit}, \texttt{NextTaskDecision}) is the receive counterpart, sampling SDA on each SCL rising
+edge. \Cref{fig:serdes-fsm} shows the three machines.
+
+\textbf{Key decision.} The receive path aligns the acknowledge/T-Bit slot with the data it follows: the
+deserialiser presents the seven already-sampled bits together with the live SDA value on the eighth cycle,
+so that the assembled byte is valid exactly when \texttt{rx_done} asserts and the command engine can act
+on the trailing bit in the same step. This live-SDA alignment removes a pipeline bubble that would
+otherwise appear at every byte boundary.
+
+\figphl{fig:serdes-fsm}{Transmit and receive serialiser FSMs: \texttt{bus\_tx} (5 states),
+   \texttt{bus\_tx\_flow} (4 states), and \texttt{bus\_rx\_flow} (4 states)}
+  {bus\_tx Idle/AwaitClockNegedge/SetupData/TransmitData/HoldData; bus\_tx\_flow
+   Idle/DriveByte/DriveBit/NextTaskDecision; bus\_rx\_flow Idle/ReadByte/ReadBit/NextTaskDecision}
+  {src/rtl/ctrl/bus\_tx.sv, bus\_tx\_flow.sv, bus\_rx\_flow.sv}{TikZ automata}
+
+\section{ENTDAA subsystem (\texttt{entdaa\_controller} + \texttt{entdaa\_fsm})}
+\label{sec:rtl-entdaa}
+
+\textbf{Role.} Dynamic Address Assignment is handled by a two-level subsystem, re-expressed entirely from
+the Controller's perspective. The outer \texttt{entdaa_controller} (seven states: \texttt{Idle},
+\texttt{StartLoop}, \texttt{RequestRStart}, \texttt{WaitRStart}, \texttt{ReadDAT}, \texttt{RunEntdaa},
+\texttt{Done}) manages the enumeration loop: it reads the DAT entry for the current round, invokes the
+inner FSM to enumerate one device, and advances the round until either no device answers or a STOP is
+seen, at which point it reaches \texttt{Done}. The inner \texttt{entdaa_fsm} (eight states: \texttt{Idle},
+\texttt{SendRsvdByte}, \texttt{ReadRsvdAck}, \texttt{ReceiveIDBit}, \texttt{SendAddr},
+\texttt{ReadAddrAck}, \texttt{WaitStop}, \texttt{Done}) performs one per-Target handshake.
+\Cref{fig:entdaa-fsm} shows both machines and \cref{fig:entdaa-flow} renders the loop as an algorithm.
+
+\textbf{Per-Target handshake.} The inner FSM transmits the reserved address \texttt{7'h7E} with the
+read direction bit, reads the acknowledge (a NACK means no further device is arbitrating), then shifts in
+64 identification bits most-significant-first --- the 48-bit Provisioned ID, the 8-bit Bus
+Characteristics Register, and the 8-bit Device Characteristics Register. It then transmits the assigned
+seven-bit dynamic address together with its odd-parity bit and reads the Target's acknowledge. On
+completion it presents the captured PID/BCR/DCR to the command engine, which streams them back to
+software through the receive queue. A STOP detected mid-handshake forces the inner FSM directly to its
+\texttt{Done} state.
+
+\textbf{Key decision.} Placing the entire DAA protocol on the Controller side is the change that
+completes what the reference left unfinished, and it is why ENTDAA appears as a first-class, verifiable
+path in this design rather than as a Target-side stub. The outer/inner split keeps the loop bookkeeping
+(rounds, DAT indexing, repeated-rejection detection that raises the \texttt{Nack} error of
+\cref{tab:err-status}) separate from the per-device bit-level handshake.
+
+\figphl{fig:entdaa-fsm}{ENTDAA subsystem FSMs: \texttt{entdaa\_controller} (7 states) and
+   \texttt{entdaa\_fsm} (8 states)}
+  {outer loop Idle/StartLoop/RequestRStart/WaitRStart/ReadDAT/RunEntdaa/Done; inner handshake
+   Idle/SendRsvdByte/ReadRsvdAck/ReceiveIDBit/SendAddr/ReadAddrAck/WaitStop/Done; bus\_stop\_det\_i edges}
+  {src/rtl/ctrl/entdaa\_controller.sv, entdaa\_fsm.sv}{TikZ automata}
+
+\figphl{fig:entdaa-flow}{ENTDAA per-Target enumeration loop (algorithm flowchart)}
+  {7E/R -> ACK? -> shift 48-bit PID + 8-bit BCR + 8-bit DCR -> send 7-bit address + parity -> ACK? ->
+   next round or bus-STOP termination}
+  {src/rtl/ctrl/entdaa\_controller.sv, entdaa\_fsm.sv}{TikZ flowchart}
+
+\section{The \texttt{flow\_active} \FlowStateCount-state command FSM (flagship)}
+\label{sec:rtl-flow-active}
+
+\texttt{flow_active} is the headline RTL contribution: the single command authority that turns a popped
+descriptor into a complete bus transaction and a response. It is implemented as a
+\FlowStateCount-state machine (\cref{lst:flow-enum}), and unlike the reference --- which leaves several
+command-issue paths as \texttt{TODO} --- every state and every supported transaction path is realised and
+verified. \Cref{fig:flow-fsm} is the full-page state diagram and \cref{fig:flow-issue} renders the
+command-issue decision as an algorithm; \cref{tab:flow-states} summarises the role of each state, with
+the exhaustive transition table relegated to \cref{app:fsm-tables}.
+
+\begin{lstlisting}[language=Verilog,caption={The \FlowStateCount{} states of \texttt{flow\_active} (\texttt{flow\_fsm\_state\_e}).},label={lst:flow-enum}]
+typedef enum logic [3:0] {
+  Idle              = 4'd0,  WaitForCmd        = 4'd1,
+  FetchDAT          = 4'd2,  WaitDAT           = 4'd3,
+  I3CBcastHeader    = 4'd4,  IssueImmediateCcc = 4'd5,
+  FetchTxData       = 4'd6,  InitI3CWrite      = 4'd7,
+  InitI3CRead       = 4'd8,  InitI2CWrite      = 4'd9,
+  InitI2CRead       = 4'd10, IssueCmd          = 4'd11,
+  WriteResp         = 4'd12
+} flow_fsm_state_e;
+\end{lstlisting}
+
+\textbf{State architecture.} The machine has a short common prologue, a branch fan-out, a set of
+per-transfer issue paths that converge on a shared work state, and a single epilogue. From \texttt{Idle}
+it advances to \texttt{WaitForCmd} when the controller is enabled, pops a descriptor into
+\texttt{FetchDAT}, and validates it: an invalid or unsupported descriptor sets the \texttt{NotSupported}
+error and jumps straight to \texttt{WriteResp}, while a valid one launches the 1-cycle DAT read and waits
+in \texttt{WaitDAT}.
+
+\textbf{Branch decision out of \texttt{WaitDAT}.} This is the heart of the FSM and the subject of the
+algorithm in \cref{fig:flow-issue}. Using the command attribute, the target type (I3C vs \iic{}, read
+from the DAT entry), the transfer direction, and whether a broadcast header is required, the FSM selects
+one of the issue paths: an immediate or address-assignment command goes through \texttt{I3CBcastHeader};
+an I3C private write or read goes to \texttt{InitI3CWrite}/\texttt{InitI3CRead} (optionally preceded by
+the broadcast header); and an \iic{} transfer goes to \texttt{InitI2CWrite}/\texttt{InitI2CRead}. A
+continuation of an in-progress frame (a back-to-back transfer to the same I3C Target) skips the broadcast
+header.
+
+\textbf{Issue paths.} The \texttt{Init*} states drive the START (or Repeated START) and the address byte
+with its acknowledge, switching \texttt{sel_od_pp} between the open-drain address phase and the push-pull
+data phase. Regular writes pull payload from the transmit queue via \texttt{FetchTxData}; immediate
+writes take their bytes directly from the descriptor with no queue traffic. CCCs are emitted from
+\texttt{IssueImmediateCcc}, which handles both the broadcast form (CCC code plus its odd-parity T-Bit,
+followed by an optional event byte for ENEC/DISEC) and the direct form (a Repeated START, the Target's
+dynamic address, and the defining byte). Address assignment enters \texttt{IssueCmd} and hands the bus to
+the ENTDAA subsystem of \cref{sec:rtl-entdaa}.
+
+\textbf{Convergence and read handling.} All data movement converges on \texttt{IssueCmd}, which sequences
+data bytes for writes and reads. The read sub-path is the most intricate: it commits each completed
+32-bit receive word, recognises an early Target termination as a short read, performs the SDA takeover
+needed to end an I3C read, and --- when chaining is possible --- can loop back to \texttt{FetchDAT} for a
+supported continuation rather than ending the frame.
+
+\textbf{Abort and epilogue.} A host abort is handled by an override at the top of the next-state logic: in
+any abortable state it steers the machine toward a clean STOP and then to \texttt{WriteResp}, latching the
+\texttt{HcAborted} (or, for an interrupted \iic{} read, the appropriate data-NACK) status. The single
+epilogue state, \texttt{WriteResp}, formats the response descriptor through the consolidation function of
+\cref{lst:err-map} and returns to \texttt{Idle} once the response queue accepts it.
+
+\begin{table}[!htb]\centering
+  \caption{Roles of the \FlowStateCount{} \texttt{flow\_active} states (representative summary; the full
+    transition table is in \cref{app:fsm-tables}).}
+  \label{tab:flow-states}
+  \small
+  \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.66\textwidth}@{}}
+    \toprule
+    \textbf{State} & \textbf{Role} \\
+    \midrule
+    \texttt{Idle}              & Wait for controller enable; clear all transfer context \\
+    \texttt{WaitForCmd}        & Pop the next command descriptor from the command queue \\
+    \texttt{FetchDAT}          & Validate the descriptor; launch the DAT read or fail to \texttt{WriteResp} \\
+    \texttt{WaitDAT}           & Await DAT data; select the issue path (branch fan-out) \\
+    \texttt{I3CBcastHeader}    & Drive START + \texttt{7E}/W broadcast header \\
+    \texttt{IssueImmediateCcc} & Emit a broadcast or direct CCC (code + T-Bit, optional event byte) \\
+    \texttt{FetchTxData}       & Pull the next payload word from the transmit queue \\
+    \texttt{InitI3CWrite}      & I3C write address phase (dynamic address + ACK) \\
+    \texttt{InitI3CRead}       & I3C read address phase (dynamic address + ACK) \\
+    \texttt{InitI2CWrite}      & \iic{} write address phase (static address + ACK) \\
+    \texttt{InitI2CRead}       & \iic{} read address phase (static address + ACK) \\
+    \texttt{IssueCmd}          & Sequence data bytes / run ENTDAA; detect end-of-transfer \\
+    \texttt{WriteResp}         & Format and push the response descriptor; return to \texttt{Idle} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{landscape}
+\figphl{fig:flow-fsm}{\texttt{flow\_active} \FlowStateCount-state command FSM (flagship; full-page landscape)}
+  {Idle -> WaitForCmd -> FetchDAT -> WaitDAT branch fan-out to I3C/\iic{} write/read, immediate-CCC, and
+   address-assignment issue paths, converging on IssueCmd, with the abort -> WriteResp override}
+  {src/rtl/ctrl/flow\_active.sv (flow\_fsm\_state\_e)}{TikZ automata, pdflscape}
+\end{landscape}
+
+\figphl{fig:flow-issue}{\texttt{flow\_active} command-issue decision (algorithm flowchart)}
+  {WaitDAT branch on command attribute / target type / direction / broadcast-header into the immediate,
+   regular-write, regular-read, \iic{}, and address-assignment issue paths}
+  {src/rtl/ctrl/flow\_active.sv}{TikZ flowchart}
+
+\section{Integration: \texttt{controller\_active} and OD/PP switching}
+\label{sec:rtl-controller-active}
+
+\textbf{Role.} \texttt{controller_active} is the integration glue of the protocol layer. It instantiates
+the command FSM, the ENTDAA subsystem, the clock generator, the serialisers, and the bus monitor, and it
+arbitrates the bus between the command FSM and the ENTDAA subsystem: while ENTDAA is active, the transmit
+and receive requests, the DAT read port, and the Repeated-START request are sourced from the DAA logic;
+otherwise they come from \texttt{flow_active}. It also selects the active timing-parameter set, switching
+every value between the I3C and \iic{} register banks according to the FSM's \texttt{use_i2c_timing}
+output.
+
+\textbf{OD/PP output formation.} The module composes the single driven \texttt{sda} from three
+prioritised sources --- the clock generator (which owns SDA during START/STOP/Sr), a low-bit handoff
+takeover, and otherwise the transmit serialiser --- and encodes open-drain versus push-pull entirely in
+the output enable, as shown in \cref{lst:odpp} and \cref{fig:odpp-switch}. In push-pull mode
+(\texttt{sel_od_pp = 1}) the driver is always enabled; in open-drain mode the driver is enabled only to
+pull the line low (\texttt{\textasciitilde sda}), letting the external pull-up provide the high level.
+This output-enable convention is exactly what lets the PHY omit real pad cells.
+
+\begin{lstlisting}[language=Verilog,caption={SDA composition and output-enable open-drain modelling (\texttt{controller\_active.sv}).},label={lst:odpp}]
+assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda :
+    handoff_takeover_q ? 1'b0 : tx_flow_sda_drive ? tx_flow_sda : 1'b1;
+assign ctrl_sda_oe_o = scl_gen_driving_sda ? ~scl_gen_sda
+    : handoff_takeover_q ? 1'b1
+    : tx_flow_sda_drive ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
+assign sel_od_pp_o = (scl_gen_driving_sda || handoff_takeover_q) ? 1'b0
+    : tx_flow_sel_od_pp;
+\end{lstlisting}
+
+This completes the structural and behavioural walkthrough of the design. The cross-cutting decisions that
+recur across the modules were consolidated in \cref{sec:arch-boundary}; the full register map, descriptor
+layouts, port lists, and state-transition tables are collected in
+\crefrange{app:csr}{app:fsm-tables}; and all quantitative metrics --- module sizes, the reduction
+against the reference, and the verification results --- are reported in \cref{ch:results}.
+
+\figphl{fig:odpp-switch}{Open-drain / push-pull output switching in \texttt{controller\_active}}
+  {prioritised SDA source mux (scl\_generator / handoff takeover / tx serialiser) and the output-enable
+   that encodes OD (enable only to pull low) vs PP (always enabled), plus sel\_od\_pp\_o}
+  {src/rtl/ctrl/controller\_active.sv}{TikZ}

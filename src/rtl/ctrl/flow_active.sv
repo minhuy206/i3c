@@ -122,6 +122,8 @@ module flow_active
   logic                       [          DatAw-1:0] dev_index;
   logic                                             imm_bcast_enec_disec;
   logic                                             imm_bcast_has_event_byte;
+  logic                                             active_wroc;
+  logic                                             completion_error_q;
 
   logic                       [HciCmdDataWidth-1:0] next_cmd_desc;
   regular_trans_desc_t                              next_reg_desc;
@@ -219,6 +221,18 @@ module flow_active
   assign dev_index = cmd_desc[20:16];
   assign target_is_i3c = !dat_entry.device;
 
+  always_comb begin : derive_active_wroc
+    unique case (cmd_attr)
+      ImmediateDataTransfer: active_wroc = imm_desc.wroc;
+      AddressAssignment:     active_wroc = aa_desc.wroc;
+      default:               active_wroc = reg_desc.wroc;
+    endcase
+  end
+
+  assign completion_error_q = addr_nack_q || data_nack_q || daa_nack_error_q ||
+                              rx_overflow_q || tx_underflow_q || short_read_q ||
+                              not_supported_q || hc_aborted_q;
+
   assign imm_bcast_enec_disec =
       imm_desc.cp &&
       !imm_desc.cmd[7] &&
@@ -246,6 +260,42 @@ module flow_active
     dat_end = {1'b0, desc.dev_idx} + {2'b00, desc.dev_count};
     invalid_addr_assign_desc =
         !desc.toc || !desc.wroc || (desc.dev_count == 4'd0) || (dat_end > DatDepth);
+  endfunction
+
+  function automatic logic supported_immediate_ccc(input logic [7:0] cmd);
+    unique case (cmd)
+      8'h00, 8'h01, 8'h80, 8'h81: supported_immediate_ccc = 1'b1;
+      default:                     supported_immediate_ccc = 1'b0;
+    endcase
+  endfunction
+
+  function automatic logic invalid_cmd_desc(input logic [63:0] desc);
+    immediate_data_trans_desc_t imm;
+    regular_trans_desc_t        reg_transfer;
+    addr_assign_desc_t          addr_assign;
+    logic [2:0]                 attr;
+
+    imm          = immediate_data_trans_desc_t'(desc);
+    reg_transfer = regular_trans_desc_t'(desc);
+    addr_assign = addr_assign_desc_t'(desc);
+    attr        = desc[2:0];
+
+    unique case (attr)
+      3'b000: begin
+        invalid_cmd_desc = reg_transfer.cp || (reg_transfer.mode != sdr0);
+      end
+      3'b001: begin
+        invalid_cmd_desc = imm.rnw || (imm.mode != sdr0) || (imm.dtt > 3'd4) ||
+                           (imm.cp && !supported_immediate_ccc(imm.cmd));
+      end
+      3'b010: begin
+        invalid_cmd_desc = invalid_addr_assign_desc(addr_assign) ||
+                           (addr_assign.cmd != CCC_ENTDAA);
+      end
+      default: begin
+        invalid_cmd_desc = 1'b1;
+      end
+    endcase
   endfunction
 
   function automatic logic [1:0] next_byte_idx(input logic [1:0] idx);
@@ -327,7 +377,7 @@ module flow_active
   endtask
 
   task automatic request_missing_continuation_stop;
-    request_stop(1'b0);
+    request_stop(1'b1);
   endtask
 
   task automatic request_read_takeover;
@@ -374,8 +424,10 @@ module flow_active
   endtask
 
   task automatic accept_continuation_cmd(input logic rstart_already_generated);
-    resp_queue_wvalid = 1'b1;
-    resp_queue_wdata  = make_resp_word(map_resp_err_status(), cmd_tid, resp_data_len_q);
+    if (active_wroc) begin
+      resp_queue_wvalid = 1'b1;
+      resp_queue_wdata  = make_resp_word(map_resp_err_status(), cmd_tid, resp_data_len_q);
+    end
     cmd_queue_rready  = 1'b1;
     clear_transfer_context();
     next_start_is_rstart_d = !rstart_already_generated;
@@ -797,7 +849,7 @@ module flow_active
         end
 
         FetchDAT: begin
-          if ((cmd_attr == AddressAssignment) && invalid_addr_assign_desc(aa_desc)) begin
+          if (invalid_cmd_desc(cmd_desc)) begin
             state_d = WriteResp;
           end else if (dat_read_valid_hw_q) begin
             state_d = WaitDAT;
@@ -808,13 +860,7 @@ module flow_active
           if (cont_pending_q && !target_is_i3c) begin
             if (scl_stop_done_q) state_d = WriteResp;
           end else if (!dat_read_valid_hw_q) begin
-            if ((cmd_attr == ImmediateDataTransfer && imm_desc.dtt > 3'd4) ||
-                (cmd_attr == AddressAssignment &&
-                 invalid_addr_assign_desc(
-                    aa_desc
-                ))) begin
-              state_d = WriteResp;
-            end else if (cmd_attr == ImmediateDataTransfer) begin
+            if (cmd_attr == ImmediateDataTransfer) begin
               if (!imm_desc.cp) begin
                 if (!target_is_i3c) begin
                   state_d = InitI2CWrite;
@@ -889,13 +935,13 @@ module flow_active
             if (imm_desc.cmd[7]) begin
               if (issue_phase_q >= PhaseDirectCccStop) begin
                 if (scl_stop_done_q) begin
-                  state_d = WriteResp;
+                  state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
                 end
               end
             end else begin
               if (issue_phase_q >= 8'd6) begin
                 if (scl_stop_done_q) begin
-                  state_d = WriteResp;
+                  state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
                 end
               end
             end
@@ -974,7 +1020,7 @@ module flow_active
               if (bus_tx_idle_i && bus_rx_idle_i) begin
                 if (((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) &&
                     scl_stop_done_q) begin
-                  state_d = WriteResp;
+                  state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
                 end else if (!((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc :
                                 reg_desc.toc)) begin
                   if (cmd_attr == ImmediateDataTransfer) begin
@@ -982,7 +1028,7 @@ module flow_active
                       state_d = WriteResp;
                     end
                   end else if (target_is_i3c && next_cmd_available && next_cmd_supported &&
-                    resp_queue_wready_i) begin
+                    (!active_wroc || resp_queue_wready_i)) begin
                     state_d = FetchDAT;
                   end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
                              scl_stop_done_q) begin
@@ -1005,11 +1051,11 @@ module flow_active
               end else if (bus_tx_idle_i && bus_rx_idle_i) begin
                 if ((short_read_q || reg_desc.toc || read_abort_term_q ||
                      rx_overflow_q) && scl_stop_done_q) begin
-                  state_d = WriteResp;
+                  state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
                 end else if (!short_read_q && !reg_desc.toc && !read_abort_term_q &&
                              !rx_overflow_q) begin
                   if (target_is_i3c && next_cmd_available && next_cmd_supported &&
-                    resp_queue_wready_i) begin
+                    (!active_wroc || resp_queue_wready_i)) begin
                     state_d = FetchDAT;
                   end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
                              scl_stop_done_q) begin
@@ -1150,12 +1196,12 @@ module flow_active
         end
 
         FetchDAT: begin
-          if ((cmd_attr == AddressAssignment) && invalid_addr_assign_desc(aa_desc)) begin
+          if (invalid_cmd_desc(cmd_desc)) begin
             not_supported_d = 1'b1;
           end else begin
             dat_read_valid_hw_d = 1'b1;
             dat_index_hw = dev_index;
-            if (cmd_attr == RegularTransfer || cmd_attr == ComboTransfer) begin
+            if (cmd_attr == RegularTransfer) begin
               remaining_len_d = reg_desc.data_length;
             end else if (cmd_attr == ImmediateDataTransfer && !imm_desc.cp) begin
               remaining_len_d = {13'h0, imm_desc.dtt};
@@ -1165,14 +1211,7 @@ module flow_active
 
         WaitDAT: begin
           use_i2c_timing = cont_pending_q && !target_is_i3c;
-          if (!dat_read_valid_hw_q &&
-              ((cmd_attr == ImmediateDataTransfer && imm_desc.dtt > 3'd4) ||
-               (cmd_attr == AddressAssignment &&
-                invalid_addr_assign_desc(
-                  aa_desc
-              )))) begin
-            not_supported_d = 1'b1;
-          end else if (cmd_attr == ImmediateDataTransfer && imm_desc.cp) begin
+          if (cmd_attr == ImmediateDataTransfer && imm_desc.cp) begin
             if (imm_desc.cp && imm_desc.cmd[7]) begin
               bcast_header_next_d = BcastHeaderDirectCCC;
             end else begin
@@ -1499,7 +1538,7 @@ module flow_active
                 end else if (cmd_attr == ImmediateDataTransfer) begin
                   request_stop(1'b1);
                 end else if (next_cmd_available && next_cmd_supported) begin
-                  if (resp_queue_wready_i) begin
+                  if (!active_wroc || resp_queue_wready_i) begin
                     accept_continuation_cmd(1'b0);
                   end
                 end else if (!next_cmd_available) begin
@@ -1574,7 +1613,7 @@ module flow_active
                 if (short_read_q || reg_desc.toc || read_abort_term_q || rx_overflow_q) begin
                   request_stop(1'b0);
                 end else if (next_cmd_available && next_cmd_supported) begin
-                  if (resp_queue_wready_i) begin
+                  if (!active_wroc || resp_queue_wready_i) begin
                     accept_continuation_cmd(read_takeover_done_q);
                   end
                 end else if (!next_cmd_available) begin
@@ -1649,6 +1688,10 @@ module flow_active
                   end
                 end else begin
                   if (abort_i || hc_aborted_q) begin
+                    bus_tx_req_bit   = 1'b1;
+                    bus_tx_req_value = NACK;
+                  end else if (rx_byte_idx_q == 2'd3 &&
+                               (!rx_queue_wready_i || rx_queue_full_i)) begin
                     bus_tx_req_bit   = 1'b1;
                     bus_tx_req_value = NACK;
                   end else if (remaining_len_q > 16'h1) begin

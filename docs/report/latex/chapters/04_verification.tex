@@ -1,0 +1,473 @@
+\chapter{Verification Methodology and UVM Environment}
+\label{ch:verif-method}
+
+This chapter presents the verification work as the second first-class implementation
+contribution of the thesis. \Cref{ch:architecture-rtl} described \emph{what} was built; this
+chapter describes \emph{how} that design was shown to be correct, and \emph{what}
+verification infrastructure was constructed to do so. The presentation is split into two
+parts. Part~A states the methodology --- the goals, the directed-versus-random stimulus
+strategy, the toolchain choice, the analysis and scoreboard model, the assertion layer, and
+the coverage model. Part~B then walks the concrete UVM environment bottom-up, from the
+testbench top and its interfaces through the two agents, the environment class hierarchy, the
+virtual-sequence library, and the build and debug flow. Throughout, the chapter defines the
+verification \emph{mechanisms}; the measured outcomes (regression pass/fail, coverage
+percentages, annotated waveforms) belong to \cref{ch:results}, and limitations and future
+extensions belong to \cref{ch:conclusion}.
+
+% ===========================================================================
+% PART A --- Verification Methodology
+% ===========================================================================
+\section{Verification goals and scope}
+\label{sec:verif-goals}
+
+The verification effort targets the functional correctness of every protocol mode the
+controller implements: SDR private write, SDR private read, immediate (in-descriptor) data
+transfer, \iic{}-FM legacy write and read, dynamic address assignment via ENTDAA, and the
+supported Common Command Codes (CCC) ENEC and DISEC in both broadcast and direct forms. Below
+these protocol modes sit the structural concerns that every transfer depends on: the
+configuration and status registers (CSR) and the Device Address Table (DAT), the four
+host-controller-interface queues, the open-drain/push-pull (OD/PP) phase switching, and the
+START/Repeated-START/STOP framing produced on the bus.
+
+The closure criteria are uniform across these targets. Each transaction must be checked
+end-to-end by a self-checking scoreboard rather than by visual waveform inspection; no bound
+assertion may fire during a passing run; and functional covergroups must be sampled so that
+the exercised protocol space is measurable. \Cref{tab:verif-goals} maps each goal to its
+primary checking mechanism and its closure criterion. The scope deliberately excludes the
+features the RTL does not implement --- In-Band Interrupt, HDR modes, multi-controller
+arbitration, and Target mode --- which are revisited as future work in \cref{ch:conclusion}.
+
+\begin{table}[!htb]\centering
+  \caption{Verification goals and the mechanism that establishes each one.}
+  \label{tab:verif-goals}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.30\textwidth}
+                    >{\raggedright\arraybackslash}p{0.32\textwidth}
+                    >{\raggedright\arraybackslash}p{0.30\textwidth}@{}}
+    \toprule
+    \textbf{Goal} & \textbf{Primary mechanism} & \textbf{Closure criterion} \\
+    \midrule
+    SDR private write/read & directed vseq + scoreboard data/T-Bit checks & byte and T-Bit match per transfer \\
+    Immediate data transfer & immediate vseqs + scoreboard immediate-write check & descriptor-embedded bytes match \\
+    \iic{}-FM legacy write/read & \iic{} vseqs + ACK/byte-packing checks & ACK and packing match \\
+    ENTDAA address assignment & DAA vseqs + scoreboard DAT/round checks & assigned address and DAT entry match \\
+    ENEC/DISEC CCC & CCC vseqs + scoreboard CCC check & opcode/frame and response match \\
+    Error and abort handling & response/abort vseqs + \texttt{ERR\_STATUS} check & response status matches model \\
+    Queue and FIFO integrity & FIFO vseqs + \texttt{sync\_fifo} assertions & ordering and full/empty correct \\
+    CSR/DAT access & CSR vseqs + scoreboard register model & read-back and side effects match \\
+    Bus, PHY, and timing & bus vseqs + bound timing assertions & framing and SCL timing correct \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Directed-versus-constrained-random rationale}
+\label{sec:directed-vs-random}
+
+The environment is directed-first by design. Protocol bring-up of a state-machine-heavy
+controller benefits from deterministic, repeatable stimulus: each virtual sequence drives a
+single, named scenario so that a failure points at one FSM path rather than at an opaque
+random draw. This makes the first-silicon debugging loop short and the regression
+reproducible from a fixed seed. Constrained randomisation is not discarded but layered on
+top --- sequences sweep lengths, transfer-direction, and descriptor fields, and functional
+covergroups record which points of the protocol space those sweeps actually reach. The result
+is a method that keeps the debuggability of directed tests while still measuring coverage,
+which is the appropriate trade-off for a single-author thesis controller where exhaustive
+random closure is out of scope. \Cref{fig:verif-cov-tradeoff} sketches where directed
+stimulus carries the bring-up and where coverage-driven sweeping extends it.
+
+\figphl{fig:verif-cov-tradeoff}{Directed-first verification with coverage-driven extension}
+  {coverage reached versus engineering effort; directed bring-up region and the
+   covergroup-sweep region}{conceptual}{TikZ}
+
+\section{Why UVM 1.2 and Xcelium}
+\label{sec:why-uvm}
+
+The environment is built on UVM~1.2 (the Cadence \texttt{CDNS-1.2} library) running under
+Xcelium (\texttt{xrun}), with SimVision for waveform debug. UVM~1.2 is chosen for its
+standard component model, factory-based type substitution, and TLM analysis
+connections~\cite{uvm12}, all of which the environment relies on: the test selects its
+stimulus by factory name, and the monitors publish transactions through analysis ports.
+Xcelium provides the SystemVerilog assertion engine, functional-coverage database, and the
+SHM waveform format used for debug. One deliberate departure from textbook UVM is the
+register access path: rather than instantiating the heavyweight \texttt{uvm\_reg} model, the
+environment uses a small custom register agent, because the design's register interface is a
+plain 12-bit-address / write-enable / read-enable bus rather than AXI or AHB, and a bespoke
+agent models it with far less boilerplate. Low-level checking macros follow the OpenTitan DV
+style~\cite{opentitan_dvmacros}. \Cref{tab:verif-tooling} records these choices and their
+rationale.
+
+\begin{table}[!htb]\centering
+  \caption{Toolchain and methodology decisions, with rationale.}
+  \label{tab:verif-tooling}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}
+                    >{\raggedright\arraybackslash}p{0.28\textwidth}
+                    >{\raggedright\arraybackslash}p{0.40\textwidth}@{}}
+    \toprule
+    \textbf{Decision} & \textbf{Choice} & \textbf{Rationale} \\
+    \midrule
+    Methodology & UVM 1.2 (CDNS-1.2) & standard components, factory, TLM analysis path \\
+    Simulator / debug & Xcelium \texttt{xrun} + SimVision & SVA, coverage DB, SHM waveform dump \\
+    Stimulus style & directed vseqs + covergroups & deterministic bring-up, measurable coverage \\
+    Register access & custom register agent & simple addr/wen/ren bus; avoids \texttt{uvm\_reg} overhead \\
+    Checking & self-checking scoreboard + bound SVA & end-to-end data checks plus structural invariants \\
+    Check macros & OpenTitan DV-style macros & concise fatal/error reporting helpers \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Layered test stack}
+\label{sec:test-stack}
+
+The stimulus is organised as a conventional UVM layering: a single reusable test class
+constructs the environment and then runs one virtual sequence on the environment's virtual
+sequencer; that virtual sequence in turn coordinates lower-level sequences on the two real
+sequencers --- the register sequencer (32-bit register bus) and the I3C sequencer (bus-side
+Target responses). \Cref{fig:verif-stack} shows this layering from test down to DUT.
+
+A notable simplification is that there is exactly one test class,
+\texttt{i3c\_base\_test}, and the specific scenario is selected at run time by the
+\texttt{+UVM\_TEST\_SEQ} plusarg, which the Makefile sets from the \texttt{SEQ} variable. The
+test creates the named virtual sequence through the UVM factory, waits for reset to deassert,
+and starts it on the virtual sequencer under a raised objection
+(\cref{lst:verif-test-dispatch}). This keeps the test layer thin --- all scenario-specific
+behaviour lives in the virtual-sequence library of \cref{sec:vseq-library} --- and lets the
+same compiled image run any of the \RunnableVseqCount{} scenarios without recompilation.
+
+\begin{lstlisting}[language=Verilog,caption={Single reusable test selects its scenario by factory name (\texttt{i3c\_base\_test.sv}).},label={lst:verif-test-dispatch}]
+string test_seq_s = "i3c_imm_vseq";
+void'($value$plusargs("UVM_TEST_SEQ=%0s", test_seq_s));
+obj = factory.create_object_by_name(test_seq_s, "", test_seq_s);
+if (obj == null) `uvm_fatal(`gfn, $sformatf("could not create %0s seq", test_seq_s))
+if (!$cast(test_seq, obj)) `uvm_fatal(`gfn, "cast failed - not a uvm_sequence")
+phase.raise_objection(this);
+@(posedge cfg.m_i3c_agent_cfg.vif.rst_ni);  // start after reset release
+test_seq.start(env.m_vsequencer);
+phase.drop_objection(this);
+\end{lstlisting}
+
+\figphl{fig:verif-stack}{Layered UVM test stack}
+  {test to virtual sequence to \{register sequences, I3C Target sequences\} to agents to
+   DUT, with the virtual sequencer holding both real sequencer handles}{conceptual}{TikZ}
+
+\section{TLM analysis path and scoreboard strategy}
+\label{sec:scoreboard}
+
+The checking core is a substantial self-checking scoreboard, not a stub. Both monitors
+publish through UVM analysis ports that feed two \texttt{uvm\_tlm\_analysis\_fifo} instances
+in the scoreboard: the register monitor feeds a \texttt{reg\_seq\_item} FIFO and the I3C
+monitor feeds an \texttt{i3c\_item} FIFO (\cref{fig:verif-tlm}). Two run-phase tasks drain
+these FIFOs concurrently. The register-side task interprets each access by address ---
+response-port reads, RX-data-port reads, DAT writes, command-descriptor writes, host-control
+and reset-control writes --- and updates the reference model accordingly. The bus-side task
+classifies each completed transaction and dispatches it to the matching checker:
+CCC, read, write, or immediate-write.
+
+The cross-checks span the full transaction: response-descriptor status, transaction ID, and
+data length (with response priority); RX and TX data bytes with their dword packing; the
+per-byte T-Bit on I3C and ACK/NACK on \iic{}; DAT entry contents; command-descriptor decode
+including rejection of invalid descriptors; and software-reset queue flushing.
+\Cref{tab:verif-scb} lists the principal checks. Two properties make the scoreboard rigorous
+beyond per-transaction comparison: it maintains a pending-response model so that every
+expected response is eventually matched against an observed one, and at \texttt{check\_phase}
+it asserts that this pending-response queue is empty, catching responses that were expected
+but never produced --- an end-of-test residue check.
+
+\begin{table}[!htb]\centering
+  \caption{Principal scoreboard checks (\texttt{i3c\_scoreboard.sv}).}
+  \label{tab:verif-scb}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.34\textwidth}
+                    >{\raggedright\arraybackslash}p{0.58\textwidth}@{}}
+    \toprule
+    \textbf{Check} & \textbf{What it verifies} \\
+    \midrule
+    Response descriptor & status, transaction ID, data length, and response priority \\
+    RX data & read bytes and their dword packing into the RX port \\
+    TX data & write bytes (full and short) and dword packing \\
+    Per-byte T-Bit / ACK & I3C T-Bit and \iic{} ACK/NACK on every data byte \\
+    CCC transaction & broadcast/direct ENEC/DISEC and ENTDAA framing \\
+    Read transaction & normal, short (early Target end), and interrupted reads \\
+    Write / immediate write & private write and in-descriptor immediate write \\
+    DAT entry & address-table writes and hardware read-back selection \\
+    Command descriptor & descriptor decode and rejection of invalid descriptors \\
+    SW reset & queue flush and command-staging clear \\
+    End-of-test residue & pending-response model fully consumed at \texttt{check\_phase} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\figphl{fig:verif-tlm}{TLM analysis path from monitors to scoreboard}
+  {register monitor and I3C monitor analysis ports into two \texttt{uvm\_tlm\_analysis\_fifo}
+   instances feeding the register-side and bus-side checker tasks}{i3c\_scoreboard.sv}{TikZ}
+
+\section{SVA checkers}
+\label{sec:sva-checkers}
+
+Alongside the transaction-level scoreboard, \SvaCheckerCount{} SystemVerilog-assertion modules
+check structural invariants directly on the RTL. Nine of them are \emph{bound} to their target
+module by a \texttt{bind} statement co-located in the checker file itself --- so the checker
+travels with its design module rather than being wired centrally in the testbench top --- and
+the tenth, the pad-model checker, is \emph{instantiated} directly in the testbench top because
+its target is the testbench's own pad model rather than a synthesised RTL module.
+\Cref{tab:verif-sva} lists all ten, their targets, and the invariant family each enforces, and
+\cref{fig:verif-sva} shows the binding map.
+
+The bound checkers cover the protocol-critical and timing-critical modules: the command FSM
+(\texttt{flow\_active}), the ENTDAA controller and per-Target FSM, the CSR file, the
+\texttt{sync\_fifo} primitive, the bus monitor, the SCL generator, the PHY, and the top level.
+Several of these checkers also host functional covergroups (\cref{sec:coverage}). The
+deliberately uncovered modules --- \texttt{controller\_active}, the TX/RX byte-and-bit flows,
+and the bus-level TX engine --- are exercised end-to-end through the scoreboard data checks
+rather than by dedicated assertion modules, and the queue wrapper is covered transitively
+through the \texttt{sync\_fifo} checker and the top-level checker. The assertion \emph{outcomes}
+(zero firings on passing runs) are reported in \cref{ch:results}.
+
+\begin{table}[!htb]\centering
+  \caption{The \SvaCheckerCount{} SVA checker modules (\texttt{i3c\_core/sva/}).}
+  \label{tab:verif-sva}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.27\textwidth}
+                    >{\raggedright\arraybackslash}p{0.22\textwidth}
+                    c
+                    >{\raggedright\arraybackslash}p{0.30\textwidth}@{}}
+    \toprule
+    \textbf{Checker} & \textbf{Target} & \textbf{Wiring} & \textbf{Invariant family} \\
+    \midrule
+    \texttt{flow\_active\_sva}        & \texttt{flow\_active}        & bind & FSM transitions, abort, response priority \\
+    \texttt{entdaa\_fsm\_sva}         & \texttt{entdaa\_fsm}         & bind & DAA address/parity, abort point \\
+    \texttt{entdaa\_controller\_sva}  & \texttt{entdaa\_controller}  & bind & DAA round sequencing \\
+    \texttt{csr\_registers\_sva}      & CSR file                     & bind & register read/write and reset behaviour \\
+    \texttt{sync\_fifo\_sva}          & \texttt{sync\_fifo}          & bind & full/empty, ordering, depth contract \\
+    \texttt{bus\_monitor\_sva}        & \texttt{bus\_monitor}        & bind & START/Sr/STOP edge detection \\
+    \texttt{scl\_generator\_sva}      & \texttt{scl\_generator}      & bind & SCL low/high timing, stall/resume \\
+    \texttt{i3c\_phy\_sva}            & \texttt{i3c\_phy}            & bind & synchroniser and output-driver behaviour \\
+    \texttt{i3c\_controller\_top\_sva}& \texttt{i3c\_controller\_top}& bind & top-level integration invariants \\
+    \texttt{tb\_pad\_model\_sva}      & TB pad model                 & instantiate & no X/Z, OD/PP mirror, turnaround \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\figphl{fig:verif-sva}{SVA binding map}
+  {nine checker modules bound to their RTL targets via co-located \texttt{bind} statements
+   plus the pad-model checker instantiated in the testbench top}{sva/**, tb\_i3c\_top.sv}{TikZ}
+
+\section{Coverage strategy}
+\label{sec:coverage}
+
+Functional coverage is implemented rather than deferred. Coverage is collected when the
+simulation is run with \texttt{COV=1}, which enables Xcelium's coverage database. The
+covergroups live in two places. A stimulus-side covergroup in the CSR timing sequence
+samples which timing register is exercised crossed with the kind of value written, recording
+the spread of register-bus traffic. Assertion-side covergroups co-located with the bound SVA
+checkers sample protocol-internal events that are awkward to observe from the bus alone: the
+ENTDAA FSM checker crosses the assigned dynamic address against its computed odd-parity bit
+and records the FSM state at which an abort is taken, and the command-FSM checker records the
+state at which an abort enters and at which the stop is generated, the response-priority
+field, and the immediate/invalid-command descriptor encodings. Sampling the parity and
+error-injection points where they occur --- inside the FSMs --- gives meaningful coverage of
+the abort and error paths that a purely transaction-level model could not see. The coverage
+\emph{percentages} and any remaining closure gaps are reported in \cref{ch:results}; this
+section defines only what is measured.
+
+% ===========================================================================
+% PART B --- UVM Verification Environment
+% ===========================================================================
+\section{Testbench top and interfaces}
+\label{ch:uvm-env}
+
+The testbench top, \texttt{tb\_i3c\_top}, instantiates the device under test together with
+the register and I3C interfaces and the static testbench infrastructure. It generates a
+\SI{3}{\nano\second} clock (\SI{333.333}{\mega\hertz}, the design's minimum operating
+frequency) and holds the active-low reset asserted for 100 clock cycles before release. The
+DUT is parameterised with reduced queue depths --- eight entries for each of the command, TX,
+RX, and response FIFOs, against the RTL default of 64 --- which shrinks simulation time while
+still exercising full and empty boundaries; the power-of-two depth contract itself is enforced
+by the RTL elaboration assertion described in \cref{ch:architecture-rtl} and is not re-checked
+here. A \SI{100}{\milli\second} watchdog raises a \texttt{uvm\_fatal} timeout so that a hung
+sequence fails fast rather than running indefinitely. Waveform dumping is gated by the
+\texttt{+DUMP\_WAVES} plusarg, which opens an SHM database and probes the whole hierarchy. The
+virtual interfaces are published through \texttt{uvm\_config\_db} for the agents to retrieve,
+and the pad-model assertion checker (\cref{sec:sva-checkers}) is instantiated here.
+
+\section{Register agent}
+\label{sec:reg-agent}
+
+The register agent (\texttt{dv\_reg/}) drives the design's 32-bit register bus --- the
+12-bit address with separate write-enable and read-enable strobes described in
+\cref{ch:architecture-rtl}. It is a conventional UVM agent with a driver, monitor, sequencer, and
+configuration object (\cref{fig:verif-reg-agent}). The driver performs single-beat register
+reads and writes; the monitor reconstructs each access as a \texttt{reg\_seq\_item} and
+publishes it on its analysis port, which the scoreboard consumes to maintain its register and
+DAT reference model. Because the bus is this simple, the agent replaces the
+\texttt{uvm\_reg} layer entirely, as motivated in \cref{sec:why-uvm}.
+
+\figphl{fig:verif-reg-agent}{Register agent structure}
+  {driver, monitor, sequencer, and configuration object on the 32-bit
+   address/write-enable/read-enable bus}{dv\_reg/}{TikZ}
+
+\section{I3C Target agent}
+\label{sec:i3c-agent}
+
+The I3C agent (\texttt{dv\_i3c/}) is the bus-side counterpart: a Target-mode responder that
+reacts to the controller acting as the active Controller. Its driver implements a
+\DriverPhaseCount-phase finite-state machine (\texttt{i3c\_drv\_phase\_e}) that walks the
+Target through every step of a transfer --- address decode and acknowledge, push-pull and
+open-drain data, the broadcast-header dispatch, and the ENTDAA arbitration phase ---
+enumerated in \cref{tab:verif-driver-phases}. The monitor is protocol-aware: it waits for a
+host START, captures the address phase and its acknowledgement, distinguishes I3C from
+\iic{}, recognises the broadcast address \texttt{0x7E} and routes the following bytes through
+a CCC-decoding path, and then assembles the data bytes, per-byte T-Bit or ACK, and the
+closing framing into a single \texttt{i3c\_item} that it publishes for the scoreboard
+(\cref{fig:verif-i3c-agent}). It also models corner conditions the scoreboard depends on,
+such as a NACK'd address, an interrupted (controller-ended) read, and an aborted transfer.
+
+\begin{table}[!htb]\centering
+  \caption{The \DriverPhaseCount{} Target-driver phases (\texttt{i3c\_drv\_phase\_e}).}
+  \label{tab:verif-driver-phases}
+  \small
+  \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.62\textwidth}@{}}
+    \toprule
+    \textbf{Phase} & \textbf{Role} \\
+    \midrule
+    \texttt{DrvIdle}             & idle; wait for bus activity \\
+    \texttt{DrvAddr}             & drive/observe the address phase \\
+    \texttt{DrvAddrArbit}        & open-drain address arbitration \\
+    \texttt{DrvAddrPushPull}     & push-pull address phase \\
+    \texttt{DrvAck}              & address acknowledge / NACK \\
+    \texttt{DrvSelectNext}       & decide the next phase from transfer type \\
+    \texttt{DrvWr}               & receive write data byte \\
+    \texttt{DrvWrPushPull}       & push-pull write-data phase \\
+    \texttt{DrvRd}               & drive read data byte \\
+    \texttt{DrvRdPushPull}       & push-pull read-data phase \\
+    \texttt{DrvStop}             & respond to STOP \\
+    \texttt{DrvWaitStopOrRStart} & wait for STOP or Repeated START \\
+    \texttt{DrvBcastDispatch}    & dispatch after a broadcast header \\
+    \texttt{DrvDAA}              & ENTDAA arbitration response \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\figphl{fig:verif-i3c-agent}{I3C Target agent: driver and monitor}
+  {the \DriverPhaseCount-phase driver FSM and the protocol-capturing monitor that assembles
+   each transaction into an \texttt{i3c\_item}}{dv\_i3c/i3c\_agent\_pkg.sv, i3c\_driver.sv,
+   i3c\_monitor.sv}{TikZ}
+
+\section{Environment, virtual sequencer, and class hierarchy}
+\label{sec:env-hierarchy}
+
+The environment class \texttt{i3c\_env} aggregates the register agent, the I3C agent, the
+virtual sequencer, and the scoreboard, all constructed from a single configuration object
+distributed through \texttt{uvm\_config\_db} (\cref{fig:verif-env}). The virtual sequencer
+holds handles to both real sequencers, which is what lets a virtual sequence interleave
+register-bus programming with bus-side Target responses. The analysis wiring is made in
+\texttt{connect\_phase}: each agent monitor's analysis port is connected to the corresponding
+analysis FIFO in the scoreboard, realising the TLM path of \cref{sec:scoreboard}. The
+scoreboard and the monitor are enabled through configuration fields, so the same environment
+can be built with or without active checking.
+
+\figphl{fig:verif-env}{Environment class hierarchy}
+  {\texttt{i3c\_base\_test} to \texttt{i3c\_env} to \{register agent, I3C agent, virtual
+   sequencer, scoreboard\}, with \texttt{uvm\_config\_db} configuration distribution}
+  {i3c\_env.sv}{TikZ}
+
+\section{Virtual-sequence library}
+\label{sec:vseq-library}
+
+All scenario behaviour lives in the virtual-sequence library, whose sequences extend a common
+\texttt{i3c\_base\_vseq}. There are \RunnableVseqCount{} runnable scenarios, grouped by the
+protocol or structural area they exercise. \Cref{tab:verif-vseqs} gives the per-category
+counts and focus; the complete per-sequence inventory, with the one-line intent of each, is
+relocated to \cref{app:vseq-inventory} to keep this chapter within its page budget. The counts
+exclude the per-category abstract base sequences and a shared ENTDAA stimulus helper, which
+are infrastructure rather than runnable tests.
+
+\begin{table}[!htb]\centering
+  \caption{Virtual-sequence library by category (runnable scenarios; full inventory in
+    \cref{app:vseq-inventory}).}
+  \label{tab:verif-vseqs}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.30\textwidth} c
+                    >{\raggedright\arraybackslash}p{0.46\textwidth}@{}}
+    \toprule
+    \textbf{Category} & \textbf{Count} & \textbf{Focus} \\
+    \midrule
+    CSR / DAT / register bus      & 14 & register read/write, DAT, reset, queue staging \\
+    FIFO / queue                  & 4  & push/pop order, full/empty, flush \\
+    PHY / bus / timing            & 11 & START/Sr/STOP, SCL timing, byte/bit order, OD/PP \\
+    SDR private write             & 5  & length sweep, ToC, back-to-back, multi-DAT \\
+    SDR private read              & 6  & length sweep, over-read, ToC, back-to-back, multi-DAT \\
+    Immediate transfer           & 4  & DTT sweep, ToC, \iic{} immediate write \\
+    CCC (ENEC/DISEC/ENTDAA frame) & 5  & broadcast and direct ENEC/DISEC, ENTDAA opening \\
+    ENTDAA / DAA                  & 6  & single/multi device, no device, rejection, boundary \\
+    \iic{} legacy                 & 3  & regular write/read, partial-RX length sweep \\
+    Error / status / recovery     & 17 & NACK, FIFO under/overflow, aborts, HC-abort, invalid descriptor \\
+    \midrule
+    \textbf{Total}                & \textbf{\RunnableVseqCount{}} & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Build and run flow}
+\label{sec:build-flow}
+
+Simulation is driven from a Makefile in \texttt{src/verification/}. The Xcelium environment
+must be sourced once per shell before invoking any target. The core targets are
+\texttt{compile} (compile and elaborate only) and \texttt{sim SEQ=\textit{name}}, which runs
+one scenario by passing it through \texttt{+UVM\_TEST\_SEQ} as described in
+\cref{sec:test-stack}. On top of these sit per-area regression targets and an aggregate
+\texttt{regression} target that runs them all; coverage and waveform dumping are enabled by
+the \texttt{COV=1} and \texttt{DUMP\_WAVES=1} switches. \Cref{tab:verif-make} summarises the
+targets; the explicit per-target sequence lists are reproduced in \cref{app:build}.
+
+\begin{table}[!htb]\centering
+  \caption{Makefile targets (full sequence lists in \cref{app:build}).}
+  \label{tab:verif-make}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.34\textwidth}
+                    >{\raggedright\arraybackslash}p{0.58\textwidth}@{}}
+    \toprule
+    \textbf{Target} & \textbf{Action} \\
+    \midrule
+    \texttt{compile}            & compile + elaborate only \\
+    \texttt{sim SEQ=\textit{n}} & run one scenario by name \\
+    \texttt{smoke}              & single smoke scenario \\
+    \texttt{regression}         & run all category regressions in sequence \\
+    \texttt{csr/fifo/bus\_regression} & CSR, FIFO, and bus/PHY/timing suites \\
+    \texttt{sdrw/sdrr/sdr\_regression} & SDR write, SDR read, and combined SDR suites \\
+    \texttt{imm/i2c/ccc/daa\_regression} & immediate, \iic{}, CCC, and DAA suites \\
+    \texttt{err\_regression}    & error/status/recovery suite \\
+    \texttt{coverage}           & \texttt{sim} with \texttt{COV=1} \\
+    \texttt{waves}              & \texttt{sim} with \texttt{DUMP\_WAVES=1} \\
+    \texttt{clean}              & remove build, log, wave, and coverage artifacts \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Waveform and debug workflow}
+\label{sec:debug-flow}
+
+When a scenario is run with \texttt{DUMP\_WAVES=1}, the testbench writes an SHM database under
+\texttt{waves/\textit{SEQ}/} that is opened in SimVision for inspection. The events worth
+annotating when debugging a transfer are the START and Repeated-START conditions, the address
+acknowledge, the per-byte T-Bit on I3C and ACK on \iic{}, the open-drain-to-push-pull
+hand-over at the start of the data phase, and the closing STOP. This workflow is the bridge
+between a scoreboard failure and its root cause in the RTL; the specific annotated waveforms
+that serve as evidence for the implemented protocol modes are presented in \cref{ch:results},
+not here.
+
+\section{Chapter summary and evidence hand-off}
+\label{sec:verif-summary}
+
+This chapter defined the verification method and the environment that realises it. The method
+is directed-first stimulus measured by functional coverage; the environment is a UVM~1.2
+testbench on Xcelium with a custom register agent, a protocol-aware I3C Target agent, a
+substantive self-checking scoreboard fed over a TLM analysis path, and \SvaCheckerCount{}
+assertion checkers bound to the RTL. Every verification goal of \cref{sec:verif-goals} maps to
+a concrete mechanism: protocol-mode correctness to directed virtual sequences and the
+scoreboard's data, T-Bit, and response checks; structural invariants to the bound SVA;
+exercised-space measurement to the functional covergroups; and robustness to the watchdog and
+end-of-test residue check. With the method and environment established, \cref{ch:results}
+presents the measured evidence --- regression results, coverage, and annotated waveforms ---
+and \cref{ch:conclusion} discusses the limitations of this environment and the work left for
+future extension.

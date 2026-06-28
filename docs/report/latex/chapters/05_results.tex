@@ -1,0 +1,59 @@
+\chapter{Results and Evaluation}
+\label{ch:results}
+
+% DRAFT BRIEF: BLOCKED --- write after green regressions (make regression + category
+% regressions; optional COV=1). Format = tables + annotated waveforms; avoid prose padding.
+% Do not present results before fixing outstanding critical issues and re-running.
+% Sources: sim logs/coverage, improvements.md.
+
+\section{Verified baseline and measurement method}
+\brief{Record the branch, commit, simulator/tool versions, regression seed policy, and exact file-selection
+rules used for every count in this chapter. Distinguish runnable scenario vseqs from the base vseq and
+generated or third-party source from authored RTL. This is the canonical snapshot for all volatile facts.}
+
+\section{Quantitative implementation metrics}
+\brief{Report reproducible line counts per subsystem for this design and the pinned CHIPS Alliance
+reference, plus the reuse/adapt/new breakdown. Derive any percentage only from those disclosed counts and
+pair it with the scope caveat: excluding IBI, HDR, Secondary Controller, and Target mode measures a
+different design boundary, not automatically denser code. This section owns the two metrics tables moved
+from Chapter~3.}
+
+\tabph{Per-subsystem implementation metrics}{count script/output + pinned source revisions}
+\tabph{Module line-count summary}{count script/output}
+
+\figph{Implementation-size comparison}{per-subsystem line counts for this design and the pinned reference}
+  {reproducible count output}{TikZ/pgfplots}
+
+\section{Regression results}
+\brief{AFTER SIMS. Pass/fail matrix across the current \RunnableVseqCount{} runnable scenarios,
+with seeds and the exact baseline above. Quote trimmed \texttt{sim.log} excerpts (Appendix E).}
+
+\tabph{Regression pass/fail matrix}{sim logs --- AFTER SIMS}
+
+\section{Waveform evidence}
+\brief{AFTER SIMS. Annotated waveforms for write, read, immediate, and CCC, cropped
+$\le \SI{5}{\micro\second}$ with TikZ overlay arrows on START/ACK/T-Bit/OD-to-PP/STOP.}
+
+\figph{Annotated waveforms (write + read)}{canonical SDR transactions, annotated}
+  {SimVision --- AFTER SIMS}{SimVision PDF/PNG}
+
+\section{Functional coverage}
+\brief{Report the implemented functional coverage: run \texttt{COV=1} and present the covergroup results
+(per-coverpoint + cross hit percentages) with the Xcelium IMC screenshot. State that this is the implemented
+subset and that full-protocol coverage closure is the planned extension (\cref{ch:conclusion}).}
+
+\figph{Coverage screenshot}{covergroup/functional coverage summary}
+  {Xcelium IMC --- AFTER COV RUN}{screenshot}
+
+\section{Comparison with CHIPS Alliance reference}
+\brief{Evaluate the qualitative design decisions introduced in Chapter~3 using the quantitative metrics
+and verified feature evidence from this chapter. State that all \FlowStateCount{} \texttt{flow_active}
+states are implemented and attribute the exact reference commit.}
+
+\tabph{Reference comparison}{pinned source revisions + verified results}
+
+\section{Evaluation against requirements}
+\brief{Close the loop against the functional, performance, and verification requirements defined in
+Chapter~2. Mark each requirement met, partially met, or not demonstrated, and cite the regression,
+waveform, coverage, or implementation evidence in this chapter. Defer the interpretation of remaining
+limitations and the roadmap to \cref{ch:conclusion}.}
