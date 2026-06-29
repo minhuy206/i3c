@@ -75,6 +75,8 @@
 `include "i3c_vseqs/resp_vseqs/i3c_wroc_policy_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_invalid_descriptor_attr_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_entdaa_invalid_descriptor_resp_vseq.sv"
+`include "i3c_vseqs/resp_vseqs/i3c_reset_during_idle_vseq.sv"
+`include "i3c_vseqs/resp_vseqs/i3c_reset_during_transfer_phases_vseq.sv"
 
 // 4.6 Immediate Data Transfer
 `include "i3c_vseqs/imm_vseqs/i3c_imm_vseq.sv"
