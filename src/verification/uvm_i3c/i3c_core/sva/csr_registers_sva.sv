@@ -519,11 +519,6 @@ module csr_registers_sva
                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
                   ##1 !hc_control_cfg_i.sw_reset);
 
-  cp_sw_reset_busy :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
-                  ##1 !hc_control_cfg_i.sw_reset);
-
   ap_broadcast_header_enable_does_not_enable_hc :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    hc_control_write && wdata_i[HC_CTRL_IBA_INCLUDE_BIT] &&
@@ -690,11 +685,6 @@ module csr_registers_sva
                   hc_control_cfg_i.sw_reset && !repeated_sw_reset_write
                   ##1 !hc_control_cfg_i.sw_reset);
 
-  cp_sw_reset :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  hc_control_cfg_i.sw_reset && !repeated_sw_reset_write
-                  ##1 !hc_control_cfg_i.sw_reset);
-
   ap_cmd_wvalid_output_mirror :
   assert property (@(posedge clk_i) disable iff (!rst_ni) cmd_wvalid_o == cmd_wvalid_int_i)
   else $error("csr_registers_sva: cmd_wvalid_o must mirror internal cmd_wvalid");
@@ -764,17 +754,6 @@ module csr_registers_sva
   ), $past(
       cmd_dword0_i
   )})));
-
-  cp_cmd_staging :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  ((!hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
-                    !cmd_staging_valid_i)
-                   ##1 (cmd_staging_valid_i && !cmd_wvalid_int_i &&
-                        (cmd_dword0_i == $past(wdata_i)))) or
-                  ((!hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
-                    cmd_staging_valid_i)
-                   ##1 (!cmd_staging_valid_i && cmd_wvalid_int_i &&
-                        (cmd_wdata_int_i == {$past(wdata_i), $past(cmd_dword0_i)}))));
 
   ap_cmd_non_cmd_write_preserves_staging :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
@@ -930,16 +909,6 @@ module csr_registers_sva
   cp_resp_empty_read_returns_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   resp_read && !resp_rvalid_i ##1 (rdata_o == '0));
-
-  cp_port_pop :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  ((rx_data_read && rx_rvalid_i) ##1 (rdata_o == $past(rx_rdata_i))) or
-                  ((resp_read && resp_rvalid_i) ##1 (rdata_o == $past(resp_rdata_i))));
-
-  cp_empty_read :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  ((rx_data_read && !rx_rvalid_i) ##1 (rdata_o == '0)) or
-                  ((resp_read && !resp_rvalid_i) ##1 (rdata_o == '0)));
 
   ap_timing_reset_defaults :
   assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(

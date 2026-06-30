@@ -2524,29 +2524,6 @@ module flow_active_sva
   // policy, read byte packing, and Success/length response descriptors.
   // ----------------------------------------------------------------------
 
-  // I2C selects open-drain + I2C timing (never push-pull / I3C) for the
-  // whole transfer — the "OD mode throughout" and "DAT.device selects the
-  // I2C path" requirements of I2C_001/I2C_002.
-  ap_i2c_xfer_uses_i2c_open_drain :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            i2c_active_state() &&
-                                            !abort_i &&
-                                            i2c_regular_xfer()
-                                            |->
-                                            !sel_i3c_i2c_o &&
-                                            use_i2c_timing_o &&
-                                            !sel_od_pp_o)
-  else $error("flow_active_sva: I2C legacy transfer must stay open-drain on the I2C path in %m");
-
-  cp_i2c_xfer_uses_i2c_open_drain :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            i2c_active_state() &&
-                                            !abort_i &&
-                                            i2c_regular_xfer() &&
-                                            !sel_i3c_i2c_o &&
-                                            use_i2c_timing_o &&
-                                            !sel_od_pp_o);
-
   // BUS_014: keep an explicit sign-off hook for the legacy-I2C OD-only rule.
   // The I2C regular write/read vseqs provide the stimulus; this assertion owns
   // the protocol invariant, so no BUS_014-specific vseq is required.

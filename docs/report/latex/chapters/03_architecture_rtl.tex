@@ -179,9 +179,10 @@ from the CSR to the protocol engine.
         {\texttt{u\_phy}\\\texttt{i3c\_phy}\\[2pt]\scriptsize 2-FF sync\\OD/PP drivers};
 
   % internal connections
-  \draw[bus] (csr.south) -- node[right, font=\tiny] {SW side} (queues.north);
-  \draw[bus] (queues.east) -- node[below, font=\tiny] {queue R/W} (queues.east-|ctrl.west);
-  \draw[sig] (csr.east) -- node[above, font=\tiny] {DAT rd · timing×18} (csr.east-|ctrl.west);
+  \draw[bus] (csr.south) -- node[font=\tiny, fill=white, inner sep=1pt] {SW side} (queues.north);
+  \draw[bus] (queues.east) -- node[font=\tiny, fill=white, inner sep=1pt] {queue R/W} (queues.east-|ctrl.west);
+  \draw[sig] (csr.east) -- node[font=\tiny, align=center, fill=white, inner sep=1pt]
+        {DAT rd\\timing\,$\times$18} (csr.east-|ctrl.west);
   \draw[bus] (ctrl.east) -- (phy.west);
 
   % external ports
@@ -312,41 +313,43 @@ selects open-drain signalling for the address and acknowledge phases.
                font=\scriptsize, fill=green!10},
     grp/.style={draw, dashed, rounded corners=3pt, inner sep=6pt},
     sig/.style={-{Stealth[length=5pt]}, thick},
-    clk/.style={-{Stealth[length=4pt]}, thick, black!55},
+    clk/.style={-{Stealth[length=4pt]}, semithick, black!55},
     lbl/.style={font=\scriptsize\itshape, text=black!70},
   ]
-  % synchroniser chain
-  \node[lbl, align=center] (pad) {\texttt{scl\_i}/\texttt{sda\_i}\\(async pad)};
-  \node[ff, right=10mm of pad] (f1) {FF1};
+  % synchroniser chain (y = 0)
+  \node[lbl, align=center] (pad) at (0,0) {\texttt{scl\_i}/\texttt{sda\_i}\\(async pad)};
+  \node[ff] (f1) at (2.7,0) {FF1};
   \node[ff, right=6mm of f1] (f2) {FF2};
-  \node[ff, right=10mm of f2] (f3) {capture\\FF};
-  \node[lbl, align=center, right=10mm of f3] (use) {synchronised\\value\\(edge detect)};
+  \node[ff, right=12mm of f2] (f3) {capture\\FF};
+  \node[lbl, align=center, right=12mm of f3] (use) {synchronised\\value\\(edge detect)};
 
   \draw[sig] (pad) -- (f1);
   \draw[sig] (f1) -- (f2);
   \draw[sig] (f2) -- (f3);
   \draw[sig] (f3) -- (use);
 
-  % grouping boxes
-  \node[grp, fit=(f1)(f2), label={[font=\scriptsize\bfseries]below:\texttt{i3c\_phy} (2-FF sync)}] (phybox) {};
-  \node[grp, fit=(f3), label={[font=\scriptsize\bfseries]below:\texttt{bus\_monitor}}] (monbox) {};
-  \node[lbl, above=7mm of f2, text=black!75] {3 flops of pad-to-logic latency = metastability budget};
+  % grouping boxes with labels ABOVE (keeps the area below free for the clock rail)
+  \node[grp, fit=(f1)(f2), label={[font=\scriptsize\bfseries]above:\texttt{i3c\_phy} (2-FF sync)}] (phybox) {};
+  \node[grp, fit=(f3), label={[font=\scriptsize\bfseries]above:\texttt{bus\_monitor}}] (monbox) {};
+  \node[lbl, text=black!75] at ($(phybox.north)!0.5!(monbox.north)+(0,1.05)$)
+        {3 flops of pad-to-logic latency $=$ metastability budget};
 
-  % clock + reset rail
-  \node[lbl, anchor=east] at ([yshift=-20mm]pad.east|-pad) {};
-  \coordinate (rail) at ($(pad)+(0,-2.3)$);
-  \node[font=\footnotesize\bfseries, anchor=east] (clksrc) at ($(f1|-rail)+(-1.2,0)$) {\texttt{clk\_i}};
-  \draw[clk] (clksrc.east) -| (f1.south);
-  \draw[clk] (clksrc.east) -| (f2.south);
-  \draw[clk] (clksrc.east) -| (f3.south);
-  \node[lbl, right=2mm of f3.south, anchor=west, yshift=-7mm]
-        {single domain @ \SI{333.333}{\mega\hertz}; \texttt{rst\_ni} async, active-low};
+  % clk_i rail below the flops, with up-arrows to each flop
+  \coordinate (rl) at ($(f1.south)+(0,-0.9)$);
+  \coordinate (rr) at ($(f3.south)+(0,-0.9)$);
+  \draw[semithick, black!55] (rl) -- (rr);
+  \node[font=\footnotesize\bfseries, anchor=east] at ($(rl)+(-0.2,0)$) {\texttt{clk\_i}};
+  \draw[clk] ($(f1.south)+(0,-0.9)$) -- (f1.south);
+  \draw[clk] ($(f2.south)+(0,-0.9)$) -- (f2.south);
+  \draw[clk] ($(f3.south)+(0,-0.9)$) -- (f3.south);
+  \node[lbl] at ($(rl)!0.5!(rr)+(0,-0.55)$)
+        {single clock domain @ \SI{333.333}{\mega\hertz}; \texttt{rst\_ni} asynchronous, active-low};
 
-  % software reset note
+  % software reset note (bottom band)
   \node[draw, rounded corners=2pt, fill=blue!6, font=\scriptsize, align=center, very thick,
-        below=12mm of f2] (sw)
-        {\textbf{Software reset} \texttt{RESET\_CONTROL[0]} (self-clearing):\\
-         synchronously flushes the four HCI queues + CMD/TX staging --- FSM state untouched};
+        text width=10.5cm] (sw) at ($(pad)!0.5!(use)+(0,-3.4)$)
+        {\textbf{Software reset} \texttt{RESET\_CONTROL[0]} (self-clearing): synchronously flushes
+         the four HCI queues + CMD/TX staging --- FSM state untouched};
 \end{tikzpicture}
 \caption[Clock, reset, and input synchroniser chain]{Single clock domain and the input
   synchroniser chain. \texttt{i3c\_phy} provides two synchroniser flops on each bus line and
@@ -650,56 +653,96 @@ other restart entry points.
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
     >={Stealth[length=5pt]},
-    st/.style={draw, rounded corners=3pt, thick, fill=orange!12, font=\scriptsize\ttfamily,
-               align=center, minimum height=7mm, inner sep=3pt},
-    init/.style={st, fill=blue!10},
-    ed/.style={->, thick, black!70},
-    el/.style={font=\scriptsize\itshape, text=black!75, inner sep=1.5pt},
+    st/.style={draw, circle, thick, align=center, font=\tiny\ttfamily,
+               minimum size=12mm, inner sep=0.4pt},
+    hub/.style={st, fill=black!12, very thick},
+    sgen/.style={st, fill=green!16},
+    drive/.style={st, fill=orange!16},
+    sstop/.style={st, fill=blue!14},
+    rst/.style={st, fill=violet!16},
+    ed/.style={->, semithick, black!72},
+    el/.style={font=\tiny\bfseries, text=black!82, fill=white, inner sep=0.8pt},
   ]
-  \node[init] (idle) at (0,0) {Idle};
-  \node[st] (gst) at (0,2.6) {GenerateStart};
-  \node[st] (sf)  at (3.2,2.6) {SdaFall};
-  \node[st] (hs)  at (6.4,2.6) {HoldStart};
-  \node[st] (dl)  at (6.4,0) {DriveLow};
-  \node[st] (dh)  at (9.8,0) {DriveHigh};
-  \node[st] (wc)  at (9.8,2.6) {WaitCmd};
-  \node[st] (grs) at (3.0,-2.6) {GenerateRstart};
-  \node[st] (shr) at (3.0,-4.6) {SclHighForRstart};
-  \node[st] (rsf) at (6.4,-3.6) {RstartSdaFall};
-  \node[st] (gsp) at (13.0,0) {GenerateStop};
-  \node[st] (shs) at (13.0,-2.2) {SclHighForStop};
-  \node[st] (sr)  at (13.0,-4.4) {SdaRise};
-  \node[st] (bf)  at (9.8,-4.4) {BusFree};
+  % --- states (grouped by function, MIPI Fig.168 colour-coded style) ---
+  \node[hub]   (idle) at (0,5.6)    {Idle};
+  \node[sgen]  (gst)  at (2.5,5.6)  {Generate\\Start};
+  \node[sgen]  (sf)   at (5.0,5.6)  {Sda\\Fall};
+  \node[sgen]  (hs)   at (7.5,5.6)  {Hold\\Start};
+  \node[drive] (dl)   at (8.4,3.3)  {Drive\\Low};
+  \node[drive] (dh)   at (11.2,3.3) {Drive\\High};
+  \node[drive] (wc)   at (9.8,1.4)  {Wait\\Cmd};
+  \node[sstop] (gsp)  at (14.0,3.3) {Generate\\Stop};
+  \node[sstop] (shs)  at (14.0,0.7) {SclHigh\\ForStop};
+  \node[sstop] (sr)   at (14.0,-2.0){Sda\\Rise};
+  \node[sstop] (bf)   at (10.6,-2.8){Bus\\Free};
+  \node[rst]   (grs)  at (5.2,1.2)  {Generate\\Rstart};
+  \node[rst]   (shr)  at (3.4,-1.4) {SclHigh\\ForRstart};
+  \node[rst]   (rsf)  at (6.6,-2.6) {Rstart\\SdaFall};
 
-  \draw[ed] (idle) -- node[el,left]{gen\_start} (gst);
-  \draw[ed] (gst) -- (sf);
-  \draw[ed] (sf) -- (hs);
-  \draw[ed] (hs) -- (dl);
-  \draw[ed] (dl) -- node[el,above]{gen\_clock} (dh);
-  \draw[ed] (dh) to[bend left=12] node[el,below]{gen\_clock} (dl);
-  \draw[ed] (dl) -- node[el,left]{else} (wc);
-  \draw[ed] (dh) -- node[el,right]{else} (wc);
-  \draw[ed] (wc) to[bend right=18] node[el,right,pos=0.4]{gen\_clock} (dl);
-  \draw[ed] (idle) to[bend right=10] node[el,left,pos=0.6]{gen\_rstart} (grs);
-  \draw[ed] (dl) -- node[el,below,pos=0.4]{gen\_rstart} (grs);
-  \draw[ed] (dh) -- node[el,above]{gen\_stop} (gsp);
-  \draw[ed] (dh.south) to[bend right=10] node[el,above,pos=0.7]{rstart \& takeover} (rsf.east);
-  \draw[ed] (wc) to[bend left=22] node[el,above,pos=0.3]{gen\_stop} (gsp.north);
-  \draw[ed] (grs) -- node[el,left]{texp \& scl} (shr);
-  \draw[ed] (shr) -- (rsf);
-  \draw[ed] (rsf) -- (hs);
-  \draw[ed] (gsp) -- node[el,right]{texp \& scl} (shs);
-  \draw[ed] (shs) -- (sr);
-  \draw[ed] (sr) -- (bf);
-  \draw[ed] (bf) to[bend left=12] node[el,below,pos=0.5]{texp} (idle.south east);
+  % dashed group box around the three drive states (their gen_stop / gen_rstart
+  % branches are identical, so they are drawn once from the box boundary)
+  \node[draw=orange!70, dashed, thick, rounded corners=6pt, inner sep=9pt,
+        fit=(dl)(dh)(wc), label={[font=\scriptsize\itshape,text=orange!60!black]below:%
+        data drive cycle}] (dbox) {};
+
+  % --- START sub-cycle (top) ---
+  \draw[ed] (idle) -- node[el,above]{gen\_start} (gst);
+  \draw[ed] (gst)  -- (sf);
+  \draw[ed] (sf)   -- (hs);
+  \draw[ed] (hs)   -- (dl);
+
+  % --- data drive loop (internal to the group box) ---
+  \draw[ed] (dl) -- node[el,pos=0.5]{gen\_clock} (dh);
+  \draw[ed] (dh) to[bend left=32] (dl);
+  \draw[ed] (dl) to[bend right=18] node[el,pos=0.45]{else} (wc);
+  \draw[ed] (wc) to[bend right=18] node[el,pos=0.55]{gen\_clock} (dl);
+  \draw[ed] (dh) -- node[el,pos=0.6]{else} (wc);
+
+  % --- shared exits from the drive cluster (one edge each) ---
+  \draw[ed] (dbox.east) -- node[el,pos=0.5]{gen\_stop} (gsp);
+  \draw[ed] (dbox.south west) to[bend left=10] node[el,pos=0.45]{gen\_rstart} (grs);
+
+  % --- takeover fast path (DriveHigh only) ---
+  \draw[ed] (dh) to[out=-35,in=20,looseness=1.4] node[el,pos=0.85]{rstart \& takeover} (rsf);
+
+  % --- Repeated-START sub-cycle ---
+  \draw[ed] (grs) -- node[el,pos=0.5]{texp \& scl} (shr);
+  \draw[ed] (shr) -- node[el,pos=0.5]{texp} (rsf);
+  \draw[ed] (rsf) to[out=120,in=250,looseness=1.0] (hs);
+
+  % --- STOP -> bus-free -> Idle ---
+  \draw[ed] (gsp) -- node[el,pos=0.5]{texp \& scl} (shs);
+  \draw[ed] (shs) -- node[el,pos=0.5]{texp} (sr);
+  \draw[ed] (sr)  -- (bf);
+  \draw[ed] (bf)  to[out=248,in=283,looseness=0.95] node[el,pos=0.5]{texp} (idle);
+
+  % --- Repeated START entered directly from Idle ---
+  \draw[ed] (idle) to[out=-20,in=160] node[el,pos=0.6]{gen\_rstart} (grs);
+
+  % --- legend (MIPI-style category key, top-right corner) ---
+  \begin{scope}[shift={(12.7,7.4)}]
+    \node[draw, rounded corners=2pt, fill=black!2, inner sep=4pt, anchor=north west]
+      (lg) at (0,0) {%
+      \begin{tikzpicture}[every node/.style={font=\tiny}]
+        \node[st, hub,   minimum size=4mm] (a) at (0,0)    {}; \node[anchor=west] at (0.4,0)    {Idle / bus-free hub};
+        \node[st, sgen,  minimum size=4mm] (b) at (0,-0.55){}; \node[anchor=west] at (0.4,-0.55){START generation};
+        \node[st, drive, minimum size=4mm] (c) at (0,-1.1) {}; \node[anchor=west] at (0.4,-1.1) {Data drive cycle};
+        \node[st, sstop, minimum size=4mm] (d) at (0,-1.65){}; \node[anchor=west] at (0.4,-1.65){STOP sequence};
+        \node[st, rst,   minimum size=4mm] (e) at (0,-2.2) {}; \node[anchor=west] at (0.4,-2.2) {Repeated-START seq.};
+      \end{tikzpicture}};
+  \end{scope}
 \end{tikzpicture}}
-\caption[\texttt{scl\_generator} 14-state FSM]{The \texttt{scl\_generator} 14-state FSM. The START
-  sub-cycle (top), the data drive cycle (\texttt{DriveLow}/\texttt{DriveHigh}/\texttt{WaitCmd}), the
-  Repeated-START path, and the STOP\,$\to$\,bus-free path all walk from one state to the next as the
-  single down-counter expires. Unlabelled edges advance on counter expiry
-  (\texttt{tcount\_expired}); labelled edges show the request inputs (\texttt{gen\_start},
-  \texttt{gen\_rstart}, \texttt{gen\_stop}, \texttt{gen\_clock}, \texttt{takeover}) that choose the
-  next state.}
+\caption[\texttt{scl\_generator} 14-state FSM]{The \texttt{scl\_generator} 14-state FSM, drawn in the
+  MIPI controller-FSM style (states colour-coded by function; see the key). The START sub-cycle (top,
+  green), the data drive loop (\texttt{DriveLow}/\texttt{DriveHigh}/\texttt{WaitCmd}, orange), the
+  Repeated-START sub-cycle (violet), and the STOP\,$\to$\,bus-free path (blue) each walk from one state
+  to the next as the single down-counter \texttt{tcount} expires. Unlabelled edges advance
+  unconditionally or on counter expiry (\texttt{tcount\_expired}); labelled edges show the request
+  inputs (\texttt{gen\_start}, \texttt{gen\_rstart}, \texttt{gen\_stop}, \texttt{gen\_clock},
+  \texttt{takeover}) that select the next state. All three drive states
+  (\texttt{DriveLow}/\texttt{DriveHigh}/\texttt{WaitCmd}, dashed box) branch identically on
+  \texttt{gen\_stop} (to \texttt{GenerateStop}) and \texttt{gen\_rstart} (to \texttt{GenerateRstart}),
+  so those two exits are drawn once from the cluster boundary rather than three times each.}
 \label{fig:scl-fsm}
 \end{figure}
 

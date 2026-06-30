@@ -11,6 +11,8 @@ package i3c_env_pkg;
 
   `include "i3c_env_cfg.sv"
   `include "i3c_virtual_sequencer.sv"
+  `include "i3c_coverage.sv"
+  `include "reg_coverage.sv"
   `include "i3c_scoreboard.sv"
   `include "i3c_env.sv"
 

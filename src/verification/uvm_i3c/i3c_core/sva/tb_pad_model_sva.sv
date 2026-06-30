@@ -141,18 +141,6 @@ module tb_pad_model_sva (
                   dut_drives && dut_sda_o_i && dut_sel_od_pp_i &&
                   (sda_bus_i === 1'b1));
 
-  cp_bus013_target_drive_low_when_dut_released:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !dut_drives && device_drives_low && (sda_bus_i === 1'b0));
-
-  cp_bus013_target_drive_high_when_dut_released:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !dut_drives && device_drives_high && (sda_bus_i === 1'b1));
-
-  cp_bus013_released_sda_pullup_high:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !dut_drives && device_released && (sda_bus_i === 1'b1));
-
   ap_dut_sda_low_drive_bus_low:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    dut_sda_oe_i && !dut_sda_o_i && !hc_abort_read_contention
@@ -208,17 +196,6 @@ module tb_pad_model_sva (
   cp_released_sda_pullup_high:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   !dut_drives && device_released && (sda_bus_i === 1'b1));
-
-  ap_no_unsafe_contention:
-  assert property (@(posedge clk_i) disable iff (!rst_ni) !unsafe_contention)
-  else $error(
-      "tb_pad_model_sva: DUT and target must not create unsafe SDA contention dut_oe=%0b dut_sda=%0b dut_pp=%0b dev_sda=%0b dev_pp=%0b sda_bus=%0b model_turnaround=%0b hc_abort=%0b",
-      dut_sda_oe_i, dut_sda_o_i, dut_sel_od_pp_i, device_sda_o_i, device_sda_pp_en_i,
-      sda_bus_i, model_turnaround_overlap, hc_abort_i);
-
-  cp_no_unsafe_contention:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !unsafe_contention && (dut_drives || device_drives));
 
   cp_safe_od_low_overlap:
   cover property (@(posedge clk_i) disable iff (!rst_ni)

@@ -33,10 +33,17 @@ module flow_active_cov (
       bins WRITE_RESP       = {4'd12};
     }
 
+    // Representative end-to-end command paths and selected error shortcuts;
+    // this is not an exhaustive arc model for the main FSM.
     cp_transitions: coverpoint state_q {
       bins sdr_write_path[]   = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd4 => 4'd7 => 4'd6 => 4'd11 => 4'd12);
       bins sdr_read_path[]    = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd4 => 4'd8 => 4'd11 => 4'd12);
       bins i2c_write_path[]   = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd9 => 4'd6 => 4'd11 => 4'd12);
+      bins i2c_read_path[]    = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd10 => 4'd11 => 4'd12);
+      bins imm_i3c_path[]     = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd4 => 4'd7 => 4'd11 => 4'd12);
+      bins imm_i2c_path[]     = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd9 => 4'd11 => 4'd12);
+      bins ccc_resp_path[]    = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd4 => 4'd5 => 4'd12);
+      bins daa_path[]         = (4'd0 => 4'd1 => 4'd2 => 4'd3 => 4'd4 => 4'd11 => 4'd12);
       bins abort_from_issue[] = (4'd11 => 4'd12);
       bins bcast_nack_path[]  = (4'd4 => 4'd12);
     }

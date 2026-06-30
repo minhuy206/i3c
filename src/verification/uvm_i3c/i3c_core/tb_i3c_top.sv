@@ -22,6 +22,7 @@ module tb_i3c_top;
   logic sda_oe;
   logic sel_od_pp;
   logic scl_i, sda_i;
+  logic resp_valid;
 
   assign scl_bus = (scl_o === 1'b0) ? 1'b0 : 1'bz;
   assign sda_bus = sda_oe ? sda_o : 1'bz;
@@ -33,8 +34,9 @@ module tb_i3c_top;
   assign sda_i = sda_bus;
 
   reg_if reg_bus (
-      .clk_i (clk),
-      .rst_ni(rst_n)
+      .clk_i       (clk),
+      .rst_ni      (rst_n),
+      .resp_valid_i(resp_valid)
   );
 
   i3c_if i3c_bus (
@@ -71,6 +73,9 @@ module tb_i3c_top;
       .sda_oe_o   (sda_oe),
       .sel_od_pp_o(sel_od_pp)
   );
+
+  // Distinguish a valid zero-valued response descriptor from an empty FIFO read.
+  assign resp_valid = dut.resp_csr_rvalid;
 
   tb_pad_model_sva u_tb_pad_model_sva (
       .clk_i                 (clk),

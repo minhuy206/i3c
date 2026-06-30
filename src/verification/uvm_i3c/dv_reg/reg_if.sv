@@ -1,6 +1,7 @@
 interface reg_if (
     input clk_i,
-    input rst_ni
+    input rst_ni,
+    input resp_valid_i
 );
   logic [11:0] addr;
   logic [31:0] wdata;

@@ -33,6 +33,7 @@ class reg_monitor extends uvm_monitor;
         reg_seq_item item = reg_seq_item::type_id::create("item");
         item.is_write = 1'b0;
         item.addr = vif.addr;
+        item.resp_valid = vif.resp_valid_i;
         @(posedge vif.clk_i);
         item.rdata = vif.rdata;
         `uvm_info(`gfn, item.convert2string(), UVM_DEBUG)
