@@ -38,13 +38,15 @@ class csr_timing_rw_vseq extends csr_base_vseq;
       };
     }
 
-    cp_timing_value: coverpoint value_kind {
-      bins default_value     = {TIMING_VALUE_DEFAULT};
-      bins minimum_nonzero   = {TIMING_VALUE_MIN_NONZERO};
-      bins maximum_20bit     = {TIMING_VALUE_MAX};
-      bins random_legal      = {TIMING_VALUE_RANDOM};
-      bins reserved_bit_mask = {TIMING_VALUE_RESERVED_MASK};
-      bins zero_value        = {TIMING_VALUE_ZERO};
+    // Xcelium 18.03 records 0 hits for enum-typed coverpoints binned by enum
+    // labels; cast to int and bin by the underlying ordinal value instead.
+    cp_timing_value: coverpoint int'(value_kind) {
+      bins default_value     = {int'(TIMING_VALUE_DEFAULT)};
+      bins minimum_nonzero   = {int'(TIMING_VALUE_MIN_NONZERO)};
+      bins maximum_20bit     = {int'(TIMING_VALUE_MAX)};
+      bins random_legal      = {int'(TIMING_VALUE_RANDOM)};
+      bins reserved_bit_mask = {int'(TIMING_VALUE_RESERVED_MASK)};
+      bins zero_value        = {int'(TIMING_VALUE_ZERO)};
     }
 
     cr_timing_reg_value: cross cp_timing_reg, cp_timing_value;

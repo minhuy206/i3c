@@ -23,18 +23,21 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
     bit [31:0]              resp1;
     bit [31:0]              rx;
     int                     rstart_count;
+    byte_queue_t            exp_data;
+    bit [6:0]               static_addr;
+    bit [6:0]               dynamic_addr;
     i3c_device_response_seq dev_seq0;
     i3c_device_response_seq dev_seq1;
 
     enable_dut(broadcast_header_enable);
-    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     rd_cfg                   = make_transfer_cfg(
         .ctxt($sformatf("read_toc0_vseq %s first", private_addr_mode_name(broadcast_header_enable))),
         .seq_name($sformatf("dev_seq0_%s", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd5),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -50,7 +53,7 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
         .seq_name($sformatf("dev_seq1_%s", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd6),
         .dev_idx(5'd0),
-        .target_addr(7'h08),
+        .target_addr(dynamic_addr),
         .is_i3c(1'b1),
         .ack_address(1'b1),
         .ack_data(1'b1),
@@ -61,9 +64,8 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
         .settle_before_cmd(0),
         .timeout_cycles(0)
     );
-    read_data.push_back(8'h11);
-    read_data.push_back(8'h22);
-    tx_words.push_back(32'h0000_4433);
+    build_random_payload(rd_cfg.data_length, read_data);
+    build_random_tx_words(wr_cfg.data_length, exp_data, tx_words);
 
     run_toc_zero_read_write_stimulus(rd_cfg, wr_cfg, read_data, tx_words, rx, resp0, resp1,
                                      rstart_count, dev_seq0, dev_seq1);

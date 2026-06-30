@@ -497,16 +497,32 @@ module csr_registers_sva
       wdata_i[HC_CTRL_ABORT_BIT]
   ))));
 
-  ap_reset_control_write_pulses_soft_reset :
+  ap_idle_reset_control_write_pulses_soft_reset :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT]
+                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && i3c_fsm_idle_i
                    |=> hc_control_cfg_i.sw_reset)
-  else $error("csr_registers_sva: RESET_CONTROL.SOFT_RST write did not pulse sw_reset");
+  else $error("csr_registers_sva: idle RESET_CONTROL.SOFT_RST write did not pulse sw_reset");
 
-  cp_reset_control_write_pulses_soft_reset :
+  cp_idle_reset_control_write_pulses_soft_reset :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT]
+                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && i3c_fsm_idle_i
                   ##1 hc_control_cfg_i.sw_reset);
+
+  ap_busy_reset_control_write_ignored :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
+                   |=> !hc_control_cfg_i.sw_reset)
+  else $error("csr_registers_sva: busy RESET_CONTROL.SOFT_RST write must not pulse sw_reset");
+
+  cp_busy_reset_control_write_ignored :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
+                  ##1 !hc_control_cfg_i.sw_reset);
+
+  cp_sw_reset_busy :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
+                  ##1 !hc_control_cfg_i.sw_reset);
 
   ap_broadcast_header_enable_does_not_enable_hc :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -708,9 +724,9 @@ module csr_registers_sva
   cover property (@(posedge clk_i) disable iff (!rst_ni) tx_wdata_o == tx_wdata_int_i);
 
   ap_cmd_first_write_stages_dword0 :
-  assert property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset ||
-                                                 !csr_bus_known)
-                   cmd_queue_write && !cmd_wvalid_int_i && !cmd_staging_valid_i
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                   !hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
+                   !cmd_staging_valid_i
                    |=> (cmd_staging_valid_i && !cmd_wvalid_int_i &&
                         (cmd_dword0_i == $past(
       wdata_i
@@ -718,18 +734,18 @@ module csr_registers_sva
   else $error("csr_registers_sva: first CMD_QUEUE write must stage DWORD0 only");
 
   cp_cmd_first_write_stages_dword0 :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset ||
-                                                !csr_bus_known)
-                  cmd_queue_write && !cmd_wvalid_int_i && !cmd_staging_valid_i
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  !hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
+                  !cmd_staging_valid_i
                   ##1 (cmd_staging_valid_i && !cmd_wvalid_int_i &&
                        (cmd_dword0_i == $past(
       wdata_i
   ))));
 
   ap_cmd_second_write_emits_command :
-  assert property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset ||
-                                                 !csr_bus_known)
-                   cmd_queue_write && !cmd_wvalid_int_i && cmd_staging_valid_i
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                   !hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
+                   cmd_staging_valid_i
                    |=> (!cmd_staging_valid_i && cmd_wvalid_int_i &&
                         (cmd_wdata_int_i == {$past(
       wdata_i
@@ -739,9 +755,9 @@ module csr_registers_sva
   else $error("csr_registers_sva: second CMD_QUEUE write must emit staged command");
 
   cp_cmd_second_write_emits_command :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset ||
-                                                !csr_bus_known)
-                  cmd_queue_write && !cmd_wvalid_int_i && cmd_staging_valid_i
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  !hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
+                  cmd_staging_valid_i
                   ##1 (!cmd_staging_valid_i && cmd_wvalid_int_i &&
                        (cmd_wdata_int_i == {$past(
       wdata_i
@@ -750,12 +766,13 @@ module csr_registers_sva
   )})));
 
   cp_cmd_staging :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset ||
-                                                !csr_bus_known)
-                  ((cmd_queue_write && !cmd_wvalid_int_i && !cmd_staging_valid_i)
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  ((!hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
+                    !cmd_staging_valid_i)
                    ##1 (cmd_staging_valid_i && !cmd_wvalid_int_i &&
                         (cmd_dword0_i == $past(wdata_i)))) or
-                  ((cmd_queue_write && !cmd_wvalid_int_i && cmd_staging_valid_i)
+                  ((!hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
+                    cmd_staging_valid_i)
                    ##1 (!cmd_staging_valid_i && cmd_wvalid_int_i &&
                         (cmd_wdata_int_i == {$past(wdata_i), $past(cmd_dword0_i)}))));
 
@@ -777,8 +794,8 @@ module csr_registers_sva
   ))));
 
   ap_cmd_wdata_stable_until_ready :
-  assert property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset)
-                   cmd_wvalid_int_i && !cmd_wready_i
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   !hc_control_cfg_i.sw_reset && cmd_wvalid_int_i && !cmd_wready_i
                    |=> ($past(hc_control_cfg_i.sw_reset) ||
                         hc_control_cfg_i.sw_reset ||
                         (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
@@ -787,8 +804,8 @@ module csr_registers_sva
   else $error("csr_registers_sva: CMD write data changed before ready");
 
   cp_cmd_wdata_stable_until_ready :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset)
-                  cmd_wvalid_int_i && !cmd_wready_i
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  !hc_control_cfg_i.sw_reset && cmd_wvalid_int_i && !cmd_wready_i
                   ##1 (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
       cmd_wdata_int_i
   ))));
@@ -812,25 +829,23 @@ module csr_registers_sva
                   hc_control_cfg_i.sw_reset ##1 (!tx_wvalid_int_i && (tx_wdata_int_i == '0)));
 
   ap_tx_data_write_captures_data :
-  assert property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset ||
-                                                 !csr_bus_known)
-                   tx_data_write && !tx_wvalid_int_i
+  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                   !hc_control_cfg_i.sw_reset && tx_data_write && !tx_wvalid_int_i
                    |=> (tx_wvalid_int_i && (tx_wdata_int_i == $past(
       wdata_i
   ))))
   else $error("csr_registers_sva: TX_DATA write must raise tx_wvalid with written data");
 
   cp_tx_data_write_captures_data :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset ||
-                                                !csr_bus_known)
-                  tx_data_write && !tx_wvalid_int_i
+  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
+                  !hc_control_cfg_i.sw_reset && tx_data_write && !tx_wvalid_int_i
                   ##1 (tx_wvalid_int_i && (tx_wdata_int_i == $past(
       wdata_i
   ))));
 
   ap_tx_wdata_stable_until_ready :
-  assert property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset)
-                   tx_wvalid_int_i && !tx_wready_i
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   !hc_control_cfg_i.sw_reset && tx_wvalid_int_i && !tx_wready_i
                    |=> ($past(hc_control_cfg_i.sw_reset) ||
                         hc_control_cfg_i.sw_reset ||
                         (tx_wvalid_int_i && (tx_wdata_int_i == $past(
@@ -839,8 +854,8 @@ module csr_registers_sva
   else $error("csr_registers_sva: TX write data changed before ready");
 
   cp_tx_wdata_stable_until_ready :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || hc_control_cfg_i.sw_reset)
-                  tx_wvalid_int_i && !tx_wready_i
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  !hc_control_cfg_i.sw_reset && tx_wvalid_int_i && !tx_wready_i
                   ##1 (tx_wvalid_int_i && (tx_wdata_int_i == $past(
       tx_wdata_int_i
   ))));

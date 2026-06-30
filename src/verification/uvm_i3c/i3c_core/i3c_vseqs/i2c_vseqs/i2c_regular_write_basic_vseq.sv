@@ -59,14 +59,7 @@ class i2c_regular_write_basic_vseq extends i3c_base_vseq;
 
   virtual function void build_payload(int unsigned data_length, ref byte_queue_t exp_data,
                                       ref word_queue_t tx_words);
-    exp_data.delete();
-    tx_words.delete();
-
-    for (int unsigned i = 0; i < data_length; i++) begin
-      exp_data.push_back(8'(8'h61 + i));
-    end
-
-    pack_payload_words(exp_data, tx_words);
+    build_random_tx_words(data_length, exp_data, tx_words);
   endfunction
 
 endclass

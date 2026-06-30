@@ -53,6 +53,18 @@ module entdaa_fsm_sva (
 
   daa_addr_parity_cg daa_addr_parity_cov = new();
 
+  covergroup err009_daa_abort_cg @(posedge clk_i);
+    option.per_instance = 1;
+
+    cp_daa_abort_point: coverpoint state_q iff (rst_ni && stop_pending_i) {
+      bins identity = {ReceiveIDBit};
+      bins assigned_address[] = {SendAddr, ReadAddrAck};
+      bins completed_round_boundary = {Idle};
+    }
+  endgroup
+
+  err009_daa_abort_cg err009_daa_abort_cov = new();
+
   ap_entdaa_ack_enters_receive_id: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
     (state_q == ReadRsvdAck && bus_rx_done_i &&
@@ -229,11 +241,11 @@ bind entdaa_fsm entdaa_fsm_sva u_entdaa_fsm_sva (
     .id_shift_q,
     .bit_cnt_q,
     .stop_pending_i,
-    .daa_addr_i,
-    .done_daa_o,
+    .daa_addr_i(addr_i),
+    .done_daa_o(done_o),
     .addr_valid_o,
     .no_device_o,
-    .stop_req_o,
+    .stop_req_o(req_stop_o),
     .stopped_o,
     .pid_o,
     .bcr_o,

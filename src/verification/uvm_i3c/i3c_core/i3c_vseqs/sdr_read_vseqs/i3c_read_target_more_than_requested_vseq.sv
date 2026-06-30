@@ -36,6 +36,7 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t rd_cfg;
     transfer_stimulus_cfg_t wr_cfg;
     byte_queue_t            read_data;   // 6 bytes offered vs 4 requested -> over-length
+    byte_queue_t            exp_data;
     word_queue_t            tx_words;
     bit [31:0]              rx;
     bit [31:0]              resp0;
@@ -62,8 +63,8 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
         .start_with_broadcast_header(1'b0), .data_length(2), .settle_before_cmd(0),
         .timeout_cycles(0));
 
-    for (int i = 0; i < 6; i++) read_data.push_back(8'(8'hD0 + i));  // target offers 6, only 4 read
-    tx_words.push_back(32'h0000_BCAB);
+    build_random_payload(6, read_data);  // target offers 6, only 4 read
+    build_random_tx_words(wr_cfg.data_length, exp_data, tx_words);
 
     run_toc_zero_read_write_stimulus(rd_cfg, wr_cfg, read_data, tx_words, rx, resp0, resp1,
                                      rstart_count, dev_seq0, dev_seq1);
@@ -96,7 +97,7 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
                  $sformatf("SDRR_003 case %0d must provide more target bytes than requested",
                            case_idx))
 
-    build_payload(case_idx, target_length, read_data);
+    build_payload(target_length, read_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -146,13 +147,8 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
                   rx_words.size(), dev_seq.observed_rstart), UVM_LOW)
   endtask
 
-  virtual function void build_payload(int unsigned case_idx, int unsigned target_length,
-                                      ref byte_queue_t read_data);
-    read_data.delete();
-
-    for (int unsigned i = 0; i < target_length; i++) begin
-      read_data.push_back(8'(8'hC0 + (case_idx * 8) + i));
-    end
+  virtual function void build_payload(int unsigned target_length, ref byte_queue_t read_data);
+    build_random_payload(target_length, read_data);
   endfunction
 
 endclass

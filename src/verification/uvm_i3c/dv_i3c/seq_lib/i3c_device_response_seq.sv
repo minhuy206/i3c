@@ -14,6 +14,8 @@ class i3c_device_response_seq extends uvm_sequence #(
   bit entdaa_join;
   bit [7:0] daa_id_bytes[$];
   bit daa_accept_addr = 1'b1;
+  int unsigned daa_target_count;
+  i3c_daa_arb_target_t daa_targets[I3C_DAA_ARB_MAX_TARGETS];
   bit [6:0] ccc_target_addr;
   bit ccc_target_addr_valid;
   int read_data_cnt = 4;
@@ -59,6 +61,8 @@ class i3c_device_response_seq extends uvm_sequence #(
     req.entdaa_join = entdaa_join;
     req.daa_id_bytes = daa_id_bytes;
     req.daa_accept_addr = daa_accept_addr;
+    req.daa_target_count = daa_target_count;
+    req.daa_targets = daa_targets;
     req.ccc_target_addr = ccc_target_addr;
     req.ccc_target_addr_valid = ccc_target_addr_valid;
     req.end_with_rstart = 0;

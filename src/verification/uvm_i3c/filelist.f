@@ -39,6 +39,7 @@ uvm_i3c/i3c_core/sva/scl_generator_sva.sv
 uvm_i3c/i3c_core/sva/entdaa_fsm_sva.sv
 uvm_i3c/i3c_core/sva/entdaa_controller_sva.sv
 uvm_i3c/i3c_core/sva/flow_active_sva.sv
+uvm_i3c/i3c_core/sva/flow_active_cov.sv
 uvm_i3c/i3c_core/sva/csr_registers_sva.sv
 uvm_i3c/i3c_core/sva/i3c_controller_top_sva.sv
 uvm_i3c/i3c_core/sva/tb_pad_model_sva.sv
@@ -55,6 +56,10 @@ uvm_i3c/dv_reg/reg_agent_pkg.sv
 // ─── Verification: I3C timing package ────────────────────────────────────────
 // Defines timing types used by both i3c_if.sv and i3c_agent_pkg.sv.
 uvm_i3c/dv_i3c/i3c_timing_pkg.sv
+
+// ─── Verification: I3C DAA arbitration package ───────────────────────────────
+// Defines shared multi-target ENTDAA arbitration stimulus types.
+uvm_i3c/dv_i3c/i3c_daa_arb_pkg.sv
 
 // ─── Verification: I3C interface ─────────────────────────────────────────────
 // Imports i3c_timing_t / i2c_timing_t from i3c_timing_pkg.

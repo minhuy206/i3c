@@ -14,14 +14,6 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
 
   endtask
 
-  virtual function void build_read_payload(input byte base, input int unsigned data_length,
-                                           ref byte_queue_t read_data);
-    read_data.delete();
-    for (int unsigned i = 0; i < data_length; i++) begin
-      read_data.push_back(8'(base + i));
-    end
-  endfunction
-
   virtual task run_back_to_back_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg0;
     transfer_stimulus_cfg_t        cfg1;
@@ -105,9 +97,9 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    build_read_payload(8'h20, cfg0.data_length, read_data0);
-    build_read_payload(8'h60, cfg1.data_length, read_data1);
-    build_read_payload(8'hA0, cfg2.data_length, read_data2);
+    build_random_payload(cfg0.data_length, read_data0);
+    build_random_payload(cfg1.data_length, read_data1);
+    build_random_payload(cfg2.data_length, read_data2);
     start_back_to_back_device_responses(cfg0, read_data0, cfg1, read_data1, cfg2, read_data2,
                                         dev_seq0, dev_seq1, dev_seq2);
 

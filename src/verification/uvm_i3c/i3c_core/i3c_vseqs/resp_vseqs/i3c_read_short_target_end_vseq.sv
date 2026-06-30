@@ -1,14 +1,14 @@
 class i3c_read_short_target_end_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_read_short_target_end_vseq)
 
-  localparam int unsigned NUM_CASES = 4;
+  localparam int unsigned NUM_CASES = 5;
   function new(string name = "i3c_read_short_target_end_vseq");
     super.new(name);
   endfunction
 
   task body();
-    int unsigned req_lengths[NUM_CASES] = '{4, 8, 8, 9};
-    int unsigned actual_lengths[NUM_CASES] = '{1, 3, 4, 5};
+    int unsigned req_lengths[NUM_CASES] = '{4, 8, 8, 9, 6};
+    int unsigned actual_lengths[NUM_CASES] = '{1, 3, 4, 5, 5};
     bit broadcast_modes[2] = '{1'b0, 1'b1};
 
     foreach (broadcast_modes[mode_idx]) begin

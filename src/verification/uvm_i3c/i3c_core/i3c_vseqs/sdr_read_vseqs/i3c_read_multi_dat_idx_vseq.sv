@@ -26,14 +26,6 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
     write_dat_entry(7, 7'h51, 7'h12, 1'b0);
   endtask
 
-  virtual function void build_read_payload(input byte base, input int unsigned data_length,
-                                           ref byte_queue_t read_data);
-    read_data.delete();
-    for (int unsigned i = 0; i < data_length; i++) begin
-      read_data.push_back(8'(base + i));
-    end
-  endfunction
-
   virtual task run_multi_dat_idx_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg0;
     transfer_stimulus_cfg_t        cfg1;
@@ -85,8 +77,8 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    build_read_payload(8'hA0, cfg0.data_length, read_data0);
-    build_read_payload(8'hC0, cfg1.data_length, read_data1);
+    build_random_payload(cfg0.data_length, read_data0);
+    build_random_payload(cfg1.data_length, read_data1);
 
     start_ordered_device_responses(cfg0, 1'b1, read_data0, dev_seq0, cfg1, 1'b1, read_data1,
                                    dev_seq1);
@@ -169,8 +161,8 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    build_read_payload(8'hBA, cfg0.data_length, read_data0);
-    build_read_payload(8'hDC, cfg1.data_length, read_data1);
+    build_random_payload(cfg0.data_length, read_data0);
+    build_random_payload(cfg1.data_length, read_data1);
 
     run_toc_zero_read_stimulus(cfg0, cfg1, read_data0, read_data1, rx_words0, rx_words1, resp0,
                                resp1, rstart_count, dev_seq0, dev_seq1);

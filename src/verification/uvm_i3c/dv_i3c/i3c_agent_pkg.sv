@@ -1,5 +1,6 @@
 package i3c_agent_pkg;
   import i3c_pkg::I3C_RSVD_ADDR;
+  import i3c_daa_arb_pkg::*;
   import uvm_pkg::*;
 
   `include "uvm_macros.svh"
