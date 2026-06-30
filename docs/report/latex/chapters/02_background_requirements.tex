@@ -152,19 +152,57 @@ used to chain phases --- for example to switch from the open-drain broadcast hea
 push-pull data phase, or to turn the bus around between a write and a read.
 
 The MIPI specification further defines three \emph{distinct} idle conditions that this
-thesis is careful not to conflate~\cite{mipi_i3c_basic}. The \textbf{Bus Free Condition}
-(\S5.1.3.2.1) is the interval after a STOP and before the next START, sustained for at
-least $t_{\mathrm{CAS}}$; the \textbf{Bus Available Condition} (\S5.1.3.2.2) is a Bus Free
-Condition sustained for at least $t_{\mathrm{AVAL}}$, during which a target may request to
-drive the bus; and the \textbf{Bus Idle Condition} (\S5.1.3.2.3) is a longer interval
-(at least $t_{\mathrm{IDLE}}$) required before a Hot-Join request. This controller
-generates START/Sr/STOP and detects the Bus Free Condition before initiating a transfer;
-it does not use the Bus Available or Bus Idle conditions, because the events that need
-them (target-initiated START, Hot-Join) are out of scope. The bus monitor and SCL
-generator that realise these conditions are detailed in \cref{ch:architecture-rtl}.
+thesis is careful not to conflate~\cite{mipi_i3c_basic}. This controller uses only the
+\textbf{Bus Free Condition} (\S5.1.3.2.1) --- the interval after a STOP and before the next
+START, sustained for at least $t_{\mathrm{CAS}}$ --- which it detects before initiating a
+transfer. The longer \textbf{Bus Available} (\S5.1.3.2.2) and \textbf{Bus Idle}
+(\S5.1.3.2.3) conditions are not used, because the events that need them (target-initiated
+START, Hot-Join) are out of scope. The bus monitor and SCL generator that realise these
+conditions are detailed in \cref{ch:architecture-rtl}.
 
-\figph{Bus conditions}{START / Repeated START (Sr) / STOP --- SDA edge relative to SCL High}
-  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/bus_conditions.json)}
+\begin{figure}[!htb]\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\footnotesize,
+    sig/.style={thick, line join=round},
+    condline/.style={densely dashed, gray},
+    cond/.style={font=\footnotesize\bfseries},
+    edge dot/.style={circle, fill=black, inner sep=1.1pt},
+  ]
+  % row labels
+  \node[anchor=east] at (-0.3,2.0) {SCL};
+  \node[anchor=east] at (-0.3,0.4) {SDA};
+
+  % condition marker lines + labels (SDA edge while SCL High)
+  \foreach \x/\lbl in {1/S, 6/Sr, 11/P}{
+    \draw[condline] (\x,-0.9) -- (\x,3.0);
+    \node[cond, anchor=south] at (\x,3.0) {\lbl};
+  }
+
+  % SCL waveform (High during S, Sr, P)
+  \draw[sig, blue!60!black]
+    (0,2.4)--(2,2.4)--(2,1.6)--(3,1.6)--(3,2.4)--(4,2.4)--(4,1.6)--(5,1.6)--
+    (5,2.4)--(7,2.4)--(7,1.6)--(8,1.6)--(8,2.4)--(9,2.4)--(9,1.6)--(10,1.6)--
+    (10,2.4)--(13,2.4);
+
+  % SDA waveform
+  \draw[sig, orange!80!black]
+    (0,0.8)--(1,0.8)--(1,0.0)--(4.5,0.0)--(4.5,0.8)--(6,0.8)--(6,0.0)--
+    (11,0.0)--(11,0.8)--(13,0.8);
+
+  % highlight the defining SDA edges
+  \node[edge dot] at (1,0.4){};
+  \node[edge dot] at (6,0.4){};
+  \node[edge dot] at (11,0.4){};
+  \node[anchor=north, font=\scriptsize\itshape, text=black!70] at (1,-0.9)  {SDA\,$\downarrow$};
+  \node[anchor=north, font=\scriptsize\itshape, text=black!70] at (6,-0.9)  {SDA\,$\downarrow$};
+  \node[anchor=north, font=\scriptsize\itshape, text=black!70] at (11,-0.9) {SDA\,$\uparrow$};
+\end{tikzpicture}}
+\caption[Bus conditions (START / Repeated START / STOP)]{Bus conditions on the two-wire bus. A START (\textbf{S}) and a Repeated START
+(\textbf{Sr}) are SDA falling edges while SCL is High; a STOP (\textbf{P}) is an SDA rising
+edge while SCL is High. Between Sr and P, SDA changes only while SCL is Low (the data phase).}
+\label{fig:bus-conditions}
+\end{figure}
 
 \section{Open-drain versus push-pull signalling}
 \label{sec:bg-odpp}
@@ -181,14 +219,62 @@ directly; this removes the RC time constant of the pull-up and is what permits t
 
 The boundary is crossed at a Repeated START, where the controller turns the bus from the
 open-drain \texttt{0x7E} header to push-pull for the address and data that follow, while the
-ACK/NACK bits remain open-drain (\cref{fig:sdr-frames}). In the RTL this mode select is
-exposed as a single signal, \texttt{sel_od_pp} (\texttt{1}${=}$push-pull,
-\texttt{0}${=}$open-drain), whose detailed switching behaviour is described in
-\cref{ch:architecture-rtl}.
+ACK/NACK bits remain open-drain (\cref{fig:sdr-frames}). The RTL realisation of this mode
+select and its switching behaviour are described in \cref{ch:architecture-rtl}.
 
-\figph{Open-drain vs push-pull phases}
-  {OD 7E-header/ACK vs PP address+data; OD$\rightarrow$PP boundary at Sr; \texttt{sel_od_pp} select}
-  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/od_vs_pp.json)}
+\begin{figure}[!htb]\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\footnotesize,
+    field/.style={draw, minimum width=1.7cm, minimum height=9mm,
+                  text height=1.6ex, text depth=.5ex, align=center, inner sep=2pt},
+    od/.style={field, fill=blue!10},
+    pp/.style={field, fill=orange!18},
+    cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+    sig/.style={thick, line join=round},
+    rowlbl/.style={anchor=east, font=\footnotesize\bfseries},
+  ]
+  % ---- field row (centres 1.7 apart, boxes touch) ----
+  \node[cond] (f0) at (0.0,0)  {S};
+  \node[od]   (f1) at (1.7,0)  {7E$+$W};
+  \node[od]   (f2) at (3.4,0)  {ACK};
+  \node[cond] (f3) at (5.1,0)  {Sr};
+  \node[pp]   (f4) at (6.8,0)  {addr$+$W};
+  \node[od]   (f5) at (8.5,0)  {ACK};
+  \node[pp]   (f6) at (10.2,0) {Data\,0};
+  \node[pp]   (f7) at (11.9,0) {T};
+  \node[cond] (f8) at (13.6,0) {P};
+  \node[rowlbl] at (-1.0,0) {Bus};
+
+  % ---- OD->PP boundary marker at Sr|addr edge (x = 5.95) ----
+  \draw[densely dashed, gray] (5.95,-2.6) -- (5.95,0.95);
+  \node[anchor=south, font=\scriptsize\itshape, text=black!70, align=center]
+    at (5.95,0.95) {OD\,$\to$\,PP\\boundary};
+
+  % ---- sel_od_pp waveform (low=-2.2, high=-1.4) ----
+  \draw[sig]
+    (-0.85,-2.2)--(5.95,-2.2)--(5.95,-1.4)--(7.65,-1.4)--(7.65,-2.2)--
+    (9.35,-2.2)--(9.35,-1.4)--(12.75,-1.4)--(12.75,-2.2)--(14.45,-2.2);
+  \node[rowlbl] at (-1.0,-1.8) {\texttt{sel\_od\_pp}};
+  \node[anchor=west, font=\scriptsize] at (14.6,-1.4) {1};
+  \node[anchor=west, font=\scriptsize] at (14.6,-2.2) {0};
+
+  % ---- legend ----
+  \begin{scope}[every node/.style={font=\scriptsize}, node distance=3pt]
+    \node[od, minimum width=6mm, minimum height=4mm] (l1) at (1.4,-3.2) {};
+    \node[right=of l1] (l1t) {Open-drain};
+    \node[pp, minimum width=6mm, minimum height=4mm, right=12pt of l1t] (l2) {};
+    \node[right=of l2] (l2t) {Push-pull};
+    \node[cond, minimum width=6mm, minimum height=4mm, right=12pt of l2t] (l3) {};
+    \node[right=of l3] {Bus condition};
+  \end{scope}
+\end{tikzpicture}}
+\caption[Open-drain versus push-pull phases]{Open-drain versus push-pull phases across a Repeated START. The \texttt{0x7E}
+broadcast header and every ACK bit stay open-drain (\texttt{sel\_od\_pp}${=}0$); the address
+and data driven after the Sr boundary switch to push-pull (\texttt{sel\_od\_pp}${=}1$), while
+the ACK bit between them remains open-drain.}
+\label{fig:od-pp}
+\end{figure}
 
 \section{Dynamic Address Assignment via ENTDAA}
 \label{sec:bg-entdaa}
@@ -213,10 +299,64 @@ point a STOP closes the procedure. The assigned addresses are recorded in a 32-e
 Device Address Table (DAT). \Cref{ch:architecture-rtl} realises this as a two-FSM
 subsystem --- a loop manager and a per-round arbitration FSM.
 
-\figph{ENTDAA arbitration}
-  {7E+W, ACK, ENTDAA CCC, then per-target: Sr, 7E+R, 64-bit PID+BCR+DCR, dyn-addr+parity,
-   ACK; loop until no response, then P}
-  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/entdaa_arbitration.json)}
+\begin{figure}[!htb]\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\footnotesize,
+    field/.style={draw, minimum width=1.5cm, minimum height=11mm,
+                  align=center, inner sep=2pt},
+    od/.style={field, fill=blue!10},
+    pp/.style={field, fill=orange!18},
+    ccc/.style={field, fill=green!14},
+    cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+  ]
+  % ---- field chain ----
+  \begin{scope}[start chain=c going right, node distance=-\pgflinewidth]
+    \node[cond, on chain] (S)   {S};
+    \node[od,   on chain]        {7E$+$W};
+    \node[od,   on chain]        {ACK};
+    \node[ccc,  on chain]        {ENTDAA\\\texttt{0x07}};
+    \node[cond, on chain] (Sr)  {Sr};
+    \node[od,   on chain]        {7E$+$R};
+    \node[od,   on chain] (id) {64-bit ID};
+    \node[pp,   on chain]        {dyn-addr\\$+$\,par};
+    \node[od,   on chain] (ack2) {ACK};
+    \node[cond, on chain] (P)    {P};
+  \end{scope}
+  \node[anchor=east, font=\footnotesize\bfseries] at (S.west) {Bus~};
+
+  % ---- identity / arbitration annotation above the 64-bit field ----
+  \node[above=3pt of id, font=\scriptsize\itshape, text=black!70, align=center]
+    {64-bit ID $=$ PID/BCR/DCR, MSB first --- open-drain wired-AND arbitration};
+
+  % ---- per-target loop-back arrow ----
+  \draw[-{Stealth[length=5pt]}, thick, gray]
+    (ack2.south) .. controls +(0,-1.1) and +(0,-1.1) .. (Sr.south);
+  \node[font=\scriptsize\itshape, text=black!70, align=center]
+    at ($(Sr.south)!0.5!(ack2.south) + (0,-1.35)$)
+    {per Target; loop until a round goes unanswered, then STOP};
+
+  % ---- legend ----
+  \begin{scope}[every node/.style={font=\scriptsize}, node distance=3pt,
+                lg/.style={draw, minimum width=6mm, minimum height=4mm}]
+    \node[lg, fill=blue!10]  (l1) at (0,-3.1) {};
+    \node[right=of l1] (l1t) {Open-drain};
+    \node[lg, fill=orange!18, right=12pt of l1t] (l2) {};
+    \node[right=of l2] (l2t) {Push-pull};
+    \node[lg, fill=green!14, right=12pt of l2t] (l3) {};
+    \node[right=of l3] (l3t) {CCC};
+    \node[lg, fill=black!12, right=12pt of l3t] (l4) {};
+    \node[right=of l4] {Bus condition};
+  \end{scope}
+\end{tikzpicture}}
+\caption[ENTDAA dynamic address assignment loop]{ENTDAA dynamic address assignment from the
+controller's perspective. After the \texttt{7E$+$W} broadcast header and the ENTDAA CCC
+(\texttt{0x07}), the controller loops: a Repeated START and \texttt{7E$+$R}, the target's
+64-bit identity (PID$+$BCR$+$DCR) streamed open-drain so it self-arbitrates, then a
+controller-assigned dynamic address with parity and the target's ACK. The loop repeats until a
+round goes unanswered, when a STOP (\textbf{P}) closes the procedure.}
+\label{fig:entdaa}
+\end{figure}
 
 \section{Common Command Codes (CCC) overview}
 \label{sec:bg-ccc}
@@ -253,8 +393,65 @@ direct) enable and disable target-generated events. All other CCCs are out of sc
   \end{tabular}
 \end{table}
 
-\figph{CCC frame formats}{Broadcast CCC vs Direct CCC framing}
-  {MIPI I3C Basic v1.1.1}{WaveDrom (bus/ccc_frame.json)}
+\begin{figure}[!htb]\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\footnotesize,
+    field/.style={draw, minimum width=1.4cm, minimum height=9mm,
+                  text height=1.6ex, text depth=.5ex, align=center, inner sep=2pt},
+    od/.style={field, fill=blue!10},
+    pp/.style={field, fill=orange!18},
+    ccc/.style={field, fill=green!14},
+    data/.style={field, fill=black!4},
+    cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+    rowlbl/.style={anchor=east, font=\footnotesize\bfseries},
+  ]
+  % ---------------- Broadcast CCC ----------------
+  \begin{scope}[start chain=b going right, node distance=-\pgflinewidth]
+    \node[cond, on chain] (b0) {S};
+    \node[od,   on chain]      {7E$+$W};
+    \node[od,   on chain]      {ACK};
+    \node[ccc,  on chain]      {CCC};
+    \node[data, on chain]      {$\cdots$};
+    \node[cond, on chain] (bN) {P};
+  \end{scope}
+  \node[rowlbl] at (b0.west) {Broadcast~};
+
+  % ---------------- Direct CCC ----------------
+  \begin{scope}[start chain=d going right, node distance=-\pgflinewidth]
+    \node[cond, on chain] (d0) at (0,-2.2) {S};
+    \node[od,   on chain]      {7E$+$W};
+    \node[od,   on chain]      {ACK};
+    \node[ccc,  on chain]      {CCC};
+    \node[cond, on chain]      {Sr};
+    \node[pp,   on chain]      {addr$+$RnW};
+    \node[od,   on chain]      {ACK};
+    \node[data, on chain]      {$\cdots$};
+    \node[cond, on chain] (dN) {P};
+  \end{scope}
+  \node[rowlbl] at (d0.west) {Direct~};
+
+  % ---------------- legend ----------------
+  \begin{scope}[every node/.style={font=\scriptsize}, node distance=3pt,
+                lg/.style={draw, minimum width=6mm, minimum height=4mm}]
+    \node[lg, fill=blue!10]  (l1) at (0,-3.6) {};
+    \node[right=of l1] (l1t) {Open-drain};
+    \node[lg, fill=orange!18, right=12pt of l1t] (l2) {};
+    \node[right=of l2] (l2t) {Push-pull};
+    \node[lg, fill=green!14, right=12pt of l2t] (l3) {};
+    \node[right=of l3] (l3t) {CCC code};
+    \node[lg, fill=black!4, right=12pt of l3t] (l4) {};
+    \node[right=of l4] (l4t) {Data};
+    \node[lg, fill=black!12, right=12pt of l4t] (l5) {};
+    \node[right=of l5] {Bus condition};
+  \end{scope}
+\end{tikzpicture}}
+\caption[CCC broadcast and direct frame formats]{Common Command Code framings. A
+\textbf{Broadcast CCC} follows the \texttt{7E$+$W} header with the command code and reaches every
+target at once. A \textbf{Direct CCC} adds a Repeated START and a target address after the code,
+so the command applies to one device. Both are framed by START (\textbf{S}) and STOP (\textbf{P}).}
+\label{fig:ccc-frames}
+\end{figure}
 
 \section{I3C-versus-\iic{} comparison}
 \label{sec:bg-comparison}
@@ -264,10 +461,8 @@ and marks which rows fall within this design's scope. The headline gains are a
 $\sim$12.5$\times$ data-rate increase from push-pull signalling, collision-free dynamic
 addressing, and lower static power from the absence of board-level pull-up current --- all
 while remaining backward compatible with legacy \iic{} Fast-Mode traffic on the same two
-wires. The SDR push-pull and \iic{} Fast-Mode timing parameters the controller's programmable
-timing must satisfy --- the SDR values from MIPI I3C Basic Table~87 and the Fast-Mode values
-from the \iic{} legacy timing table~\cite{mipi_i3c_basic} --- are summarised together with the
-implementation's reset defaults in \cref{tab:perf-targets} (\cref{sec:req-performance}).
+wires. The SDR and Fast-Mode timing parameters the controller must satisfy are summarised with
+the implementation's reset defaults in \cref{tab:perf-targets} (\cref{sec:req-performance}).
 
 \begin{table}[!htb]\centering
   \caption{I3C-versus-\iic{} feature matrix. The final column marks coverage in this design.}
@@ -447,9 +642,66 @@ RX data-buffer window; and each completed command produces a response descriptor
 response queue. The full register map and descriptor layouts are deferred to the
 appendices and detailed in \cref{ch:architecture-rtl}.
 
-\figph{Register-bus read/write protocol}
-  {single-cycle write handshake + read-with-ready timing on the 32-bit register bus}
-  {csr\_registers.sv}{WaveDrom / TikZ timing}
+\begin{figure}[!htb]\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\footnotesize,
+    sig/.style={thick, line join=round},
+    busline/.style={thick},
+    samp/.style={densely dashed, gray!55},
+    lbl/.style={anchor=east},
+    busbox/.style={draw, thick, fill=black!6, minimum width=2cm, minimum height=6mm,
+                   inner sep=1pt},
+    note/.style={font=\scriptsize\itshape, text=black!70},
+  ]
+  % ---- sampling-edge guides ----
+  \foreach \x in {2,6,8}{ \draw[samp] (\x,-0.35) -- (\x,7.95); }
+
+  % ---- clk_i ----
+  \draw[sig]
+    (0,7.2)--(2,7.2)--(2,7.8)--(3,7.8)--(3,7.2)--(4,7.2)--(4,7.8)--(5,7.8)--(5,7.2)--
+    (6,7.2)--(6,7.8)--(7,7.8)--(7,7.2)--(8,7.2)--(8,7.8)--(9,7.8)--(9,7.2)--
+    (10,7.2)--(10,7.8)--(11,7.8)--(11,7.2)--(12,7.2);
+  \node[lbl] at (-0.2,7.5) {\texttt{clk\_i}};
+
+  % ---- reg_addr_i (bus) ----
+  \draw[busline] (0,6.3)--(2,6.3); \draw[busline] (4,6.3)--(6,6.3); \draw[busline] (8,6.3)--(12,6.3);
+  \node[busbox, fill=blue!8]   at (3,6.3) {ADDR$_\mathrm{W}$};
+  \node[busbox, fill=orange!10] at (7,6.3) {ADDR$_\mathrm{R}$};
+  \node[lbl] at (-0.2,6.3) {\texttt{reg\_addr\_i}};
+
+  % ---- reg_wdata_i (bus) ----
+  \draw[busline] (0,5.1)--(2,5.1); \draw[busline] (4,5.1)--(12,5.1);
+  \node[busbox, fill=blue!8] at (3,5.1) {WDATA};
+  \node[lbl] at (-0.2,5.1) {\texttt{reg\_wdata\_i}};
+
+  % ---- reg_wen_i ----
+  \draw[sig] (0,3.6)--(2,3.6)--(2,4.2)--(4,4.2)--(4,3.6)--(12,3.6);
+  \node[lbl] at (-0.2,3.9) {\texttt{reg\_wen\_i}};
+
+  % ---- reg_ren_i ----
+  \draw[sig] (0,2.4)--(6,2.4)--(6,3.0)--(8,3.0)--(8,2.4)--(12,2.4);
+  \node[lbl] at (-0.2,2.7) {\texttt{reg\_ren\_i}};
+
+  % ---- reg_rdata_o (bus) ----
+  \draw[busline] (0,1.5)--(8,1.5); \draw[busline] (10,1.5)--(12,1.5);
+  \node[busbox, fill=orange!10] at (9,1.5) {RDATA};
+  \node[lbl] at (-0.2,1.5) {\texttt{reg\_rdata\_o}};
+
+  % ---- reg_ready_o ----
+  \draw[sig] (0,0)--(8,0)--(8,0.6)--(10,0.6)--(10,0)--(12,0);
+  \node[lbl] at (-0.2,0.3) {\texttt{reg\_ready\_o}};
+
+  % ---- transaction annotations ----
+  \draw[gray] (2,8.0)--(4,8.0);  \node[note, anchor=south] at (3,8.05) {single-cycle write};
+  \draw[gray] (6,8.0)--(10,8.0); \node[note, anchor=south] at (8,8.05) {read with ready handshake};
+\end{tikzpicture}}
+\caption[32-bit register-bus read/write timing]{Register-bus protocol. A write drives the
+address, write data, and \texttt{reg\_wen\_i} in a single clock; a read drives the address with
+\texttt{reg\_ren\_i} and later receives \texttt{reg\_rdata\_o} qualified by the
+\texttt{reg\_ready\_o} handshake. Dashed lines mark the sampling clock edges.}
+\label{fig:reg-bus}
+\end{figure}
 
 \section{Verification requirements}
 \label{sec:req-verification}

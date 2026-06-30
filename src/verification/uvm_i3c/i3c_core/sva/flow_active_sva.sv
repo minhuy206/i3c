@@ -125,6 +125,68 @@ module flow_active_sva
   localparam logic [7:0] PhaseDataStart = 8'd3;
   localparam int unsigned AddrNackRespTimeoutCycles = 256;
 
+  typedef enum logic [2:0] {
+    ResetPointOther,
+    ResetPointStart,
+    ResetPointAddrAck,
+    ResetPointDataTx,
+    ResetPointDataRx,
+    ResetPointDaa,
+    ResetPointWriteResp
+  } err014_reset_point_e;
+
+  function automatic err014_reset_point_e classify_err014_reset_point();
+    if (state_q == WriteResp) begin
+      return ResetPointWriteResp;
+    end
+    if ((state_q == IssueCmd) && (cmd_attr == AddressAssignment)) begin
+      return ResetPointDaa;
+    end
+    if ((state_q == IssueCmd) && bus_tx_req_byte) begin
+      return ResetPointDataTx;
+    end
+    if ((state_q == IssueCmd) && bus_rx_req_byte) begin
+      return ResetPointDataRx;
+    end
+    if (gen_start_o) begin
+      return ResetPointStart;
+    end
+    if ((issue_phase_q == PhaseAddrAck) && bus_rx_req_bit_handoff) begin
+      return ResetPointAddrAck;
+    end
+    return ResetPointOther;
+  endfunction
+
+  // Latch must have no async reset: the point is to capture the phase value
+  // at the posedge where the vseq detects the condition, so the value is
+  // stable by the time the covergroup samples at @(negedge rst_ni).
+  err014_reset_point_e reset_phase_latch_q;
+  always_ff @(posedge clk_i) begin
+    reset_phase_latch_q <= classify_err014_reset_point();
+  end
+
+  covergroup err014_reset_cg @(negedge rst_ni);
+    option.per_instance = 1;
+
+    cp_reset_asserted: coverpoint rst_ni {
+      bins hard_reset = {1'b0};
+    }
+
+    cp_reset_point: coverpoint reset_phase_latch_q {
+      bins start = {ResetPointStart};
+      bins address_ack = {ResetPointAddrAck};
+      bins data_tx = {ResetPointDataTx};
+      bins data_rx = {ResetPointDataRx};
+      bins daa = {ResetPointDaa};
+      bins response_write = {ResetPointWriteResp};
+      ignore_bins other = {ResetPointOther};
+    }
+
+    cross_reset_x_phase: cross cp_reset_asserted, cp_reset_point;
+  endgroup
+
+  err014_reset_cg err014_reset_cov = new();
+
   covergroup err009_abort_cg @(posedge clk_i);
     option.per_instance = 1;
 
@@ -590,8 +652,13 @@ module flow_active_sva
   covergroup err010_invalid_cmd_cg @(posedge clk_i);
     option.per_instance = 1;
 
-    cp_invalid_cmd: coverpoint cmd_attr iff (rst_ni && state_q == FetchDAT &&
-                                              invalid_cmd_desc()) {
+    // Cast to int'() so Xcelium 18.03 enum-bin bug doesn't record 0 hits.
+    // Gate on WriteResp+NotSupported instead of FetchDAT: ImmediateDataTransfer
+    // never enters FetchDAT (goes directly to IssueImmediateCcc), making the
+    // FetchDAT gate structurally unreachable for the `immediate` bin.
+    cp_invalid_cmd: coverpoint int'(cmd_attr) iff (
+        rst_ni && state_q == WriteResp && resp_queue_wvalid &&
+        resp_queue_wdata[31:28] == NotSupported) {
       bins regular = {3'b000};
       bins immediate = {3'b001};
       bins address_assignment = {3'b010};

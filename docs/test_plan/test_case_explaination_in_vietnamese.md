@@ -1204,15 +1204,15 @@ Test này quan trọng vì reset có thể xảy ra bất kỳ lúc nào trong h
 
 ### ERR_015 - `sw_reset_while_busy_policy`
 
-Test này làm rõ policy khi software reset được assert trong lúc controller đang bận.
+Test này kiểm tra policy khi software reset được assert trong lúc controller đang bận.
 
-Testbench bắt đầu một transfer, sau đó ghi `RESET_CONTROL[0]` (SOFT_RST) khi FSM chưa idle.
+Testbench bắt đầu một chuỗi transfer có command tiếp theo đang chờ, sau đó ghi `RESET_CONTROL[0]` (SOFT_RST) khi `HC_STATUS[FSM_IDLE]=0`.
 
-Theo testplan, nếu spec hiện tại xem behavior này là undefined thì testcase chỉ được dùng để ghi nhận spec gap và khuyến nghị software chỉ dùng software reset khi `FSM_IDLE=1`; nó không phải positive pass/fail dựa trên waveform hiện tại.
+Policy hiện tại là busy SOFT_RST được bus CSR accept nhưng không có side effect: không tạo pulse `sw_reset`, không flush CMD/TX/RX/RESP FIFO, không clear CSR CMD/TX staging, và không reset protocol FSM.
 
-Nếu muốn kiểm tra busy software reset như một feature, project spec phải định nghĩa rõ là flush queue, abort transfer, ignore reset, hay trả lỗi. Nếu có nguy cơ treo hoặc corrupt state, đó là gap cần được xử lý hoặc ràng buộc bằng software precondition.
+Kết quả mong đợi là transfer đang chạy và các transfer đã queue vẫn hoàn tất bình thường. Nếu software muốn hủy active transfer, đường recovery đúng là dùng `HC_CONTROL[ABORT]`, đợi idle, rồi dùng SOFT_RST khi idle để cleanup FIFO/staging nếu cần.
 
-Test này quan trọng vì software reset là công cụ recovery, nhưng nếu dùng sai thời điểm có thể làm trạng thái controller khó dự đoán.
+Test này quan trọng vì RTL cũ flush queue ngay cả khi protocol FSM vẫn đang chạy, tạo nguy cơ mất command/data và làm trạng thái controller khó dự đoán.
 
 ### ERR_016 - `bus_stuck_scl_low`
 
@@ -1232,17 +1232,7 @@ Phần 4.11 kiểm tra các hành vi liên quan đến arbitration và trạng t
 
 Trong I3C, đặc biệt ở ENTDAA, bus có thể có nhiều target cùng drive theo kiểu wired-AND. Ngoài ra controller cũng cần có policy rõ khi gặp STOP bất ngờ hoặc khi software queue command trong lúc bus chưa idle. Các test trong phần này không chỉ kiểm tra data path, mà còn kiểm tra cách DUT quan sát bus thật và phản ứng với điều kiện bus bất thường.
 
-### ARB_001 - `entdaa_single_bit_arbitration_observe`
-
-Test này kiểm tra việc receiver sample từng bit identity trong ENTDAA.
-
-Target DAA drive PID/BCR/DCR với giá trị đã biết. Trong quá trình ENTDAA, testbench quan sát từng bit mà `bus_rx_flow` sample từ bus.
-
-Kết quả mong đợi là identity 64-bit mà `entdaa_fsm` capture phải khớp với dữ liệu thật trên bus, bao gồm PID, BCR, và DCR.
-
-Test này quan trọng vì ENTDAA arbitration và identity capture đều phụ thuộc vào việc sample đúng từng bit. Nếu bit-level receive sai, controller có thể assign address cho sai target hoặc capture sai thông tin target.
-
-### ARB_002 - `entdaa_multi_target_arbitration_future`
+### ARB_001 - `i3c_entdaa_multi_target_arbitration_vseq`
 
 Test này kiểm tra true multi-target arbitration trong ENTDAA.
 
@@ -1252,9 +1242,9 @@ Kết quả mong đợi là controller assign address cho arbitration winner tr�
 
 Case hai target chỉ là minimum subcase của mục multi-target này, không cần testcase riêng trong DAA category.
 
-Test này có priority Future vì cần UVM bus model hỗ trợ nhiều target simultaneous drive. Hiện tại nếu testbench chưa hỗ trợ điều này, test được giữ như roadmap cho verification mở rộng.
+Test này dùng UVM bus model mở rộng để nhiều target cùng drive SDA open-drain trong cùng một ENTDAA round. Vseq kiểm tra cả case target thua sớm theo PID và case target chỉ thua muộn ở DCR, sau đó đối chiếu thứ tự RX FIFO result với thứ tự winner dự đoán từ `{PID,BCR,DCR}`.
 
-### ARB_003 - `unexpected_stop_during_command`
+### ARB_002 - `unexpected_stop_during_command`
 
 Test này kiểm tra phản ứng của controller khi có STOP bất ngờ trong lúc command đang active.
 
@@ -1266,7 +1256,7 @@ Controller không được âm thầm tiếp tục dùng state cũ như thể kh
 
 Test này quan trọng vì bus event bất ngờ có thể xảy ra do reset, target lỗi, hoặc contention trong hệ thống. Verification cần biết scope/spec yêu cầu recovery đến mức nào.
 
-### ARB_004 - `start_when_bus_not_idle`
+### ARB_003 - `start_when_bus_not_idle`
 
 Test này kiểm tra behavior khi software queue command trong lúc bus chưa idle.
 

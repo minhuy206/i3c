@@ -35,6 +35,18 @@ module sync_fifo_sva #(
     else past_valid_q <= 1'b1;
   end
 
+  ap_hard_reset_clears_fifo_state:
+  assert property (@(posedge clk_i)
+                   !rst_ni |->
+                   (empty_o && !full_o && (depth_o == '0) &&
+                    (wptr_q == '0) && (rptr_q == '0)))
+  else $error("sync_fifo_sva: hard reset did not clear FIFO state");
+
+  cp_hard_reset_clears_fifo_state:
+  cover property (@(posedge clk_i)
+                  !rst_ni && empty_o && !full_o && (depth_o == '0) &&
+                  (wptr_q == '0) && (rptr_q == '0));
+
   ap_status_matches_depth:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    !flush_i |->

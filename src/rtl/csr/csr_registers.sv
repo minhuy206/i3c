@@ -185,7 +185,7 @@ module csr_registers
             hc_abort <= wdata_i[HC_CTRL_ABORT_BIT];
           end
           ADDR_RESET_CONTROL: begin
-            sw_reset <= wdata_i[RESET_CTRL_SOFT_RST_BIT];
+            sw_reset <= wdata_i[RESET_CTRL_SOFT_RST_BIT] && i3c_fsm_idle_i;
           end
           ADDR_T_R: t_r <= wdata_i[19:0];
           ADDR_T_F: t_f <= wdata_i[19:0];

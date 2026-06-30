@@ -64,6 +64,83 @@ class i3c_driver extends uvm_driver #(
     return !is_broadcast_header(addr);
   endfunction : direct_ccc_addr_match
 
+  function automatic bit [63:0] daa_target_identity(i3c_daa_arb_target_t target);
+    return {target.pid, target.bcr, target.dcr};
+  endfunction : daa_target_identity
+
+  function automatic bit [7:0] daa_id_byte_at(i3c_seq_item req, int unsigned byte_idx);
+    if (byte_idx < req.daa_id_bytes.size()) return req.daa_id_bytes[byte_idx];
+    return 8'h00;
+  endfunction : daa_id_byte_at
+
+  function automatic void build_entdaa_target_list(
+      i3c_seq_item req, output i3c_daa_arb_target_t targets[I3C_DAA_ARB_MAX_TARGETS],
+      output int unsigned target_count);
+    targets = '{default: '0};
+    target_count = 0;
+
+    if (req.daa_target_count > 0) begin
+      target_count = (req.daa_target_count > I3C_DAA_ARB_MAX_TARGETS) ?
+          I3C_DAA_ARB_MAX_TARGETS : req.daa_target_count;
+      for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+        targets[i] = req.daa_targets[i];
+      end
+    end else begin
+      target_count = 1;
+      targets[0].valid = req.entdaa_join;
+      targets[0].pid = {daa_id_byte_at(req, 0), daa_id_byte_at(req, 1), daa_id_byte_at(req, 2),
+                        daa_id_byte_at(req, 3), daa_id_byte_at(req, 4), daa_id_byte_at(req, 5)};
+      targets[0].bcr = daa_id_byte_at(req, 6);
+      targets[0].dcr = daa_id_byte_at(req, 7);
+      targets[0].accept_addr = req.daa_accept_addr;
+
+      if (req.entdaa_join && req.daa_id_bytes.size() != 8) begin
+        `uvm_error(`gfn, $sformatf("ENTDAA join requires 8 DAA ID bytes, got %0d",
+                                   req.daa_id_bytes.size()))
+      end
+    end
+  endfunction : build_entdaa_target_list
+
+  function automatic bit [I3C_DAA_ARB_MAX_TARGETS-1:0] make_entdaa_active_mask(
+      i3c_daa_arb_target_t targets[I3C_DAA_ARB_MAX_TARGETS], int unsigned target_count,
+      bit [I3C_DAA_ARB_MAX_TARGETS-1:0] assigned);
+    make_entdaa_active_mask = '0;
+    for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+      if ((i < target_count) && targets[i].valid && !assigned[i]) begin
+        make_entdaa_active_mask[i] = 1'b1;
+      end
+    end
+  endfunction : make_entdaa_active_mask
+
+  function automatic int unsigned count_active_entdaa_targets(
+      bit [I3C_DAA_ARB_MAX_TARGETS-1:0] active);
+    count_active_entdaa_targets = 0;
+    for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+      if (active[i]) count_active_entdaa_targets++;
+    end
+  endfunction : count_active_entdaa_targets
+
+  function automatic bit find_entdaa_winner(bit [I3C_DAA_ARB_MAX_TARGETS-1:0] active,
+                                            output int unsigned winner_idx);
+    bit winner_found;
+
+    winner_idx = 0;
+    winner_found = 1'b0;
+    for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+      if (active[i] && !winner_found) begin
+        winner_found = 1'b1;
+        winner_idx = i;
+      end else if (active[i]) begin
+        `uvm_error(`gfn, "ENTDAA arbitration ended with multiple winners")
+      end
+    end
+
+    if (!winner_found) begin
+      `uvm_error(`gfn, "ENTDAA arbitration ended with no winner")
+    end
+    return winner_found;
+  endfunction : find_entdaa_winner
+
   task automatic sample_addr(ref i3c_seq_item rsp, input string msg = "addr");
     bit [6:0] sampled_addr;
     bit       sampled_dir;
@@ -121,41 +198,47 @@ class i3c_driver extends uvm_driver #(
     rsp.end_with_rstart = rstart;
   endtask : wait_i3c_term
 
-  task automatic drive_entdaa_round(i3c_seq_item req, ref i3c_seq_item rsp);
-    bit addr_ack;
+  task automatic drive_entdaa_identity_arbitration(
+      input i3c_daa_arb_target_t targets[I3C_DAA_ARB_MAX_TARGETS],
+      input bit [I3C_DAA_ARB_MAX_TARGETS-1:0] active_i,
+      output bit [I3C_DAA_ARB_MAX_TARGETS-1:0] active_o);
+    bit [I3C_DAA_ARB_MAX_TARGETS-1:0] bit_value;
+    bit [I3C_DAA_ARB_MAX_TARGETS-1:0] lost;
+    bit [63:0] identity[I3C_DAA_ARB_MAX_TARGETS];
+    bit bus_bit;
+
+    active_o = active_i;
+    for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+      identity[i] = daa_target_identity(targets[i]);
+    end
+
+    for (int bit_pos = 63; bit_pos >= 0; bit_pos--) begin
+      for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+        bit_value[i] = identity[i][bit_pos];
+      end
+      cfg.vif.device_i3c_send_daa_arbitration_bit(cfg.tc.i3c_tc, active_o, bit_value, lost,
+                                                  bus_bit);
+      active_o &= ~lost;
+      `uvm_info(`gfn, $sformatf(
+                "ENTDAA arbitration bit[%0d] bus=%0b bit_value=0x%0h lost=0x%0h active=0x%0h",
+                bit_pos, bus_bit, bit_value, lost, active_o), UVM_DEBUG)
+    end
+  endtask : drive_entdaa_identity_arbitration
+
+  task automatic sample_entdaa_assigned_addr_or_term(ref i3c_seq_item rsp, output bit got_addr,
+                                                     output bit [7:0] addr_tmp);
     bit addr_complete;
     bit term_seen;
     bit term_rstart;
     bit term_stop;
-    bit [7:0] addr_tmp;
 
-    addr_ack = req.entdaa_join && rsp.addr == I3C_RSVD_ADDR && rsp.dir;
-    cfg.vif.device_i3c_send_addr_ack_no_handoff(cfg.tc.i3c_tc, addr_ack);
-    `uvm_info(`gfn, $sformatf("ENTDAA 0x7E+R sent %s", ack_to_string(addr_ack)), UVM_MEDIUM)
-
-    if (!addr_ack) begin
-      wait_i3c_term(rsp);
-      return;
-    end
-
-    if (req.daa_id_bytes.size() != 8) begin
-      `uvm_error(`gfn, $sformatf("ENTDAA join requires 8 DAA ID bytes, got %0d",
-                                 req.daa_id_bytes.size()))
-    end
-
-    for (int i = 0; i < 8; i++) begin
-      bit [7:0] daa_byte;
-      daa_byte = (i < req.daa_id_bytes.size()) ? req.daa_id_bytes[i] : 8'h00;
-      for (int j = 7; j >= 0; j--) begin
-        cfg.vif.device_i3c_send_daa_bit(cfg.tc.i3c_tc, daa_byte[j]);
-      end
-    end
-
+    got_addr = 1'b0;
+    addr_tmp = '0;
     addr_complete = 1'b0;
-    term_seen     = 1'b0;
-    term_rstart   = 1'b0;
-    term_stop     = 1'b0;
-    addr_tmp      = '0;
+    term_seen = 1'b0;
+    term_rstart = 1'b0;
+    term_stop = 1'b0;
+
     fork : wait_addr_or_term
       begin
         for (int j = 7; j >= 0; j--) begin
@@ -177,13 +260,86 @@ class i3c_driver extends uvm_driver #(
       return;
     end
 
-    if (addr_complete) begin
-      rsp.data.push_back(addr_tmp);
-      cfg.vif.device_i3c_send_addr_ack_handoff(cfg.tc.i3c_tc, req.daa_accept_addr);
-    end
+    got_addr = addr_complete;
+  endtask : sample_entdaa_assigned_addr_or_term
 
-    wait_i3c_term(rsp);
-  endtask : drive_entdaa_round
+  task automatic drive_entdaa_transfer(i3c_seq_item req, ref i3c_seq_item rsp,
+                                       input bit first_addr_valid = 1'b0);
+    i3c_daa_arb_target_t targets[I3C_DAA_ARB_MAX_TARGETS];
+    int unsigned target_count;
+    int unsigned assigned_count;
+    bit [I3C_DAA_ARB_MAX_TARGETS-1:0] assigned;
+    bit [I3C_DAA_ARB_MAX_TARGETS-1:0] active;
+    bit first_addr_pending;
+    bit got_addr;
+    bit addr_ack;
+    bit active_found;
+    bit [7:0] addr_tmp;
+    bit target_list_request;
+    int unsigned winner_idx;
+
+    build_entdaa_target_list(req, targets, target_count);
+    target_list_request = (req.daa_target_count > 0);
+    assigned = '0;
+    assigned_count = 0;
+    first_addr_pending = first_addr_valid;
+
+    forever begin
+      if (first_addr_pending) begin
+        got_addr = 1'b1;
+        first_addr_pending = 1'b0;
+      end else begin
+        sample_next_addr_or_stop(rsp, "ENTDAA addr", got_addr);
+        if (!got_addr) return;
+      end
+
+      active = make_entdaa_active_mask(targets, target_count, assigned);
+      active_found = (|active) && (rsp.addr == I3C_RSVD_ADDR) && rsp.dir;
+      addr_ack = active_found;
+      cfg.vif.device_i3c_send_addr_ack_no_handoff(cfg.tc.i3c_tc, addr_ack);
+      `uvm_info(`gfn, $sformatf("ENTDAA 0x7E+R sent %s active=0x%0h",
+                                ack_to_string(addr_ack), active), UVM_MEDIUM)
+
+      if ((rsp.addr != I3C_RSVD_ADDR) || !rsp.dir) begin
+        `uvm_warning(`gfn, $sformatf("ENTDAA expected 0x7E+R, got addr=0x%02h dir=%0b",
+                                     rsp.addr, rsp.dir))
+      end
+
+      if (!addr_ack) begin
+        continue;
+      end
+
+      drive_entdaa_identity_arbitration(targets, active, active);
+      if (count_active_entdaa_targets(active) != 1) begin
+        `uvm_error(`gfn, $sformatf("ENTDAA arbitration ended with %0d winners",
+                                   count_active_entdaa_targets(active)))
+        continue;
+      end
+      if (!find_entdaa_winner(active, winner_idx)) begin
+        continue;
+      end
+
+      sample_entdaa_assigned_addr_or_term(rsp, got_addr, addr_tmp);
+      if (!got_addr) return;
+
+      rsp.data.push_back(addr_tmp);
+      cfg.vif.device_i3c_send_addr_ack_handoff(cfg.tc.i3c_tc, targets[winner_idx].accept_addr);
+      if (targets[winner_idx].accept_addr) begin
+        assigned[winner_idx] = 1'b1;
+        assigned_count++;
+      end
+      `uvm_info(`gfn, $sformatf(
+                "ENTDAA winner=%0d pid=0x%012h bcr=0x%02h dcr=0x%02h assigned_addr=0x%02h accepted=%0b assigned_count=%0d",
+                winner_idx, targets[winner_idx].pid, targets[winner_idx].bcr,
+                targets[winner_idx].dcr, addr_tmp[7:1], targets[winner_idx].accept_addr,
+                assigned_count), UVM_MEDIUM)
+
+      if (!target_list_request) begin
+        wait_i3c_term(rsp);
+        return;
+      end
+    end
+  endtask : drive_entdaa_transfer
 
   task automatic sample_next_addr_or_stop(ref i3c_seq_item rsp, input string msg,
                                           output bit got_addr);
@@ -239,12 +395,7 @@ class i3c_driver extends uvm_driver #(
       end
 
       ENTDAA: begin
-        sample_next_addr_or_stop(rsp, "ENTDAA addr", got_addr);
-        if (got_addr) begin
-          drive_entdaa_round(req, rsp);
-        end else begin
-          `uvm_warning(`gfn, "ENTDAA opcode was not followed by a repeated START")
-        end
+        drive_entdaa_transfer(req, rsp);
         transaction_done = 1'b1;
       end
 
@@ -301,6 +452,7 @@ class i3c_driver extends uvm_driver #(
     if (cfg.if_mode == Device) begin
       cfg.vif.device_sda_pp_en = 1'b0;
       cfg.vif.device_sda_o = 1'b1;
+      cfg.vif.daa_target_sda_oe = '0;
     end
   endtask : release_bus
 
@@ -332,7 +484,9 @@ class i3c_driver extends uvm_driver #(
             begin
               if (cfg.if_mode == Device) begin
                 wait (req != null);
-                if (req.dir || req.is_daa) begin
+                if (req.is_daa) begin
+                  wait (1'b0);
+                end else if (req.dir) begin
                   wait (bus_state == DrvRd || bus_state == DrvRdPushPull || bus_state == DrvDAA || bus_state == DrvStop);
                 end else begin
                   wait (bus_state == DrvWrPushPull || bus_state == DrvWr || bus_state == DrvStop);
@@ -404,7 +558,7 @@ class i3c_driver extends uvm_driver #(
         DrvAddrPushPull: begin
           sample_addr(rsp, "device addr");
           if (req.is_daa) begin
-            drive_entdaa_round(req, rsp);
+            drive_entdaa_transfer(req, rsp, 1'b1);
             set_drv_state(DrvIdle);
             return;
           end

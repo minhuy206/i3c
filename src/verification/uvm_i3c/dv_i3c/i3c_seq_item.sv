@@ -19,6 +19,8 @@ class i3c_seq_item extends uvm_sequence_item;
   rand bit        entdaa_join;
   rand bit [ 7:0] daa_id_bytes                [$];
   rand bit        daa_accept_addr;
+  rand int unsigned daa_target_count;
+  rand i3c_daa_arb_target_t daa_targets[I3C_DAA_ARB_MAX_TARGETS];
   rand bit [ 6:0] ccc_target_addr;
   rand bit        ccc_target_addr_valid;
   bit      [ 6:0] sampled_addr_q              [$];
@@ -73,6 +75,7 @@ class i3c_seq_item extends uvm_sequence_item;
     `uvm_field_int(entdaa_join, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_queue_int(daa_id_bytes, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(daa_accept_addr, UVM_DEFAULT | UVM_NOCOMPARE)
+    `uvm_field_int(daa_target_count, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(ccc_target_addr, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(ccc_target_addr_valid, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_queue_int(sampled_addr_q, UVM_DEFAULT | UVM_NOCOMPARE)

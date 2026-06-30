@@ -2,6 +2,7 @@ package i3c_env_pkg;
   import uvm_pkg::*;
   import reg_agent_pkg::*;
   import i3c_agent_pkg::*;
+  import i3c_daa_arb_pkg::*;
   import i3c_csr_addr_pkg::*;
   import i3c_pkg::*;
 

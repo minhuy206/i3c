@@ -77,6 +77,7 @@
 `include "i3c_vseqs/resp_vseqs/i3c_entdaa_invalid_descriptor_resp_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_reset_during_idle_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_reset_during_transfer_phases_vseq.sv"
+`include "i3c_vseqs/resp_vseqs/i3c_sw_reset_while_busy_policy_vseq.sv"
 
 // 4.6 Immediate Data Transfer
 `include "i3c_vseqs/imm_vseqs/i3c_imm_vseq.sv"
@@ -98,6 +99,9 @@
 `include "i3c_vseqs/daa_vseqs/i3c_daa_multi_device_dat_loop_vseq.sv"
 `include "i3c_vseqs/daa_vseqs/i3c_daa_address_rejected_vseq.sv"
 `include "i3c_vseqs/daa_vseqs/i3c_daa_dat_boundary_vseq.sv"
+
+// 4.11 Arbitration and Bus Behavior
+`include "i3c_vseqs/arb_vseqs/i3c_entdaa_multi_target_arbitration_vseq.sv"
 
 // 4.9 I2C Legacy Compatibility
 `include "i3c_vseqs/i2c_vseqs/i2c_regular_write_basic_vseq.sv"

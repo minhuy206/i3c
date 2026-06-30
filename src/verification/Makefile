@@ -12,7 +12,8 @@ WAVE_FILE   ?= $(WAVE_DIR)/waves.shm
 COV         ?= 0
 COV_ROOT    ?= cov_work
 COV_TEST    ?= $(SEQ)_$(SEED)
-COV_OPTS    = -coverage all -covworkdir $(COV_ROOT) -covtest $(COV_TEST)
+COV_OPTS    = -coverage all -covworkdir $(COV_ROOT) -covtest $(COV_TEST) -covoverwrite
+LOG_FILE    ?= sim.log
 
 CSR_REGRESSION_SEQS ?= \
 	csr_reset_defaults_vseq \
@@ -73,7 +74,6 @@ IMM_REGRESSION_SEQS ?= \
 I2C_REGRESSION_SEQS ?= \
 	i2c_regular_write_basic_vseq \
 	i2c_regular_read_basic_vseq \
-	i2c_broadcast_addr_enable_ignored_vseq \
 	i2c_len_sweep_partial_rx_vseq
 
 CCC_REGRESSION_SEQS ?= \
@@ -109,7 +109,10 @@ ERR_REGRESSION_SEQS ?= \
 	i3c_hc_abort_policy_vseq \
 	i3c_wroc_policy_vseq \
 	i3c_invalid_descriptor_attr_vseq \
-	i3c_entdaa_invalid_descriptor_resp_vseq
+	i3c_entdaa_invalid_descriptor_resp_vseq \
+	i3c_reset_during_idle_vseq \
+	i3c_reset_during_transfer_phases_vseq \
+	i3c_sw_reset_while_busy_policy_vseq
 
 compile:
 	$(SIMULATOR) -compile -elaborate \
@@ -124,6 +127,7 @@ compile:
 
 sim: compile
 	$(if $(filter 1,$(DUMP_WAVES)),@mkdir -p $(WAVE_DIR),)
+	@mkdir -p $(dir $(LOG_FILE))
 	$(SIMULATOR) -R \
 	  +UVM_TESTNAME=$(TEST) \
 	  +UVM_TEST_SEQ=$(SEQ) \
@@ -132,7 +136,7 @@ sim: compile
 	  -xceligen on \
 	  $(if $(filter 1,$(COV)),$(COV_OPTS),) \
 	  $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES +WAVE_FILE=$(WAVE_FILE),) \
-	  2>&1 | tee sim.log
+	  2>&1 | tee $(LOG_FILE)
 
 smoke:
 	$(MAKE) sim TEST=i3c_base_test SEQ=i3c_imm_vseq

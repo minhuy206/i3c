@@ -19,6 +19,9 @@ module i3c_controller_top_sva #(
 
     input logic cmd_hw_rvalid_i,
     input logic cmd_hw_rready_i,
+    input logic tx_hw_rready_i,
+    input logic rx_hw_wvalid_i,
+    input logic resp_hw_wvalid_i,
     input logic cmd_empty_i,
     input logic resp_empty_i,
 
@@ -28,6 +31,7 @@ module i3c_controller_top_sva #(
     input logic flow_gen_clock_i,
     input logic flow_use_i2c_timing_i,
     input logic ctrl_sda_oe_to_phy_i,
+    input logic scl_o,
     input logic sda_o,
     input logic sel_od_pp_o,
     input logic sda_oe_o
@@ -59,6 +63,34 @@ module i3c_controller_top_sva #(
   assign disabled_bus_idle =
       !flow_gen_start_i && !flow_gen_rstart_i && !flow_gen_stop_i &&
       !flow_gen_clock_i && !ctrl_sda_oe_to_phy_i && !sda_oe_o;
+
+  ap_hard_reset_forces_idle_and_releases_bus :
+  assert property (@(posedge clk_i)
+                   !rst_ni |->
+                   (i3c_fsm_idle_i && scl_o && sda_o &&
+                    !sda_oe_o && !sel_od_pp_o))
+  else $error("i3c_controller_top_sva: hard reset did not force idle and release the bus");
+
+  cp_hard_reset_forces_idle_and_releases_bus :
+  cover property (@(posedge clk_i)
+                  !rst_ni && i3c_fsm_idle_i && scl_o && sda_o &&
+                  !sda_oe_o && !sel_od_pp_o);
+
+  ap_hard_reset_release_has_no_queue_activity :
+  assert property (@(posedge clk_i)
+                   $rose(rst_ni) |->
+                   (i3c_fsm_idle_i && !cmd_hw_rready_i && !tx_hw_rready_i &&
+                    !rx_hw_wvalid_i && !resp_hw_wvalid_i))
+  else $error("i3c_controller_top_sva: queue activity observed at hard-reset release");
+
+  cp_hard_reset_release_has_no_queue_activity :
+  cover property (@(posedge clk_i)
+                  $rose(rst_ni) && i3c_fsm_idle_i &&
+                  !cmd_hw_rready_i && !tx_hw_rready_i &&
+                  !rx_hw_wvalid_i && !resp_hw_wvalid_i);
+
+  cp_reset_point_idle :
+  cover property (@(negedge rst_ni) i3c_fsm_idle_i);
 
   ap_ctrl_enable_matches_i3c_fsm_en :
   assert property (@(posedge clk_i) disable iff (!rst_ni) ctrl_enable_i == i3c_fsm_en_i)
@@ -193,6 +225,9 @@ bind i3c_controller_top i3c_controller_top_sva #(
     .i3c_fsm_idle_i(i3c_fsm_idle),
     .cmd_hw_rvalid_i(cmd_hw_rvalid),
     .cmd_hw_rready_i(cmd_hw_rready),
+    .tx_hw_rready_i(tx_hw_rready),
+    .rx_hw_wvalid_i(rx_hw_wvalid),
+    .resp_hw_wvalid_i(resp_hw_wvalid),
     .cmd_empty_i(cmd_empty),
     .resp_empty_i(resp_empty),
     .flow_gen_start_i(u_ctrl.flow_gen_start),
@@ -201,6 +236,7 @@ bind i3c_controller_top i3c_controller_top_sva #(
     .flow_gen_clock_i(u_ctrl.flow_gen_clock),
     .flow_use_i2c_timing_i(u_ctrl.flow_use_i2c_timing),
     .ctrl_sda_oe_to_phy_i(ctrl_sda_oe_to_phy),
+    .scl_o,
     .sda_o,
     .sel_od_pp_o,
     .sda_oe_o

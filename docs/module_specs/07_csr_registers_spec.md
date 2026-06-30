@@ -192,7 +192,7 @@ typedef struct packed {
 | [0]    | `SOFT_RST` | W/SC   | 0     | 1 = Reset FIFOs and CSR CMD/TX staging |
 | [31:1] | Reserved   | RO     | 0     | -                               |
 
-**SOFT_RST usage constraint:** SOFT_RST flushes the CMD, TX, RX, and RESP FIFOs. It does **not** reset the protocol FSM. Asserting SOFT_RST while a transaction is in progress is undefined behavior.
+**SOFT_RST usage constraint:** SOFT_RST flushes the CMD, TX, RX, and RESP FIFOs only when `HC_STATUS[FSM_IDLE]` is 1. It does **not** reset the protocol FSM. If software writes `SOFT_RST=1` while a transaction is in progress (`FSM_IDLE=0`), the write is accepted but ignored: no internal `sw_reset` pulse is generated, queues and CSR staging are preserved, and the active transfer continues.
 
 **Safe usage sequence:**
 1. Poll `HC_STATUS[FSM_IDLE]` until it reads 1.

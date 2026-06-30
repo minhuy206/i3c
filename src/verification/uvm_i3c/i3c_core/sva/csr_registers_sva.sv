@@ -497,16 +497,32 @@ module csr_registers_sva
       wdata_i[HC_CTRL_ABORT_BIT]
   ))));
 
-  ap_reset_control_write_pulses_soft_reset :
+  ap_idle_reset_control_write_pulses_soft_reset :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT]
+                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && i3c_fsm_idle_i
                    |=> hc_control_cfg_i.sw_reset)
-  else $error("csr_registers_sva: RESET_CONTROL.SOFT_RST write did not pulse sw_reset");
+  else $error("csr_registers_sva: idle RESET_CONTROL.SOFT_RST write did not pulse sw_reset");
 
-  cp_reset_control_write_pulses_soft_reset :
+  cp_idle_reset_control_write_pulses_soft_reset :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT]
+                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && i3c_fsm_idle_i
                   ##1 hc_control_cfg_i.sw_reset);
+
+  ap_busy_reset_control_write_ignored :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
+                   |=> !hc_control_cfg_i.sw_reset)
+  else $error("csr_registers_sva: busy RESET_CONTROL.SOFT_RST write must not pulse sw_reset");
+
+  cp_busy_reset_control_write_ignored :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
+                  ##1 !hc_control_cfg_i.sw_reset);
+
+  cp_sw_reset_busy :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
+                  ##1 !hc_control_cfg_i.sw_reset);
 
   ap_broadcast_header_enable_does_not_enable_hc :
   assert property (@(posedge clk_i) disable iff (!rst_ni)

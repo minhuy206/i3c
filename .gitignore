@@ -3,6 +3,7 @@ CLAUDE.md
 .claude
 .codex
 .DS_Store
+.latexmkrc
 AGENTS.md
 GEMINI.md
 docs/architecture_qa_session.md
@@ -62,3 +63,8 @@ docs/rtl_design_review.md
 docs/dut_i3c_write_immediate_flow.md
 docs/toc0_sdr_regular_continuation_plan.md
 docs/ccc_enec_disec_fix_plan.md
+/docs/report/latex/chapters_vi
+/docs/report/latex/chapters_vi
+/docs/report/latex/chapters_vi
+/docs/report/latex/progress_status.tex
+/docs/report/latex/report_vi.tex

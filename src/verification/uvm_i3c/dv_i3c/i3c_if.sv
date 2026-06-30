@@ -10,6 +10,7 @@ interface i3c_if (
   import uvm_pkg::*;
   import i3c_timing_pkg::i2c_timing_t;
   import i3c_timing_pkg::i3c_timing_t;
+  import i3c_daa_arb_pkg::*;
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
 
@@ -19,6 +20,7 @@ interface i3c_if (
   logic sda_i;
   logic device_sda_o = 1'b1;
   logic device_sda_pp_en = 1'b1;
+  logic [I3C_DAA_ARB_MAX_TARGETS-1:0] daa_target_sda_oe = '0;
   logic dut_sel_od_pp;
   logic dut_sda_oe;
   logic dut_sda_o;
@@ -33,6 +35,9 @@ interface i3c_if (
   assign (highz0, weak1) scl_io = 1'b1;
 
   assign sda_io = device_sda_pp_en ? device_sda_o : (device_sda_o ? 1'bz : device_sda_o);
+  for (genvar daa_target_idx = 0; daa_target_idx < I3C_DAA_ARB_MAX_TARGETS; daa_target_idx++) begin : gen_daa_target_sda
+    assign sda_io = daa_target_sda_oe[daa_target_idx] ? 1'b0 : 1'bz;
+  end
 
   assign (highz0, weak1) sda_io = 1'b1;
 
@@ -523,6 +528,7 @@ interface i3c_if (
 
   task automatic device_i3c_raw_od_send_bit(input i3c_timing_t tc, input bit bit_i);
     wait (!scl_i);
+    daa_target_sda_oe = '0;
     device_sda_pp_en = 0;
     `uvm_info(msg_id, "device_i3c_raw_od_send_bit::Drive bit", UVM_HIGH)
     device_sda_o = bit_i;
@@ -630,4 +636,39 @@ interface i3c_if (
 
     device_i3c_raw_od_send_bit(tc, bit_i);
   endtask : device_i3c_send_daa_bit
+
+  task automatic device_i3c_send_daa_arbitration_bit(
+      input i3c_timing_t tc,
+      input logic [I3C_DAA_ARB_MAX_TARGETS-1:0] active_i,
+      input logic [I3C_DAA_ARB_MAX_TARGETS-1:0] bit_i,
+      output logic [I3C_DAA_ARB_MAX_TARGETS-1:0] lost_o,
+      output bit bus_bit_o
+  );
+    bit handoff_ok;
+
+    lost_o   = '0;
+    bus_bit_o = 1'b1;
+
+    wait_for_i3c_target_sda_handoff("I3C multi-target DAA bit", handoff_ok);
+    if (!handoff_ok) return;
+
+    wait (!scl_i);
+    device_sda_pp_en = 1'b0;
+    device_sda_o     = 1'b1;
+    for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+      daa_target_sda_oe[i] = active_i[i] && !bit_i[i];
+    end
+    device_sda_o = !(|daa_target_sda_oe);
+
+    time_check(tc.tSetupBit, 1'b1, scl_i, "I3C multi-target DAA bit setup");
+    bus_bit_o = sda_i;
+    for (int unsigned i = 0; i < I3C_DAA_ARB_MAX_TARGETS; i++) begin
+      lost_o[i] = active_i[i] && bit_i[i] && !bus_bit_o;
+    end
+
+    time_check(tc.tClockPulse, 1'b0, scl_i, "I3C multi-target DAA clock high pulse width");
+    #(tc.tHoldBit * 1ns);
+    daa_target_sda_oe = '0;
+    device_sda_o = 1'b1;
+  endtask : device_i3c_send_daa_arbitration_bit
 endinterface

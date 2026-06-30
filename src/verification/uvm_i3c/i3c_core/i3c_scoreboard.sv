@@ -56,6 +56,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   } pending_resp_t;
 
   localparam int unsigned RxFifoDepth = 8;
+  localparam string I3C_FSM_IDLE_PATH = "tb_i3c_top.dut.i3c_fsm_idle";
 
   exp_txn_t exp_txn_queue[$];
   bit [31:0] tx_data_queue[$];
@@ -86,7 +87,17 @@ class i3c_scoreboard extends uvm_scoreboard;
     fork
       process_req_items();
       process_i3c_items();
+      process_hard_reset();
     join
+  endtask
+
+  task process_hard_reset();
+    forever begin
+      @(negedge cfg.m_i3c_agent_cfg.vif.rst_ni);
+      reg_fifo.flush();
+      i3c_fifo.flush();
+      handle_hard_reset();
+    end
   endtask
 
   function string resp_status_to_string(i3c_resp_err_status_e status);
@@ -381,10 +392,26 @@ class i3c_scoreboard extends uvm_scoreboard;
   endfunction
 
   function void handle_reset_control_write(bit [31:0] wdata);
-    if (wdata[RESET_CTRL_SOFT_RST_BIT]) handle_sw_reset();
+    if (wdata[RESET_CTRL_SOFT_RST_BIT]) begin
+      if (controller_idle_for_sw_reset()) begin
+        handle_sw_reset();
+      end else begin
+        `uvm_info(`gfn, "Busy SW_RESET write ignored by scoreboard model", UVM_MEDIUM)
+      end
+    end
   endfunction
 
-  function void handle_sw_reset();
+  function bit controller_idle_for_sw_reset();
+    uvm_hdl_data_t value;
+
+    if (!uvm_hdl_read(I3C_FSM_IDLE_PATH, value)) begin
+      `uvm_error(`gfn, $sformatf("uvm_hdl_read failed for %s", I3C_FSM_IDLE_PATH))
+      return 1'b0;
+    end
+    return value[0];
+  endfunction
+
+  function void clear_transaction_model();
     exp_txn_queue.delete();
     tx_data_queue.delete();
     exp_rx_data_queue.delete();
@@ -394,7 +421,19 @@ class i3c_scoreboard extends uvm_scoreboard;
     cmd_dw0 = '0;
     pending_private_transfer = 1'b0;
     next_read_id = 0;
+  endfunction
+
+  function void handle_sw_reset();
+    clear_transaction_model();
     `uvm_info(`gfn, "SW_RESET observed: scoreboard queues flushed", UVM_MEDIUM)
+  endfunction
+
+  function void handle_hard_reset();
+    clear_transaction_model();
+    foreach (dat_model[i]) dat_model[i] = dat_model_entry_t'('0);
+    broadcast_header_enable = 1'b0;
+    hc_abort_active = 1'b0;
+    `uvm_info(`gfn, "Hard reset observed: scoreboard model returned to reset state", UVM_MEDIUM)
   endfunction
 
   function void handle_dat_write(bit [11:0] addr, bit [31:0] wdata);
