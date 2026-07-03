@@ -160,6 +160,7 @@ module flow_active
   logic [15:0] resp_data_len_d, resp_data_len_q;
 
   logic short_read_d, short_read_q;
+  logic short_read_error;
   logic addr_nack_d, addr_nack_q;
   logic data_nack_d, data_nack_q;
   logic hc_aborted_d, hc_aborted_q;
@@ -220,6 +221,7 @@ module flow_active
   assign cmd_tid = cmd_desc[6:3];
   assign dev_index = cmd_desc[20:16];
   assign target_is_i3c = !dat_entry.device;
+  assign short_read_error = short_read_q && reg_desc.sre;
 
   always_comb begin : derive_active_wroc
     unique case (cmd_attr)
@@ -230,13 +232,13 @@ module flow_active
   end
 
   assign completion_error_q = addr_nack_q || data_nack_q || daa_nack_error_q ||
-                              rx_overflow_q || tx_underflow_q || short_read_q ||
+                              rx_overflow_q || tx_underflow_q || short_read_error ||
                               not_supported_q || hc_aborted_q;
 
   assign imm_bcast_enec_disec =
       imm_desc.cp &&
       !imm_desc.cmd[7] &&
-      ((imm_desc.cmd == 8'h00) || (imm_desc.cmd == 8'h01));
+      ((imm_desc.cmd == 8'(ENEC)) || (imm_desc.cmd == 8'(DISEC)));
   assign imm_bcast_has_event_byte = imm_bcast_enec_disec;
 
   assign next_cmd_desc = cmd_queue_rdata_i;
@@ -264,7 +266,7 @@ module flow_active
 
   function automatic logic supported_immediate_ccc(input logic [7:0] cmd);
     unique case (cmd)
-      8'h00, 8'h01, 8'h80, 8'h81: supported_immediate_ccc = 1'b1;
+      8'(ENEC), 8'(DISEC), 8'(DIR_ENEC), 8'(DIR_DISEC): supported_immediate_ccc = 1'b1;
       default:                     supported_immediate_ccc = 1'b0;
     endcase
   endfunction
@@ -290,7 +292,7 @@ module flow_active
       end
       3'b010: begin
         invalid_cmd_desc = invalid_addr_assign_desc(addr_assign) ||
-                           (addr_assign.cmd != CCC_ENTDAA);
+                           (addr_assign.cmd != ENTDAA);
       end
       default: begin
         invalid_cmd_desc = 1'b1;
@@ -333,7 +335,7 @@ module flow_active
       return Nack;
     end else if (rx_overflow_q || tx_underflow_q) begin
       return Ovl;
-    end else if (short_read_q) begin
+    end else if (short_read_error) begin
       return I3cShortReadErr;
     end else if (not_supported_q) begin
       return NotSupported;
@@ -1463,7 +1465,7 @@ module flow_active
               8'd3: begin
                 sel_od_pp = 1'b1;
                 bus_tx_req_byte = 1'b1;
-                bus_tx_req_value = CCC_ENTDAA;
+                bus_tx_req_value = ENTDAA;
                 if (bus_tx_done_i) begin
                   issue_phase_d = issue_phase_q + 8'h1;
                 end
@@ -1472,7 +1474,7 @@ module flow_active
               8'd4: begin
                 sel_od_pp        = 1'b1;
                 bus_tx_req_bit   = 1'b1;
-                bus_tx_req_value = {7'b0, ~^CCC_ENTDAA};
+                bus_tx_req_value = {7'b0, ~^8'(ENTDAA)};
                 if (bus_tx_done_i) begin
                   issue_phase_d = issue_phase_q + 8'h1;
                 end

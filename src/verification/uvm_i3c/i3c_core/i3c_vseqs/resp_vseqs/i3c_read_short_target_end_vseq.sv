@@ -21,43 +21,62 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
       end
     end
 
+    run_sre_wroc_policy_case(1'b1, 1'b0, 4'd12);
+    run_sre_wroc_policy_case(1'b0, 1'b1, 4'd13);
+    run_sre_wroc_policy_case(1'b0, 1'b0, 4'd14);
     run_short_toc_zero_case();
 
   endtask
 
-  // Short read with toc=0 and a valid continuation command queued behind it. The early target end
-  // is an error: it must force STOP and SUPPRESS the toc=0 continuation -- the second command must
-  // NOT be chained via a continuation Repeated START. It instead runs as an independent transfer,
-  // so the only Repeated START expected across the pair is zero (first read ends in STOP).
   virtual task run_short_toc_zero_case();
-    transfer_stimulus_cfg_t rd_cfg;
-    transfer_stimulus_cfg_t wr_cfg;
-    byte_queue_t            read_data;   // 2 bytes only -> short vs requested 4
-    word_queue_t            tx_words;
-    bit [31:0]              rx;
-    bit [31:0]              resp0;
-    bit [31:0]              resp1;
-    int                     rstart_count;
-    i3c_device_response_seq dev_seq0;
-    i3c_device_response_seq dev_seq1;
+    transfer_stimulus_cfg_t        rd_cfg;
+    transfer_stimulus_cfg_t        wr_cfg;
+    byte_queue_t                   read_data;  // 2 bytes only -> short vs requested 4
+    word_queue_t                   tx_words;
+    bit                     [31:0] rx;
+    bit                     [31:0] resp0;
+    bit                     [31:0] resp1;
+    int                            rstart_count;
+    i3c_device_response_seq        dev_seq0;
+    i3c_device_response_seq        dev_seq1;
 
     enable_dut(1'b0);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     rd_cfg = make_transfer_cfg(
-        .ctxt("SDRR_003 toc0 short_read_first"),
-        .seq_name("sdrr003_toc0_rd_dev_seq"),
-        .tid(4'd10), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
-        .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
-        .start_with_broadcast_header(1'b0), .data_length(4), .settle_before_cmd(5),
-        .timeout_cycles(0));
+        .ctxt("ERR_005 toc0 permitted_short_read_first"),
+        .seq_name("err005_toc0_rd_dev_seq"),
+        .tid(4'd10),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(4),
+        .settle_before_cmd(5),
+        .timeout_cycles(0),
+        .sre(1'b0),
+        .wroc(1'b1)
+    );
     wr_cfg = make_transfer_cfg(
-        .ctxt("SDRR_003 toc0 write_second"),
-        .seq_name("sdrr003_toc0_wr_dev_seq"),
-        .tid(4'd11), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
-        .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
-        .start_with_broadcast_header(1'b0), .data_length(2), .settle_before_cmd(0),
-        .timeout_cycles(0));
+        .ctxt("ERR_005 toc0 write_second"),
+        .seq_name("err005_toc0_wr_dev_seq"),
+        .tid(4'd11),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(2),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
 
     read_data.push_back(8'h90);
     read_data.push_back(8'h91);
@@ -66,15 +85,61 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
     run_toc_zero_read_write_stimulus(rd_cfg, wr_cfg, read_data, tx_words, rx, resp0, resp1,
                                      rstart_count, dev_seq0, dev_seq1);
 
-    // First read short-ends and STOPs; second command runs fresh -> no continuation RSTART.
     `DV_CHECK_EQ(rstart_count, 0,
-                 "SDRR_003 toc0: short read must suppress the continuation (no continuation RSTART)")
+                 "ERR_005 toc0: short read must suppress the continuation (no continuation RSTART)")
 
-    check_all_queues_empty("after SDRR_003 toc0 short_read continuation suppression");
+    check_all_queues_empty("after ERR_005 toc0 permitted short-read continuation suppression");
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_003 result: case=toc0_short_read rstart_count=%0d resp0_status=0x%0h resp0_len=%0d resp1_status=0x%0h",
-                  rstart_count, resp0[31:28], resp0[15:0], resp1[31:28]), UVM_LOW)
+  endtask
+
+  virtual task run_sre_wroc_policy_case(bit sre, bit wroc, bit [3:0] tid);
+    localparam int unsigned RequestedLength = 4;
+    localparam int unsigned ActualLength = 2;
+    transfer_stimulus_cfg_t        cfg;
+    regular_trans_desc_t           rd_cmd;
+    byte_queue_t                   read_data;
+    word_queue_t                   rx_words;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+
+    enable_dut(1'b0);
+    write_dat_entry(0, 7'h50, 7'h08, 1'b0);
+    read_data.push_back(8'hD0 | {6'h0, sre, wroc});
+    read_data.push_back(8'hE0 | {6'h0, sre, wroc});
+    cfg = make_transfer_cfg(
+        .ctxt($sformatf("ERR_005 sre=%0b wroc=%0b", sre, wroc)),
+        .seq_name($sformatf("err005_sre%0b_wroc%0b_dev_seq", sre, wroc)),
+        .tid(tid),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(RequestedLength),
+        .settle_before_cmd(0),
+        .timeout_cycles(0),
+        .sre(sre),
+        .wroc(wroc)
+    );
+
+    if (sre || wroc) begin
+      run_read_stimulus_words_with_actual_len(cfg, read_data, ActualLength, rx_words, resp,
+                                              dev_seq);
+    end else begin
+      rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
+      start_device_response(cfg, 1'b1, read_data, dev_seq);
+      write_cmd(rd_cmd[31:0], rd_cmd[63:32]);
+      poll_idle();
+      wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
+      read_rx_words(ActualLength, rx_words);
+      check_queue_flags(resp_paths.name, resp_paths.full_bit, resp_paths.empty_bit, 1'b0, 1'b1,
+                        "after permitted short read with wroc=0");
+    end
+
+    check_all_queues_empty($sformatf("after ERR_005 sre=%0b wroc=%0b", sre, wroc));
   endtask
 
   virtual task run_short_case(int unsigned case_idx, int unsigned requested_length,
@@ -86,13 +151,13 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
     i3c_device_response_seq        dev_seq;
 
     `DV_CHECK_LT(actual_length, requested_length,
-                 $sformatf("SDRR_003 case %0d must end before requested length", case_idx))
+                 $sformatf("ERR_005 case %0d must end before requested length", case_idx))
 
     build_payload(case_idx, actual_length, read_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
-            "SDRR_003 %s req %0d actual %0d",
+            "ERR_005 %s req %0d actual %0d",
             private_addr_mode_name(
                 broadcast_header_enable
             ),
@@ -100,7 +165,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
             actual_length
         )),
         .seq_name($sformatf(
-            "sdrr003_%s_dev_seq_%0d_%0d",
+            "err005_%s_dev_seq_%0d_%0d",
             private_addr_mode_name(
                 broadcast_header_enable
             ),
@@ -111,23 +176,26 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h08),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
         .data_length(requested_length),
         .settle_before_cmd(0),
-        .timeout_cycles(0)
+        .timeout_cycles(0),
+        .sre(1'b1),
+        .wroc(1'b1)
     );
 
     run_read_stimulus_words_with_actual_len(cfg, read_data, actual_length, rx_words, resp, dev_seq);
 
     check_all_queues_empty($sformatf(
-                           "after SDRR_003 req %0d actual %0d", requested_length, actual_length));
+                           "after ERR_005 req %0d actual %0d", requested_length, actual_length));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_003 result: mode=%s requested_len=%0d actual_len=%0d rx_words_drained=%0d",
+    `uvm_info(`gfn,
+              $sformatf(
+                  "ERR_005 result: mode=%s requested_len=%0d actual_len=%0d rx_words_drained=%0d",
                   private_addr_mode_name(broadcast_header_enable), requested_length, actual_length,
                   rx_words.size()), UVM_LOW)
   endtask

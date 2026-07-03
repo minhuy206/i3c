@@ -57,8 +57,8 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h08),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -74,8 +74,8 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h08),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -110,11 +110,6 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
     check_all_queues_empty("after ERR_007 toc0 rx_fifo_overflow");
 
-    `uvm_info(
-        `gfn,
-        $sformatf(
-            "ERR_007 result: case=toc0_overflow resp_status=0x%0h resp_len=%0d observed_rstart=%0b accepted_read_words=1 queued_followup=pass",
-            resp[31:28], resp[15:0], dev_seq.observed_rstart), UVM_LOW)
   endtask
 
   virtual task run_rx_fifo_full_overflow_case(bit is_i3c, bit broadcast_header_enable);
@@ -150,8 +145,8 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(is_i3c ? 7'h08 : 7'h50),
         .is_i3c(is_i3c),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(is_i3c && broadcast_header_enable),
@@ -177,21 +172,15 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
     end
 
     if (!is_i3c) begin
-      `DV_CHECK_GT(dev_seq.sampled_t_bit.size(), 0,
+      `DV_CHECK_GT(dev_seq.sampled_data_nack_q.size(), 0,
                    "ERR_007 I2C RX overflow did not sample an ACK/NACK bit")
-      if (dev_seq.sampled_t_bit.size() > 0) begin
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[dev_seq.sampled_t_bit.size()-1], SampledNack,
+      if (dev_seq.sampled_data_nack_q.size() > 0) begin
+        `DV_CHECK_EQ(dev_seq.sampled_data_nack_q[dev_seq.sampled_data_nack_q.size()-1], SampledNack,
                      "ERR_007 I2C RX overflow must terminate the final accepted byte with NACK")
       end
     end
     check_all_queues_empty("after ERR_007 rx_fifo_full_overflow");
 
-    `uvm_info(
-        `gfn,
-        $sformatf(
-            "ERR_007 result: device=%s mode=%s full_prefill_words=%0d read_len=%0d drained_prefill_words=%0d accepted_read_words=0",
-            is_i3c ? "I3C" : "I2C", private_addr_mode_name(broadcast_header_enable), PREFILL_WORDS,
-            DATA_LENGTH, PREFILL_WORDS), UVM_LOW)
   endtask
 
   virtual task run_rx_fifo_partial_overflow_case(bit is_i3c);
@@ -215,8 +204,8 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(is_i3c ? 7'h08 : 7'h50),
         .is_i3c(is_i3c),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -243,21 +232,15 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
     read_rx_data(rx_word);
 
     if (!is_i3c) begin
-      `DV_CHECK_GT(dev_seq.sampled_t_bit.size(), 0,
+      `DV_CHECK_GT(dev_seq.sampled_data_nack_q.size(), 0,
                    "ERR_007 I2C partial RX overflow did not sample an ACK/NACK bit")
-      if (dev_seq.sampled_t_bit.size() > 0) begin
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[dev_seq.sampled_t_bit.size()-1], SampledNack,
+      if (dev_seq.sampled_data_nack_q.size() > 0) begin
+        `DV_CHECK_EQ(dev_seq.sampled_data_nack_q[dev_seq.sampled_data_nack_q.size()-1], SampledNack,
                      "ERR_007 I2C partial RX overflow must terminate with NACK")
       end
     end
     check_all_queues_empty("after ERR_007 partial_rx_fifo_overflow");
 
-    `uvm_info(
-        `gfn,
-        $sformatf(
-            "ERR_007 result: device=%s mode=%s partial_prefill_words=%0d read_len=%0d drained_prefill_words=%0d accepted_read_words=1",
-            is_i3c ? "I3C" : "I2C", private_addr_mode_name(1'b0), PARTIAL_PREFILL_WORDS,
-            DATA_LENGTH, PARTIAL_PREFILL_WORDS), UVM_LOW)
   endtask
 
   virtual task run_rx_fifo_partial_dword_overflow_case(bit is_i3c, int unsigned data_length);
@@ -286,8 +269,8 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(is_i3c ? 7'h08 : 7'h50),
         .is_i3c(is_i3c),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -310,10 +293,10 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
                    "ERR_007 partial-DWORD: drained RX prefill word[%0d] mismatch", i))
     end
     if (!is_i3c) begin
-      `DV_CHECK_GT(dev_seq.sampled_t_bit.size(), 0,
+      `DV_CHECK_GT(dev_seq.sampled_data_nack_q.size(), 0,
                    "ERR_007 I2C partial-DWORD overflow did not sample an ACK/NACK bit")
-      if (dev_seq.sampled_t_bit.size() > 0) begin
-        `DV_CHECK_EQ(dev_seq.sampled_t_bit[dev_seq.sampled_t_bit.size()-1], SampledNack,
+      if (dev_seq.sampled_data_nack_q.size() > 0) begin
+        `DV_CHECK_EQ(dev_seq.sampled_data_nack_q[dev_seq.sampled_data_nack_q.size()-1], SampledNack,
                      "ERR_007 I2C partial-DWORD overflow must terminate with NACK")
       end
     end
@@ -337,8 +320,8 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(is_i3c ? 7'h08 : 7'h50),
         .is_i3c(is_i3c),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),

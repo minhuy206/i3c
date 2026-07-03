@@ -6,11 +6,11 @@ class i3c_daa_single_device_success_vseq extends i3c_base_vseq;
   endfunction
 
   virtual task body();
-    addr_assign_desc_t      daa_cmd;
-    bit [31:0]              resp;
-    word_queue_t            rx_words;
-    i3c_device_response_seq dev_seq;
-    i3c_daa_stimulus        stimulus;
+    addr_assign_desc_t             daa_cmd;
+    bit                     [31:0] resp;
+    word_queue_t                   rx_words;
+    i3c_device_response_seq        dev_seq;
+    i3c_daa_stimulus               stimulus;
 
     stimulus = i3c_daa_stimulus::type_id::create("daa001_stimulus");
     `DV_CHECK_RANDOMIZE_FATAL(stimulus, "daa_001: stimulus randomization failed")
@@ -18,32 +18,32 @@ class i3c_daa_single_device_success_vseq extends i3c_base_vseq;
     enable_dut();
     write_dat_entry(0, 7'h50, stimulus.assigned_addr, 1'b0);
 
-    daa_cmd           = '0;
-    daa_cmd.attr      = AddressAssignment;
-    daa_cmd.tid       = 4'd1;
-    daa_cmd.cmd       = ENTDAA;
-    daa_cmd.dev_idx   = 5'd0;
+    daa_cmd = '0;
+    daa_cmd.attr = AddressAssignment;
+    daa_cmd.tid = 4'd1;
+    daa_cmd.cmd = ENTDAA;
+    daa_cmd.dev_idx = 5'd0;
     daa_cmd.dev_count = 4'd1;
-    daa_cmd.wroc      = 1'b1;
-    daa_cmd.toc       = 1'b1;
+    daa_cmd.wroc = 1'b1;
+    daa_cmd.toc = 1'b1;
 
-    dev_seq                 = i3c_device_response_seq::type_id::create("daa001_dev_seq");
-    dev_seq.target_addr     = 7'h7e;
-    dev_seq.ack_address     = 1'b1;
-    dev_seq.is_i3c          = 1'b1;
-    dev_seq.is_daa          = 1'b1;
-    dev_seq.dir             = 1'b0;
-    dev_seq.entdaa_join     = 1'b1;
+    dev_seq = i3c_device_response_seq::type_id::create("daa001_dev_seq");
+    dev_seq.target_addr = 7'h7e;
+    dev_seq.addr_nack = 1'b0;
+    dev_seq.is_i3c = 1'b1;
+    dev_seq.is_daa = 1'b1;
+    dev_seq.dir = 1'b0;
+    dev_seq.entdaa_join = 1'b1;
     dev_seq.daa_accept_addr = 1'b1;
-    dev_seq.daa_id_bytes    = '{
-      stimulus.pid[47:40],
-      stimulus.pid[39:32],
-      stimulus.pid[31:24],
-      stimulus.pid[23:16],
-      stimulus.pid[15:8],
-      stimulus.pid[7:0],
-      stimulus.bcr,
-      stimulus.dcr
+    dev_seq.daa_id_bytes = '{
+        stimulus.pid[47:40],
+        stimulus.pid[39:32],
+        stimulus.pid[31:24],
+        stimulus.pid[23:16],
+        stimulus.pid[15:8],
+        stimulus.pid[7:0],
+        stimulus.bcr,
+        stimulus.dcr
     };
 
     fork : device_response
@@ -59,11 +59,6 @@ class i3c_daa_single_device_success_vseq extends i3c_base_vseq;
     read_response(resp);
 
     check_all_queues_empty("after DAA_001 ENTDAA single-device success");
-    `uvm_info(`gfn, $sformatf(
-                  "DAA_001 result: resp=0x%08h assigned=0x%02h pid=0x%012h bcr=0x%02h dcr=0x%02h rx_words=%0d",
-                  resp, stimulus.assigned_addr, stimulus.pid, stimulus.bcr, stimulus.dcr,
-                  rx_words.size()), UVM_LOW)
-
     disable device_response;
   endtask
 endclass

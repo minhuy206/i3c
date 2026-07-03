@@ -58,7 +58,7 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
 
     dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr   = 7'h08;
-    dev_seq.ack_address   = 1'b1;
+    dev_seq.addr_nack   = 1'b0;
     dev_seq.is_i3c        = 1'b1;
     dev_seq.dir           = 1'b0;
     dev_seq.read_data_cnt = exp_data_bytes;
@@ -70,12 +70,12 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_cmd_queue_2dw_staging_vseq");
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_data_bytes,
+    `DV_CHECK_EQ(dev_seq.sampled_data_q.size(), exp_data_bytes,
                  "csr_cmd_queue_2dw_staging_vseq: immediate payload byte count mismatch")
-    if (dev_seq.sampled_data.size() >= exp_data_bytes) begin
-      `DV_CHECK_EQ(dev_seq.sampled_data[0], imm_cmd.def_or_data_byte1,
+    if (dev_seq.sampled_data_q.size() >= exp_data_bytes) begin
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[0], imm_cmd.def_or_data_byte1,
                    "csr_cmd_queue_2dw_staging_vseq: immediate byte1 mismatch")
-      `DV_CHECK_EQ(dev_seq.sampled_data[1], imm_cmd.data_byte2,
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[1], imm_cmd.data_byte2,
                    "csr_cmd_queue_2dw_staging_vseq: immediate byte2 mismatch")
     end
 

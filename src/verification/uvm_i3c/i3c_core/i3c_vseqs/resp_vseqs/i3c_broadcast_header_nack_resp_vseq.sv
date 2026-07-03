@@ -40,7 +40,7 @@ class i3c_broadcast_header_nack_resp_vseq extends i3c_base_vseq;
 
     dev_seq             = i3c_device_response_seq::type_id::create("err003_ccc_bhdr_nack_dev_seq");
     dev_seq.target_addr = 7'h7e;
-    dev_seq.ack_address = 1'b0;
+    dev_seq.addr_nack = 1'b1;
     dev_seq.is_i3c      = 1'b1;
     dev_seq.dir         = 1'b0;
 
@@ -81,7 +81,7 @@ class i3c_broadcast_header_nack_resp_vseq extends i3c_base_vseq;
 
     dev_seq             = i3c_device_response_seq::type_id::create("err003_entdaa_bhdr_nack_dev_seq");
     dev_seq.target_addr = 7'h7e;
-    dev_seq.ack_address = 1'b0;
+    dev_seq.addr_nack = 1'b1;
     dev_seq.is_i3c      = 1'b1;
     dev_seq.is_daa      = 1'b1;
     dev_seq.dir         = 1'b0;

@@ -45,7 +45,9 @@ is difficult. The open-source CHIPS Alliance \texttt{i3c-core}~\cite{chipsallian
 Host-Controller-Interface (HCI) compliant implementation integrated into the Caliptra root-of-trust
 subsystem. Its production scope and platform integration make it a useful reference but obscure the
 protocol path for study; in addition, several command-issue paths in its central finite-state machine
-(FSM) remain as \texttt{TODO} stubs. Chapter~3 explains the qualitative design boundary derived from this
+(FSM) remain as \texttt{TODO} stubs. Recent academic work on I3C has likewise concentrated on building a
+UVM verification environment for the protocol rather than on a compact, studyable
+controller~\cite{chauhan_i3c_uvm}. Chapter~3 explains the qualitative design boundary derived from this
 baseline, while Chapter~5 reports the quantitative comparison.
 
 The objective of this thesis is therefore to derive, from that reference, a substantially simplified

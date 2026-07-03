@@ -4,13 +4,13 @@ class i3c_seq_item extends uvm_sequence_item;
   rand bit [ 6:0] addr;
   rand bit [ 6:0] static_addr;
   rand bit        dir;
-  rand bit        dev_ack;
+  rand bit        dev_nack;
   // Common for both I2C and I3C
   rand bit [ 7:0] data                        [$];
-  rand bit [15:0] data_cnt;
-  // Contains I2C ACK/NACK if i3c is false,
-  // or I3C T bits if i3c = true
-  rand bit        T_bit                       [$];
+  // Raw I2C ACK/NACK bit: 0 = ACK, 1 = NACK.
+  rand bit        data_nack_q                 [$];
+  // I3C continuation/termination or parity T-bits.
+  rand bit        t_bit_q                     [$];
   rand bit        end_with_rstart;
   rand bit        start_with_broadcast_header;
   bit             observed_broadcast_header;
@@ -19,8 +19,6 @@ class i3c_seq_item extends uvm_sequence_item;
   rand bit        entdaa_join;
   rand bit [ 7:0] daa_id_bytes                [$];
   rand bit        daa_accept_addr;
-  rand int unsigned daa_target_count;
-  rand i3c_daa_arb_target_t daa_targets[I3C_DAA_ARB_MAX_TARGETS];
   rand bit [ 6:0] ccc_target_addr;
   rand bit        ccc_target_addr_valid;
   bit      [ 6:0] sampled_addr_q              [$];
@@ -49,7 +47,6 @@ class i3c_seq_item extends uvm_sequence_item;
 
   constraint payload_c {
     if (payload_constraint_en) {
-      data_cnt == payload_len;
       data.size() == payload_len;
     }
   }
@@ -63,11 +60,11 @@ class i3c_seq_item extends uvm_sequence_item;
     `uvm_field_int(addr, UVM_DEFAULT)
     `uvm_field_int(static_addr, UVM_DEFAULT)
     `uvm_field_int(dir, UVM_DEFAULT)
-    `uvm_field_int(dev_ack, UVM_DEFAULT)
+    `uvm_field_int(dev_nack, UVM_DEFAULT)
     `uvm_field_int(is_daa, UVM_DEFAULT)
     `uvm_field_queue_int(data, UVM_DEFAULT | UVM_NOCOMPARE)
-    `uvm_field_int(data_cnt, UVM_DEFAULT)
-    `uvm_field_queue_int(T_bit, UVM_DEFAULT | UVM_NOCOMPARE)
+    `uvm_field_queue_int(data_nack_q, UVM_DEFAULT | UVM_NOCOMPARE)
+    `uvm_field_queue_int(t_bit_q, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(end_with_rstart, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(start_with_broadcast_header, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(observed_broadcast_header, UVM_DEFAULT | UVM_NOCOMPARE)
@@ -75,7 +72,6 @@ class i3c_seq_item extends uvm_sequence_item;
     `uvm_field_int(entdaa_join, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_queue_int(daa_id_bytes, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(daa_accept_addr, UVM_DEFAULT | UVM_NOCOMPARE)
-    `uvm_field_int(daa_target_count, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(ccc_target_addr, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(ccc_target_addr_valid, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_queue_int(sampled_addr_q, UVM_DEFAULT | UVM_NOCOMPARE)

@@ -19,8 +19,8 @@ class i3c_write_vseq extends i3c_base_vseq;
     word_queue_t                   tx_words;
     byte_queue_t                   exp_data;
     bit                     [31:0] resp;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     enable_dut(broadcast_header_enable);
@@ -33,8 +33,8 @@ class i3c_write_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -48,10 +48,6 @@ class i3c_write_vseq extends i3c_base_vseq;
     check_all_queues_empty($sformatf(
                            "after SDRW_001 %s", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRW_001 result: mode=%s requested_len=%0d tx_word=0x%08h sampled_bytes=%0d",
-                  private_addr_mode_name(broadcast_header_enable), cfg.data_length, tx_words[0],
-                  dev_seq.sampled_data.size()), UVM_LOW)
   endtask
 
 endclass

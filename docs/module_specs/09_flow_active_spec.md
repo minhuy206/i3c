@@ -624,7 +624,7 @@ end
 | DAA address-assignment reject | ENTDAA device address attempt NACKed after retry (`daa_nack_error_i`/`daa_nack_error_q`) | `Nack` |
 | TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
 | RX overflow      | RX FIFO cannot accept received data or DAA result data | `Ovl`            |
-| Short read       | Target drives T-bit=0 before all requested bytes sent  | `I3cShortReadErr`|
+| Short read       | Target drives T-bit=0 before all requested bytes sent and descriptor `sre=1` | `I3cShortReadErr`|
 | HC abort (I3C read) | `abort_i` during an I3C read; terminate at next T-Bit via Repeated START (T=1) or STOP (T=0) | `HcAborted` |
 | HC abort (I2C read) | `abort_i` during an I2C read; finish current byte, drive controller NACK on the ACK/NACK bit, then STOP | `HcAborted` |
 | ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses    | `Success`, length 0 |
@@ -649,7 +649,7 @@ end
 14. **RX FIFO overflow:** Large read with full RX FIFO; verify response `Ovl`
 15. **ENTDAA RX FIFO overflow:** One target joins ENTDAA while RX FIFO has only 0, 1, or 2 free DWORD entries for the 3-DWORD DAA result; verify committed DAA result words are preserved, the first uncommitted word is dropped only at the overflow boundary, response is `Ovl`, and length reflects committed DAA result bytes
 16. **Address NACK:** Target NACKs address; verify `AddrHeader` error in response
-17. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` in response
+17. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` when `sre=1`, and normal WROC policy when `sre=0`
 18. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
 19. **RESP FIFO backpressure:** Fill RESP, complete both a successful `wroc=1` command and an error-producing `wroc=0` command, then release one slot; verify `WriteResp` and descriptor stability while blocked, preserved FIFO contents, and exactly one appended response after release
 20. **WROC policy:** For regular, immediate, and immediate-CCC commands, verify successful `wroc=0` completion suppresses RESP, `wroc=1` writes RESP, errors override `wroc=0`, and a `wroc=0` continuation runs while RESP is full

@@ -41,11 +41,13 @@ class i3c_base_vseq extends uvm_sequence;
     bit [4:0]    dev_idx;
     bit [6:0]    target_addr;
     bit          is_i3c;
-    bit          ack_address;
-    bit          ack_data;
+    bit          addr_nack;
+    bit          data_nack;
     bit          tx_before_cmd;
     bit          wait_device_done;
     bit          start_with_broadcast_header;
+    bit          sre;
+    bit          wroc;
     int unsigned data_length;
     int unsigned settle_before_cmd;
     int unsigned timeout_cycles;
@@ -131,10 +133,10 @@ class i3c_base_vseq extends uvm_sequence;
 
   virtual function transfer_stimulus_cfg_t make_transfer_cfg(
       string ctxt, string seq_name, bit [3:0] tid, bit [4:0] dev_idx, bit [6:0] target_addr,
-      bit is_i3c, bit ack_address = 1'b1, bit ack_data = 1'b1, bit tx_before_cmd = 1'b1,
+      bit is_i3c, bit addr_nack = 1'b0, bit data_nack = 1'b0, bit tx_before_cmd = 1'b1,
       bit wait_device_done = 1'b1, bit start_with_broadcast_header = 1'b0,
       int unsigned data_length = 0, int unsigned settle_before_cmd = 0,
-      int unsigned timeout_cycles = 0);
+      int unsigned timeout_cycles = 0, bit sre = 1'b0, bit wroc = 1'b1);
     transfer_stimulus_cfg_t cfg;
 
     cfg.ctxt                        = ctxt;
@@ -143,11 +145,13 @@ class i3c_base_vseq extends uvm_sequence;
     cfg.dev_idx                     = dev_idx;
     cfg.target_addr                 = target_addr;
     cfg.is_i3c                      = is_i3c;
-    cfg.ack_address                 = ack_address;
-    cfg.ack_data                    = ack_data;
+    cfg.addr_nack                    = addr_nack;
+    cfg.data_nack                    = data_nack;
     cfg.tx_before_cmd               = tx_before_cmd;
     cfg.wait_device_done            = wait_device_done;
     cfg.start_with_broadcast_header = start_with_broadcast_header && is_i3c;
+    cfg.sre                         = sre;
+    cfg.wroc                        = wroc;
     cfg.data_length                 = data_length;
     cfg.settle_before_cmd           = settle_before_cmd;
     cfg.timeout_cycles              = timeout_cycles;
@@ -205,7 +209,8 @@ class i3c_base_vseq extends uvm_sequence;
     cmd.rnw         = rnw;
     cmd.mode        = sdr0;
     cmd.toc         = toc;
-    cmd.wroc        = 1'b1;
+    cmd.wroc        = cfg.wroc;
+    cmd.sre         = cfg.sre;
     cmd.dev_idx     = cfg.dev_idx;
     cmd.data_length = 16'(cfg.data_length);
     return cmd;
@@ -374,8 +379,8 @@ class i3c_base_vseq extends uvm_sequence;
                                      output i3c_device_response_seq dev_seq);
     dev_seq                             = i3c_device_response_seq::type_id::create(cfg.seq_name);
     dev_seq.target_addr                 = cfg.target_addr;
-    dev_seq.ack_address                 = cfg.ack_address;
-    dev_seq.ack_data                    = cfg.ack_data;
+    dev_seq.addr_nack                    = cfg.addr_nack;
+    dev_seq.data_nack                    = cfg.data_nack;
     dev_seq.is_i3c                      = cfg.is_i3c;
     dev_seq.dir                         = dir;
     dev_seq.start_with_broadcast_header = cfg.start_with_broadcast_header;

@@ -82,8 +82,8 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
         .dev_idx(5'd0),
         .target_addr(DynamicAddr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -145,8 +145,8 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
         .dev_idx(5'd0),
         .target_addr(DynamicAddr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -187,7 +187,7 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
 
     dev_seq                 = i3c_device_response_seq::type_id::create("err014_daa_dev_seq");
     dev_seq.target_addr     = 7'h7e;
-    dev_seq.ack_address     = 1'b1;
+    dev_seq.addr_nack     = 1'b0;
     dev_seq.is_i3c          = 1'b1;
     dev_seq.is_daa          = 1'b1;
     dev_seq.dir             = 1'b0;
@@ -238,8 +238,8 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
         .dev_idx(5'd0),
         .target_addr(DynamicAddr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -390,8 +390,8 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
         .dev_idx(5'd0),
         .target_addr(DynamicAddr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),

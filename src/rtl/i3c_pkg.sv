@@ -3,7 +3,17 @@ package i3c_pkg;
   // Constants
   localparam logic [6:0] I3C_RSVD_ADDR = 7'h7E;
   localparam logic [7:0] I3C_RSVD_BYTE = 8'hFC;
-  localparam logic [7:0] CCC_ENTDAA = 8'h07;
+
+  // Common Command Codes (CCC) — opcode values driven on the bus (See MIPI I3C Basic v1.1.1 §5.1)
+  typedef enum logic [7:0] {
+    // Broadcast CCCs
+    ENEC      = 8'h00,
+    DISEC     = 8'h01,
+    ENTDAA    = 8'h07,
+    // Direct CCCs
+    DIR_ENEC  = 8'h80,
+    DIR_DISEC = 8'h81
+  } i3c_ccc_e;
 
   // DAT configuration
   localparam int unsigned DatDepth = 32;
@@ -12,10 +22,7 @@ package i3c_pkg;
   // Response error ID width
   localparam int unsigned RespErrIdWidth = 4;
 
-  // ---------------------------------------------------------------------------
   // Bus Signal Types
-  // ---------------------------------------------------------------------------
-
   // Individual signal state from bus_monitor
   typedef struct packed {
     logic value;
@@ -34,10 +41,7 @@ package i3c_pkg;
     logic stop_det;
   } bus_state_t;
 
-  // ---------------------------------------------------------------------------
   // Response Descriptor
-  // ---------------------------------------------------------------------------
-
   // Response error status (See TCRI 7.1.3 Table 11 field ERR_STATUS)
   typedef enum logic [RespErrIdWidth-1:0] {
     Success                    = 4'b0000,
@@ -61,10 +65,7 @@ package i3c_pkg;
     logic [15:0]          data_length;  // [15:0]
   } i3c_response_desc_t;
 
-  // ---------------------------------------------------------------------------
   // Command Descriptor Types
-  // ---------------------------------------------------------------------------
-
   // Command attribute types (See TCRI 7.1.2 Table 6)
   typedef enum logic [2:0] {
     RegularTransfer       = 3'b000,
@@ -120,7 +121,7 @@ package i3c_pkg;
     logic            rnw;
     i3c_trans_mode_e mode;
     logic            dbp;          // Defining byte present
-    logic            sre;          // Short read error
+    logic            sre;          // Report an early target read end as ShortReadErr
     logic [2:0]      __rsvd23_21;
     logic [4:0]      dev_idx;
     logic            cp;

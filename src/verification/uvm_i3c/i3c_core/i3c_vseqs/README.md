@@ -22,9 +22,8 @@ Use these category directories for concrete test items:
 | 4.8 Dynamic Address Assignment / ENTDAA | `daa_vseqs/` |
 | 4.9 I2C Legacy Compatibility | `i2c_vseqs/` |
 | 4.10 Error Handling, Status, and Recovery | `resp_vseqs/` |
-| 4.11 Arbitration and Bus Behavior | `arb_vseqs/` |
-| 4.12 UVM Environment, Scoreboard, and Regression Infrastructure | `uvm_vseqs/` |
-| 4.13 Stress, Robustness, and Performance | `stress_vseqs/` |
+| 4.11 UVM Environment, Scoreboard, and Regression Infrastructure | `uvm_vseqs/` |
+| 4.12 Stress, Robustness, and Performance | `stress_vseqs/` |
 
 Add new files to the matching directory and include them from
 `i3c_vseq_list.sv` so `+UVM_TEST_SEQ=<sequence_type_name>` can create the

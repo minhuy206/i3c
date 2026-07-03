@@ -58,7 +58,7 @@ class csr_cmd_partial_then_other_write_vseq extends csr_base_vseq;
 
     dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr   = 7'h08;
-    dev_seq.ack_address   = 1'b1;
+    dev_seq.addr_nack   = 1'b0;
     dev_seq.is_i3c        = 1'b1;
     dev_seq.dir           = 1'b0;
     dev_seq.read_data_cnt = 4;
@@ -70,16 +70,16 @@ class csr_cmd_partial_then_other_write_vseq extends csr_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_cmd_partial_then_other_write_vseq");
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), 4,
+    `DV_CHECK_EQ(dev_seq.sampled_data_q.size(), 4,
                  "csr_cmd_partial_then_other_write_vseq: payload byte count mismatch")
-    if (dev_seq.sampled_data.size() >= 4) begin
-      `DV_CHECK_EQ(dev_seq.sampled_data[0], tx_data[7:0],
+    if (dev_seq.sampled_data_q.size() >= 4) begin
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[0], tx_data[7:0],
                    "csr_cmd_partial_then_other_write_vseq: payload byte0 mismatch")
-      `DV_CHECK_EQ(dev_seq.sampled_data[1], tx_data[15:8],
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[1], tx_data[15:8],
                    "csr_cmd_partial_then_other_write_vseq: payload byte1 mismatch")
-      `DV_CHECK_EQ(dev_seq.sampled_data[2], tx_data[23:16],
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[2], tx_data[23:16],
                    "csr_cmd_partial_then_other_write_vseq: payload byte2 mismatch")
-      `DV_CHECK_EQ(dev_seq.sampled_data[3], tx_data[31:24],
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[3], tx_data[31:24],
                    "csr_cmd_partial_then_other_write_vseq: payload byte3 mismatch")
     end
 

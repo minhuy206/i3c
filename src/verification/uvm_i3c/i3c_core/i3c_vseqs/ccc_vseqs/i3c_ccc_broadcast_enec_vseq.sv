@@ -28,7 +28,7 @@ class i3c_ccc_broadcast_enec_vseq extends i3c_base_vseq;
 
     dev_seq                   = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr       = 7'h7e;
-    dev_seq.ack_address       = 1'b1;
+    dev_seq.addr_nack       = 1'b0;
     dev_seq.is_i3c            = 1'b1;
     dev_seq.dir               = 1'b0;
 
@@ -44,10 +44,6 @@ class i3c_ccc_broadcast_enec_vseq extends i3c_base_vseq;
       if (dev_seq.done) break;
       @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
     end
-
-
-
-
     read_response(resp);
 
     disable device_response;

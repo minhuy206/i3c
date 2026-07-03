@@ -21,10 +21,6 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
       run_i2c_read_len_case(sweep_idx, lengths[sweep_idx]);
     end
 
-    `uvm_info(
-        `gfn,
-        "I2C_004 conclusion: legacy I2C reads and writes preserve byte packing across partial and full DWORD lengths",
-        UVM_LOW)
   endtask
 
   virtual task run_i2c_write_len_case(int unsigned sweep_idx, int unsigned data_length);
@@ -43,8 +39,8 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -56,10 +52,6 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
 
     check_all_queues_empty($sformatf("after I2C_004 write len %0d", data_length));
-
-    `uvm_info(`gfn, $sformatf(
-                  "I2C_004 write result: len=%0d resp=0x%08h tx_words=%0d sampled_bytes=%0d",
-                  data_length, resp, tx_words.size(), dev_seq.sampled_data.size()), UVM_LOW)
   endtask
 
   virtual task run_i2c_read_len_case(int unsigned sweep_idx, int unsigned data_length);
@@ -78,8 +70,8 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -92,10 +84,6 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
 
     check_all_queues_empty($sformatf("after I2C_004 read len %0d", data_length));
 
-    `uvm_info(`gfn, $sformatf(
-                  "I2C_004 read result: len=%0d resp=0x%08h rx_words=%0d ack_seq=%s",
-                  data_length, resp, rx_words.size(),
-                  format_master_ack_sequence(dev_seq, data_length)), UVM_LOW)
   endtask
 
   virtual function void build_write_payload(int unsigned data_length, ref byte_queue_t exp_data,
@@ -105,22 +93,6 @@ class i2c_len_sweep_partial_rx_vseq extends i3c_base_vseq;
 
   virtual function void build_read_payload(int unsigned data_length, ref byte_queue_t read_data);
     build_random_payload(data_length, read_data);
-  endfunction
-
-  virtual function string format_master_ack_sequence(i3c_device_response_seq dev_seq,
-                                                     int unsigned data_length);
-    string s;
-
-    s = "[";
-    for (int unsigned i = 0; i < data_length; i++) begin
-      if (i > 0) s = {s, " "};
-      if (i < dev_seq.sampled_t_bit.size()) begin
-        s = {s, (dev_seq.sampled_t_bit[i] == SampledAck) ? "ACK" : "NACK"};
-      end else begin
-        s = {s, "MISSING"};
-      end
-    end
-    return {s, "]"};
   endfunction
 
 endclass

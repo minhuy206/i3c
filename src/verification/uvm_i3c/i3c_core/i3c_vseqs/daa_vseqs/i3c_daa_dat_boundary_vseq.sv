@@ -43,7 +43,7 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
 
     dev_seq                 = i3c_device_response_seq::type_id::create("daa007_last_dev_seq");
     dev_seq.target_addr     = 7'h7e;
-    dev_seq.ack_address     = 1'b1;
+    dev_seq.addr_nack     = 1'b0;
     dev_seq.is_i3c          = 1'b1;
     dev_seq.is_daa          = 1'b1;
     dev_seq.dir             = 1'b0;

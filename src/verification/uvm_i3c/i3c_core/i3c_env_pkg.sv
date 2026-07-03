@@ -2,7 +2,6 @@ package i3c_env_pkg;
   import uvm_pkg::*;
   import reg_agent_pkg::*;
   import i3c_agent_pkg::*;
-  import i3c_daa_arb_pkg::*;
   import i3c_csr_addr_pkg::*;
   import i3c_pkg::*;
 
@@ -11,8 +10,10 @@ package i3c_env_pkg;
 
   `include "i3c_env_cfg.sv"
   `include "i3c_virtual_sequencer.sv"
+  `include "i3c_correlated_item.sv"
   `include "i3c_coverage.sv"
   `include "reg_coverage.sv"
+  `include "i3c_correlated_coverage.sv"
   `include "i3c_scoreboard.sv"
   `include "i3c_env.sv"
 

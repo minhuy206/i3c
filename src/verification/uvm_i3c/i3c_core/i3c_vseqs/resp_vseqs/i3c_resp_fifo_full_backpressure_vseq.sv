@@ -18,7 +18,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
 
   virtual function transfer_stimulus_cfg_t make_write_cfg(string ctxt, string seq_name,
                                                            bit [3:0] tid,
-                                                           bit ack_address = 1'b1);
+                                                           bit addr_nack = 1'b0);
     return make_transfer_cfg(
         .ctxt(ctxt),
         .seq_name(seq_name),
@@ -26,8 +26,8 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(I3cAddr),
         .is_i3c(1'b1),
-        .ack_address(ack_address),
-        .ack_data(1'b1),
+        .addr_nack(addr_nack),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -172,7 +172,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     prefill_resp_fifo(8'h82, "ERR_008 wroc=0 error override");
 
     cfg                   = make_write_cfg("ERR_008 wroc=0 error override",
-                                           "err008_error_dev_seq", 4'h9, 1'b0);
+                                           "err008_error_dev_seq", 4'h9, 1'b1);
     cmd                   = '0;
     cmd.attr              = ImmediateDataTransfer;
     cmd.tid               = cfg.tid;

@@ -6,7 +6,6 @@ package controller_pkg;
     Read  = 1'b1
   } cmd_transfer_dir_e;
 
-  // Raw ACK/NACK bit value driven through bus_tx_req_value on an ACK slot.
   typedef enum logic [7:0] {
     ACK  = 8'h00,
     NACK = 8'h01

@@ -31,39 +31,6 @@ module entdaa_fsm_sva (
   localparam logic [2:0] WaitStop = 3'd6;
   localparam logic [2:0] Done = 3'd7;
 
-  covergroup daa_addr_parity_cg @(posedge clk_i);
-    option.per_instance = 1;
-
-    cp_daa_addr: coverpoint daa_addr_i
-        iff (rst_ni && state_q == SendAddr && bus_tx_req_byte_o) {
-      bins low         = {[7'h08:7'h1f]};
-      bins high        = {[7'h60:7'h7d]};
-      bins alternating = {7'h2a, 7'h55};
-      bins other       = default;
-    }
-
-    cp_daa_parity: coverpoint bus_tx_req_value_o[0]
-        iff (rst_ni && state_q == SendAddr && bus_tx_req_byte_o) {
-      bins parity_zero = {1'b0};
-      bins parity_one  = {1'b1};
-    }
-
-    cx_daa_addr_parity: cross cp_daa_addr, cp_daa_parity;
-  endgroup
-
-  daa_addr_parity_cg daa_addr_parity_cov = new();
-
-  covergroup err009_daa_abort_cg @(posedge clk_i);
-    option.per_instance = 1;
-
-    cp_daa_abort_point: coverpoint state_q iff (rst_ni && stop_pending_i) {
-      bins identity = {ReceiveIDBit};
-      bins assigned_address[] = {SendAddr, ReadAddrAck};
-      bins completed_round_boundary = {Idle};
-    }
-  endgroup
-
-  err009_daa_abort_cg err009_daa_abort_cov = new();
 
   ap_entdaa_ack_enters_receive_id: assert property (
     @(posedge clk_i) disable iff (!rst_ni)

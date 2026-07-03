@@ -10,11 +10,9 @@ module sync_fifo_sva #(
 
     input logic             wvalid_i,
     input logic             wready_o,
-    input logic [Width-1:0] wdata_i,
 
     input logic             rvalid_o,
     input logic             rready_i,
-    input logic [Width-1:0] rdata_o,
 
     input logic              full_o,
     input logic              empty_o,
@@ -56,13 +54,8 @@ module sync_fifo_sva #(
                     (rvalid_o == !empty_o)))
   else $error("sync_fifo_sva: status/handshake outputs do not match FIFO depth");
 
-  cp_status_matches_depth:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !flush_i &&
-                  (full_o == (depth_o == DepthW'(Depth))) &&
-                  (empty_o == (depth_o == '0)) &&
-                  (wready_o == !full_o) &&
-                  (rvalid_o == !empty_o));
+  // No matching cover: this invariant is true in the idle/reset-default state,
+  // so covering the consequent does not demonstrate useful FIFO stimulus.
 
   ap_flush_clears_fifo_state:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -73,17 +66,8 @@ module sync_fifo_sva #(
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   flush_i ##1 (empty_o && (depth_o == '0) && (wptr_q == '0) && (rptr_q == '0)));
 
-  ap_flush_with_activity_clears_fifo_state:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   flush_i && (wvalid_i || rready_i)
-                   |=> (empty_o && (depth_o == '0) && (wptr_q == '0) && (rptr_q == '0)))
-  else $error("sync_fifo_sva: flush with active request did not clear FIFO state");
-
-  cp_flush_with_activity_clears_fifo_state:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  flush_i && (wvalid_i || rready_i)
-                  ##1 (empty_o && (depth_o == '0) && (wptr_q == '0) && (rptr_q == '0)));
-
+  // ap_flush_clears_fifo_state owns the invariant. The covers below retain the
+  // three distinct activity scenarios required by FIFO-001.
   cp_flush_with_write_request:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   flush_i && wvalid_i
@@ -110,6 +94,30 @@ module sync_fifo_sva #(
                   past_valid_q && !flush_i && do_read
                   ##1 (rptr_q == ($past(rptr_q) + 1'b1)));
 
+  ap_read_pointer_wrap_toggles_extra_msb:
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   past_valid_q && !flush_i && do_read &&
+                   (rptr_q == {1'b0, {PtrW{1'b1}}})
+                   |=> (rptr_q == {1'b1, {PtrW{1'b0}}}))
+  else $error("sync_fifo_sva: read pointer index wrap did not toggle extra MSB");
+
+  cp_read_pointer_wrap_toggles_extra_msb:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  past_valid_q && !flush_i && do_read &&
+                  (rptr_q == {1'b0, {PtrW{1'b1}}})
+                  ##1 (rptr_q == {1'b1, {PtrW{1'b0}}}));
+
+  ap_read_pointer_wrap_reuses_zero:
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   past_valid_q && !flush_i && do_read && (rptr_q == '1)
+                   |=> (rptr_q == '0))
+  else $error("sync_fifo_sva: read pointer did not wrap to zero after reuse");
+
+  cp_read_pointer_wrap_reuses_zero:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  past_valid_q && !flush_i && do_read && (rptr_q == '1)
+                  ##1 (rptr_q == '0));
+
   ap_read_only_decrements_depth:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    past_valid_q && !flush_i && do_read && !do_write
@@ -132,6 +140,30 @@ module sync_fifo_sva #(
                   past_valid_q && !flush_i && do_write
                   ##1 (wptr_q == ($past(wptr_q) + 1'b1)));
 
+  ap_write_pointer_wrap_toggles_extra_msb:
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   past_valid_q && !flush_i && do_write &&
+                   (wptr_q == {1'b0, {PtrW{1'b1}}})
+                   |=> (wptr_q == {1'b1, {PtrW{1'b0}}}))
+  else $error("sync_fifo_sva: write pointer index wrap did not toggle extra MSB");
+
+  cp_write_pointer_wrap_toggles_extra_msb:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  past_valid_q && !flush_i && do_write &&
+                  (wptr_q == {1'b0, {PtrW{1'b1}}})
+                  ##1 (wptr_q == {1'b1, {PtrW{1'b0}}}));
+
+  ap_write_pointer_wrap_reuses_zero:
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                   past_valid_q && !flush_i && do_write && (wptr_q == '1)
+                   |=> (wptr_q == '0))
+  else $error("sync_fifo_sva: write pointer did not wrap to zero after reuse");
+
+  cp_write_pointer_wrap_reuses_zero:
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                  past_valid_q && !flush_i && do_write && (wptr_q == '1)
+                  ##1 (wptr_q == '0));
+
   ap_write_only_increments_depth:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    past_valid_q && !flush_i && do_write && !do_read
@@ -143,19 +175,8 @@ module sync_fifo_sva #(
                   past_valid_q && !flush_i && do_write && !do_read
                   ##1 (depth_o == ($past(depth_o) + 1'b1)));
 
-  ap_simultaneous_read_write_advances_pointers:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   past_valid_q && !flush_i && do_read && do_write
-                   |=> ((rptr_q == ($past(rptr_q) + 1'b1)) &&
-                        (wptr_q == ($past(wptr_q) + 1'b1))))
-  else $error("sync_fifo_sva: simultaneous read/write did not advance both pointers");
-
-  cp_simultaneous_read_write_advances_pointers:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  past_valid_q && !flush_i && do_read && do_write
-                  ##1 ((rptr_q == ($past(rptr_q) + 1'b1)) &&
-                       (wptr_q == ($past(wptr_q) + 1'b1))));
-
+  // Pointer movement for simultaneous traffic is already checked independently
+  // by ap_read_pop_advances_rptr and ap_write_push_advances_wptr.
   ap_simultaneous_read_write_preserves_depth:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    past_valid_q && !flush_i && do_read && do_write
@@ -233,10 +254,8 @@ bind sync_fifo sync_fifo_sva #(
     .flush_i,
     .wvalid_i,
     .wready_o,
-    .wdata_i,
     .rvalid_o,
     .rready_i,
-    .rdata_o,
     .full_o,
     .empty_o,
     .depth_o,

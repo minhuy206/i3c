@@ -11,10 +11,9 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
 
   endtask
 
-  virtual task configure_multi_dat_targets(output bit [6:0] static_addr0,
-                                           output bit [6:0] dynamic_addr0,
-                                           output bit [6:0] static_addr1,
-                                           output bit [6:0] dynamic_addr1);
+  virtual task configure_multi_dat_targets(
+      output bit [6:0] static_addr0, output bit [6:0] dynamic_addr0, output bit [6:0] static_addr1,
+      output bit [6:0] dynamic_addr1);
     disable_dut();
     randomize_i3c_dat_target(0, static_addr0, dynamic_addr0);
     randomize_i3c_dat_target(1, static_addr1, dynamic_addr1, static_addr0, dynamic_addr0);
@@ -28,10 +27,10 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
     word_queue_t                   tx_words;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
-    bit                      [6:0] static_addr0;
-    bit                      [6:0] dynamic_addr0;
-    bit                      [6:0] static_addr1;
-    bit                      [6:0] dynamic_addr1;
+    bit                     [ 6:0] static_addr0;
+    bit                     [ 6:0] dynamic_addr0;
+    bit                     [ 6:0] static_addr1;
+    bit                     [ 6:0] dynamic_addr1;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
 
@@ -46,8 +45,8 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr0),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -64,8 +63,8 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd1),
         .target_addr(dynamic_addr1),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -92,11 +91,6 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
     check_all_queues_empty(
         $sformatf("after SDRW_005 %s multi DAT", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRW_005 result: mode=%s case=multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} sampled_bytes={%0d,%0d}",
-                  private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
-                  cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr,
-                  dev_seq0.sampled_data.size(), dev_seq1.sampled_data.size()), UVM_LOW)
   endtask
 
   virtual task run_toc_zero_multi_dat_idx_case(bit broadcast_header_enable);
@@ -107,10 +101,10 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
     int                            rstart_count;
-    bit                      [6:0] static_addr0;
-    bit                      [6:0] dynamic_addr0;
-    bit                      [6:0] static_addr1;
-    bit                      [6:0] dynamic_addr1;
+    bit                     [ 6:0] static_addr0;
+    bit                     [ 6:0] dynamic_addr0;
+    bit                     [ 6:0] static_addr1;
+    bit                     [ 6:0] dynamic_addr1;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
 
@@ -128,8 +122,8 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr0),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -148,8 +142,8 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd1),
         .target_addr(dynamic_addr1),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -168,11 +162,6 @@ class i3c_write_multi_dat_idx_vseq extends i3c_base_vseq;
         $sformatf(
         "after SDRW_005 %s toc0 multi-DAT", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRW_005 result: mode=%s case=toc0_multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b",
-                  private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
-                  cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr, rstart_count,
-                  dev_seq0.observed_rstart, dev_seq1.observed_rstart), UVM_LOW)
   endtask
 
 

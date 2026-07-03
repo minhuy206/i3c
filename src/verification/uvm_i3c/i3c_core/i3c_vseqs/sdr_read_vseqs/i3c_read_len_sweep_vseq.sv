@@ -45,8 +45,8 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -59,10 +59,6 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
 
     check_all_queues_empty($sformatf("after SDRR_002 len %0d", data_length));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_002 result: mode=%s len=%0d rx_words_drained=%0d expected_words=%0d resp_len=%0d",
-                  private_addr_mode_name(broadcast_header_enable), data_length, rx_words.size(),
-                  ((data_length + 3) / 4), resp[15:0]), UVM_LOW)
   endtask
 
   virtual function void build_payload(int unsigned data_length, ref byte_queue_t read_data);

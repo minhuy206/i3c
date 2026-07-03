@@ -15,32 +15,34 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_read_toc_zero_case(bit broadcast_header_enable);
-    transfer_stimulus_cfg_t rd_cfg;
-    transfer_stimulus_cfg_t wr_cfg;
-    byte_queue_t            read_data;
-    word_queue_t            tx_words;
-    bit [31:0]              resp0;
-    bit [31:0]              resp1;
-    bit [31:0]              rx;
-    int                     rstart_count;
-    byte_queue_t            exp_data;
-    bit [6:0]               static_addr;
-    bit [6:0]               dynamic_addr;
-    i3c_device_response_seq dev_seq0;
-    i3c_device_response_seq dev_seq1;
+    transfer_stimulus_cfg_t        rd_cfg;
+    transfer_stimulus_cfg_t        wr_cfg;
+    byte_queue_t                   read_data;
+    word_queue_t                   tx_words;
+    bit                     [31:0] resp0;
+    bit                     [31:0] resp1;
+    bit                     [31:0] rx;
+    int                            rstart_count;
+    byte_queue_t                   exp_data;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
+    i3c_device_response_seq        dev_seq0;
+    i3c_device_response_seq        dev_seq1;
 
     enable_dut(broadcast_header_enable);
     randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
-    rd_cfg                   = make_transfer_cfg(
-        .ctxt($sformatf("read_toc0_vseq %s first", private_addr_mode_name(broadcast_header_enable))),
+    rd_cfg = make_transfer_cfg(
+        .ctxt($sformatf(
+            "read_toc0_vseq %s first", private_addr_mode_name(broadcast_header_enable)
+        )),
         .seq_name($sformatf("dev_seq0_%s", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd5),
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -48,15 +50,17 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
         .settle_before_cmd(5),
         .timeout_cycles(0)
     );
-    wr_cfg                   = make_transfer_cfg(
-        .ctxt($sformatf("read_toc0_vseq %s second", private_addr_mode_name(broadcast_header_enable))),
+    wr_cfg = make_transfer_cfg(
+        .ctxt($sformatf(
+            "read_toc0_vseq %s second", private_addr_mode_name(broadcast_header_enable)
+        )),
         .seq_name($sformatf("dev_seq1_%s", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd6),
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -78,10 +82,5 @@ class i3c_read_toc_zero_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq1.observed_rstart, 1'b0,
                  "read_toc0_vseq: second write should end with STOP")
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_004 result: mode=%s rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b read_resp_len=%0d write_resp_len=%0d",
-                  private_addr_mode_name(broadcast_header_enable), rstart_count,
-                  dev_seq0.observed_rstart, dev_seq1.observed_rstart, resp0[15:0],
-                  resp1[15:0]), UVM_LOW)
   endtask
 endclass

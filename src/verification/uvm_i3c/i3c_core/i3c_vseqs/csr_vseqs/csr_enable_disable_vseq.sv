@@ -44,7 +44,7 @@ class csr_enable_disable_vseq extends csr_base_vseq;
 
         dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
         dev_seq.target_addr   = 7'h08;
-        dev_seq.ack_address   = 1'b1;
+        dev_seq.addr_nack   = 1'b0;
         dev_seq.is_i3c        = 1'b1;
         dev_seq.dir           = 1'b0;
         dev_seq.read_data_cnt = 2;
@@ -86,7 +86,7 @@ class csr_enable_disable_vseq extends csr_base_vseq;
 
         dev_seq               = i3c_device_response_seq::type_id::create("dev_seq_after_disable");
         dev_seq.target_addr   = 7'h08;
-        dev_seq.ack_address   = 1'b1;
+        dev_seq.addr_nack   = 1'b0;
         dev_seq.is_i3c        = 1'b1;
         dev_seq.dir           = 1'b0;
         dev_seq.read_data_cnt = 2;

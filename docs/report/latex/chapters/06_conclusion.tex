@@ -1,34 +1,136 @@
 \chapter{Conclusion and Future Work}
 \label{ch:conclusion}
 
-% DRAFT BRIEF: write last; quick if the Results chapter is solid.
-% Sources: all chapters, out-of-scope list, improvements.md Phase-2 notes.
+This thesis set out to design and verify a compact but complete MIPI I3C Basic Active
+Controller suitable for study and extension. This closing chapter recaps what was built
+(\cref{sec:contributions}), reflects on the knowledge and skills the work developed
+(\cref{sec:lessons}), states the limitations of the implemented system and of its evaluation
+(\cref{sec:limitations}), and sets out a prioritised roadmap for future work
+(\cref{sec:future-work}).
 
 \section{Summary of contributions}
-\brief{Recap the headline contributions, led by the design result rather than the size
-figure: all \FlowStateCount{} \texttt{flow_active} states completed; a compact, studyable controller (PHY to
-protocol to register) retaining SDR + \iic{} + ENTDAA; working dual-agent UVM 1.2 environment
-with scoreboard + SVA; first ENTDAA-capable Active Controller in the lab. Refer to the quantitative
-comparison in \cref{ch:results} without repeating its volatile counts or percentage. Tie each contribution
-back to its chapter.}
+\label{sec:contributions}
 
-\section{Lessons learned}
-\brief{Reflective notes: spec-vs-code drift (code-wins policy); educational value of a
-hand-written CSR vs auto-gen; value of directed-first bring-up; single-counter SCL timing
-tradeoff; FSM-diagram-first documentation workflow.}
+The central contribution is a \emph{functionally complete} Active Controller. Every one of
+the \FlowStateCount{} states of the \texttt{flow\_active} command engine is implemented and
+exercised (\cref{ch:architecture-rtl,ch:results}), rather than left as future work: the
+controller drives SDR private write and read, immediate data transfers, \iic{}-FM legacy
+traffic, dynamic address assignment through ENTDAA, and the ENEC/DISEC common command codes.
+This is the design result that leads the thesis; the accompanying size comparison in
+\cref{ch:results} shows it is achieved in about an order of magnitude less RTL than the
+reference, but the completeness of the protocol engine, not the line count, is the headline.
+
+The remaining contributions each map to a chapter:
+
+\begin{itemize}
+  \item \textbf{A study-scale, full-stack controller} spanning the PHY, the protocol engine,
+    and the register interface as one coherent, auditable design
+    (\cref{ch:architecture-rtl}), with complexity deliberately concentrated in a single
+    inspectable FSM rather than spread across a large generated code base.
+  \item \textbf{A hand-written control-status register file and 32-entry DAT}
+    (\cref{ch:architecture-rtl}) that make the host-visible interface transparent for
+    teaching, in contrast to a machine-generated register block.
+  \item \textbf{A working dual-agent UVM~1.2 verification environment}
+    (\cref{ch:verif-method}) --- a register-bus agent and an I3C-bus agent, a reference-model
+    scoreboard, and a set of bound SystemVerilog assertions --- that establishes correctness
+    by directed stimulus with coverage-driven extension.
+  \item \textbf{Verified evidence of that correctness} (\cref{ch:results}): a fully green
+    regression across all runnable scenarios and a functional-coverage result whose residual
+    gap is combinatorial breadth rather than any unexercised protocol mode.
+\end{itemize}
+
+Taken together, these make the controller, to the author's knowledge, the first
+ENTDAA-capable I3C Active Controller developed in the lab.
+
+\section{Knowledge, skills, and lessons learned}
+\label{sec:lessons}
+
+Building the controller end-to-end surfaced several lessons that outlast the specific design.
+
+\emph{Treating the code as ground truth prevents drift.} Planning documents and early
+specifications inevitably diverge from the implementation as the design matures; adopting a
+strict ``code and module specifications win'' policy for every reported fact --- state counts,
+port lists, error encodings --- kept the thesis consistent with what actually runs, and made
+the register-transfer level, not the prose, the single source of truth.
+
+\emph{A hand-written register file has real educational value.} Writing the CSR and DAT logic
+by hand, rather than generating it, forced an explicit understanding of every field, its
+reset value, and its side effects; the resulting file is small enough to read in full, which
+is precisely what a study design should offer.
+
+\emph{Directed-first bring-up shortens the debugging loop.} Bringing up a state-machine-heavy
+controller with deterministic, named scenarios meant that each early failure pointed at one
+FSM path rather than at an opaque random draw; constrained randomisation and functional
+coverage were then layered on top to measure reach, which proved the right order for a
+single-author project.
+
+\emph{Design choices trade simplicity against generality.} The single-counter SCL timing
+generator is a clear example: it keeps the timing logic compact and easy to reason about, at
+the cost of the finer per-edge programmability a production controller would need. Recognising
+such trade-offs explicitly, rather than treating them as omissions, is part of engineering
+maturity.
+
+\emph{Diagram-first documentation clarifies the design.} Drawing the FSM and dataflow figures
+before writing the surrounding prose repeatedly exposed gaps and inconsistencies in the
+mental model of the design, and made the eventual explanation follow the structure of the
+hardware.
 
 \section{Limitations}
-\brief{State the evidenced limits once: the verified scenario and coverage boundary from
-\cref{ch:results}, remaining assertion or stimulus gaps, the single-Target assumptions, excluded protocol
-features, and the absence of FPGA validation. Separate limitations of the implemented system from limits
-of the evaluation.}
+\label{sec:limitations}
+
+The limitations fall into two distinct groups: limits of the implemented system, and limits
+of how thoroughly it was evaluated. Separating them avoids conflating ``the design does not do
+X'' with ``X was not measured''.
+
+\paragraph{Implementation limitations.} The controller implements the SDR and \iic{}-FM
+subset only. In-Band Interrupt (IBI), the High-Data-Rate (HDR) modes, Secondary-Controller and
+multi-controller operation, and Target mode are all out of scope
+(\cref{ch:background-requirements}), as is autonomous bus/error recovery. The design assumes
+a single Active Controller on the bus and a modest number of Targets consistent with the
+32-entry DAT. These are boundaries of the chosen scope, not defects within it.
+
+\paragraph{Evaluation limitations.} The evaluation is simulation-only. Functional correctness
+is established across the verified scenario set, but the coverage result of \cref{ch:results}
+is closed only in the single-coverpoint sense: the remaining open bins are the combinatorial
+breadth of the automatic cross groups and of the multi-device address-assignment space, which
+broader stimulus would still need to reach. The design was not taken through synthesis, so the
+target system-clock frequency is a design constraint that this work does not measure, and
+there is no FPGA or silicon validation of timing or area. Some subsystems are checked
+indirectly through the scoreboard and shared assertions rather than by a dedicated checker.
 
 \section{Future work}
-\brief{Prioritised roadmap: (1) verification breadth --- broader constrained-random stimulus and
-extending the existing functional-coverage model to full-protocol closure, broader
-CCC/ENTDAA/\iic{}/error-injection vseqs toward the $\sim$105-case testplan;
-(2) protocol features --- In-Band Interrupt (IBI), HDR, Secondary Controller, Target mode, bus recovery;
-(3) FPGA validation on a target board is left as future work (the single FPGA line, per
-settled decision).}
+\label{sec:future-work}
 
-\tabph{Future-work roadmap}{phase1_spec_v2.md out-of-scope list}
+The roadmap in \cref{tab:future-work} orders the natural extensions of this thesis by
+priority. The first tier deepens confidence in the existing design; the second widens the
+protocol feature set toward a production controller; the third moves the design onto hardware.
+
+\begin{table}[!htb]\centering
+  \caption{Prioritised future-work roadmap.}
+  \label{tab:future-work}
+  \small
+  \begin{tabular}{@{}c >{\raggedright\arraybackslash}p{0.26\textwidth}
+                    >{\raggedright\arraybackslash}p{0.52\textwidth}@{}}
+    \toprule
+    \textbf{Tier} & \textbf{Area} & \textbf{Item and rationale} \\
+    \midrule
+    1 & Verification breadth & Add constrained-random sweeping and extend the functional-coverage
+      model toward full-protocol closure, broadening the CCC, ENTDAA, \iic{}, and
+      error-injection sequences toward the full testplan; this directly closes the breadth gap
+      identified in \cref{ch:results}. \\
+    \midrule
+    2 & Protocol features & In-Band Interrupt (IBI) support for Target-initiated events. \\
+    2 & Protocol features & High-Data-Rate (HDR) modes for higher throughput. \\
+    2 & Protocol features & Secondary-Controller / multi-controller operation with bus handover. \\
+    2 & Protocol features & Target mode, so the block can also act as an I3C Target. \\
+    2 & Protocol features & Autonomous bus and error recovery. \\
+    \midrule
+    3 & Silicon validation & FPGA prototyping with a synthesis run to confirm the target
+      system-clock frequency, area, and timing left unmeasured by the simulation-only flow. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Pursued in this order, the roadmap turns the study-scale controller of this thesis into a
+progressively more complete and hardware-validated I3C Active Controller, while preserving the
+readability and directed-verification foundation that motivated the design.

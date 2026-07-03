@@ -23,8 +23,8 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
     bit                     [31:0] resp2;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
     i3c_device_response_seq        dev_seq2;
@@ -43,8 +43,8 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -63,8 +63,8 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -83,8 +83,8 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -94,7 +94,7 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     );
 
     build_random_tx_words(cfg0.data_length + cfg1.data_length + cfg2.data_length, exp_data,
-                              tx_words);
+                          tx_words);
     start_back_to_back_device_responses(cfg0, cfg1, cfg2, dev_seq0, dev_seq1, dev_seq2);
 
     write_tx_words(tx_words);
@@ -119,12 +119,6 @@ class i3c_write_back_to_back_vseq extends i3c_base_vseq;
     check_all_queues_empty("after SDRW_004 back_to_back");
     disable_dut();
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRW_004 result: mode=%s queued_cmds=3 sampled_bytes={%0d,%0d,%0d} observed_rstart={%0b,%0b,%0b}",
-                  private_addr_mode_name(broadcast_header_enable), dev_seq0.sampled_data.size(),
-                  dev_seq1.sampled_data.size(), dev_seq2.sampled_data.size(),
-                  dev_seq0.observed_rstart, dev_seq1.observed_rstart,
-                  dev_seq2.observed_rstart), UVM_LOW)
   endtask
 
   virtual task start_back_to_back_device_responses(

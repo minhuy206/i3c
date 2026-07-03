@@ -8,6 +8,7 @@ class i3c_env extends uvm_env;
   i3c_scoreboard m_scoreboard;
   i3c_coverage m_i3c_coverage;
   reg_coverage m_reg_coverage;
+  i3c_correlated_coverage m_correlated_coverage;
 
   function new(string name = "", uvm_component parent);
     super.new(name, parent);
@@ -37,6 +38,9 @@ class i3c_env extends uvm_env;
     if (cfg.en_scb) begin
       m_scoreboard = i3c_scoreboard::type_id::create("m_scoreboard", this);
       m_scoreboard.cfg = cfg;
+      m_correlated_coverage = i3c_correlated_coverage::type_id::create(
+          "m_correlated_coverage", this
+      );
     end
   endfunction
 
@@ -49,6 +53,7 @@ class i3c_env extends uvm_env;
     if (cfg.en_scb) begin
       m_reg_agent.monitor.analysis_port.connect(m_scoreboard.reg_fifo.analysis_export);
       m_i3c_agent.monitor.analysis_port.connect(m_scoreboard.i3c_fifo.analysis_export);
+      m_scoreboard.correlated_ap.connect(m_correlated_coverage.analysis_export);
     end
 
     m_i3c_agent.monitor.analysis_port.connect(m_i3c_coverage.analysis_export);

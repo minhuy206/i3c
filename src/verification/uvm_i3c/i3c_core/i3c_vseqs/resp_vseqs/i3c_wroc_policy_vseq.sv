@@ -23,7 +23,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
   virtual function transfer_stimulus_cfg_t make_write_cfg(string ctxt, string seq_name,
                                                            bit [3:0] tid,
                                                            int unsigned data_length = 2,
-                                                           bit ack_address = 1'b1);
+                                                           bit addr_nack = 1'b0);
     return make_transfer_cfg(
         .ctxt(ctxt),
         .seq_name(seq_name),
@@ -31,8 +31,8 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(I3cAddr),
         .is_i3c(1'b1),
-        .ack_address(ack_address),
-        .ack_data(1'b1),
+        .addr_nack(addr_nack),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -134,7 +134,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     dev_seq             = i3c_device_response_seq::type_id::create(
         $sformatf("err012_ccc_wroc%0b_dev_seq", wroc));
     dev_seq.target_addr = 7'h7e;
-    dev_seq.ack_address = 1'b1;
+    dev_seq.addr_nack = 1'b0;
     dev_seq.is_i3c      = 1'b1;
     dev_seq.dir         = 1'b0;
     fork
@@ -249,7 +249,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
 
     configure_target();
     cfg = make_write_cfg("ERR_012 wroc=0 address NACK override",
-                         "err012_error_override_dev_seq", 4'hB, 2, 1'b0);
+                         "err012_error_override_dev_seq", 4'hB, 2, 1'b1);
     cmd                   = '0;
     cmd.attr              = ImmediateDataTransfer;
     cmd.tid               = cfg.tid;

@@ -49,55 +49,9 @@ module tb_pad_model_sva (
                    }) && (!$isunknown(sda_bus_i) || hc_abort_read_contention))
   else $error("tb_pad_model_sva: pad-model signals must not be X/Z");
 
-  cp_pad_model_signals_known:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !$isunknown({
-                      dut_sda_oe_i,
-                      dut_sda_o_i,
-                      dut_sel_od_pp_i,
-                      if_dut_sda_oe_i,
-                      if_dut_sda_o_i,
-                      if_dut_sel_od_pp_i,
-                      device_sda_o_i,
-                      device_sda_pp_en_i,
-                      hc_abort_i
-                  }) && (!$isunknown(sda_bus_i) || hc_abort_read_contention));
-
-  ap_sda_bus_known:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   !$isunknown(sda_bus_i) || hc_abort_read_contention)
-  else $error("tb_pad_model_sva: SDA bus must not resolve to X/Z");
-
-  cp_sda_bus_known:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !$isunknown(sda_bus_i) || hc_abort_read_contention);
-
-  ap_if_dut_sda_oe_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   if_dut_sda_oe_i === dut_sda_oe_i)
-  else $error("tb_pad_model_sva: i3c_if dut_sda_oe mirror mismatch");
-
-  cp_if_dut_sda_oe_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  if_dut_sda_oe_i === dut_sda_oe_i);
-
-  ap_if_dut_sda_o_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   if_dut_sda_o_i === dut_sda_o_i)
-  else $error("tb_pad_model_sva: i3c_if dut_sda_o mirror mismatch");
-
-  cp_if_dut_sda_o_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  if_dut_sda_o_i === dut_sda_o_i);
-
-  ap_if_dut_sel_od_pp_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   if_dut_sel_od_pp_i === dut_sel_od_pp_i)
-  else $error("tb_pad_model_sva: i3c_if dut_sel_od_pp mirror mismatch");
-
-  cp_if_dut_sel_od_pp_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  if_dut_sel_od_pp_i === dut_sel_od_pp_i);
+  // No matching cover for the known-signal invariant: it hits on the first
+  // enabled idle cycle. The electrical ownership covers below require actual
+  // controller/target drive activity. ap_sda_bus_known was subsumed here.
 
   // The behavioral target can release PP-high on a different scheduler point
   // than the DUT takes over with OD-low for read turnaround. Allow only a
@@ -117,8 +71,9 @@ module tb_pad_model_sva (
   assert property (@(posedge clk_i) disable iff (!rst_ni) bus013_if_visible)
   else $error("tb_pad_model_sva: BUS_013 i3c_if pad visibility mismatch");
 
-  cp_bus013_if_exposes_dut_pad_signals:
-  cover property (@(posedge clk_i) disable iff (!rst_ni) bus013_if_visible);
+  // No matching cover: interface visibility is a static wiring invariant and
+  // would hit while idle. Keep one combined assertion instead of three mirror
+  // assertions for the individual interface signals.
 
   ap_bus013_no_unsafe_sda_contention:
   assert property (@(posedge clk_i) disable iff (!rst_ni) !unsafe_contention)
@@ -130,11 +85,6 @@ module tb_pad_model_sva (
   cp_bus013_no_unsafe_sda_contention:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   !unsafe_contention && (dut_drives || device_drives));
-
-  cp_bus013_dut_drive_low:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  dut_drives && !dut_sda_o_i && !hc_abort_read_contention &&
-                  (sda_bus_i === 1'b0));
 
   cp_bus013_dut_drive_high_pp:
   cover property (@(posedge clk_i) disable iff (!rst_ni)

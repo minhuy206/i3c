@@ -47,8 +47,8 @@ class i3c_write_len_sweep_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(preload_tx),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -65,7 +65,7 @@ class i3c_write_len_sweep_vseq extends i3c_base_vseq;
     `uvm_info(`gfn, $sformatf(
                   "SDRW_002 result: mode=%s len=%0d tx_words=%0d sampled_bytes=%0d preload_tx=%0b",
                   private_addr_mode_name(broadcast_header_enable), data_length, tx_words.size(),
-                  dev_seq.sampled_data.size(), preload_tx), UVM_LOW)
+                  dev_seq.sampled_data_q.size(), preload_tx), UVM_LOW)
   endtask
 
   virtual function void build_payload(int unsigned sweep_idx, int unsigned data_length,

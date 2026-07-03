@@ -18,8 +18,7 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
   endtask
 
   virtual function transfer_stimulus_cfg_t make_write_cfg(string ctxt, string seq_name,
-                                                           bit [3:0] tid,
-                                                           int unsigned data_length);
+                                                          bit [3:0] tid, int unsigned data_length);
     return make_transfer_cfg(
         .ctxt(ctxt),
         .seq_name(seq_name),
@@ -27,8 +26,8 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(DynamicAddr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -39,18 +38,18 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
   endfunction
 
   virtual task run_busy_sw_reset_noop_case();
-    transfer_stimulus_cfg_t cfg0;
-    transfer_stimulus_cfg_t cfg1;
-    transfer_stimulus_cfg_t cfg2;
-    i3c_device_response_seq dev_seq0;
-    i3c_device_response_seq dev_seq1;
-    i3c_device_response_seq dev_seq2;
-    byte_queue_t            no_read_data;
-    word_queue_t            tx_words;
-    bit              [31:0] status;
-    bit              [31:0] resp0;
-    bit              [31:0] resp1;
-    bit              [31:0] resp2;
+    transfer_stimulus_cfg_t        cfg0;
+    transfer_stimulus_cfg_t        cfg1;
+    transfer_stimulus_cfg_t        cfg2;
+    i3c_device_response_seq        dev_seq0;
+    i3c_device_response_seq        dev_seq1;
+    i3c_device_response_seq        dev_seq2;
+    byte_queue_t                   no_read_data;
+    word_queue_t                   tx_words;
+    bit                     [31:0] status;
+    bit                     [31:0] resp0;
+    bit                     [31:0] resp1;
+    bit                     [31:0] resp2;
 
     disable_dut();
     write_dat_entry(0, StaticAddr, DynamicAddr, 1'b0);
@@ -104,16 +103,17 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
     check_all_queues_empty("after ERR_015 busy SOFT_RST no-op");
     disable_dut();
 
-    `uvm_info(`gfn,
-              "ERR_015 result: busy RESET_CONTROL.SOFT_RST was accepted as a no-op; queued transfers completed",
-              UVM_LOW)
   endtask
 
   virtual task wait_for_data_tx_phase(string ctxt);
     for (int unsigned cycle = 0; cycle < 10000; cycle++) begin
       @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-      if ((hdl_read_uint_lsb(FLOW_FSM_STATE_PATH, 4) == FSM_ISSUE_CMD) &&
-          (hdl_read_uint_lsb(TX_FLOW_STATE_PATH, 3) == TX_DRIVE_BYTE)) return;
+      if ((hdl_read_uint_lsb(
+              FLOW_FSM_STATE_PATH, 4
+          ) == FSM_ISSUE_CMD) && (hdl_read_uint_lsb(
+              TX_FLOW_STATE_PATH, 3
+          ) == TX_DRIVE_BYTE))
+        return;
     end
     `uvm_fatal(`gfn, $sformatf("%s: data TX phase was not observed", ctxt))
   endtask
@@ -123,7 +123,7 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
     bit write_done;
 
     saw_sw_reset = 1'b0;
-    write_done = 1'b0;
+    write_done   = 1'b0;
     fork
       begin
         do begin
@@ -141,12 +141,11 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
       end
     join
 
-    `DV_CHECK_EQ(saw_sw_reset, 1'b0,
-                 "ERR_015: busy SOFT_RST write must not pulse DUT sw_reset")
+    `DV_CHECK_EQ(saw_sw_reset, 1'b0, "ERR_015: busy SOFT_RST write must not pulse DUT sw_reset")
   endtask
 
-  virtual function void check_success_resp(bit [31:0] resp, bit [3:0] tid,
-                                           bit [15:0] data_length, string ctxt);
+  virtual function void check_success_resp(bit [31:0] resp, bit [3:0] tid, bit [15:0] data_length,
+                                           string ctxt);
     `DV_CHECK_EQ(resp[31:28], Success, $sformatf("%s: response status mismatch", ctxt))
     `DV_CHECK_EQ(resp[27:24], tid, $sformatf("%s: response TID mismatch", ctxt))
     `DV_CHECK_EQ(resp[23:16], 8'h00, $sformatf("%s: response reserved bits must be zero", ctxt))

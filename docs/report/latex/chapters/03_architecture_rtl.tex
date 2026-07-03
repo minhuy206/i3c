@@ -286,8 +286,9 @@ counted in system-clock cycles (\cref{sec:rtl-csr}), the design needs a fast ref
 timing values assume a system clock of \SI{333.333}{\mega\hertz}, which is the minimum that lets the
 single-counter generator resolve the SDR \SI{12.5}{\mega\hertz} push-pull period and the sub-cycle
 setup and hold windows with integer counts. Reset is the active-low, asynchronously asserted
-\texttt{rst_ni}; every sequential block follows the \texttt{always_ff~@(posedge~clk_i~or~negedge~rst_ni)}
-idiom so that reset takes effect immediately and release is synchronous.
+\texttt{rst_ni}; every sequential block follows the standard synchronous-design
+\texttt{always_ff~@(posedge~clk_i~or~negedge~rst_ni)}
+idiom~\cite{harris_ddca} so that reset takes effect immediately and release is synchronous.
 
 Two distinct reset mechanisms coexist. The hardware reset \texttt{rst_ni} returns all state to its
 initial value. A separate \emph{software reset} --- \texttt{RESET\_CONTROL[0]}, a self-clearing pulse

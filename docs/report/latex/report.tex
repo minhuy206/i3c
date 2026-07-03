@@ -189,7 +189,7 @@
 \newcommand{\FlowStateCount}{13}
 \newcommand{\DriverPhaseCount}{14}
 \newcommand{\SvaCheckerCount}{10}
-\newcommand{\RunnableVseqCount}{75}
+\newcommand{\RunnableVseqCount}{80}
 
 % Figure placeholder: #1=caption #2=shows #3=source #4=render tool
 \newcommand{\figph}[4]{%
@@ -363,12 +363,54 @@ I take full responsibility for any violation of the commitments stated above.
 % English-written thesis: the EN abstract precedes the VN tóm tắt (template instruction).
 \begin{center}\textbf{ABSTRACT}\end{center}
 
-\brief{English abstract — Background / Purpose / Method / Results / Evaluation, under one
-page. Keywords line. (Content TBD per the writing plan.)}
+The MIPI I3C bus is displacing legacy I\textsuperscript{2}C in system-on-chip sensor and
+peripheral interconnect, but the available open-source controllers are production-scale
+designs whose size and platform integration obscure the protocol for study, and whose command
+engines are in places left unfinished. This thesis designs and verifies a compact yet
+functionally complete I3C Basic v1.1.1 Active Controller in SystemVerilog, derived by
+simplifying the CHIPS Alliance \texttt{i3c-core} reference. The controller supports the
+Single-Data-Rate data path --- private write, read, and Immediate Data Transfer --- together
+with I\textsuperscript{2}C Fast-Mode legacy interoperability, dynamic address assignment
+through ENTDAA, and the ENEC/DISEC common command codes; In-Band Interrupt, High-Data-Rate
+modes, and secondary-controller and target roles are deliberately out of scope. Every one of
+the thirteen states of the central command finite-state machine is implemented, completing the
+paths the reference leaves as stubs. Correctness is established with a dual-agent UVM~1.2
+verification environment --- a register-bus agent and an I3C-bus agent, a reference-model
+scoreboard, bound SystemVerilog assertions, and a feature-first functional-coverage model ---
+driven by directed virtual sequences with coverage-driven extension. The full regression of 80
+scenarios passes with zero errors, functional coverage reaches 78.8\,\% of bins with the
+residual confined to combinatorial breadth rather than any unexercised protocol mode, and the
+synthesisable design is about an order of magnitude smaller than the reference RTL. The result
+is a readable, auditable, and verified controller suitable for teaching and for extension
+toward a production I3C block.
+
+\textbf{Keywords:} MIPI I3C; Active Controller; SystemVerilog RTL; UVM verification; dynamic
+address assignment; functional coverage.
 
 \begin{center}\textbf{TÓM TẮT}\end{center}
 
-\brief{Tóm tắt tiếng Việt — bản dịch của ABSTRACT ở trên. Dòng từ khóa. (Nội dung TBD.)}
+Bus MIPI I3C đang dần thay thế I\textsuperscript{2}C truyền thống trong kết nối cảm biến và
+ngoại vi trên các hệ thống trên chip (SoC), nhưng các bộ điều khiển mã nguồn mở hiện có đều là
+những thiết kế ở quy mô sản phẩm với kích thước lớn và mức độ tích hợp cao khiến giao thức khó
+được dùng để học tập, đồng thời một số nhánh của khối điều khiển lệnh còn bỏ dở. Khóa luận này
+thiết kế và kiểm chứng một bộ điều khiển tích cực (Active Controller) I3C Basic v1.1.1 gọn nhẹ
+nhưng đầy đủ chức năng bằng SystemVerilog, được rút gọn từ thiết kế tham chiếu CHIPS Alliance
+\texttt{i3c-core}. Bộ điều khiển hỗ trợ đường dữ liệu Single-Data-Rate --- ghi riêng, đọc và
+truyền dữ liệu tức thời (Immediate Data Transfer) --- cùng khả năng tương thích I\textsuperscript{2}C
+Fast-Mode, gán địa chỉ động qua ENTDAA và các lệnh chung ENEC/DISEC; các tính năng In-Band
+Interrupt, High-Data-Rate, cũng như vai trò điều khiển thứ cấp và target nằm ngoài phạm vi. Toàn
+bộ mười ba trạng thái của máy trạng thái điều khiển lệnh trung tâm đều được hiện thực, hoàn thiện
+những nhánh mà thiết kế tham chiếu còn bỏ trống. Tính đúng đắn được kiểm chứng bằng môi trường
+UVM~1.2 hai tác tử --- một tác tử bus thanh ghi và một tác tử bus I3C, một scoreboard mô hình
+tham chiếu, các khẳng định SystemVerilog và một mô hình phủ chức năng --- điều khiển bằng các
+chuỗi hướng dẫn có định hướng kết hợp mở rộng theo độ phủ. Toàn bộ 80 kịch bản hồi quy đều đạt
+không lỗi, độ phủ chức năng đạt 78,8\,\% số bin với phần còn lại chỉ là bề rộng tổ hợp chứ không
+phải chế độ giao thức chưa được kiểm thử, và thiết kế tổng hợp được nhỏ hơn khoảng một bậc độ lớn
+so với RTL tham chiếu. Kết quả là một bộ điều khiển dễ đọc, dễ kiểm tra và đã được kiểm chứng,
+phù hợp cho giảng dạy và mở rộng hướng tới một khối I3C ở quy mô sản phẩm.
+
+\textbf{Từ khóa:} MIPI I3C; Active Controller; RTL SystemVerilog; kiểm chứng UVM; gán địa chỉ
+động; phủ chức năng.
 
 % ===================== TOC / index / lists (template format) =====================
 \cleardoublepage

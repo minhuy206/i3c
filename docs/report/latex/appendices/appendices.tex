@@ -7,32 +7,343 @@
 
 \chapter{CSR register map}
 \label{app:csr}
-\brief{Full bitfield tables for all 26 registers + 32-entry DAT, \texttt{longtable}. Reset
-defaults included.}
-\tabph{Full CSR bitfield map}{csr_register.sv, spec 07}
+
+This appendix gives the complete software-visible register map implemented by
+\texttt{csr\_registers.sv}, expanding the group overview of \cref{tab:csr-summary}. All
+registers are 32 bits wide on a 12-bit byte address; read data is returned one cycle after
+the read strobe. Reserved bits are ignored on write and read back as zero.
+\Cref{tab:app-csr-ctrl} lists the control, status, and queue-port registers with their
+bit-field layouts; \cref{tab:app-csr-timing} lists the timing registers; the Device Address
+Table window follows.
+
+\begin{table}[!htb]\centering
+  \caption{Control, status, and queue-port registers.}
+  \label{tab:app-csr-ctrl}
+  \small
+  \begin{tabular}{@{}lll>{\raggedright\arraybackslash}p{0.52\textwidth}@{}}
+    \toprule
+    \textbf{Addr} & \textbf{Register} & \textbf{Access} & \textbf{Bit fields and behaviour} \\
+    \midrule
+    \texttt{0x004} & \texttt{HC\_CONTROL} & RW &
+      [31] \texttt{BUS\_ENABLE} --- enables the protocol FSM;
+      [29] \texttt{ABORT} --- host-controller abort request;
+      [0] \texttt{IBA\_INCLUDE} --- prefix private I3C transfers with the \texttt{7'h7E}
+      broadcast header. Reset \texttt{0x0000\_0000}. \\
+    \addlinespace
+    \texttt{0x010} & \texttt{RESET\_CONTROL} & W &
+      [0] \texttt{SOFT\_RST} --- software-reset request; accepted only while the protocol
+      FSM is idle, self-clearing after one cycle, ignored (no-op) while busy. Reads as zero. \\
+    \addlinespace
+    \texttt{0x014} & \texttt{HC\_STATUS} & R &
+      [2] response queue empty; [1] command queue full; [0] protocol FSM idle. \\
+    \addlinespace
+    \texttt{0x080} & \texttt{CMD\_QUEUE} & W &
+      command-descriptor port. Two consecutive 32-bit writes (DWORD~0 then DWORD~1) are
+      staged into one 64-bit descriptor and pushed into the Command Queue; the bus stalls
+      (\texttt{ready} deasserted) while a completed descriptor awaits queue space. \\
+    \addlinespace
+    \texttt{0x084} & \texttt{RESP\_PORT} & R &
+      response-descriptor pop. Each valid read pops one Response Descriptor
+      (\cref{app:descriptors}); reads of an empty queue return zero. \\
+    \addlinespace
+    \texttt{0x088} & \texttt{PIO\_DATA\_PORT} & RW &
+      write: push one 32-bit word into the TX Data Buffer (stalls while a staged word awaits
+      space); read: pop one word from the RX Data Buffer (zero when empty). \\
+    \addlinespace
+    \texttt{0x0B4} & \texttt{QUEUE\_STATUS} & R &
+      [7] resp empty; [6] resp full; [5] RX empty; [4] RX full;
+      [3] TX empty; [2] TX full; [1] cmd empty; [0] cmd full. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[!htb]\centering
+  \caption{Timing registers. Each holds a 20-bit count of system-clock cycles in bits
+    [19:0]; bits [31:20] are reserved. Reset values target \SI{12.5}{\mega\hertz} SDR and
+    \SI{400}{\kilo\hertz} \iic{}-FM at the \SI{333}{\mega\hertz} system clock.}
+  \label{tab:app-csr-timing}
+  \small
+  \begin{tabular}{@{}llr@{\hspace{2.5em}}llr@{}}
+    \toprule
+    \textbf{Addr} & \textbf{Register} & \textbf{Reset} &
+    \textbf{Addr} & \textbf{Register} & \textbf{Reset} \\
+    \midrule
+    \texttt{0x32C} & \texttt{T\_R}          & 4  & \texttt{0x358} & \texttt{I2C\_T\_LOW}    & 534 \\
+    \texttt{0x330} & \texttt{T\_F}          & 4  & \texttt{0x35C} & \texttt{T\_HD\_STA}     & 13 \\
+    \texttt{0x334} & \texttt{T\_SU\_DAT}    & 1  & \texttt{0x360} & \texttt{I2C\_T\_HD\_STA} & 200 \\
+    \texttt{0x338} & \texttt{I2C\_T\_SU\_DAT} & 34 & \texttt{0x368} & \texttt{T\_SU\_STA}   & 7 \\
+    \texttt{0x33C} & \texttt{T\_HD\_DAT}    & 0  & \texttt{0x36C} & \texttt{I2C\_T\_SU\_STA} & 200 \\
+    \texttt{0x340} & \texttt{T\_HIGH}       & 11 & \texttt{0x370} & \texttt{T\_SU\_STO}     & 7 \\
+    \texttt{0x34C} & \texttt{I2C\_T\_HIGH}  & 300 & \texttt{0x374} & \texttt{I2C\_T\_SU\_STO} & 434 \\
+    \texttt{0x350} & \texttt{T\_LOW}        & 16 & \texttt{0x37C} & \texttt{T\_BUS\_FREE}   & 13 \\
+    \texttt{0x354} & \texttt{T\_LOW\_OD}    & 67 & \texttt{0x380} & \texttt{I2C\_T\_BUF}    & 434 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Device Address Table window.} The 32 DAT entries occupy word addresses
+\texttt{0x400} + $4i$ for $i = 0 \ldots 31$ (\texttt{0x400}--\texttt{0x47C}), reset to zero.
+Writes are masked with \texttt{0x807F\_007F}, so only the \texttt{DEVICE} flag and the two
+address fields of the entry layout in \cref{app:descriptors} are writable; reads return the
+stored entry. The protocol engine reads the same memory through a dedicated hardware port
+while executing a command.
 
 \chapter{Command / Response / DAT descriptor formats}
 \label{app:descriptors}
-\brief{Command Descriptor variants, Response Descriptor (incl. \texttt{err_status}), DAT entry
-(\texttt{dat_entry_t}).}
-\tabph{Descriptor formats}{i3c_pkg.sv, controller_pkg.sv}
+
+This appendix gives the exact bit-field layouts of the descriptors and the address-table
+entry summarised in \cref{tab:queue-dat-overview}, taken from \texttt{i3c\_pkg.sv} and
+\texttt{controller\_pkg.sv}. Command Descriptors are 64 bits, assembled from two 32-bit
+writes to \texttt{CMD\_QUEUE} (DWORD~0 first). The two-bit response-status names are the
+\texttt{ERR\_STATUS} encoding of \cref{tab:err-status}.
+
+\paragraph{Command Descriptor DWORD~0 (common fields).} Bits [2:0] carry the
+\texttt{ATTR} attribute --- \texttt{Regular} (\texttt{000}), \texttt{Immediate}
+(\texttt{001}), \texttt{AddressAssignment} (\texttt{010}), or \texttt{Combo}
+(\texttt{011}); bits [6:3] the transaction ID; bits [14:7] the CCC/command byte; bit [15]
+the command-present flag (\texttt{CP}); bits [20:16] the DAT device index. The remaining
+DWORD-0 bits and the whole of DWORD~1 are attribute-specific, as tabulated below.
+
+\begin{table}[!htb]\centering
+  \caption{Attribute-specific fields of the four Command Descriptor variants.}
+  \label{tab:app-cmd-desc}
+  \small
+  \begin{tabular}{@{}l>{\raggedright\arraybackslash}p{0.78\textwidth}@{}}
+    \toprule
+    \textbf{Attribute} & \textbf{Distinguishing fields} \\
+    \midrule
+    Regular &
+      DWORD0 [21] \texttt{SRE} (report early read end as short-read error), [22] \texttt{DBP}
+      (defining byte present), [26:24] \texttt{MODE}, [27] \texttt{RnW}, [28] \texttt{WROC}
+      (response on completion), [29] \texttt{TOC} (terminate on completion). DWORD1 [7:0]
+      defining byte, [63:48] data length. \\
+    \addlinespace
+    Immediate &
+      DWORD0 [23:21] \texttt{DTT} (number of valid data bytes, 0--4), [26:24] \texttt{MODE},
+      [27] \texttt{RnW} (write-only), [28] \texttt{WROC}, [29] \texttt{TOC}. DWORD1 holds up
+      to four immediate data bytes (or a defining byte plus three data bytes). \\
+    \addlinespace
+    AddressAssignment &
+      DWORD0 [25:22] \texttt{DEV\_COUNT} (targets to enumerate), [28] \texttt{WROC},
+      [29] \texttt{TOC}; DWORD1 reserved. Used to launch ENTDAA. \\
+    \addlinespace
+    Combo &
+      DWORD0 [21] \texttt{FPM}, [22] \texttt{SUB\_16\_OFF}, [24:23] \texttt{DLP},
+      [26:24]\footnotemark[1] \texttt{MODE}, [27] \texttt{RnW}, [28] \texttt{WROC},
+      [29] \texttt{TOC}. DWORD1 [15:0] offset, [31:16] data length. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+\footnotetext[1]{The Combo layout packs \texttt{DLP}, \texttt{FPM}, and \texttt{MODE} into
+the same DWORD-0 region; the field offsets follow \texttt{combo\_trans\_desc\_t} in
+\texttt{i3c\_pkg.sv} verbatim.}
+
+\paragraph{Response Descriptor.} One 32-bit word popped from \texttt{RESP\_PORT}:
+bits [15:0] the actual data length, bits [23:16] reserved, bits [27:24] the transaction ID
+echoed from the command, and bits [31:28] the \texttt{ERR\_STATUS} completion code
+(\cref{tab:err-status}).
+
+\paragraph{Device Address Table entry (\texttt{dat\_entry\_t}).} The design uses a 32-bit
+entry (halved from the reference's 64-bit entry): bit [31] \texttt{DEVICE} (1 = legacy
+\iic{} target), bits [22:16] the I3C dynamic address, bits [6:0] the \iic{} static address,
+with bits [30:23] and [15:7] reserved. The write mask \texttt{0x807F\_007F} makes exactly
+these three fields writable.
 
 \chapter{Complete FSM state tables}
 \label{app:fsm-tables}
-\brief{Transition tables for \texttt{flow_active} (\FlowStateCount), \texttt{scl_generator} (14),
-\texttt{entdaa_controller} (7), \texttt{entdaa_fsm} (8), \texttt{bus_tx} (5),
-\texttt{bus_tx_flow} (4), \texttt{bus_rx_flow} (4). Mirrors the Ch.5 diagrams.}
-\tabph{All RTL FSM transition tables}{specs 03--09 / RTL}
+
+This appendix enumerates every state of the seven control FSMs whose diagrams appear in
+\cref{ch:architecture-rtl}, taken from the RTL state enumerations and the corresponding
+module specifications. The flagship \texttt{flow\_active} table expands
+\cref{tab:flow-states}.
+
+\section{\texttt{flow\_active} command engine (\FlowStateCount{} states)}
+
+\begin{longtable}{@{}l>{\raggedright\arraybackslash}p{0.66\textwidth}@{}}
+\caption{\texttt{flow\_active} states (enum \texttt{flow\_fsm\_state\_e}, \texttt{flow\_active.sv}).}
+\label{tab:app-flow-states}\\
+\toprule
+\textbf{State (enc.)} & \textbf{Role and principal exits} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{State (enc.)} & \textbf{Role and principal exits} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{Idle} (0)              & Wait for the FSM enable; $\to$\texttt{WaitForCmd} on \texttt{i3c\_fsm\_en\_i}. \\
+\texttt{WaitForCmd} (1)        & Pop the next Command Descriptor; $\to$\texttt{FetchDAT} when one is available. \\
+\texttt{FetchDAT} (2)          & Validate the descriptor and request the DAT lookup; $\to$\texttt{WaitDAT} if supported, $\to$\texttt{WriteResp} (\texttt{NotSupported}) if not. \\
+\texttt{WaitDAT} (3)          & One-cycle settle so the captured \texttt{dat\_entry} is current; dispatches to the header, init, or immediate-CCC state by device type and transfer kind. \\
+\texttt{I3CBcastHeader} (4)    & Emit \texttt{START + 7'h7E/W + ACK}; branch to \texttt{IssueImmediateCcc}, \texttt{IssueCmd} (ENTDAA), or an I3C init state. \\
+\texttt{IssueImmediateCcc} (5) & Execute an immediate ENEC/DISEC CCC; $\to$\texttt{WriteResp} if \texttt{wroc=1}, else $\to$\texttt{Idle}. \\
+\texttt{FetchTxData} (6)       & Fetch a TX DWORD; $\to$\texttt{IssueCmd} with data, or $\to$\texttt{WriteResp} when the buffer empties and the STOP completes. \\
+\texttt{InitI3CWrite} (7)      & I3C write address phase; $\to$\texttt{FetchTxData} (regular) or \texttt{IssueCmd} (immediate). \\
+\texttt{InitI3CRead} (8)       & I3C read address phase; $\to$\texttt{IssueCmd}. \\
+\texttt{InitI2CWrite} (9)      & \iic{} write address phase; $\to$\texttt{FetchTxData} or \texttt{IssueCmd}. \\
+\texttt{InitI2CRead} (10)      & \iic{} read address phase; $\to$\texttt{IssueCmd}. \\
+\texttt{IssueCmd} (11)         & Drive command/data bytes; loops to \texttt{FetchTxData}, continues in-line to \texttt{FetchDAT} on \texttt{toc=0}, self-loops to defer a read abort, or $\to$\texttt{WriteResp}/\texttt{Idle} at completion. \\
+\texttt{WriteResp} (12)        & Assert the Response Descriptor and hold until \texttt{resp\_queue\_wready\_i}; $\to$\texttt{Idle}. \\
+\end{longtable}
+
+\section{\texttt{scl\_generator} clock/framing engine (14 states)}
+
+\begin{longtable}{@{}l>{\raggedright\arraybackslash}p{0.66\textwidth}@{}}
+\caption{\texttt{scl\_generator} states (\texttt{scl\_generator.sv}). \texttt{gen\_idle\_i} forces any state to \texttt{Idle}.}
+\label{tab:app-scl-states}\\
+\toprule
+\textbf{State (enc.)} & \textbf{Role and principal exits} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{State (enc.)} & \textbf{Role and principal exits} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{Idle} (0)             & Bus quiescent; $\to$\texttt{GenerateStart} or \texttt{GenerateRstart} on request. \\
+\texttt{GenerateStart} (1)    & Set up START; $\to$\texttt{SdaFall} on \texttt{t\_su\_sta}. \\
+\texttt{SdaFall} (2)          & Drive SDA low; $\to$\texttt{HoldStart}. \\
+\texttt{HoldStart} (3)        & Hold START; $\to$\texttt{DriveLow} on \texttt{t\_hd\_sta}. \\
+\texttt{DriveLow} (4)         & SCL low phase; $\to$\texttt{DriveHigh}, \texttt{WaitCmd}, \texttt{GenerateStop}, or \texttt{GenerateRstart} on \texttt{t\_low}. \\
+\texttt{DriveHigh} (5)        & SCL high phase; $\to$\texttt{DriveLow}, \texttt{WaitCmd}, \texttt{GenerateStop}, or the Repeated-START states on \texttt{t\_high} (fast path via \texttt{takeover\_i}). \\
+\texttt{WaitCmd} (6)          & Hold between bytes; $\to$\texttt{DriveLow}, \texttt{GenerateStop}, or \texttt{GenerateRstart}. \\
+\texttt{GenerateRstart} (7)   & Begin Repeated START; $\to$\texttt{SclHighForRstart}. \\
+\texttt{SclHighForRstart} (8) & SCL high for Sr; $\to$\texttt{RstartSdaFall} on \texttt{t\_su\_sta}. \\
+\texttt{RstartSdaFall} (9)    & SDA fall for Sr; $\to$\texttt{HoldStart}. \\
+\texttt{GenerateStop} (10)    & Begin STOP; $\to$\texttt{SclHighForStop}. \\
+\texttt{SclHighForStop} (11)  & SCL high for STOP; $\to$\texttt{SdaRise} on \texttt{t\_su\_sto}. \\
+\texttt{SdaRise} (12)         & SDA rise (STOP); $\to$\texttt{BusFree}. \\
+\texttt{BusFree} (13)         & Enforce bus-free time; $\to$\texttt{Idle} on \texttt{t\_bus\_free} (\texttt{done\_o} pulse). \\
+\end{longtable}
+
+\section{ENTDAA subsystem}
+
+\begin{table}[!htb]\centering
+  \caption{\texttt{entdaa\_controller} loop manager (7 states) and \texttt{entdaa\_fsm}
+    per-Target engine (8 states).}
+  \label{tab:app-entdaa-states}
+  \small
+  \begin{tabular}{@{}l>{\raggedright\arraybackslash}p{0.34\textwidth}
+                    l>{\raggedright\arraybackslash}p{0.30\textwidth}@{}}
+    \toprule
+    \multicolumn{2}{@{}l}{\textbf{\texttt{entdaa\_controller}}} &
+    \multicolumn{2}{l}{\textbf{\texttt{entdaa\_fsm}}} \\
+    \midrule
+    \texttt{Idle} (0)          & await \texttt{daa\_valid\_i}          & \texttt{Idle} (0)         & await \texttt{start\_i} \\
+    \texttt{StartLoop} (1)     & more rounds? else done                & \texttt{SendRsvdByte} (1)  & send \texttt{7'h7E/R} \\
+    \texttt{RequestRStart} (2) & request Repeated START                & \texttt{ReadRsvdAck} (2)   & ACK $\Rightarrow$ target present \\
+    \texttt{WaitRStart} (3)    & await Sr detect                       & \texttt{ReceiveIDBit} (3)  & shift 64 ID bits \\
+    \texttt{ReadDAT} (4)       & read next DAT entry                    & \texttt{SendAddr} (4)      & send dyn addr + parity \\
+    \texttt{RunEntdaa} (5)     & run child; branch on result           & \texttt{ReadAddrAck} (5)   & ACK $\Rightarrow$ accepted \\
+    \texttt{Done} (6)          & $\to$\texttt{Idle}                    & \texttt{WaitStop} (6)      & await STOP \\
+                               &                                       & \texttt{Done} (7)          & $\to$\texttt{Idle} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{TX/RX serializers}
+
+\begin{table}[!htb]\centering
+  \caption{Bit/byte serializer FSMs: \texttt{bus\_tx} (5 states), \texttt{bus\_tx\_flow}
+    (4 states), and \texttt{bus\_rx\_flow} (4 states).}
+  \label{tab:app-serdes-states}
+  \small
+  \begin{tabular}{@{}ll@{\hspace{1.5em}}ll@{\hspace{1.5em}}ll@{}}
+    \toprule
+    \multicolumn{2}{@{}l}{\textbf{\texttt{bus\_tx}}} &
+    \multicolumn{2}{l}{\textbf{\texttt{bus\_tx\_flow}}} &
+    \multicolumn{2}{l}{\textbf{\texttt{bus\_rx\_flow}}} \\
+    \midrule
+    \texttt{Idle}              & idle          & \texttt{Idle}             & idle          & \texttt{Idle}             & idle \\
+    \texttt{AwaitClockNegedge} & await SCL     & \texttt{DriveByte}        & 8-bit byte    & \texttt{ReadByte}         & 8-bit byte \\
+    \texttt{SetupData}         & setup         & \texttt{DriveBit}         & single bit    & \texttt{ReadBit}          & single bit \\
+    \texttt{TransmitData}      & drive on edge & \texttt{NextTaskDecision} & next request  & \texttt{NextTaskDecision} & next request \\
+    \texttt{HoldData}          & hold          &                           &               &                           & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \chapter{CCC subset opcode/frame table}
 \label{app:ccc}
-\brief{ENTDAA (0x07), ENEC/DISEC Broadcast CCC + Direct CCC --- opcode + frame diagram per entry.}
-\tabph{CCC subset (5 entries)}{protocol spec}
+
+This appendix expands the five implemented Common Command Codes of \cref{tab:ccc-supported}
+with the on-bus frame each one drives. \texttt{[S]} is START, \texttt{[Sr]} Repeated START,
+\texttt{[P]} STOP, \texttt{[7E+W]}/\texttt{[7E+R]} the \texttt{7'h7E} broadcast header with
+the direction bit, and \texttt{[a+R/W]} a target's dynamic address. All opcodes match
+\texttt{i3c\_pkg::i3c\_ccc\_e}.
+
+\begin{table}[!htb]\centering
+  \caption{Implemented CCC opcodes and their bus frames.}
+  \label{tab:app-ccc-frames}
+  \small
+  \begin{tabular}{@{}llc>{\raggedright\arraybackslash}p{0.44\textwidth}@{}}
+    \toprule
+    \textbf{CCC} & \textbf{Framing} & \textbf{Code} & \textbf{Bus frame} \\
+    \midrule
+    ENTDAA & Broadcast & \texttt{0x07} &
+      \texttt{[S][7E+W][07][Sr][7E+R]} then, per target, 64 ID bits + dynamic address +
+      parity + ACK, looping until all assigned, \texttt{[P]}. \\
+    \addlinespace
+    ENEC   & Broadcast & \texttt{0x00} &
+      \texttt{[S][7E+W][00][EVENT][P]} --- enable events on all targets. \\
+    DISEC  & Broadcast & \texttt{0x01} &
+      \texttt{[S][7E+W][01][EVENT][P]} --- disable events on all targets. \\
+    \addlinespace
+    ENEC   & Direct    & \texttt{0x80} &
+      \texttt{[S][7E+W][80][Sr][a+W][EVENT][P]} --- enable events on one target. \\
+    DISEC  & Direct    & \texttt{0x81} &
+      \texttt{[S][7E+W][81][Sr][a+W][EVENT][P]} --- disable events on one target. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The \texttt{EVENT} byte is the CCC-defined event-enable mask; this controller drives it from
+the immediate-transfer data byte of the issuing Command Descriptor
+(\cref{app:descriptors}).
 
 \chapter{Regression log excerpts}
 \label{app:logs}
-\brief{AFTER SIMS. Trimmed \texttt{sim.log} for representative vseqs per category.}
-\tabph{Regression log excerpts}{sim logs --- AFTER SIMS GREEN}
+
+Each simulation ends with a UVM report summary; a scenario passes when it reports zero
+\texttt{UVM\_ERROR} and zero \texttt{UVM\_FATAL}. The listing below is the tail of a
+representative run (commit \texttt{047dfdc}, seed~1), showing the four coverage collectors and
+the scoreboard reporting cleanly and the zero error/fatal counts that define a pass; every one
+of the \RunnableVseqCount{} sequences in \cref{tab:regression-matrix} produced the same
+zero-error result.
+
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize, breaklines=true]
+--- UVM Report Summary ---
+
+** Report counts by severity
+UVM_INFO  :   25
+UVM_WARNING :  0
+UVM_ERROR :    0
+UVM_FATAL :    0
+** Report counts by id
+[I3C_CORRELATED_COVERAGE]     1
+[I3C_COVERAGE]                1
+[I3C_DAA_ARB_COVERAGE]        1
+[REG_COVERAGE]                1
+[TEST_DONE]                   1
+[uvm_test_top.env.m_scoreboard]   16
+
+Simulation complete via $finish(1)
+\end{lstlisting}
+
+The merged functional-coverage database is post-processed by the project's own extractor
+(\texttt{tools/extract\_coverage.py} over the \texttt{ucd2json} output) into
+\texttt{coverage\_report.txt}, whose header records the headline figure and per-coverpoint
+detail quoted in \cref{sec:funccov}:
+
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize, breaklines=true]
+I3C Functional Coverage Report
+Tests analysed : 80
+Total bins     : 1147
+Covered bins   : 904
+Overall        : 78.8%
+\end{lstlisting}
 
 % Appendix F (Synthesis / utilisation / timing) DROPPED --- FPGA omitted.
 
@@ -41,8 +352,60 @@ defaults included.}
 
 \chapter{Build and run instructions}
 \label{app:build}
-\brief{Makefile target reference (compile/sim/regressions/coverage), env-sourcing
-note (\texttt{XCELIUM1803.sh}).}
+
+All simulation is driven from the Makefile in \texttt{src/verification/} using Cadence
+Xcelium (\texttt{xrun}) with UVM~1.2 (\texttt{CDNS-1.2}). The Xcelium environment must be
+sourced once per shell (for example \texttt{source XCELIUM1803.sh}) before any target is
+invoked. A single reusable test, \texttt{i3c\_base\_test}, selects the scenario through the
+\texttt{+UVM\_TEST\_SEQ} plusarg.
+
+\paragraph{Core targets.}
+\begin{itemize}
+  \item \texttt{make compile} --- compile and elaborate only.
+  \item \texttt{make sim SEQ=\textit{name}} --- run one virtual sequence
+    (\cref{app:vseq-inventory}).
+  \item \texttt{make sim SEQ=\textit{name} DUMP\_WAVES=1} --- dump an SHM waveform database
+    to \texttt{waves/\textit{name}/waves.shm}.
+  \item \texttt{make sim SEQ=\textit{name} COV=1} --- collect functional coverage into the
+    \texttt{cov\_work} database.
+  \item \texttt{VERBOSITY=} and \texttt{SEED=} override the UVM verbosity and simulation
+    seed (default seed \texttt{random}; the results of \cref{ch:results} use \texttt{SEED=1}).
+\end{itemize}
+
+\paragraph{Regression targets.} Each category target iterates its sequence list; the
+aggregate \texttt{regression} target runs all ten in turn, covering the
+\RunnableVseqCount{}\,--1 sequences of \cref{app:vseq-inventory} that belong to a target (the
+multi-Target arbitration sequence is run on its own).
+
+\begin{table}[!htb]\centering
+  \caption{Makefile regression targets and their sequence counts (commit \texttt{047dfdc}).}
+  \label{tab:app-make-targets}
+  \small
+  \begin{tabular}{@{}lcl@{}}
+    \toprule
+    \textbf{Target} & \textbf{Seqs} & \textbf{Area} \\
+    \midrule
+    \texttt{csr\_regression}  & 14 & CSR / DAT / register bus \\
+    \texttt{fifo\_regression} & 4  & FIFO / queue integrity \\
+    \texttt{bus\_regression}  & 11 & PHY / bus / SCL timing \\
+    \texttt{sdrw\_regression} & 5  & SDR private write \\
+    \texttt{sdrr\_regression} & 6  & SDR private read \\
+    \texttt{imm\_regression}  & 4  & immediate transfer \\
+    \texttt{i2c\_regression}  & 3  & \iic{}-FM legacy \\
+    \texttt{ccc\_regression}  & 5  & CCC frames \\
+    \texttt{daa\_regression}  & 6  & ENTDAA / DAA \\
+    \texttt{err\_regression}  & 21 & error / status / recovery \\
+    \midrule
+    \texttt{sdr\_regression}  & \multicolumn{2}{l}{$=$ \texttt{sdrw} $+$ \texttt{sdrr}} \\
+    \texttt{regression}       & \multicolumn{2}{l}{runs all ten category targets (79 seqs)} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Coverage post-processing.} With coverage databases present, \texttt{make cov\_report}
+builds the \texttt{ucd2json} tool and runs \texttt{tools/extract\_coverage.py} to produce the
+\texttt{coverage\_report.txt} quoted in \cref{sec:funccov,app:logs}. \texttt{make clean}
+removes the build, log, waveform, and coverage artifacts.
 
 \chapter{Glossary of I3C and HCI terms}
 \label{app:glossary}
@@ -110,8 +473,127 @@ TX / RX Data Buffer & --- & HCI: SW$\leftrightarrow$HW data queues & HCI v1.2 / 
 
 \chapter{Virtual-sequence inventory}
 \label{app:vseq-inventory}
-\brief{Generate the complete per-sequence inventory from \texttt{i3c\_vseqs/**}. Group the
-\RunnableVseqCount{} runnable scenarios by category and list the sequence type, verification objective,
-and owning regression target. Exclude \texttt{i3c\_base\_vseq} from the runnable total and record the
-source commit used to generate the table.}
-\tabph{Complete virtual-sequence inventory}{i3c_vseqs/** and Makefile}
+
+This appendix lists all \RunnableVseqCount{} runnable virtual sequences of
+\cref{tab:verif-vseqs}, enumerated from \texttt{i3c\_vseqs/**} at commit \texttt{047dfdc} ---
+the baseline of the regression and coverage results in \cref{ch:results}. The count excludes
+the four per-category abstract base sequences and the shared ENTDAA stimulus helper, which
+are infrastructure rather than runnable tests. The final column gives the owning regression
+target from \cref{app:build}; the multi-Target arbitration sequence is runnable on its own but
+belongs to no aggregate target.
+
+{\footnotesize
+\begin{longtable}{@{}>{\ttfamily}l>{\raggedright\arraybackslash}p{0.44\textwidth}l@{}}
+\caption{Runnable virtual-sequence inventory (commit \texttt{047dfdc}).}
+\label{tab:app-vseq}\\
+\toprule
+\normalfont\textbf{Sequence} & \textbf{Objective} & \textbf{Target} \\
+\midrule
+\endfirsthead
+\toprule
+\normalfont\textbf{Sequence} & \textbf{Objective} & \textbf{Target} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{@{}l}{\itshape CSR / DAT / register bus --- \texttt{csr\_regression}} \\
+csr\_reset\_defaults\_vseq            & register reset values           & csr \\
+csr\_enable\_disable\_vseq            & host-controller enable/disable  & csr \\
+csr\_broadcast\_header\_control\_vseq & broadcast-header enable bit     & csr \\
+csr\_timing\_rw\_vseq                 & timing-register read/write      & csr \\
+csr\_dat\_rw\_all\_entries\_vseq      & DAT read/write, all 32 entries  & csr \\
+csr\_dat\_hw\_read\_selection\_vseq   & hardware DAT read-back path     & csr \\
+csr\_cmd\_queue\_2dw\_staging\_vseq   & two-DWORD command staging       & csr \\
+csr\_cmd\_partial\_then\_other\_write\_vseq & partial descriptor + interleave & csr \\
+csr\_rx\_resp\_read\_pop\_vseq        & RX/response port pops           & csr \\
+csr\_queue\_status\_flags\_vseq       & queue full/empty status flags   & csr \\
+csr\_sw\_reset\_flush\_queues\_vseq   & software reset flushes queues   & csr \\
+csr\_sw\_reset\_clears\_cmd\_staging\_vseq & reset clears command staging & csr \\
+csr\_unmapped\_addr\_no\_side\_effect\_vseq & unmapped access is inert  & csr \\
+csr\_hc\_abort\_control\_vseq         & host-controller abort bit       & csr \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape FIFO / queue --- \texttt{fifo\_regression}} \\
+fifo\_basic\_push\_pop\_order\_vseq   & push/pop ordering               & fifo \\
+fifo\_full\_empty\_boundaries\_vseq   & full and empty boundaries       & fifo \\
+fifo\_simultaneous\_read\_write\_vseq & concurrent read and write       & fifo \\
+fifo\_flush\_during\_activity\_vseq   & flush under active traffic      & fifo \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape PHY / bus / SCL timing --- \texttt{bus\_regression}} \\
+bus\_phy\_reset\_and\_sync\_vseq      & PHY reset and 2FF sync          & bus \\
+bus\_start\_stop\_detect\_vseq        & START/STOP detection            & bus \\
+bus\_repeated\_start\_detect\_vseq    & Repeated START detection        & bus \\
+bus\_monitor\_glitch\_and\_simultaneous\_edge\_filter\_vseq & glitch/edge filtering & bus \\
+bus\_monitor\_enable\_gating\_and\_edge\_pulses\_vseq & monitor gating/edge pulses & bus \\
+bus\_scl\_clock\_low\_high\_timing\_vseq & SCL low/high timing          & bus \\
+bus\_scl\_waitcmd\_stall\_resume\_vseq & WaitCmd stall and resume       & bus \\
+bus\_scl\_repeated\_start\_from\_waitcmd\_vseq & Sr from WaitCmd         & bus \\
+bus\_tx\_byte\_and\_bit\_order\_vseq  & TX byte/bit order               & bus \\
+bus\_rx\_byte\_and\_bit\_order\_vseq  & RX byte/bit order               & bus \\
+bus\_tb\_pad\_model\_odpp\_wiring\_vseq & OD/PP pad-model wiring        & bus \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape SDR private write --- \texttt{sdrw\_regression}} \\
+i3c\_write\_vseq                      & baseline private write          & sdrw \\
+i3c\_write\_len\_sweep\_vseq          & write length sweep              & sdrw \\
+i3c\_write\_toc\_zero\_vseq           & terminate-on-completion = 0     & sdrw \\
+i3c\_write\_back\_to\_back\_vseq      & back-to-back writes             & sdrw \\
+i3c\_write\_multi\_dat\_idx\_vseq     & multiple DAT indices            & sdrw \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape SDR private read --- \texttt{sdrr\_regression}} \\
+i3c\_read\_vseq                       & baseline private read           & sdrr \\
+i3c\_read\_len\_sweep\_vseq           & read length sweep               & sdrr \\
+i3c\_read\_target\_more\_than\_requested\_vseq & target over-reads      & sdrr \\
+i3c\_read\_toc\_zero\_vseq            & terminate-on-completion = 0     & sdrr \\
+i3c\_read\_back\_to\_back\_vseq       & back-to-back reads              & sdrr \\
+i3c\_read\_multi\_dat\_idx\_vseq      & multiple DAT indices            & sdrr \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape Immediate transfer --- \texttt{imm\_regression}} \\
+i3c\_imm\_vseq                        & baseline immediate write        & imm \\
+i3c\_imm\_dtt\_sweep\_vseq            & data-transfer-type sweep        & imm \\
+i3c\_imm\_toc\_vseq                   & immediate terminate-on-completion & imm \\
+i3c\_imm\_i2c\_write\_vseq            & \iic{} immediate write          & imm \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape \iic{} legacy --- \texttt{i2c\_regression}} \\
+i2c\_regular\_write\_basic\_vseq      & \iic{} regular write            & i2c \\
+i2c\_regular\_read\_basic\_vseq       & \iic{} regular read             & i2c \\
+i2c\_len\_sweep\_partial\_rx\_vseq    & partial-RX length sweep         & i2c \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape CCC frame --- \texttt{ccc\_regression}} \\
+i3c\_ccc\_entdaa\_opening\_frame\_vseq & ENTDAA opening frame           & ccc \\
+i3c\_ccc\_broadcast\_enec\_vseq       & broadcast ENEC                  & ccc \\
+i3c\_ccc\_broadcast\_disec\_vseq      & broadcast DISEC                 & ccc \\
+i3c\_ccc\_direct\_enec\_vseq          & direct ENEC                     & ccc \\
+i3c\_ccc\_direct\_disec\_vseq         & direct DISEC                    & ccc \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape ENTDAA / DAA --- \texttt{daa\_regression}} \\
+i3c\_daa\_single\_device\_success\_vseq & single-device assignment      & daa \\
+i3c\_daa\_no\_device\_vseq            & no responding device            & daa \\
+i3c\_daa\_fewer\_devices\_than\_count\_vseq & fewer devices than count  & daa \\
+i3c\_daa\_multi\_device\_dat\_loop\_vseq & multi-device DAT loop        & daa \\
+i3c\_daa\_address\_rejected\_vseq     & dynamic address rejection       & daa \\
+i3c\_daa\_dat\_boundary\_vseq         & DAT boundary index              & daa \\
+i3c\_entdaa\_multi\_target\_arbitration\_vseq & wired-AND arbitration   & (standalone) \\
+\midrule
+\multicolumn{3}{@{}l}{\itshape Error / status / recovery --- \texttt{err\_regression}} \\
+i3c\_private\_addr\_nack\_resp\_vseq   & private address NACK            & err \\
+i3c\_broadcast\_header\_nack\_resp\_vseq & broadcast-header NACK         & err \\
+i3c\_read\_short\_target\_end\_vseq   & early target read end           & err \\
+i3c\_write\_tx\_fifo\_underflow\_vseq & TX FIFO underflow               & err \\
+i3c\_read\_rx\_fifo\_full\_overflow\_vseq & RX FIFO overflow            & err \\
+i3c\_entdaa\_rx\_fifo\_partial\_overflow\_vseq & ENTDAA RX overflow     & err \\
+i3c\_resp\_fifo\_full\_backpressure\_vseq & response-FIFO backpressure  & err \\
+i3c\_write\_abort\_vseq               & write abort                     & err \\
+i3c\_read\_abort\_vseq                & read abort                      & err \\
+i3c\_imm\_data\_nack\_i2c\_vseq       & \iic{} immediate data NACK      & err \\
+i3c\_imm\_abort\_vseq                 & immediate abort                 & err \\
+i2c\_data\_nack\_write\_vseq          & \iic{} write data NACK          & err \\
+i2c\_regular\_abort\_vseq             & \iic{} regular abort            & err \\
+i3c\_daa\_hc\_abort\_vseq             & abort during DAA                & err \\
+i3c\_hc\_abort\_policy\_vseq          & host-controller abort policy    & err \\
+i3c\_wroc\_policy\_vseq               & response-on-completion policy   & err \\
+i3c\_invalid\_descriptor\_attr\_vseq  & invalid descriptor attribute    & err \\
+i3c\_entdaa\_invalid\_descriptor\_resp\_vseq & invalid ENTDAA descriptor & err \\
+i3c\_reset\_during\_idle\_vseq        & reset while idle                & err \\
+i3c\_reset\_during\_transfer\_phases\_vseq & reset mid-transfer         & err \\
+i3c\_sw\_reset\_while\_busy\_policy\_vseq & software-reset-while-busy policy & err \\
+\end{longtable}
+}

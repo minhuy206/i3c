@@ -8,7 +8,7 @@ class i3c_daa_address_rejected_vseq extends i3c_base_vseq;
   virtual function void configure_rejecting_device(i3c_device_response_seq dev_seq,
                                                    i3c_daa_stimulus stimulus);
     dev_seq.target_addr     = 7'h7e;
-    dev_seq.ack_address     = 1'b1;
+    dev_seq.addr_nack     = 1'b0;
     dev_seq.is_i3c          = 1'b1;
     dev_seq.is_daa          = 1'b1;
     dev_seq.dir             = 1'b0;

@@ -13,7 +13,6 @@ module i3c_controller_top_sva #(
     input logic [DataWidth-1:0] reg_rdata_o,
 
     input logic ctrl_enable_i,
-    input logic i3c_fsm_en_i,
     input logic broadcast_header_enable_i,
     input logic i3c_fsm_idle_i,
 
@@ -91,13 +90,6 @@ module i3c_controller_top_sva #(
 
   cp_reset_point_idle :
   cover property (@(negedge rst_ni) i3c_fsm_idle_i);
-
-  ap_ctrl_enable_matches_i3c_fsm_en :
-  assert property (@(posedge clk_i) disable iff (!rst_ni) ctrl_enable_i == i3c_fsm_en_i)
-  else $error("i3c_controller_top_sva: ctrl_enable and i3c_fsm_en mismatch");
-
-  cp_ctrl_enable_matches_i3c_fsm_en :
-  cover property (@(posedge clk_i) disable iff (!rst_ni) ctrl_enable_i == i3c_fsm_en_i);
 
   ap_disabled_no_cmd_pop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -220,7 +212,6 @@ bind i3c_controller_top i3c_controller_top_sva #(
     .reg_ren_i,
     .reg_rdata_o,
     .ctrl_enable_i(ctrl_enable),
-    .i3c_fsm_en_i(i3c_fsm_en),
     .broadcast_header_enable_i(broadcast_header_enable),
     .i3c_fsm_idle_i(i3c_fsm_idle),
     .cmd_hw_rvalid_i(cmd_hw_rvalid),

@@ -94,6 +94,7 @@ module tb_i3c_top;
 
   initial begin
     uvm_config_db#(virtual reg_if)::set(null, "*.env.m_reg_agent*", "vif", reg_bus);
+    uvm_config_db#(virtual reg_if)::set(null, "*.env.m_reg_coverage", "vif", reg_bus);
     uvm_config_db#(virtual i3c_if)::set(null, "*.env.m_i3c_agent", "vif", i3c_bus);
     $timeformat(-9, 0, " ns", 12);
     run_test();
