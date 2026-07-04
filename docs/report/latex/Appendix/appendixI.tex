@@ -1,0 +1,97 @@
+\chapter{Danh mục Virtual Sequence}
+\label{app:vseq}
+
+Phụ lục này liệt kê đầy đủ các Virtual Sequence trong \texttt{i3c\_vseqs/}, bổ trợ cho \cref{sec:ver-vseq}.
+Danh sách được liệt kê theo nhóm chức năng (ảnh chụp tại thời điểm viết). Các lớp cơ sở
+(\texttt{*\_base\_vseq}) và tệp trợ giúp (\texttt{i3c\_daa\_stimulus}) không phải kịch bản chạy trực tiếp.
+
+\section*{Nhóm \texttt{bus} (11 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{bus\_monitor\_enable\_gating\_and\_edge\_pulses\_vseq}
+  \item \texttt{bus\_monitor\_glitch\_and\_simultaneous\_edge\_filter\_vseq}
+  \item \texttt{bus\_phy\_reset\_and\_sync\_vseq}
+  \item \texttt{bus\_repeated\_start\_detect\_vseq}
+  \item \texttt{bus\_rx\_byte\_and\_bit\_order\_vseq}
+  \item \texttt{bus\_scl\_clock\_low\_high\_timing\_vseq}
+  \item \texttt{bus\_scl\_repeated\_start\_from\_waitcmd\_vseq}
+  \item \texttt{bus\_scl\_waitcmd\_stall\_resume\_vseq}
+  \item \texttt{bus\_start\_stop\_detect\_vseq}
+  \item \texttt{bus\_tb\_pad\_model\_odpp\_wiring\_vseq}
+  \item \texttt{bus\_tx\_byte\_and\_bit\_order\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{ccc} (5 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{i3c\_ccc\_broadcast\_disec\_vseq}, \texttt{i3c\_ccc\_broadcast\_enec\_vseq}
+  \item \texttt{i3c\_ccc\_direct\_disec\_vseq}, \texttt{i3c\_ccc\_direct\_enec\_vseq}
+  \item \texttt{i3c\_ccc\_entdaa\_opening\_frame\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{csr} (14 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{csr\_broadcast\_header\_control\_vseq}, \texttt{csr\_cmd\_partial\_then\_other\_write\_vseq}
+  \item \texttt{csr\_cmd\_queue\_2dw\_staging\_vseq}, \texttt{csr\_dat\_hw\_read\_selection\_vseq}
+  \item \texttt{csr\_dat\_rw\_all\_entries\_vseq}, \texttt{csr\_enable\_disable\_vseq}
+  \item \texttt{csr\_hc\_abort\_control\_vseq}, \texttt{csr\_queue\_status\_flags\_vseq}
+  \item \texttt{csr\_reset\_defaults\_vseq}, \texttt{csr\_rx\_resp\_read\_pop\_vseq}
+  \item \texttt{csr\_sw\_reset\_clears\_cmd\_staging\_vseq}, \texttt{csr\_sw\_reset\_flush\_queues\_vseq}
+  \item \texttt{csr\_timing\_rw\_vseq}, \texttt{csr\_unmapped\_addr\_no\_side\_effect\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{daa} (6 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{i3c\_daa\_address\_rejected\_vseq}, \texttt{i3c\_daa\_dat\_boundary\_vseq}
+  \item \texttt{i3c\_daa\_fewer\_devices\_than\_count\_vseq}, \texttt{i3c\_daa\_multi\_device\_dat\_loop\_vseq}
+  \item \texttt{i3c\_daa\_no\_device\_vseq}, \texttt{i3c\_daa\_single\_device\_success\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{fifo} (5 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{fifo\_basic\_push\_pop\_order\_vseq}, \texttt{fifo\_flush\_during\_activity\_vseq}
+  \item \texttt{fifo\_full\_empty\_boundaries\_vseq}, \texttt{fifo\_pointer\_wrap\_reuse\_vseq}
+  \item \texttt{fifo\_simultaneous\_read\_write\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{imm} (4 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{i3c\_imm\_dtt\_sweep\_vseq}, \texttt{i3c\_imm\_i2c\_write\_vseq}
+  \item \texttt{i3c\_imm\_toc\_vseq}, \texttt{i3c\_imm\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{resp} (21 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{i2c\_data\_nack\_write\_vseq}, \texttt{i2c\_regular\_abort\_vseq}
+  \item \texttt{i3c\_broadcast\_header\_nack\_resp\_vseq}, \texttt{i3c\_daa\_hc\_abort\_vseq}
+  \item \texttt{i3c\_entdaa\_invalid\_descriptor\_resp\_vseq}, \texttt{i3c\_entdaa\_rx\_fifo\_partial\_overflow\_vseq}
+  \item \texttt{i3c\_hc\_abort\_policy\_vseq}, \texttt{i3c\_imm\_abort\_vseq}
+  \item \texttt{i3c\_imm\_data\_nack\_i2c\_vseq}, \texttt{i3c\_invalid\_descriptor\_attr\_vseq}
+  \item \texttt{i3c\_private\_addr\_nack\_resp\_vseq}, \texttt{i3c\_read\_abort\_vseq}
+  \item \texttt{i3c\_read\_rx\_fifo\_full\_overflow\_vseq}, \texttt{i3c\_read\_short\_target\_end\_vseq}
+  \item \texttt{i3c\_reset\_during\_idle\_vseq}, \texttt{i3c\_reset\_during\_transfer\_phases\_vseq}
+  \item \texttt{i3c\_resp\_fifo\_full\_backpressure\_vseq}, \texttt{i3c\_sw\_reset\_while\_busy\_policy\_vseq}
+  \item \texttt{i3c\_write\_abort\_vseq}, \texttt{i3c\_write\_tx\_fifo\_underflow\_vseq}
+  \item \texttt{i3c\_wroc\_policy\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{sdr\_read} (6 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{i3c\_read\_back\_to\_back\_vseq}, \texttt{i3c\_read\_len\_sweep\_vseq}
+  \item \texttt{i3c\_read\_multi\_dat\_idx\_vseq}, \texttt{i3c\_read\_target\_more\_than\_requested\_vseq}
+  \item \texttt{i3c\_read\_toc\_zero\_vseq}, \texttt{i3c\_read\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{sdr\_write} (5 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{i3c\_write\_back\_to\_back\_vseq}, \texttt{i3c\_write\_len\_sweep\_vseq}
+  \item \texttt{i3c\_write\_multi\_dat\_idx\_vseq}, \texttt{i3c\_write\_toc\_zero\_vseq}
+  \item \texttt{i3c\_write\_vseq}
+\end{itemize}
+
+\section*{Nhóm \texttt{i2c} (3 kịch bản)}
+\begin{itemize}\itemsep0pt
+  \item \texttt{i2c\_len\_sweep\_partial\_rx\_vseq}, \texttt{i2c\_regular\_read\_basic\_vseq}
+  \item \texttt{i2c\_regular\_write\_basic\_vseq}
+\end{itemize}
+
+\noindent \textbf{Tổng cộng: 80 kịch bản chạy được} trên 10 nhóm chức năng (chưa kể các lớp cơ sở và tệp
+trợ giúp không chạy trực tiếp). Con số này được đếm lại từ mã nguồn ở thời điểm hoàn thiện \cref{ch:results}.

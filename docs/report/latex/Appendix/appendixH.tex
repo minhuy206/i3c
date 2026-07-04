@@ -1,0 +1,35 @@
+\chapter{Bảng thuật ngữ I3C và HCI}
+\label{app:glossary}
+
+Phụ lục này định nghĩa các thuật ngữ I3C và HCI dùng trong khóa luận, kèm điều khoản đặc tả tương ứng. Đây
+là phần định nghĩa mở rộng, khác với danh mục từ viết tắt ở đầu quyển.
+
+\begin{longtable}{L{3.6cm} L{6.8cm} L{2.4cm}}
+  \toprule
+  \textbf{Thuật ngữ} & \textbf{Định nghĩa} & \textbf{Điều khoản} \\
+  \midrule\endhead
+  Controller & I3C Device điều khiển bus. & §2.2 \\
+  Active Controller & Controller đang nắm quyền điều khiển bus. & §2.2 \\
+  Target & Device đáp ứng lệnh của Controller. & §2.2 \\
+  Dynamic Address & Địa chỉ được gán lúc khởi tạo bus. & §2.2 \\
+  Static Address & Địa chỉ cố định của Device (I\textsuperscript{2}C). & §2.2 \\
+  Dynamic Address Assignment (DAA) & Quy trình gán Dynamic Address. & §5.1.4 \\
+  ENTDAA & CCC \texttt{0x07} khởi động DAA. & §5.1.9.3.4 \\
+  Common Command Code (CCC) & Lệnh chuẩn hóa gửi tới Target. & §5.1.9 \\
+  Broadcast / Direct CCC & CCC gửi tới mọi Target / một Target. & §5.1.9.3 \\
+  I3C Broadcast Address & \texttt{7'h7E}, địa chỉ tất cả Target. & §2.2 \\
+  Single Data Rate (SDR) & Chế độ truyền một cạnh xung nhịp. & §2.2 \\
+  Open Drain (OD) & Đầu ra trở kháng cao, chỉ kéo xuống. & §2.2 \\
+  Push-Pull (PP) & Đầu ra kéo cả hai chiều. & §2.2 \\
+  START / Repeated START / STOP & Các điều kiện định khung bus. & §2.2 \\
+  Bus Free Condition & Khoảng sau STOP trước START. & §5.1.3.2.1 \\
+  Transition Bit (T-Bit) & Bit kết thúc mỗi word (parity khi ghi). & §2.2 \\
+  Read-not-Write (RnW) & Bit hướng trong Address Header. & §5.1.2 \\
+  Provisioned ID (PID) & Định danh 48-bit của Target trong DAA. & §5.1.4.1.1 \\
+  Bus Characteristics Register (BCR) & Thanh ghi năng lực 8-bit của Target. & §5.1.1.2.1 \\
+  Device Characteristics Register (DCR) & Thanh ghi loại 8-bit của Target. & §5.1.1.2.2 \\
+  Device Address Table (DAT) & Bảng địa chỉ/cấu hình mỗi Target (HCI). & HCI v1.2 \\
+  Command / Response Queue & Hàng đợi phần mềm$\leftrightarrow$phần cứng (HCI). & HCI v1.2 \\
+  TX / RX Data Buffer & Hàng đợi dữ liệu (HCI). & HCI v1.2 \\
+  \bottomrule
+\end{longtable}

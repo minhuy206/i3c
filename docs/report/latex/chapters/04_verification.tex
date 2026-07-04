@@ -1,751 +1,320 @@
-\chapter{Verification Methodology and UVM Environment}
-\label{ch:verif-method}
+\chapter{Phương pháp kiểm chứng và Môi trường UVM}
+\label{ch:verification}
 
-This chapter presents the verification work as the second first-class implementation
-contribution of the thesis. \Cref{ch:architecture-rtl} described \emph{what} was built; this
-chapter describes \emph{how} that design was shown to be correct, and \emph{what}
-verification infrastructure was constructed to do so. The presentation is split into two
-parts. Part~A states the methodology --- the goals, the directed-versus-random stimulus
-strategy, the toolchain choice, the analysis and scoreboard model, the assertion layer, and
-the coverage model. Part~B then walks the concrete UVM environment bottom-up, from the
-testbench top and its interfaces through the two agents, the environment class hierarchy, the
-virtual-sequence library, and the build and debug flow. Throughout, the chapter defines the
-verification \emph{mechanisms}; the measured outcomes (regression pass/fail, coverage
-percentages, annotated waveforms) belong to \cref{ch:results}, and limitations and future
-extensions belong to \cref{ch:conclusion}.
+Chương này trình bày cách kiểm chứng implementation ở \cref{ch:architecture} theo các yêu cầu của
+\cref{sec:req}. Nội dung tập trung vào phương pháp, topology, reference model và cách tạo stimulus. Kết
+quả regression và coverage thuộc phạm vi \cref{ch:results}.
 
-% ===========================================================================
-% PART A --- Verification Methodology
-% ===========================================================================
-\section{Verification goals and scope}
-\label{sec:verif-goals}
+\section{Mục tiêu và phạm vi kiểm chứng}
+\label{sec:ver-scope}
 
-The verification effort targets the functional correctness of every protocol mode the
-controller implements: SDR private write, SDR private read, immediate (in-descriptor) data
-transfer, \iic{}-FM legacy write and read, dynamic address assignment via ENTDAA, and the
-supported Common Command Codes (CCC) ENEC and DISEC in both broadcast and direct forms. Below
-these protocol modes sit the structural concerns that every transfer depends on: the
-configuration and status registers (CSR) and the Device Address Table (DAT), the four
-host-controller-interface queues, the open-drain/push-pull (OD/PP) phase switching, and the
-START/Repeated-START/STOP framing produced on the bus.
+Mục tiêu kiểm chứng là phát hiện sai khác giữa hành vi RTL và yêu cầu ở cả hai phía của IP. Phía Host cần
+kiểm tra truy cập CSR, DAT, Command/Response Queue và TX/RX Data Buffer. Phía bus cần kiểm tra SDR private
+write/read, Immediate Data, CCC, ENTDAA và I\textsuperscript{2}C Fast Mode. Các trường hợp lỗi gồm Address
+NACK, data NACK, short read, overflow, underflow, Descriptor không hỗ trợ, abort, reset và backpressure.
 
-The closure criteria are uniform across these targets. Each transaction must be checked
-end-to-end by a self-checking scoreboard rather than by visual waveform inspection; no bound
-assertion may fire during a passing run; and functional covergroups must be sampled so that
-the exercised protocol space is measurable. \Cref{tab:verif-goals} maps each goal to its
-primary checking mechanism and its closure criterion. The scope deliberately excludes the
-features the RTL does not implement --- In-Band Interrupt, HDR modes, multi-controller
-arbitration, and Target mode --- which are revisited as future work in \cref{ch:conclusion}.
+Testbench được viết bằng SystemVerilog theo UVM~1.2~\cite{ieee1800,uvm12_ug,uvm12_ref}. Cadence Xcelium
+thực hiện compile và simulation; SimVision phục vụ waveform debugging~\cite{cadence_xcelium}. Clock trong
+Testbench có chu kỳ 3~ns, tương ứng 333,333~MHz. Top-level Testbench giảm độ sâu các Queue xuống 8 nhưng
+giữ DAT 32 mục để các boundary case có thời gian simulation ngắn hơn mà không thay đổi protocol behavior.
 
-\begin{table}[!htb]\centering
-  \caption{Verification goals and the mechanism that establishes each one.}
-  \label{tab:verif-goals}
-  \small
-  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.30\textwidth}
-                    >{\raggedright\arraybackslash}p{0.32\textwidth}
-                    >{\raggedright\arraybackslash}p{0.30\textwidth}@{}}
-    \toprule
-    \textbf{Goal} & \textbf{Primary mechanism} & \textbf{Closure criterion} \\
-    \midrule
-    SDR private write/read & directed vseq + scoreboard data/T-Bit checks & byte and T-Bit match per transfer \\
-    Immediate data transfer & immediate vseqs + scoreboard immediate-write check & descriptor-embedded bytes match \\
-    \iic{}-FM legacy write/read & \iic{} vseqs + ACK/byte-packing checks & ACK and packing match \\
-    ENTDAA address assignment & DAA vseqs + scoreboard DAT/round checks & assigned address and DAT entry match \\
-    ENEC/DISEC CCC & CCC vseqs + scoreboard CCC check & opcode/frame and response match \\
-    Error and abort handling & response/abort vseqs + \texttt{ERR\_STATUS} check & response status matches model \\
-    Queue and FIFO integrity & FIFO vseqs + \texttt{sync\_fifo} assertions & ordering and full/empty correct \\
-    CSR/DAT access & CSR vseqs + scoreboard register model & read-back and side effects match \\
-    Bus, PHY, and timing & bus vseqs + bound timing assertions & framing and SCL timing correct \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+Phạm vi kiểm chứng bám theo F1--F10. Các tính năng ngoài phạm vi tại \cref{tab:req-oos} không được xem là
+coverage goal. Chẳng hạn, một bin cho IBI hoặc HDR không được tạo chỉ để làm giảm coverage của thiết kế vốn
+không hiện thực các tính năng này.
 
-\section{Directed-versus-constrained-random rationale}
-\label{sec:directed-vs-random}
+\section{Chiến lược kiểm chứng}
+\label{sec:ver-strategy}
 
-The environment is directed-first by design. Protocol bring-up of a state-machine-heavy
-controller benefits from deterministic, repeatable stimulus: each virtual sequence drives a
-single, named scenario so that a failure points at one FSM path rather than at an opaque
-random draw. This makes the first-silicon debugging loop short and the regression
-reproducible from a fixed seed. Constrained randomisation is not discarded but layered on
-top --- sequences sweep lengths, transfer-direction, and descriptor fields, and functional
-covergroups record which points of the protocol space those sweeps actually reach. This
-directed-then-random layering is the accepted practice for testbench construction in the
-verification literature~\cite{spear_sv}. The result
-is a method that keeps the debuggability of directed tests while still measuring coverage,
-which is the appropriate trade-off for a single-author thesis controller where exhaustive
-random closure is out of scope. \Cref{fig:verif-cov-tradeoff} sketches where directed
-stimulus carries the bring-up and where coverage-driven sweeping extends it.
+Chiến lược kết hợp directed test và constrained-random stimulus. Directed test phù hợp với reset value,
+opcode CCC, biên DAT và một chuyển tiếp FSM cụ thể. Constrained-random stimulus được dùng cho địa chỉ,
+payload, độ dài và response behavior của Target trong miền hợp lệ. Mỗi Virtual Sequence vẫn có một mục
+tiêu rõ ràng; randomization mở rộng dữ liệu trong kịch bản chứ không thay thế tiêu chí pass/fail.
 
-\begin{figure}[!htb]\centering
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    axis/.style={-{Stealth[length=5pt]}, thick},
-    curve/.style={very thick, blue!55!black},
-    guide/.style={dashed, black!45},
-  ]
-  \draw[axis] (0,0) -- (10,0) node[anchor=north east]{Engineering effort};
-  \draw[axis] (0,0) -- (0,5.0) node[above right, align=left]{Protocol space\\covered};
-  \draw[guide] (0,4.5) -- (10,4.5)
-        node[anchor=south east, font=\scriptsize, text=black!55]{full-random closure (out of scope)};
-  \draw[curve] (0,0) to[out=72,in=205] (3.0,3.4) to[out=25,in=182] (9.2,4.15);
-  \draw[guide] (3.0,0) -- (3.0,3.9);
-  \node[align=center, font=\scriptsize\itshape, text=orange!45!black] at (1.5,4.1)
-        {directed\\bring-up};
-  \node[align=center, font=\scriptsize\itshape, text=green!35!black] at (6.2,2.6)
-        {covergroup-driven\\sweeping};
-\end{tikzpicture}
-\caption[Directed-first verification with coverage-driven extension]{The directed-first
-  strategy. Directed virtual sequences bring up each protocol mode quickly (the steep left
-  region); constrained length, direction, and descriptor-field sweeps then extend the exercised
-  protocol space, with functional covergroups measuring how far it reaches. Exhaustive
-  full-random closure is deliberately out of scope for a single-author controller.}
-\label{fig:verif-cov-tradeoff}
-\end{figure}
-
-\section{Why UVM 1.2 and Xcelium}
-\label{sec:why-uvm}
-
-The environment is built on UVM~1.2 (the Cadence \texttt{CDNS-1.2} library) running under
-Xcelium (\texttt{xrun}), with SimVision for waveform debug. UVM~1.2 is chosen for its
-standard component model, factory-based type substitution, and TLM analysis
-connections~\cite{uvm12, uvm12_userguide}, all of which the environment relies on: the test selects its
-stimulus by factory name, and the monitors publish transactions through analysis ports.
-Xcelium provides the SystemVerilog assertion engine defined by the language
-standard~\cite{ieee1800}, the functional-coverage database, and the
-SHM waveform format used for debug. UVM-based functional verification of comparable
-serial-bus protocols follows the same component-and-scoreboard structure~\cite{kulkarni_spi_uvm}. One deliberate departure from textbook UVM is the
-register access path: rather than instantiating the heavyweight \texttt{uvm\_reg} model, the
-environment uses a small custom register agent, because the design's register interface is a
-plain 12-bit-address / write-enable / read-enable bus rather than AXI or AHB, and a bespoke
-agent models it with far less boilerplate. Low-level checking macros follow the OpenTitan DV
-style~\cite{opentitan_dvmacros}. \Cref{tab:verif-tooling} records these choices and their
-rationale.
-
-\begin{table}[!htb]\centering
-  \caption{Toolchain and methodology decisions, with rationale.}
-  \label{tab:verif-tooling}
-  \small
-  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}
-                    >{\raggedright\arraybackslash}p{0.28\textwidth}
-                    >{\raggedright\arraybackslash}p{0.40\textwidth}@{}}
-    \toprule
-    \textbf{Decision} & \textbf{Choice} & \textbf{Rationale} \\
-    \midrule
-    Methodology & UVM 1.2 (CDNS-1.2) & standard components, factory, TLM analysis path \\
-    Simulator / debug & Xcelium \texttt{xrun} + SimVision & SVA, coverage DB, SHM waveform dump \\
-    Stimulus style & directed vseqs + covergroups & deterministic bring-up, measurable coverage \\
-    Register access & custom register agent & simple addr/wen/ren bus; avoids \texttt{uvm\_reg} overhead \\
-    Checking & self-checking scoreboard + bound SVA & end-to-end data checks plus structural invariants \\
-    Check macros & OpenTitan DV-style macros & concise fatal/error reporting helpers \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\section{Layered test stack}
-\label{sec:test-stack}
-
-The stimulus is organised as a conventional UVM layering: a single reusable test class
-constructs the environment and then runs one virtual sequence on the environment's virtual
-sequencer; that virtual sequence in turn coordinates lower-level sequences on the two real
-sequencers --- the register sequencer (32-bit register bus) and the I3C sequencer (bus-side
-Target responses). \Cref{fig:verif-stack} shows this layering from test down to DUT.
-
-A notable simplification is that there is exactly one test class,
-\texttt{i3c\_base\_test}, and the specific scenario is selected at run time by the
-\texttt{+UVM\_TEST\_SEQ} plusarg, which the Makefile sets from the \texttt{SEQ} variable. The
-test creates the named virtual sequence through the UVM factory, waits for reset to deassert,
-and starts it on the virtual sequencer under a raised objection
-(\cref{lst:verif-test-dispatch}). This keeps the test layer thin --- all scenario-specific
-behaviour lives in the virtual-sequence library of \cref{sec:vseq-library} --- and lets the
-same compiled image run any of the \RunnableVseqCount{} scenarios without recompilation.
-
-\begin{lstlisting}[language=Verilog,caption={Single reusable test selects its scenario by factory name (\texttt{i3c\_base\_test.sv}).},label={lst:verif-test-dispatch}]
-string test_seq_s = "i3c_imm_vseq";
-void'($value$plusargs("UVM_TEST_SEQ=%0s", test_seq_s));
-obj = factory.create_object_by_name(test_seq_s, "", test_seq_s);
-if (obj == null) `uvm_fatal(`gfn, $sformatf("could not create %0s seq", test_seq_s))
-if (!$cast(test_seq, obj)) `uvm_fatal(`gfn, "cast failed - not a uvm_sequence")
-phase.raise_objection(this);
-@(posedge cfg.m_i3c_agent_cfg.vif.rst_ni);  // start after reset release
-test_seq.start(env.m_vsequencer);
-phase.drop_objection(this);
-\end{lstlisting}
-
-\begin{figure}[!htb]\centering
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    blk/.style={draw, rounded corners=2pt, align=center, very thick, minimum height=8mm},
-    test/.style={blk, fill=blue!8, text width=5.2cm},
-    seq/.style={blk, fill=orange!12, text width=5.6cm},
-    vseqr/.style={blk, fill=orange!8, text width=7.6cm, minimum height=11mm},
-    sqr/.style={blk, fill=white, text width=3.2cm},
-    drv/.style={blk, fill=green!12, text width=3.2cm},
-    dut/.style={blk, fill=black!8, text width=7.6cm, minimum height=9mm},
-    down/.style={-{Stealth[length=4pt]}, thick, black!60},
-    bus/.style={<->, thick, black!60, >={Stealth[length=4pt]}},
-    lbl/.style={font=\scriptsize\itshape, text=black!55, fill=white, inner sep=1pt},
-  ]
-  \node[test]  (test)  at (0,8.0) {\texttt{i3c\_base\_test}\\[-1pt]\scriptsize builds env, starts one vseq};
-  \node[seq]   (vseq)  at (0,6.4) {virtual sequence \texttt{i3c\_*\_vseq}\\[-1pt]\scriptsize one named scenario};
-  \node[vseqr] (vseqr) at (0,4.8) {\texttt{i3c\_virtual\_sequencer}\\[-1pt]\scriptsize holds both real-sequencer handles};
-  \node[sqr] (rsqr) at (-2.2,3.0) {\texttt{reg\_sequencer}};
-  \node[sqr] (isqr) at ( 2.2,3.0) {\texttt{i3c\_sequencer}};
-  \node[drv] (rdrv) at (-2.2,1.4) {\texttt{reg\_driver}};
-  \node[drv] (idrv) at ( 2.2,1.4) {\texttt{i3c\_driver}\\[-1pt]\scriptsize (Target)};
-  \node[dut] (dut)  at (0,-0.3) {DUT --- \texttt{i3c\_controller\_top}};
-  \draw[down] (test)  -- (vseq);
-  \draw[down] (vseq)  -- (vseqr);
-  \draw[down] (vseqr.south) -- (rsqr.north) node[lbl, pos=0.55]{reg seq};
-  \draw[down] (vseqr.south) -- (isqr.north) node[lbl, pos=0.55]{Target seq};
-  \draw[bus]  (rsqr) -- (rdrv) node[lbl, midway]{\texttt{seq\_item}};
-  \draw[bus]  (isqr) -- (idrv) node[lbl, midway]{\texttt{seq\_item}};
-  \draw[down] (rdrv.south) -- (rdrv.south|-dut.north) node[lbl, pos=0.6]{32-bit reg bus};
-  \draw[bus]  (idrv.south) -- (idrv.south|-dut.north) node[lbl, pos=0.6]{\texttt{scl}/\texttt{sda}};
-\end{tikzpicture}
-\caption[Layered UVM test stack]{The stimulus layering from test down to DUT. A single reusable
-  test builds the environment and starts one virtual sequence on the virtual sequencer, which
-  holds handles to both real sequencers; the register and Target sequences drive their respective
-  drivers, which stimulate the DUT over the 32-bit register bus and the I3C bus.}
-\label{fig:verif-stack}
-\end{figure}
-
-\section{TLM analysis path and scoreboard strategy}
-\label{sec:scoreboard}
-
-The checking core is a substantial self-checking scoreboard, not a stub. Both monitors
-publish through UVM analysis ports that feed two \texttt{uvm\_tlm\_analysis\_fifo} instances
-in the scoreboard: the register monitor feeds a \texttt{reg\_seq\_item} FIFO and the I3C
-monitor feeds an \texttt{i3c\_item} FIFO (\cref{fig:verif-tlm}). Two run-phase tasks drain
-these FIFOs concurrently. The register-side task interprets each access by address ---
-response-port reads, RX-data-port reads, DAT writes, command-descriptor writes, host-control
-and reset-control writes --- and updates the reference model accordingly. The bus-side task
-classifies each completed transaction and dispatches it to the matching checker:
-CCC, read, write, or immediate-write.
-
-The cross-checks span the full transaction: response-descriptor status, transaction ID, and
-data length (with response priority); RX and TX data bytes with their dword packing; the
-per-byte T-Bit on I3C and ACK/NACK on \iic{}; DAT entry contents; command-descriptor decode
-including rejection of invalid descriptors; and software-reset queue flushing.
-\Cref{tab:verif-scb} lists the principal checks. Two properties make the scoreboard rigorous
-beyond per-transaction comparison: it maintains a pending-response model so that every
-expected response is eventually matched against an observed one, and at \texttt{check\_phase}
-it asserts that this pending-response queue is empty, catching responses that were expected
-but never produced --- an end-of-test residue check. The scoreboard is also an observation
-source in its own right: each time it completes a match between a command descriptor, its bus
-transaction, and its response, it publishes the correlated record on an analysis port
-(\texttt{correlated\_ap}) that feeds the correlated coverage collector of
-\cref{sec:coverage}.
-
-\begin{table}[!htb]\centering
-  \caption{Principal scoreboard checks (\texttt{i3c\_scoreboard.sv}).}
-  \label{tab:verif-scb}
-  \small
-  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.34\textwidth}
-                    >{\raggedright\arraybackslash}p{0.58\textwidth}@{}}
-    \toprule
-    \textbf{Check} & \textbf{What it verifies} \\
-    \midrule
-    Response descriptor & status, transaction ID, data length, and response priority \\
-    RX data & read bytes and their dword packing into the RX port \\
-    TX data & write bytes (full and short) and dword packing \\
-    Per-byte T-Bit / ACK & I3C T-Bit and \iic{} ACK/NACK on every data byte \\
-    CCC transaction & broadcast/direct ENEC/DISEC and ENTDAA framing \\
-    Read transaction & normal, short (early Target end), and interrupted reads \\
-    Write / immediate write & private write and in-descriptor immediate write \\
-    DAT entry & address-table writes and hardware read-back selection \\
-    Command descriptor & descriptor decode and rejection of invalid descriptors \\
-    SW reset & queue flush and command-staging clear \\
-    End-of-test residue & pending-response model fully consumed at \texttt{check\_phase} \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    mon/.style={draw, rounded corners=2pt, fill=blue!8, very thick, align=center, minimum height=9mm, text width=2.5cm},
-    fifo/.style={draw, rounded corners=2pt, fill=white, align=center, minimum height=12mm, text width=3.3cm},
-    task/.style={draw, rounded corners=2pt, fill=orange!12, align=center, minimum height=12mm, text width=3.3cm},
-    outc/.style={draw, rounded corners=2pt, fill=green!12, align=center, minimum height=12mm, text width=3.3cm},
-    ap/.style={-{Stealth[length=4pt]}, thick, black!60},
-    lbl/.style={font=\scriptsize\itshape, text=black!55, fill=white, inner sep=1pt},
-  ]
-  \node[mon] (rmon) at (-1.2,1.6) {\texttt{reg\_monitor}};
-  \node[mon] (imon) at (-1.2,-1.6) {\texttt{i3c\_monitor}};
-  \node[draw, dashed, rounded corners=4pt, fill=black!3, minimum width=13.0cm, minimum height=5.0cm] (scb) at (8.9,0) {};
-  \node[font=\footnotesize\bfseries, anchor=south west] at ([yshift=0.6mm]scb.north west) {\texttt{i3c\_scoreboard}};
-  \node[fifo] (rfifo) at (4.9,1.6) {\texttt{reg\_fifo}\\[-1pt]\scriptsize\texttt{tlm\_analysis\_fifo}\\[-2pt]\scriptsize\texttt{\#(reg\_seq\_item)}};
-  \node[fifo] (ififo) at (4.9,-1.6) {\texttt{i3c\_fifo}\\[-1pt]\scriptsize\texttt{tlm\_analysis\_fifo}\\[-2pt]\scriptsize\texttt{\#(i3c\_item)}};
-  \node[task] (rtask) at (8.9,1.6) {register-side task\\[-1pt]\scriptsize decode by address};
-  \node[task] (itask) at (8.9,-1.6) {bus-side task\\[-1pt]\scriptsize classify transaction};
-  \node[outc] (refm) at (12.9,1.6) {register + DAT\\reference model};
-  \node[outc] (chk)  at (12.9,-1.6) {CCC / read / write /\\immediate checkers};
-  \draw[ap] (rmon) -- (rfifo) node[lbl, midway]{\texttt{analysis\_port}};
-  \draw[ap] (imon) -- (ififo) node[lbl, midway]{\texttt{analysis\_port}};
-  \node[outc, text width=4.8cm] (ccov) at (8.9,-3.9) {\texttt{i3c\_correlated\_coverage}\\[-1pt]\scriptsize correlated coverage collector};
-  \draw[ap] (rfifo) -- (rtask);
-  \draw[ap] (ififo) -- (itask);
-  \draw[ap] (rtask) -- (refm);
-  \draw[ap] (itask) -- (chk);
-  \draw[ap] (scb.south) -- (ccov.north) node[lbl, midway, anchor=west, xshift=2pt]{\texttt{correlated\_ap}};
-\end{tikzpicture}}
-\caption[TLM analysis path from monitors to scoreboard]{The analysis path. Each monitor publishes
-  on its analysis port into a \texttt{uvm\_tlm\_analysis\_fifo} inside the scoreboard; the
-  register-side task decodes accesses by address into the register/DAT reference model, while the
-  bus-side task classifies each completed transaction and dispatches it to the CCC, read, write, or
-  immediate-write checker. Fully matched command/bus/response records leave the scoreboard on
-  \texttt{correlated\_ap} and feed the correlated coverage collector.}
-\label{fig:verif-tlm}
-\end{figure}
-
-\section{SVA checkers}
-\label{sec:sva-checkers}
-
-Alongside the transaction-level scoreboard, \SvaCheckerCount{} SystemVerilog-assertion modules
-check structural invariants directly on the RTL. Nine of them are \emph{bound} to their target
-module by a \texttt{bind} statement co-located in the checker file itself --- so the checker
-travels with its design module rather than being wired centrally in the testbench top --- and
-the tenth, the pad-model checker, is \emph{instantiated} directly in the testbench top because
-its target is the testbench's own pad model rather than a synthesised RTL module.
-\Cref{tab:verif-sva} lists all ten, their targets, and the invariant family each enforces, and
-\cref{fig:verif-sva} shows the binding map.
-
-The bound checkers cover the protocol-critical and timing-critical modules: the command FSM
-(\texttt{flow\_active}), the ENTDAA controller and per-Target FSM, the CSR file, the
-\texttt{sync\_fifo} primitive, the bus monitor, the SCL generator, the PHY, and the top level.
-Several of these checkers also host functional covergroups (\cref{sec:coverage}). The
-deliberately uncovered modules --- \texttt{controller\_active}, the TX/RX byte-and-bit flows,
-and the bus-level TX engine --- are exercised end-to-end through the scoreboard data checks
-rather than by dedicated assertion modules, and the queue wrapper is covered transitively
-through the \texttt{sync\_fifo} checker and the top-level checker. The assertion \emph{outcomes}
-(zero firings on passing runs) are reported in \cref{ch:results}.
-
-\begin{table}[!htb]\centering
-  \caption{The \SvaCheckerCount{} SVA checker modules (\texttt{i3c\_core/sva/}).}
-  \label{tab:verif-sva}
-  \small
-  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.27\textwidth}
-                    >{\raggedright\arraybackslash}p{0.22\textwidth}
-                    c
-                    >{\raggedright\arraybackslash}p{0.30\textwidth}@{}}
-    \toprule
-    \textbf{Checker} & \textbf{Target} & \textbf{Wiring} & \textbf{Invariant family} \\
-    \midrule
-    \texttt{flow\_active\_sva}        & \texttt{flow\_active}        & bind & FSM transitions, abort, response priority \\
-    \texttt{entdaa\_fsm\_sva}         & \texttt{entdaa\_fsm}         & bind & DAA address/parity, abort point \\
-    \texttt{entdaa\_controller\_sva}  & \texttt{entdaa\_controller}  & bind & DAA round sequencing \\
-    \texttt{csr\_registers\_sva}      & CSR file                     & bind & register read/write and reset behaviour \\
-    \texttt{sync\_fifo\_sva}          & \texttt{sync\_fifo}          & bind & full/empty, ordering, depth contract \\
-    \texttt{bus\_monitor\_sva}        & \texttt{bus\_monitor}        & bind & START/Sr/STOP edge detection \\
-    \texttt{scl\_generator\_sva}      & \texttt{scl\_generator}      & bind & SCL low/high timing, stall/resume \\
-    \texttt{i3c\_phy\_sva}            & \texttt{i3c\_phy}            & bind & synchroniser and output-driver behaviour \\
-    \texttt{i3c\_controller\_top\_sva}& \texttt{i3c\_controller\_top}& bind & top-level integration invariants \\
-    \texttt{tb\_pad\_model\_sva}      & TB pad model                 & instantiate & no X/Z, OD/PP mirror, turnaround \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    rtl/.style={draw, rounded corners=2pt, fill=blue!8, align=center, minimum height=7mm, text width=3.0cm},
-    chk/.style={draw, rounded corners=2pt, fill=orange!12, align=center, minimum height=7mm, text width=3.2cm},
-    inst/.style={draw, rounded corners=2pt, fill=green!12, align=center, minimum height=7mm, text width=3.2cm},
-    bind/.style={-{Stealth[length=3.5pt]}, thick, black!60},
-    bl/.style={font=\tiny, text=black!55, fill=white, inner sep=0.8pt},
-  ]
-  \node[draw, dashed, rounded corners=4pt, fill=black!3, minimum width=16.4cm, minimum height=7.4cm] (dut) at (0,0.9) {};
-  \node[font=\footnotesize\bfseries, anchor=north west, align=left] at (dut.north west)
-        {\ RTL (DUT \texttt{i3c\_controller\_top}) --- checkers \texttt{bind}-attached in each checker file};
-  % left column pairs (checker -- bind --> module)
-  \node[rtl] (m1) at (-6.5,3.2) {\texttt{flow\_active}};
-  \node[rtl] (m2) at (-6.5,1.9) {\texttt{entdaa\_fsm}};
-  \node[rtl] (m3) at (-6.5,0.6) {\texttt{entdaa\_controller}};
-  \node[rtl] (m4) at (-6.5,-0.7) {\texttt{csr\_registers}};
-  \node[rtl] (m5) at (-6.5,-2.0) {\texttt{sync\_fifo}};
-  \node[chk] (c1) at (-3.1,3.2) {\texttt{flow\_active\_sva}};
-  \node[chk] (c2) at (-3.1,1.9) {\texttt{entdaa\_fsm\_sva}};
-  \node[chk] (c3) at (-3.1,0.6) {\texttt{entdaa\_controller\_sva}};
-  \node[chk] (c4) at (-3.1,-0.7) {\texttt{csr\_registers\_sva}};
-  \node[chk] (c5) at (-3.1,-2.0) {\texttt{sync\_fifo\_sva}};
-  % right column pairs
-  \node[rtl] (m6) at (2.6,3.2) {\texttt{bus\_monitor}};
-  \node[rtl] (m7) at (2.6,1.9) {\texttt{scl\_generator}};
-  \node[rtl] (m8) at (2.6,0.6) {\texttt{i3c\_phy}};
-  \node[rtl] (m9) at (2.6,-0.7) {\texttt{i3c\_controller\_top}};
-  \node[chk] (c6) at (6.0,3.2) {\texttt{bus\_monitor\_sva}};
-  \node[chk] (c7) at (6.0,1.9) {\texttt{scl\_generator\_sva}};
-  \node[chk] (c8) at (6.0,0.6) {\texttt{i3c\_phy\_sva}};
-  \node[chk] (c9) at (6.0,-0.7) {\texttt{i3c\_controller\_top\_sva}};
-  \foreach \c/\m in {c1/m1,c2/m2,c3/m3,c4/m4,c5/m5,c6/m6,c7/m7,c8/m8,c9/m9}
-     \draw[bind] (\c) -- (\m) node[bl, midway]{bind};
-  % testbench region (instantiated checker)
-  \node[draw, dashed, rounded corners=4pt, fill=black!3, minimum width=8.2cm, minimum height=1.8cm] (tb) at (1.5,-3.7) {};
-  \node[font=\footnotesize\bfseries, anchor=north west] at (tb.north west) {\ \texttt{tb\_i3c\_top}};
-  \node[rtl, fill=black!8] (pad) at (0.0,-4.0) {TB pad model};
-  \node[inst] (cpad) at (4.0,-4.0) {\texttt{tb\_pad\_model\_sva}};
-  \draw[bind] (cpad) -- (pad) node[bl, midway]{instantiate};
-\end{tikzpicture}}
-\caption[SVA binding map]{The assertion binding map. Nine checker modules are attached to their RTL
-  targets by a \texttt{bind} statement co-located in each checker file, so a checker travels with its
-  design module rather than being wired centrally; the tenth, the pad-model checker, is instantiated
-  directly in \texttt{tb\_i3c\_top} because its target is the testbench's own pad model.}
-\label{fig:verif-sva}
-\end{figure}
-
-\section{Coverage strategy}
-\label{sec:coverage}
-
-Functional coverage is implemented as a full coverage model rather than deferred. The model
-is defined feature-first in a coverage matrix: every feature of the supported protocol subset
-is listed, then assigned to the one observation source whose data is trustworthy for it, so
-that no behaviour is double-counted and nothing is sampled from a stream that can only guess
-at it. This yields four UVM coverage subscribers, built by the environment alongside the
-scoreboard, plus the assertion-side covergroups inside the bound SVA checkers.
+Ba cơ chế kiểm tra hoạt động song song:
 
 \begin{itemize}
-  \item \textbf{Register-stream collector} (\texttt{reg\_coverage}), subscribed to the
-    register monitor: register accesses (mapped/unmapped/misaligned address classes crossed
-    with read/write), per-index DAT-entry fields, command descriptors reassembled from their
-    two descriptor words (attribute, direction, terminate-on-completion and
-    response-suppression flags, length, immediate-data width, DAA device count, transaction
-    ID, CCC opcode), consecutive-command transitions, response descriptors popped at the
-    response port, host-control field transitions, timing-CSR value classes, and software
-    queue-port usage.
-  \item \textbf{Bus-stream collector} (\texttt{i3c\_coverage}), subscribed to the I3C
-    monitor and sampling once per completed bus transfer, never per clock: address phases
-    (address class crossed with ACK/NACK, START versus Repeated START), transfers
-    (protocol $\times$ direction $\times$ actual-length class, end condition, private-read
-    preamble form), payload byte patterns, the final T-Bit of I3C reads crossed with
-    interruption, write-to-read transitions, \iic{} ACK/NACK profiles, CCC framing (opcode
-    $\times$ broadcast/direct form, header NACK, T-Bits), per-Target direct-CCC
-    acknowledgement, and ENTDAA transaction and round counts.
-  \item \textbf{DAA-arbitration collector} (\texttt{i3c\_daa\_arb\_coverage}), fed from a
-    dedicated analysis port on the Target-agent driver: multi-Target ENTDAA arbitration ---
-    contender and round counts, the identity phase (PID, BCR, or DCR) in which the first
-    loser drops out, loser retry, and all-Targets-assigned completion.
-  \item \textbf{Correlated collector} (\texttt{i3c\_correlated\_coverage}), fed from the
-    scoreboard: cross-stream items that neither monitor can attribute alone, sampled only
-    after the scoreboard has matched a command descriptor with its bus transaction and
-    response --- immediate-transfer outcomes, response status crossed with command class,
-    granted response length, CCC responses, and DAA results including the DAT-boundary cases.
+  \item Scoreboard xây dựng expected transaction từ truy cập Host và so sánh với transaction do I3C
+  Monitor thu được;
+  \item SVA kiểm tra invariant và quan hệ theo chu kỳ tại ranh giới module;
+  \item Functional Coverage ghi nhận tình huống và cross quan trọng để đánh giá mức độ kích hoạt.
 \end{itemize}
 
-The assertion-side covergroups co-located with the SVA checkers retain the events that are
-awkward to observe from any transaction stream: the ENTDAA checker crosses each assigned
-dynamic address with its computed odd-parity bit and records the FSM state at which an abort
-is taken, and the command-FSM checker records abort-entry and stop-generation states and the
-descriptor encodings. Sampling these where they occur --- inside the FSMs --- covers abort and
-error paths a purely transaction-level model could not see.
+Sự phân vai này tránh đưa mọi kiểm tra vào một thành phần. Scoreboard phù hợp với quan hệ xuyên suốt có
+độ trễ biến đổi. SVA phù hợp với valid/ready, reset, state transition và timing cục bộ. Functional Coverage
+không phát hiện lỗi trực tiếp; nó cho biết những miền nào của không gian kiểm chứng chưa được quan sát.
 
-Two disciplines keep the model honest. First, sampling is gated on completion: a command
-descriptor is sampled only once both of its words have been written, a response only on a
-valid response-port pop, and a correlated item only when the scoreboard match is complete.
-Second, reserved and illegal encodings are kept as explicit negative bins exercised by the
-error sequences, while values the environment cannot produce are excluded as ignore bins
-rather than left to depress the score indefinitely. Coverage is collected when simulation
-runs with \texttt{COV=1}, which enables Xcelium's coverage database; the measured
-\emph{percentages} and remaining closure gaps are reported in \cref{ch:results} --- this
-section defines only what is measured.
+\section{Kiến trúc tổng thể của Testbench}
+\label{sec:ver-arch}
 
-% ===========================================================================
-% PART B --- UVM Verification Environment
-% ===========================================================================
-\section{Testbench top and interfaces}
-\label{ch:uvm-env}
+Module \texttt{tb\_i3c\_top} tạo clock/reset, khởi tạo DUT, \texttt{reg\_if} và \texttt{i3c\_if}. Mô hình
+pad dùng net \texttt{wire} có pull-up yếu. SCL của DUT được mô hình theo Open Drain; SDA kết hợp
+\texttt{sda\_o} và \texttt{sda\_oe}. I3C Target Agent có thể kéo hoặc điều khiển SDA theo pha giao thức.
+Virtual interface được chuyển vào UVM bằng \texttt{uvm\_config\_db}.
 
-The testbench top, \texttt{tb\_i3c\_top}, instantiates the device under test together with
-the register and I3C interfaces and the static testbench infrastructure. It generates a
-\SI{3}{\nano\second} clock (\SI{333.333}{\mega\hertz}, the design's minimum operating
-frequency) and holds the active-low reset asserted for 100 clock cycles before release. The
-DUT is parameterised with reduced queue depths --- eight entries for each of the command, TX,
-RX, and response FIFOs, against the RTL default of 64 --- which shrinks simulation time while
-still exercising full and empty boundaries; the power-of-two depth contract itself is enforced
-by the RTL elaboration assertion described in \cref{ch:architecture-rtl} and is not re-checked
-here. A \SI{100}{\milli\second} watchdog raises a \texttt{uvm\_fatal} timeout so that a hung
-sequence fails fast rather than running indefinitely. Waveform dumping is gated by the
-\texttt{+DUMP\_WAVES} plusarg, which opens an SHM database and probes the whole hierarchy. The
-virtual interfaces are published through \texttt{uvm\_config\_db} for the agents to retrieve,
-and the pad-model assertion checker (\cref{sec:sva-checkers}) is instantiated here.
-
-\section{Register agent}
-\label{sec:reg-agent}
-
-The register agent (\texttt{dv\_reg/}) drives the design's 32-bit register bus --- the
-12-bit address with separate write-enable and read-enable strobes described in
-\cref{ch:architecture-rtl}. It is a conventional UVM agent with a driver, monitor, sequencer, and
-configuration object (\cref{fig:verif-reg-agent}). The driver performs single-beat register
-reads and writes; the monitor reconstructs each access as a \texttt{reg\_seq\_item} and
-publishes it on its analysis port, which the scoreboard consumes to maintain its register and
-DAT reference model. Because the bus is this simple, the agent replaces the
-\texttt{uvm\_reg} layer entirely, as motivated in \cref{sec:why-uvm}.
-
-\begin{figure}[!htb]\centering
-\resizebox{0.9\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    comp/.style={draw, rounded corners=2pt, fill=white, very thick, align=center, minimum height=8mm, text width=3.1cm},
-    cfg/.style={draw, dashed, rounded corners=2pt, fill=green!10, align=center, text width=2.8cm, font=\scriptsize},
-    dut/.style={draw, rounded corners=2pt, fill=black!8, align=center, very thick, minimum height=10mm, text width=3.2cm},
-    ext/.style={align=center, font=\scriptsize, text=black!60},
-    edge/.style={-{Stealth[length=4pt]}, thick, black!60},
-    bus/.style={<->, thick, black!60, >={Stealth[length=4pt]}},
-    lbl/.style={font=\scriptsize\itshape, text=black!55, fill=white, inner sep=1pt},
-  ]
-  \node[draw, dashed, rounded corners=4pt, fill=blue!4, minimum width=4.6cm, minimum height=6.4cm] (agent) at (0,0) {};
-  \node[font=\footnotesize\bfseries, anchor=north] at ([yshift=-1.5mm]agent.north) {\texttt{reg\_agent}};
-  \node[comp] (sqr) at (0,1.7) {\texttt{reg\_sequencer}};
-  \node[comp] (drv) at (0,0.1) {\texttt{reg\_driver}};
-  \node[comp] (mon) at (0,-1.5) {\texttt{reg\_monitor}};
-  \node[cfg]  (cfg) at (0,-2.7) {\texttt{reg\_agent\_cfg}};
-  \draw[bus] (sqr) -- (drv) node[lbl, midway]{\texttt{seq\_item}};
-  \node[dut] (dut) at (5.4,0.1) {DUT\\register interface};
-  \draw[edge] (drv.east) -- (dut.west) node[lbl, pos=0.55]{drive};
-  \draw[edge] (dut.south west) to[out=225,in=0] node[lbl, pos=0.45]{sample} (mon.east);
-  \node[ext] at (5.4,-1.5) {\texttt{addr[11:0]}, \texttt{wen}, \texttt{ren},\\\texttt{wdata[31:0]}, \texttt{rdata[31:0]}, \texttt{ready}};
-  \node[comp, fill=orange!10] (scb) at (-5.1,-1.5) {to \texttt{i3c\_scoreboard}};
-  \draw[edge] (mon.west) -- (scb.east) node[lbl, pos=0.5]{\texttt{analysis\_port}};
-\end{tikzpicture}}
-\caption[Register agent structure]{The register agent. A driver, sequencer, monitor, and
-  configuration object model the 32-bit register bus; the driver performs single-beat reads and
-  writes on the \texttt{addr}/\texttt{wen}/\texttt{ren} interface, and the monitor reconstructs each
-  access as a \texttt{reg\_seq\_item} published on its analysis port to the scoreboard.}
-\label{fig:verif-reg-agent}
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Latex,font=\scriptsize,node distance=0.55cm and 0.65cm,
+    b/.style={draw,rounded corners,minimum width=2.8cm,minimum height=0.85cm,align=center}]
+    \node[b,fill=blue!8] (test) {UVM Test};
+    \node[b,fill=blue!8,below=of test] (vseq) {Virtual Sequence};
+    \node[b,fill=blue!8,below=of vseq] (vsqr) {Virtual Sequencer};
+    \node[b,fill=green!9,below left=of vsqr] (ra) {Register Agent\\Sequencer/Driver/Monitor};
+    \node[b,fill=green!9,below right=of vsqr] (ia) {I3C Target Agent\\Sequencer/Driver/Monitor};
+    \node[b,fill=orange!10,below=1.0cm of vsqr] (dut) {DUT\\\texttt{i3c\_controller\_top}};
+    \node[b,left=of dut] (scb) {Scoreboard\\reference model};
+    \node[b,right=of dut] (cov) {Functional Coverage\\+ SVA};
+    \draw[->] (test)--(vseq); \draw[->] (vseq)--(vsqr);
+    \draw[->] (vsqr)--(ra); \draw[->] (vsqr)--(ia);
+    \draw[<->,thick] (ra)--(dut); \draw[<->,thick] (ia)--(dut);
+    \draw[->] (ra.west)-|(scb.north); \draw[->] (ia.east)-|(cov.north);
+    \draw[<->] (scb)--(dut); \draw[<->] (dut)--(cov);
+  \end{tikzpicture}
+  \caption{Topology của môi trường UVM.}
+  \label{fig:uvm-topology}
 \end{figure}
 
-\section{I3C Target agent}
-\label{sec:i3c-agent}
+\texttt{i3c\_env} khởi tạo Register Agent, I3C Target Agent, Virtual Sequencer, Scoreboard và ba coverage
+component. Hai coverage component nhận transaction riêng của register interface và I3C bus. Component
+\texttt{i3c\_correlated\_coverage} nhận item đã được Scoreboard ghép, nhờ đó có thể cover quan hệ giữa
+Command Descriptor, giao dịch bus và Response Descriptor.
 
-The I3C agent (\texttt{dv\_i3c/}) is the bus-side counterpart: a Target-mode responder that
-reacts to the controller acting as the active Controller. Its driver implements a
-\DriverPhaseCount-phase finite-state machine (\texttt{i3c\_drv\_phase\_e}) that walks the
-Target through every step of a transfer --- address decode and acknowledge, push-pull and
-open-drain data, the broadcast-header dispatch, and the ENTDAA arbitration phase ---
-enumerated in \cref{tab:verif-driver-phases}. The monitor is protocol-aware: it waits for a
-host START, captures the address phase and its acknowledgement, distinguishes I3C from
-\iic{}, recognises the broadcast address \texttt{0x7E} and routes the following bytes through
-a CCC-decoding path, and then assembles the data bytes, per-byte T-Bit or ACK, and the
-closing framing into a single \texttt{i3c\_item} that it publishes for the scoreboard
-(\cref{fig:verif-i3c-agent}). It also models corner conditions the scoreboard depends on,
-such as a NACK'd address, an interrupted (controller-ended) read, and an aborted transfer.
+\section{Luồng TLM và cơ chế Scoreboard}
+\label{sec:ver-tlm}
 
-\begin{table}[!htb]\centering
-  \caption{The \DriverPhaseCount{} Target-driver phases (\texttt{i3c\_drv\_phase\_e}).}
-  \label{tab:verif-driver-phases}
-  \small
-  \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.62\textwidth}@{}}
+Monitor không gọi trực tiếp hàm kiểm tra của Scoreboard. Mỗi Monitor phát transaction qua TLM analysis
+port. Trong \texttt{i3c\_env}, Register Monitor nối đến \texttt{reg\_fifo}; I3C Monitor nối đến
+\texttt{i3c\_fifo}. Hai \texttt{uvm\_tlm\_analysis\_fifo} tách thời điểm sampling khỏi thời điểm xử lý và
+cho phép Scoreboard tương quan hai dòng sự kiện có tốc độ khác nhau.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Latex,font=\small,node distance=0.55cm,
+    b/.style={draw,rounded corners,minimum width=3.0cm,minimum height=0.85cm,align=center}]
+    \node[b] (rm) {Register Monitor};
+    \node[b,right=of rm] (rf) {TLM analysis FIFO\\register transaction};
+    \node[b,below=of rm] (im) {I3C Monitor};
+    \node[b,right=of im] (if) {TLM analysis FIFO\\I3C transaction};
+    \node[b,right=1.0cm of rf] (scb) {Scoreboard\\model + compare};
+    \node[b,below=of scb] (cc) {Correlated Coverage};
+    \draw[->,thick] (rm)--(rf); \draw[->,thick] (im)--(if);
+    \draw[->,thick] (rf)--(scb); \draw[->,thick] (if)--(scb);
+    \draw[->,thick] (scb)--(cc);
+  \end{tikzpicture}
+  \caption{Luồng TLM từ Monitor đến Scoreboard và correlated coverage.}
+  \label{fig:tlm-flow}
+\end{figure}
+
+Reference model của Scoreboard lưu bản sao DAT, Command Descriptor đang chờ, TX data, expected RX data
+và expected response. Khi Register Monitor quan sát hai lần ghi Command Queue port, Scoreboard ghép
+Descriptor, giải mã \texttt{attr}, \texttt{dev\_idx}, \texttt{rnw}, \texttt{toc}, \texttt{wroc}, độ dài
+và transaction ID. Truy cập DAT cập nhật model địa chỉ. Ghi TX Data Buffer bổ sung payload kỳ vọng.
+
+I3C transaction được kiểm tra theo loại. Với private transfer, Scoreboard so sánh Address Header, RnW,
+payload, ACK/NACK và T-Bit. Với CCC, model kiểm tra opcode, dạng Broadcast/Direct, Target Address và event
+byte. Với ENTDAA, model theo dõi số Target, PID/BCR/DCR, Dynamic Address, address rejection và dữ liệu ghi
+vào RX Data Buffer. Response đọc từ CSR được đối chiếu với error status, transaction ID và data length.
+
+Sau khi hoàn tất phép so sánh, Scoreboard phát \texttt{i3c\_correlated\_item}. Item này mang thông tin đã
+được xác nhận từ cả hai phía, phù hợp để cover các cross như command class--response status, requested
+length--actual length và abort point--recovery. Việc chỉ sampling sau tương quan giảm nguy cơ coverage ghi
+nhận một giao dịch sai như một tình huống hợp lệ.
+
+\section{Kiểm tra bằng SVA}
+\label{sec:ver-sva}
+
+Chín checker được gắn bằng \texttt{bind} vào RTL. Phạm vi bind gồm top-level, PHY, bus monitor, SCL
+generator, FIFO, CSR, FSM phát lệnh và hai FSM ENTDAA. Checker thứ mười là
+\texttt{tb\_pad\_model\_sva}; checker này được khởi tạo trực tiếp trong Testbench vì cần quan sát cả tín
+hiệu DUT và mô hình net của Testbench.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[font=\scriptsize,node distance=0.35cm and 0.45cm,
+    b/.style={draw,rounded corners,minimum width=3.1cm,minimum height=0.72cm,align=center}]
+    \node[b,fill=green!8] (core) {Protocol core\\\texttt{flow\_active}, ENTDAA};
+    \node[b,fill=green!8,right=of core] (bus) {Bus support\\SCL, monitor, PHY};
+    \node[b,fill=blue!8,below=of core] (host) {Host path\\CSR, FIFO};
+    \node[b,fill=orange!10,right=of host] (pad) {Top-level + pad model};
+    \node[b,below=0.7cm of $(host)!0.5!(pad)$] (sva) {SVA property groups\\assert property + cover property};
+    \draw[->] (core)--(sva); \draw[->] (bus)--(sva); \draw[->] (host)--(sva); \draw[->] (pad)--(sva);
+  \end{tikzpicture}
+  \caption{Nhóm checker SVA theo phạm vi tín hiệu.}
+  \label{fig:sva-map}
+\end{figure}
+
+Các property được chia theo chức năng:
+
+\begin{itemize}
+  \item reset value, software reset và trạng thái enable của CSR;
+  \item valid/ready, full/empty, thứ tự dữ liệu và pointer wrap của FIFO;
+  \item START, Repeated START, STOP, cạnh bus và stable-high detection;
+  \item state transition hợp lệ, pha Open Drain/Push-Pull và handoff/takeover;
+  \item Descriptor validation, error accumulation, abort và response handshake;
+  \item vòng lặp ENTDAA, biên DAT, retry khi address NACK và stop policy;
+  \item tính nhất quán giữa output-enable của DUT, interface và pad model.
+\end{itemize}
+
+Mỗi assertion có label \texttt{ap\_*}; cover property tương ứng dùng label \texttt{cp\_*}. Cover property
+đo việc antecedent và transition đã thực sự xảy ra, giúp phân biệt assertion pass do được kích hoạt với
+property chưa được exercise. Kết quả pass/miss thuộc \cref{ch:results}, không được suy ra từ số lượng
+property trong mã nguồn.
+
+\section{Chiến lược Functional Coverage}
+\label{sec:ver-cov}
+
+Functional Coverage được tổ chức thành ba lớp. \texttt{reg\_coverage} cover địa chỉ CSR, read/write,
+default value, DAT index, Command/Response Descriptor, timing register và Queue port. \texttt{i3c\_coverage}
+cover transaction quan sát trên bus: loại Address Header, RnW, payload, ACK/NACK, CCC, ENTDAA và T-Bit.
+\texttt{i3c\_correlated\_coverage} cover quan hệ xuyên suốt sau khi Scoreboard đã ghép context.
+
+Các bin được thiết kế theo equivalence class thay vì liệt kê mọi giá trị. Payload có các nhóm zero, all
+ones, alternating và giá trị khác. Độ dài có nhóm zero, một byte, biên DWORD, nhiều DWORD và giá trị lớn.
+Địa chỉ có các vùng thấp, giữa, cao và reserved. Error status được cross với command class để kiểm tra rằng
+mỗi lỗi xuất hiện trong ngữ cảnh hợp lệ. Illegal bin chỉ dùng khi tình huống thực sự không được phép; tính
+năng ngoài phạm vi không được đánh dấu illegal chỉ vì RTL không hỗ trợ.
+
+Coverage được thu thập bằng \texttt{COV=1}. Báo cáo merge phải ghi rõ danh sách test và timestamp. Tỷ lệ
+tổng chỉ có ý nghĩa cùng với uncovered-bin analysis, vì một cross lớn có thể chi phối tỷ lệ dù các luồng
+nominal đã đạt. Vì vậy, closure được đánh giá theo covergroup và theo yêu cầu, không chỉ bằng một con số.
+
+\section{Register Agent}
+\label{sec:ver-regagent}
+
+Register Agent là Agent active ở phía Host. Sequencer nhận \texttt{reg\_seq\_item} chứa address, data và
+loại truy cập. Driver điều khiển \texttt{addr}, \texttt{wdata}, \texttt{wen}/\texttt{ren}, sau đó chờ
+\texttt{ready}. Monitor lấy mẫu transaction đã hoàn tất và phát qua analysis port.
+
+Các Sequence cấp thấp cung cấp thao tác đọc/ghi đơn và helper cho Command Descriptor 64-bit. Virtual
+Sequence dùng các thao tác này để cấu hình DAT, nạp TX Data Buffer, ghi Command Queue, chờ Controller hoàn
+tất rồi đọc RX Data Buffer và Response Queue. Register Agent không dự đoán kết quả; prediction thuộc
+Scoreboard. Cách tách này giữ Driver không phụ thuộc vào protocol semantics.
+
+Các trường hợp kiểm chứng riêng của Agent gồm partial Command Descriptor, write khi Queue backpressure,
+unmapped address, mask bit reserved, software reset và read-pop behavior. Những kiểm tra side effect được
+thực hiện bởi Scoreboard và SVA thay vì lặp lại bằng điều kiện thủ công trong Virtual Sequence.
+
+\section{I3C Target Agent}
+\label{sec:ver-i3cagent}
+
+I3C Target Agent đóng vai Target có thể lập trình. Driver phản hồi Address Header, phát ACK/NACK, nhận dữ
+liệu write, phát dữ liệu read và tham gia ENTDAA. Monitor quan sát bus độc lập với Driver và xây dựng
+\texttt{i3c\_item}. Sự độc lập này quan trọng: Scoreboard phải kiểm tra tín hiệu thực sự xuất hiện trên bus,
+không dùng lại transaction mà Driver dự định tạo.
+
+Driver dùng FSM pha gồm 13 giá trị. Các pha được nhóm trong \cref{tab:drv-phase}; bảng chỉ thể hiện vai trò,
+không mô tả state transition nội bộ của Driver.
+
+\begin{table}[H]
+  \centering
+  \caption{Nhóm pha của I3C Target Driver.}
+  \label{tab:drv-phase}
+  \begin{tabular}{L{4.3cm} L{4.8cm} L{4.1cm}}
     \toprule
-    \textbf{Phase} & \textbf{Role} \\
+    \textbf{Nhóm} & \textbf{Pha RTL/UVM} & \textbf{Chức năng} \\
     \midrule
-    \texttt{DrvIdle}             & idle; wait for bus activity \\
-    \texttt{DrvAddr}             & drive/observe the address phase \\
-    \texttt{DrvAddrArbit}        & open-drain address arbitration \\
-    \texttt{DrvAddrPushPull}     & push-pull address phase \\
-    \texttt{DrvAck}              & address acknowledge / NACK \\
-    \texttt{DrvSelectNext}       & decide the next phase from transfer type \\
-    \texttt{DrvWr}               & receive write data byte \\
-    \texttt{DrvWrPushPull}       & push-pull write-data phase \\
-    \texttt{DrvRd}               & drive read data byte \\
-    \texttt{DrvRdPushPull}       & push-pull read-data phase \\
-    \texttt{DrvStop}             & respond to STOP \\
-    \texttt{DrvWaitStopOrRStart} & wait for STOP or Repeated START \\
-    \texttt{DrvBcastDispatch}    & dispatch after a broadcast header \\
-    \texttt{DrvDAA}              & ENTDAA arbitration response \\
+    Chờ và địa chỉ & \texttt{DrvIdle}, \texttt{DrvAddrArbit}, \texttt{DrvAddrPushPull} & Phát hiện START và giải mã Address Header. \\
+    Phản hồi & \texttt{DrvAck}, \texttt{DrvSelectNext}, \texttt{DrvStop} & ACK/NACK, chọn nhánh và kết thúc. \\
+    Write & \texttt{DrvWr}, \texttt{DrvWrPushPull} & Nhận payload I\textsuperscript{2}C/I3C. \\
+    Read & \texttt{DrvRd}, \texttt{DrvRdPushPull} & Phát payload I\textsuperscript{2}C/I3C. \\
+    ENTDAA & \texttt{DrvEntdaa} & Arbitration PID/BCR/DCR và nhận Dynamic Address. \\
+    CCC & \texttt{DrvBcastDispatch}, \texttt{DrvCccPayload} & Giải mã Broadcast/Direct CCC và event byte. \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\begin{figure}[!htb]\centering
-\resizebox{0.9\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    comp/.style={draw, rounded corners=2pt, fill=white, very thick, align=center, minimum height=8mm, text width=3.4cm},
-    fsm/.style={draw, rounded corners=2pt, fill=orange!10, very thick, align=center, minimum height=13mm, text width=3.4cm},
-    cfg/.style={draw, dashed, rounded corners=2pt, fill=green!10, align=center, text width=3.0cm, font=\scriptsize},
-    dut/.style={draw, rounded corners=2pt, fill=black!8, align=center, very thick, minimum height=10mm, text width=3.0cm},
-    ext/.style={align=center, font=\scriptsize, text=black!60},
-    edge/.style={-{Stealth[length=4pt]}, thick, black!60},
-    bus/.style={<->, thick, black!60, >={Stealth[length=4pt]}},
-    lbl/.style={font=\scriptsize\itshape, text=black!55, fill=white, inner sep=1pt},
-  ]
-  \node[draw, dashed, rounded corners=4pt, fill=blue!4, minimum width=4.9cm, minimum height=7.2cm] (agent) at (0,0) {};
-  \node[font=\footnotesize\bfseries, anchor=north] at ([yshift=-1.5mm]agent.north) {\texttt{i3c\_agent} (Target)};
-  \node[comp] (sqr) at (0,2.1) {\texttt{i3c\_sequencer}};
-  \node[fsm]  (drv) at (0,0.3) {\texttt{i3c\_driver}\\[-1pt]\scriptsize \DriverPhaseCount-phase FSM\\[-2pt]\scriptsize \texttt{DrvIdle}\,\ldots\,\texttt{DrvDAA}};
-  \node[comp] (mon) at (0,-1.8) {\texttt{i3c\_monitor}\\[-1pt]\scriptsize assembles \texttt{i3c\_item}};
-  \node[cfg]  (cfg) at (0,-3.0) {\texttt{i3c\_agent\_cfg}};
-  \draw[bus] (sqr) -- (drv) node[lbl, midway]{\texttt{seq\_item}};
-  \node[dut] (dut) at (5.6,0.3) {DUT\\bus interface};
-  \draw[bus]  (drv.east) -- (dut.west) node[lbl, pos=0.55]{\texttt{scl}/\texttt{sda}};
-  \draw[edge] (dut.south west) to[out=225,in=0] node[lbl, pos=0.45]{observe} (mon.east);
-  \node[ext] at (5.6,-1.6) {\texttt{scl}, \texttt{sda}\\(open-drain / push-pull)};
-  \node[comp, fill=orange!10, text width=3.0cm] (scb) at (-5.4,-1.8) {to \texttt{i3c\_scoreboard}};
-  \draw[edge] (mon.west) -- (scb.east) node[lbl, pos=0.5]{\texttt{analysis\_port}};
-\end{tikzpicture}}
-\caption[I3C Target agent: driver and monitor]{The I3C Target agent. The driver walks a
-  \DriverPhaseCount-phase FSM (\texttt{DrvIdle}\,\ldots\,\texttt{DrvDAA}) that responds to the
-  controller as a Target, while the protocol-aware monitor captures the address, per-byte T-Bit or
-  ACK, and framing, assembling each transfer into an \texttt{i3c\_item} for the scoreboard.}
-\label{fig:verif-i3c-agent}
-\end{figure}
+Sequence response của Target cấu hình Static/Dynamic Address, payload, điểm NACK, T-Bit kết thúc và bộ
+thông tin PID/BCR/DCR. Protocol context phân biệt ENTDAA, Direct CCC và Broadcast CCC để cùng một Address
+Header được phản hồi đúng theo pha trước đó. Driver không dùng delay tùy ý; nó đồng bộ theo cạnh SCL và
+event trong interface.
 
-\section{Environment, virtual sequencer, and class hierarchy}
-\label{sec:env-hierarchy}
+\section{Virtual Sequencer và thư viện Virtual Sequence}
+\label{sec:ver-vseq}
 
-The environment class \texttt{i3c\_env} aggregates the register agent, the I3C agent, the
-virtual sequencer, the scoreboard, and the four coverage subscribers of \cref{sec:coverage},
-all constructed from a single configuration object distributed through
-\texttt{uvm\_config\_db} (\cref{fig:verif-env}). The virtual sequencer holds handles to both
-real sequencers, which is what lets a virtual sequence interleave register-bus programming
-with bus-side Target responses. The analysis wiring is made in \texttt{connect\_phase}: each
-agent monitor's analysis port is connected to the corresponding analysis FIFO in the
-scoreboard, realising the TLM path of \cref{sec:scoreboard}, and the same two monitor ports
-also fan out to the register-stream and bus-stream coverage collectors, while the driver's
-DAA-arbitration port and the scoreboard's \texttt{correlated\_ap} feed the remaining two.
-The scoreboard and the monitor are enabled through configuration fields, so the same
-environment can be built with or without active checking; the correlated collector is built
-only together with the scoreboard that feeds it.
+Virtual Sequencer giữ handle đến Register Sequencer và I3C Sequencer. Virtual Sequence khởi động Target
+response sequence, cấu hình DUT qua Register Agent, phát Command Descriptor và chờ các hoạt động hoàn tất.
+Nhờ đó, stimulus hai phía được điều phối trong một kịch bản duy nhất mà hai Agent vẫn tái sử dụng độc lập.
 
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    blk/.style={draw, rounded corners=2pt, very thick, align=center, minimum height=8mm},
-    test/.style={blk, fill=blue!8, text width=3.6cm},
-    env/.style={blk, fill=orange!12, text width=3.6cm},
-    comp/.style={blk, fill=white, text width=3.0cm, minimum height=11mm},
-    cfg/.style={draw, dashed, rounded corners=2pt, fill=green!10, align=center, text width=3.2cm, font=\scriptsize},
-    edge/.style={-{Stealth[length=4pt]}, thick, black!60},
-    cfgedge/.style={-{Stealth[length=3pt]}, dashed, thick, green!45!black},
-  ]
-  \node[test] (test) at (0,3.4) {\texttt{i3c\_base\_test}};
-  \node[env]  (env)  at (0,1.5) {\texttt{i3c\_env}};
-  \node[comp] (ra) at (-5.4,-1.1) {\texttt{m\_reg\_agent}\\[-1pt]\scriptsize \texttt{reg\_agent}};
-  \node[comp] (ia) at (-1.8,-1.1) {\texttt{m\_i3c\_agent}\\[-1pt]\scriptsize \texttt{i3c\_agent}};
-  \node[comp] (vs) at ( 1.8,-1.1) {\texttt{m\_vsequencer}\\[-1pt]\scriptsize \texttt{i3c\_virtual\_sequencer}};
-  \node[comp] (sb) at ( 5.4,-1.1) {\texttt{m\_scoreboard}\\[-1pt]\scriptsize \texttt{i3c\_scoreboard}};
-  \node[blk, fill=green!12, text width=10.6cm, minimum height=10mm] (cov) at (0,-3.3)
-    {coverage subscribers\\[-1pt]\scriptsize \texttt{m\_reg\_coverage} $\cdot$
-     \texttt{m\_i3c\_coverage} $\cdot$ \texttt{m\_daa\_arb\_coverage} $\cdot$
-     \texttt{m\_correlated\_coverage}};
-  \draw[edge] (test) -- (env);
-  \draw[edge] (env.south) -- (ra.north);
-  \draw[edge] (env.south) -- (ia.north);
-  \draw[edge] (env.south) -- (vs.north);
-  \draw[edge] (env.south) -- (sb.north);
-  \draw[edge] (env.south) -- (cov.north);
-  \node[cfg] (cfg) at (5.6,2.1) {\texttt{uvm\_config\_db}\\ delivers \texttt{i3c\_env\_cfg}};
-  \draw[cfgedge] (cfg) -- (env);
-\end{tikzpicture}}
-\caption[Environment class hierarchy]{The environment hierarchy. \texttt{i3c\_base\_test} builds
-  \texttt{i3c\_env}, which aggregates the register agent, the I3C Target agent, the virtual
-  sequencer, the scoreboard, and the four coverage subscribers of \cref{sec:coverage}. A single
-  \texttt{i3c\_env\_cfg} is distributed through \texttt{uvm\_config\_db}, from which each agent
-  takes its own configuration.}
-\label{fig:verif-env}
-\end{figure}
+Thư viện hiện được chia thành mười nhóm. \Cref{tab:vseq-cat} trình bày số lớp chạy được được đếm từ
+\texttt{i3c\_vseq\_list.sv}; các base class không nằm trong tổng. Danh sách tên đầy đủ được đặt tại
+\cref{app:vseq}.
 
-\section{Virtual-sequence library}
-\label{sec:vseq-library}
-
-All scenario behaviour lives in the virtual-sequence library, whose sequences extend a common
-\texttt{i3c\_base\_vseq}. There are \RunnableVseqCount{} runnable scenarios, grouped by the
-protocol or structural area they exercise. \Cref{tab:verif-vseqs} gives the per-category
-counts and focus; the complete per-sequence inventory, with the one-line intent of each, is
-relocated to \cref{app:vseq-inventory} to keep this chapter within its page budget. The counts
-exclude the per-category abstract base sequences and a shared ENTDAA stimulus helper, which
-are infrastructure rather than runnable tests.
-
-\begin{table}[!htb]\centering
-  \caption{Virtual-sequence library by category (runnable scenarios; full inventory in
-    \cref{app:vseq-inventory}).}
-  \label{tab:verif-vseqs}
-  \small
-  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.30\textwidth} c
-                    >{\raggedright\arraybackslash}p{0.46\textwidth}@{}}
+\begin{table}[H]
+  \centering
+  \caption{Phân loại thư viện Virtual Sequence.}
+  \label{tab:vseq-cat}
+  \begin{tabular}{L{3.0cm} C{1.6cm} L{8.5cm}}
     \toprule
-    \textbf{Category} & \textbf{Count} & \textbf{Focus} \\
+    \textbf{Nhóm} & \textbf{Số lượng} & \textbf{Mục tiêu chính} \\
     \midrule
-    CSR / DAT / register bus      & 14 & register read/write, DAT, reset, queue staging \\
-    FIFO / queue                  & 4  & push/pop order, full/empty, flush \\
-    PHY / bus / timing            & 11 & START/Sr/STOP, SCL timing, byte/bit order, OD/PP \\
-    SDR private write             & 5  & length sweep, ToC, back-to-back, multi-DAT \\
-    SDR private read              & 6  & length sweep, over-read, ToC, back-to-back, multi-DAT \\
-    Immediate transfer           & 4  & DTT sweep, ToC, \iic{} immediate write \\
-    CCC (ENEC/DISEC/ENTDAA frame) & 5  & broadcast and direct ENEC/DISEC, ENTDAA opening \\
-    ENTDAA / DAA                  & 6  & single/multi device, no device, rejection, boundary \\
-    ENTDAA multi-Target arbitration & 1 & open-drain wired-AND identity arbitration \\
-    \iic{} legacy                 & 3  & regular write/read, partial-RX length sweep \\
-    Error / status / recovery     & 21 & NACK, FIFO under/overflow, aborts, HC-abort, invalid descriptor, reset policy \\
+    Bus & 11 & PHY, START/Sr/STOP, timing, serializer và pad model. \\
+    CSR & 14 & Default, DAT, Command staging, status, reset và unmapped access. \\
+    FIFO & 5 & Thứ tự, full/empty, đồng thời read/write, flush và wrap. \\
+    SDR write & 5 & Nominal, length sweep, back-to-back, DAT index và \texttt{toc}. \\
+    SDR read & 6 & Nominal, length, early end, back-to-back, DAT index và \texttt{toc}. \\
+    Immediate Data & 4 & DTT, I3C/I\textsuperscript{2}C, \texttt{toc} và payload trong Descriptor. \\
+    CCC & 5 & Broadcast/Direct ENEC, DISEC và frame mở đầu ENTDAA. \\
+    DAA & 6 & Không Target, một/nhiều Target, address reject và biên DAT. \\
+    I\textsuperscript{2}C & 3 & Read, write và length/partial RX. \\
+    Response/error & 21 & NACK, overflow, underflow, abort, reset, backpressure và unsupported. \\
     \midrule
-    \textbf{Total}                & \textbf{\RunnableVseqCount{}} & \\
+    \textbf{Tổng} & \textbf{80} & Không tính bốn base class/helper. \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\section{Build and run flow}
-\label{sec:build-flow}
+Mỗi Virtual Sequence tập trung vào behavior riêng của test. Chẳng hạn, test length sweep tạo nhiều độ dài
+nhưng không tự kiểm tra response success vì Scoreboard đã đảm nhiệm. Test error chỉ cấu hình điểm lỗi và
+kiểm tra policy đặc thù nếu cần. Quy tắc này hạn chế duplicate checking và làm failure dễ truy vết.
 
-Simulation is driven from a Makefile in \texttt{src/verification/}. The Xcelium environment
-must be sourced once per shell before invoking any target. The core targets are
-\texttt{compile} (compile and elaborate only) and \texttt{sim SEQ=\textit{name}}, which runs
-one scenario by passing it through \texttt{+UVM\_TEST\_SEQ} as described in
-\cref{sec:test-stack}. On top of these sit per-area regression targets and an aggregate
-\texttt{regression} target that runs them all; coverage and waveform dumping are enabled by
-the \texttt{COV=1} and \texttt{DUMP\_WAVES=1} switches. \Cref{tab:verif-make} summarises the
-targets; the explicit per-target sequence lists are reproduced in \cref{app:build}.
+\section{Quy trình build, run và debug}
+\label{sec:ver-run}
 
-\begin{table}[!htb]\centering
-  \caption{Makefile targets (full sequence lists in \cref{app:build}).}
-  \label{tab:verif-make}
-  \small
-  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.34\textwidth}
-                    >{\raggedright\arraybackslash}p{0.58\textwidth}@{}}
+Các target được chạy từ \texttt{src/verification} vì filelist dùng đường dẫn tương đối. Hai lệnh cơ bản là:
+
+\begin{lstlisting}[language=bash]
+make sim TEST=i3c_base_test SEQ=<sequence_name> SEED=<seed>
+make sim TEST=i3c_base_test SEQ=<sequence_name> SEED=<seed> COV=1
+\end{lstlisting}
+
+\texttt{make compile} thực hiện compile và elaborate. \texttt{make regression} gọi lần lượt các nhóm CSR,
+FIFO, bus, SDR write/read, Immediate Data, I\textsuperscript{2}C, CCC, DAA và error. Danh sách target và
+quy trình tạo coverage report được ghi tại \cref{app:build}.
+
+Quy trình debug bắt đầu từ phần tổng kết UVM và message đầu tiên có mức \texttt{UVM\_ERROR} hoặc
+\texttt{UVM\_FATAL}. Tiếp theo, assertion label hoặc Scoreboard mismatch được dùng để xác định lớp lỗi.
+Khi cần waveform debugging, simulation được chạy lại với \texttt{DUMP\_WAVES=1}; SimVision được dùng để
+theo dõi chuỗi Virtual Sequence $\rightarrow$ Driver $\rightarrow$ DUT $\rightarrow$ Monitor
+$\rightarrow$ Scoreboard. Seed, tên Sequence và command line phải được lưu cùng log để tái tạo lỗi.
+
+Một test chỉ đạt khi process simulation hoàn tất và UVM summary có zero error/fatal. Lệnh được pipe qua
+\texttt{tee}, nên exit code của shell không đủ để kết luận. Coverage run có thêm bước kiểm tra database và
+report; tỷ lệ coverage không thay thế điều kiện pass của test.
+
+\section{Ánh xạ yêu cầu và tổng kết chương}
+\label{sec:ver-summary}
+
+\begin{table}[H]
+  \centering
+  \caption{Ánh xạ yêu cầu sang cơ chế kiểm chứng chính.}
+  \label{tab:req-ver-map}
+  \begin{tabular}{C{1.5cm} L{4.0cm} L{7.5cm}}
     \toprule
-    \textbf{Target} & \textbf{Action} \\
+    \textbf{Yêu cầu} & \textbf{Stimulus} & \textbf{Cơ chế kiểm tra} \\
     \midrule
-    \texttt{compile}            & compile + elaborate only \\
-    \texttt{sim SEQ=\textit{n}} & run one scenario by name \\
-    \texttt{smoke}              & single smoke scenario \\
-    \texttt{regression}         & run all category regressions in sequence \\
-    \texttt{csr/fifo/bus\_regression} & CSR, FIFO, and bus/PHY/timing suites \\
-    \texttt{sdrw/sdrr/sdr\_regression} & SDR write, SDR read, and combined SDR suites \\
-    \texttt{imm/i2c/ccc/daa\_regression} & immediate, \iic{}, CCC, and DAA suites \\
-    \texttt{err\_regression}    & error/status/recovery suite \\
-    \texttt{coverage}           & \texttt{sim} with \texttt{COV=1} \\
-    \texttt{waves}              & \texttt{sim} with \texttt{DUMP\_WAVES=1} \\
-    \texttt{clean}              & remove build, log, wave, and coverage artifacts \\
+    F1--F3 & SDR write/read, Immediate Data vseq & I3C Monitor, Scoreboard, T-Bit SVA và correlated coverage. \\
+    F4 & CCC vseq & CCC context trong Driver, Scoreboard opcode/frame và CCC coverage. \\
+    F5 & DAA vseq & ENTDAA Target model, DAT/RX model, FSM SVA và DAA coverage. \\
+    F6 & I\textsuperscript{2}C vseq & ACK/NACK model, payload Scoreboard và timing SVA. \\
+    F7 & CSR/FIFO vseq & Register Scoreboard, FIFO/CSR SVA và register coverage. \\
+    F8 & Response/error vseq & Expected response model và status cross coverage. \\
+    F9 & Error/reset/abort vseq & Recovery model, abort SVA và pad-model SVA. \\
+    F10 & CSR timing và bus timing vseq & CSR readback, SCL measurement và timing cover property. \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\section{Waveform and debug workflow}
-\label{sec:debug-flow}
-
-When a scenario is run with \texttt{DUMP\_WAVES=1}, the testbench writes an SHM database under
-\texttt{waves/\textit{SEQ}/} that is opened in SimVision for inspection. The events worth
-annotating when debugging a transfer are the START and Repeated-START conditions, the address
-acknowledge, the per-byte T-Bit on I3C and ACK on \iic{}, the open-drain-to-push-pull
-hand-over at the start of the data phase, and the closing STOP. This workflow is the bridge
-between a scoreboard failure and its root cause in the RTL; the specific annotated waveforms
-that serve as evidence for the implemented protocol modes are presented in \cref{ch:results},
-not here.
-
-\section{Chapter summary and evidence hand-off}
-\label{sec:verif-summary}
-
-This chapter defined the verification method and the environment that realises it. The method
-is directed-first stimulus measured by functional coverage; the environment is a UVM~1.2
-testbench on Xcelium with a custom register agent, a protocol-aware I3C Target agent, a
-substantive self-checking scoreboard fed over a TLM analysis path, and \SvaCheckerCount{}
-assertion checkers bound to the RTL. Every verification goal of \cref{sec:verif-goals} maps to
-a concrete mechanism: protocol-mode correctness to directed virtual sequences and the
-scoreboard's data, T-Bit, and response checks; structural invariants to the bound SVA;
-exercised-space measurement to the functional covergroups; and robustness to the watchdog and
-end-of-test residue check. With the method and environment established, \cref{ch:results}
-presents the measured evidence --- regression results, coverage, and annotated waveforms ---
-and \cref{ch:conclusion} discusses the limitations of this environment and the work left for
-future extension.
+Môi trường kết hợp Register Agent và I3C Target Agent dưới Virtual Sequencer, dùng Scoreboard để kiểm tra
+xuyên suốt, SVA để kiểm tra thuộc tính cục bộ và Functional Coverage để đo mức độ exercise. Cấu trúc này
+bao phủ cả software-visible register interface lẫn protocol behavior mà không đặt logic kiểm tra trong
+Virtual Sequence. Các số liệu pass/fail, uncovered bin và mức closure được tách sang \cref{ch:results} để
+phương pháp kiểm chứng không phụ thuộc vào một lần chạy cụ thể.

@@ -1,0 +1,74 @@
+\chapter{Bảng trạng thái đầy đủ các máy trạng thái}
+\label{app:fsm}
+
+Phụ lục này liệt kê đầy đủ các trạng thái của mọi máy trạng thái trong lõi giao thức, bổ trợ cho
+\cref{ch:architecture}. Tên trạng thái giữ nguyên định danh RTL.
+
+\section*{\texttt{scl\_generator} — 14 trạng thái}
+
+\begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
+  \toprule
+  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
+  \midrule\endhead
+  0  & \texttt{Idle}             & Chờ yêu cầu phát START/xung nhịp. \\
+  1  & \texttt{GenerateStart}    & Bắt đầu tạo điều kiện START. \\
+  2  & \texttt{SdaFall}          & Kéo SDA xuống khi SCL cao. \\
+  3  & \texttt{HoldStart}        & Giữ điều kiện START. \\
+  4  & \texttt{DriveLow}         & Kéo SCL xuống (nửa chu kỳ thấp). \\
+  5  & \texttt{DriveHigh}        & Thả SCL lên (nửa chu kỳ cao). \\
+  6  & \texttt{WaitCmd}          & Chờ lệnh/dữ liệu tiếp theo giữa chừng. \\
+  7  & \texttt{GenerateRstart}   & Bắt đầu tạo Repeated START. \\
+  8  & \texttt{SclHighForRstart} & Đưa SCL lên để chuẩn bị Sr. \\
+  9  & \texttt{RstartSdaFall}    & Kéo SDA xuống cho Sr (đường tắt takeover). \\
+  10 & \texttt{GenerateStop}     & Bắt đầu tạo điều kiện STOP. \\
+  11 & \texttt{SclHighForStop}   & Đưa SCL lên để chuẩn bị STOP. \\
+  12 & \texttt{SdaRise}          & Thả SDA lên khi SCL cao (STOP). \\
+  13 & \texttt{BusFree}          & Đợi khoảng Bus Free sau STOP. \\
+  \bottomrule
+\end{longtable}
+
+\section*{\texttt{entdaa\_controller} — 7 trạng thái}
+
+\begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
+  \toprule
+  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
+  \midrule\endhead
+  0 & \texttt{Idle}          & Chờ khởi động ENTDAA. \\
+  1 & \texttt{StartLoop}     & Bắt đầu một vòng gán địa chỉ. \\
+  2 & \texttt{RequestRStart} & Yêu cầu Repeated START. \\
+  3 & \texttt{WaitRStart}    & Chờ Sr hoàn tất. \\
+  4 & \texttt{ReadDAT}       & Đọc mục DAT lấy Dynamic Address dự kiến. \\
+  5 & \texttt{RunEntdaa}     & Chạy một vòng gán qua \texttt{entdaa\_fsm}. \\
+  6 & \texttt{Done}          & Kết thúc khi không còn Target đáp ứng. \\
+  \bottomrule
+\end{longtable}
+
+\section*{\texttt{entdaa\_fsm} — 8 trạng thái}
+
+\begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
+  \toprule
+  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
+  \midrule\endhead
+  0 & \texttt{Idle}         & Chờ bắt đầu trình tự một Target. \\
+  1 & \texttt{SendRsvdByte} & Phát byte broadcast dành riêng. \\
+  2 & \texttt{ReadRsvdAck}  & Đọc ACK của byte dành riêng. \\
+  3 & \texttt{ReceiveIDBit} & Nhận 64 bit PID/BCR/DCR theo phân xử. \\
+  4 & \texttt{SendAddr}     & Phát Dynamic Address kèm parity. \\
+  5 & \texttt{ReadAddrAck}  & Đọc ACK địa chỉ từ Target. \\
+  6 & \texttt{WaitStop}     & Chờ điều kiện dừng. \\
+  7 & \texttt{Done}         & Hoàn tất một vòng. \\
+  \bottomrule
+\end{longtable}
+
+\section*{Các máy trạng thái tuần tự hóa}
+
+\texttt{bus\_tx} (5 trạng thái): \texttt{Idle}, \texttt{AwaitClockNegedge}, \texttt{SetupData},
+\texttt{TransmitData}, \texttt{HoldData}.
+
+\texttt{bus\_tx\_flow} (4 trạng thái): \texttt{Idle}, \texttt{DriveByte}, \texttt{DriveBit},
+\texttt{NextTaskDecision}.
+
+\texttt{bus\_rx\_flow} (4 trạng thái): \texttt{Idle}, \texttt{ReadByte}, \texttt{ReadBit},
+\texttt{NextTaskDecision}.
+
+\noindent Bảng 13 trạng thái của \texttt{flow\_active} đã trình bày ở \cref{tab:flow-states}.

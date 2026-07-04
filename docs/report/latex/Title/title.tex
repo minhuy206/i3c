@@ -1,0 +1,53 @@
+% fix anchor bug
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+
+\begin{center}
+\textbf{ĐẠI HỌC QUỐC GIA THÀNH PHỐ HỒ CHÍ MINH\\
+TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN\\
+KHOA ĐIỆN TỬ - VIỄN THÔNG}\\[2cm]
+
+{ \Large \bfseries \tenSV \\[2cm] }
+
+{ \Large \bfseries \tenKL \\[5cm]}
+
+\large KHÓA LUẬN TỐT NGHIỆP CỬ NHÂN\\
+\large NGÀNH KỸ THUẬT ĐIỆN TỬ - VIỄN THÔNG
+
+\begin{tikzpicture}[remember picture, overlay]
+  \draw[line width = 2pt] ($(current page.north west) + (2cm,-2cm)$) rectangle ($(current page.south east) + (-1.5cm,2cm)$);
+\end{tikzpicture}
+
+\vfill
+Tp. Hồ Chí Minh - Năm 2026
+
+\end{center}
+
+\pagebreak
+\myemptypage
+
+\begin{center}
+\textbf{ĐẠI HỌC QUỐC GIA THÀNH PHỐ HỒ CHÍ MINH\\
+TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN\\
+KHOA ĐIỆN TỬ - VIỄN THÔNG}\\[2cm]
+
+\large \textbf{KHÓA LUẬN TỐT NGHIỆP CỬ NHÂN}\\
+\large \textbf{NGÀNH KỸ THUẬT ĐIỆN TỬ - VIỄN THÔNG}\\[2cm]
+
+{ \Large \bfseries \tenKL \\[2cm] }
+
+{\bfseries Họ và tên sinh viên: \tenSV\\
+Mã số SV: \mssv\\[2cm]}
+
+NGƯỜI HƯỚNG DẪN KHOA HỌC\\
+\tenGVHD
+
+\vfill
+Tp. Hồ Chí Minh - Năm 2026
+
+\end{center}
+\thispagestyle{empty}
+\myemptypage
+
+\end{titlepage}
+\hypersetup{pageanchor=true}

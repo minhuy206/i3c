@@ -1,57 +1,60 @@
-\chapter{Introduction}
+\chapter{Giới thiệu}
 \label{ch:intro}
 
-% DRAFT BRIEF: keep under ~8 pages; frame topic, justify, declare scope, preview
-% structure. Defer architectural detail to Ch.4. Attribute CHIPS Alliance i3c-core
-% (commit SHA). Sources: outline PDF, improvements.md, phase1_spec_v2.md.
+\section{Động lực và phát biểu bài toán}
+\label{sec:intro-motivation}
 
-\section{I3C in SoC trends and motivation}
-\brief{Establish why I3C matters: modern SoCs aggregate many sensors/peripherals over
-slow two-wire buses; \iic{} is ubiquitous but limited (Open Drain (OD) speed ceiling, Static
-Address only, no In-Band Interrupt, pull-up power). MIPI I3C Basic answers these (Push-Pull (PP)
-SDR up to \SI{12.5}{\mega\hertz} here, Dynamic Address Assignment) while staying backward-compatible
-with legacy \iic{} Targets on the same bus. Motivate a simplified single-Controller design
-as a self-contained front-end digital-IC design exercise (RTL to UVM).}
+SoC (System-on-Chip) hiện đại thường tích hợp nhiều cảm biến, mạch quản lý nguồn và ngoại vi điều khiển.
+Nhóm ngoại vi này cần một liên kết có số chân thấp, hỗ trợ nhiều Target và có chi phí tích hợp nhỏ. Bus
+I\textsuperscript{2}C đáp ứng tốt yêu cầu kết nối hai dây và đã được sử dụng rộng rãi trong hệ thống nhúng.
+Tuy nhiên, cơ chế Open Drain của I\textsuperscript{2}C làm tốc độ phụ thuộc vào điện trở kéo lên và điện
+dung bus; Fast Mode được giới hạn ở 400~kHz. I\textsuperscript{2}C cũng sử dụng Static Address và không có
+cơ chế quản lý Target tương đương Dynamic Address Assignment của I3C~\cite{nxp_i2c,mipi_i3c_basic}.
 
-\figph{I3C in an SoC context}
-  {application processor + I3C Controller driving mixed I3C/\iic{} Target devices on one bus}
-  {conceptual}{TikZ block diagram}
+MIPI I3C Basic được xây dựng để duy trì cấu trúc SDA/SCL và khả năng cùng tồn tại với Target
+I\textsuperscript{2}C, đồng thời bổ sung truyền SDR bằng Push-Pull, Dynamic Address Assignment và Common
+Command Code. Với SDR, tần số SCL danh định có thể đạt 12,5~MHz~\cite{mipi_i3c_basic}. Do đó, việc hiện thực
+một I3C Active Controller không chỉ là bài toán tuần tự hóa dữ liệu. Thiết kế còn phải điều phối pha Open
+Drain và Push-Pull, tạo đúng START, Repeated START và STOP, quản lý Descriptor và Data Buffer, xử lý lỗi,
+đồng thời cung cấp giao diện thanh ghi cho phần mềm truy cập.
 
-\section{Problem statement and objectives}
-\brief{Problem: the CHIPS Alliance \texttt{i3c-core} reference is a full-featured
-($\sim$25k-line) HCI-compliant design that is hard to study and leaves several
-\texttt{flow_active} FSM states as TODO. Objective: derive a substantially simplified
-single-Controller design that completes all \FlowStateCount{}
-\texttt{flow_active} states, then verify it in a dual-agent UVM 1.2 environment.
-Deliverables: SDR write/read/immediate + \iic{}-FM + ENTDAA + ENEC/DISEC plus a regression suite.}
+Khóa luận giải quyết bài toán trên ở mức IP số có thể tổng hợp. Điểm xuất phát là dự án mã nguồn mở CHIPS
+Alliance \texttt{i3c-core}, một thiết kế được tích hợp trong hệ sinh thái Caliptra~\cite{chipsalliance_i3c}.
+Thiết kế tham chiếu cung cấp các cấu trúc giao thức và HCI hữu ích, nhưng phạm vi tích hợp của dự án lớn
+hơn nhu cầu của một Active Controller độc lập. Vì vậy, khóa luận lựa chọn lại ranh giới chức năng, xây dựng
+đường điều khiển RTL gọn hơn và hoàn thiện luồng phát lệnh cho tập tính năng mục tiêu. Việc kiểm chứng được
+thực hiện bằng SystemVerilog, UVM~1.2 và Cadence Xcelium; SimVision được dùng cho waveform
+debugging~\cite{ieee1800,uvm12_ug,cadence_xcelium}.
 
-\section{Scope and constraints}
-\brief{In scope: SDR private write/read, Immediate Data Transfer ($\le 4$ inline bytes),
-\iic{} Fast-Mode \SI{400}{\kilo\hertz} legacy traffic, START / Repeated START (Sr) / STOP +
-Bus Free Condition handling, OD/PP switching, ENTDAA Dynamic Address Assignment, ENEC/DISEC CCCs,
-32-bit register interface, 32-entry Device Address Table (DAT), four sync FIFOs. Out of scope
-(deliberate): In-Band Interrupt (IBI), Hot-Join, HDR, \iic{} FM+, Secondary Controller
-(multi-Controller), Target mode, bus recovery, full HCI / Device Characteristics Table (DCT),
-other CCCs. Constraint: single clock domain, $\ge \SI{333}{\mega\hertz}$ system clock to meet SCL timing.}
+Kết quả được đánh giá trên ba lớp bằng chứng. Thứ nhất, Scoreboard đối chiếu giao dịch giữa giao diện phần
+mềm và bus. Thứ hai, SVA kiểm tra các thuộc tính cục bộ của RTL. Thứ ba, Functional Coverage đo mức độ kích
+hoạt các tình huống đã mô hình hóa. Số liệu của baseline, regression suite và coverage được trình bày tại
+\cref{ch:results}.
 
-\tabph{In-scope vs out-of-scope summary}{phase1_spec_v2.md, scope analysis}
+\section{Mục tiêu và phạm vi}
+\label{sec:intro-objective}
 
-\section{Contributions}
-\brief{Headline contributions (refine numbers after Ch.9), led by the design result rather than
-the size figure: (1) all \FlowStateCount{} \texttt{flow_active} states implemented vs the reference's TODO paths;
-(2) a compact, studyable single-Controller design (PHY to protocol to register layers, $\sim$2k lines)
-retaining SDR + \iic{}-FM + ENTDAA after deliberately scoping out IBI/HDR/Secondary-Controller/Target-mode ---
-the LoC figure and its scope caveat are reported once, in Ch.9, not headlined here; (3) dual-agent
-UVM 1.2 environment (register agent + I3C Target agent) with scoreboard + SVA; (4) first ENTDAA-capable
-Active Controller built in the lab.}
+Mục tiêu chính của khóa luận là thiết kế và kiểm chứng một I3C Active Controller bằng SystemVerilog RTL.
+Thiết kế phải cung cấp một luồng xử lý hoàn chỉnh từ Command Descriptor do phần mềm ghi vào, qua khối điều
+khiển giao thức, đến hoạt động trên SDA/SCL và Response Descriptor trả về. Các mục tiêu cụ thể gồm:
 
-\tabph{Contributions summary}{refine after Ch.9}
+\begin{itemize}
+  \item xây dựng kiến trúc phân lớp giữa software-visible register interface, khối Active Controller và
+  lớp PHY;
+  \item triển khai các luồng SDR private write, SDR private read, Immediate Data Transfer, một số CCC được lựa chọn, ENTDAA và giao dịch với Target I\textsuperscript{2}C Fast Mode;
+\item xây dựng cấu trúc Command Queue, Response Queue, TX/RX Data Buffer và DAT nhằm tách giao tiếp với phần mềm khỏi phần quá trình xử lý trên bus;
+  \item xây dựng môi trường UVM gồm Register Agent, I3C Target Agent, Virtual Sequencer, Scoreboard,
+  Functional Coverage và SVA;
+  \item đánh giá thiết kế bằng regression test, coverage và các kết quả triển khai có khả năng tái lập.
+\end{itemize}
 
-\section{Thesis organisation}
-\brief{One short paragraph per chapter (2--10) mapping the reading path: Background,
-Requirements, Architecture, RTL, Verification methodology, UVM environment, Results,
-Conclusion. Note Ch.8 (FPGA) is omitted and appears only as future work.}
+Phạm vi của đề tài là một I3C Active Controller hỗ trợ SDR private transfer, các CCC được chọn, ENTDAA và hỗ trợ
+tương thích I\textsuperscript{2}C Fast Mode. HDR, In-Band Interrupt, Hot-Join, Secondary
+Controller, Target mode và FPGA validation không nằm trong phạm vi triển khai. Các yêu cầu chi tiết, tiêu chí đánh giá, và tiêu chí kiểm chứng được trình bày tại
+\cref{sec:req}; các giới hạn của thiết kế và kết quả đánh giá được tổng kết tại \cref{ch:conclusion}.
 
-\figph{Thesis-organisation roadmap}
-  {chapter dependency / reading-order flow (Theory to RTL to UVM to Results)}
-  {conceptual}{TikZ}
+\section{Bố cục khóa luận}
+\label{sec:intro-outline}
+
+Khóa luận gồm sáu chương. \Cref{ch:introduction} giới thiệu bối cảnh, mục tiêu, phạm vi và cấu trúc của đề tài. \Cref{ch:background-requirements} trình bày cơ sở lý thuyết cần thiết và xác định yêu cầu hệ thống. \Cref{ch:architecture} mô tả kiến trúc phân lớp, luồng dữ liệu và các quyết định thiết kế RTL, với trọng tâm là FSM \texttt{flow_active}. \Cref{ch:verification} trình bày chiến lược kiểm chứng và cấu trúc môi trường UVM. \Cref{ch:results} trình bày kết quả baseline, kết quả regression, coverage, quy mô triển khai và đánh giá theo yêu cầu. Cuối cùng, \cref{ch:conclusion} tổng kết kết quả, nêu các giới hạn và đề xuất hướng phát triển. Các bảng tra cứu chi tiết về CSR, Descriptor, FSM, CCC, quy trình chạy và Virtual Sequence được đặt trong phụ lục nhằm giữ phần nội dung chính tập trung vào các quyết định thiết kế và kết quả kiểm chứng.
+

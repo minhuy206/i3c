@@ -1,0 +1,40 @@
+\chapter{Hướng dẫn build và chạy mô phỏng}
+\label{app:build}
+
+Phụ lục này liệt kê các lệnh \texttt{make} để biên dịch và chạy môi trường kiểm chứng, bổ trợ cho
+\cref{sec:ver-run}. Mọi lệnh chạy từ thư mục \texttt{src/verification/} với trình mô phỏng Cadence Xcelium
+(\texttt{xrun}) và UVM 1.2.
+
+\section*{Biên dịch và chạy một kịch bản}
+
+\begin{lstlisting}[language=bash]
+make compile                              # compile + elaborate
+make sim SEQ=i3c_write_vseq               # run one Virtual Sequence
+make sim SEQ=i3c_write_vseq DUMP_WAVES=1  # + waveform dump (waves/<SEQ>/)
+make sim SEQ=i3c_write_vseq COV=1         # + coverage collection
+make sim SEQ=i3c_write_vseq SEED=12345 VERBOSITY=UVM_HIGH
+\end{lstlisting}
+
+\section*{Các bộ hồi quy}
+
+\begin{lstlisting}[language=bash]
+make smoke            # one smoke test
+make regression       # smoke + write + read
+make csr_regression   # 13 CSR tests
+make fifo_regression  # 4 FIFO tests + elaboration guard
+make bus_regression   # 11 bus-level tests
+make sdrw_regression  # 8 SDR write tests
+make sdrr_regression  # 9 SDR read tests
+make sdr_regression   # sdrw + sdrr
+\end{lstlisting}
+
+\section*{Tiện ích}
+
+\begin{lstlisting}[language=bash]
+make clean            # remove xcelium.d, logs, waves, coverage artifacts
+make fifo_non_power_of_two_elaboration  # TC FIFO_005: expects elaboration FAIL
+\end{lstlisting}
+
+\noindent Kịch bản \texttt{fifo\_non\_power\_of\_two\_elaboration} \emph{kỳ vọng} elaboration thất bại với
+thông báo \texttt{sync\_fifo: Depth (3) must be a power of 2}; test đạt khi fatal này xuất hiện, minh chứng
+cho khẳng định biên dịch mô tả ở \cref{sec:rtl-queues}.
