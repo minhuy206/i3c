@@ -1,146 +1,108 @@
 \chapter{Phương pháp kiểm chứng và Môi trường UVM}
 \label{ch:verification}
 
-Chương này trình bày cách kiểm chứng implementation ở \cref{ch:architecture} theo các yêu cầu của
-\cref{sec:req}. Nội dung tập trung vào phương pháp, topology, reference model và cách tạo stimulus. Kết
-quả regression và coverage thuộc phạm vi \cref{ch:results}.
+Chương này trình bày cách kiểm chứng implementation ở \cref{ch:architecture} theo các yêu cầu tại
+\cref{sec:req}. Nội dung đi từ mục tiêu và chiến lược, qua kiến trúc môi trường UVM cùng ba cơ chế kiểm
+tra, đến cách tổ chức stimulus và quy trình chạy. Kết quả regression và coverage thuộc phạm vi
+\cref{ch:results} để phương pháp không bị gắn với một lần chạy cụ thể.
 
 \section{Mục tiêu và phạm vi kiểm chứng}
 \label{sec:ver-scope}
 
-Mục tiêu kiểm chứng là phát hiện sai khác giữa hành vi RTL và yêu cầu ở cả hai phía của IP. Phía Host cần
-kiểm tra truy cập CSR, DAT, Command/Response Queue và TX/RX Data Buffer. Phía bus cần kiểm tra SDR private
-write/read, Immediate Data, CCC, ENTDAA và I\textsuperscript{2}C Fast Mode. Các trường hợp lỗi gồm Address
-NACK, data NACK, short read, overflow, underflow, Descriptor không hỗ trợ, abort, reset và backpressure.
+Mục tiêu kiểm chứng là phát hiện sai khác giữa hành vi RTL và yêu cầu ở cả hai phía của IP. Phía Host
+cần kiểm tra truy cập CSR, DAT, Command/Response Queue và TX/RX Data Buffer. Phía bus cần kiểm tra SDR
+private write/read, Immediate Data, CCC, ENTDAA và giao dịch I\textsuperscript{2}C Fast Mode. Các
+trường hợp lỗi phải bao gồm address NACK, data NACK, short read, overflow, underflow, Descriptor không
+hỗ trợ, abort, reset và backpressure --- chính là những nhánh mà mô hình xử lý lỗi ở
+\cref{sec:arch-err} phân biệt.
 
 Testbench được viết bằng SystemVerilog theo UVM~1.2~\cite{ieee1800,uvm12_ug,uvm12_ref}. Cadence Xcelium
-thực hiện compile và simulation; SimVision phục vụ waveform debugging~\cite{cadence_xcelium}. Clock trong
-Testbench có chu kỳ 3~ns, tương ứng 333,333~MHz. Top-level Testbench giảm độ sâu các Queue xuống 8 nhưng
-giữ DAT 32 mục để các boundary case có thời gian simulation ngắn hơn mà không thay đổi protocol behavior.
+thực hiện compile và simulation; SimVision phục vụ waveform debugging~\cite{cadence_xcelium}. Clock
+trong Testbench có chu kỳ 3~ns, tương ứng 333,333~MHz --- đúng chỉ tiêu P1. Top-level Testbench giảm độ
+sâu bốn Queue xuống 8 nhưng giữ DAT đủ 32 mục: các boundary case full/empty xuất hiện sau ít giao dịch
+hơn, trong khi protocol behavior không phụ thuộc độ sâu Queue nên không bị thay đổi.
 
-Phạm vi kiểm chứng bám theo F1--F10. Các tính năng ngoài phạm vi tại \cref{tab:req-oos} không được xem là
-coverage goal. Chẳng hạn, một bin cho IBI hoặc HDR không được tạo chỉ để làm giảm coverage của thiết kế vốn
-không hiện thực các tính năng này.
+Phạm vi kiểm chứng bám theo F1--F10. Các tính năng ngoài phạm vi tại \cref{tab:req-oos} không được xem
+là coverage goal: một bin cho IBI hoặc HDR sẽ chỉ làm giảm tỷ lệ coverage của thiết kế vốn không hiện
+thực các tính năng này mà không đem lại thông tin kiểm chứng nào.
 
 \section{Chiến lược kiểm chứng}
 \label{sec:ver-strategy}
 
-Chiến lược kết hợp directed test và constrained-random stimulus. Directed test phù hợp với reset value,
-opcode CCC, biên DAT và một chuyển tiếp FSM cụ thể. Constrained-random stimulus được dùng cho địa chỉ,
-payload, độ dài và response behavior của Target trong miền hợp lệ. Mỗi Virtual Sequence vẫn có một mục
-tiêu rõ ràng; randomization mở rộng dữ liệu trong kịch bản chứ không thay thế tiêu chí pass/fail.
+Chiến lược kết hợp directed test và constrained-random stimulus. Directed test phù hợp với những hành vi
+có định nghĩa điểm: reset value, opcode CCC, biên DAT, một chuyển tiếp FSM cụ thể. Constrained-random
+stimulus được dùng cho địa chỉ, payload, độ dài và hành vi phản hồi của Target trong miền hợp lệ. Mỗi
+Virtual Sequence vẫn có một mục tiêu duy nhất và được đặt tên theo mục tiêu đó; randomization mở rộng dữ
+liệu bên trong kịch bản chứ không thay thế tiêu chí pass/fail.
 
-Ba cơ chế kiểm tra hoạt động song song:
+Ba cơ chế kiểm tra hoạt động song song và bù trừ điểm mù cho nhau:
 
 \begin{itemize}
   \item Scoreboard xây dựng expected transaction từ truy cập Host và so sánh với transaction do I3C
   Monitor thu được;
   \item SVA kiểm tra invariant và quan hệ theo chu kỳ tại ranh giới module;
-  \item Functional Coverage ghi nhận tình huống và cross quan trọng để đánh giá mức độ kích hoạt.
+  \item Functional Coverage ghi nhận các tình huống và cross quan trọng đã được kích hoạt.
 \end{itemize}
 
-Sự phân vai này tránh đưa mọi kiểm tra vào một thành phần. Scoreboard phù hợp với quan hệ xuyên suốt có
-độ trễ biến đổi. SVA phù hợp với valid/ready, reset, state transition và timing cục bộ. Functional Coverage
-không phát hiện lỗi trực tiếp; nó cho biết những miền nào của không gian kiểm chứng chưa được quan sát.
+Sự phân vai này tránh dồn mọi phép kiểm tra vào một thành phần. Scoreboard mạnh ở các quan hệ xuyên suốt
+có độ trễ biến đổi --- một Command Descriptor có thể mất hàng nghìn chu kỳ mới thành giao dịch trên bus.
+SVA mạnh ở các thuộc tính cục bộ như valid/ready, reset, state transition và timing. Functional Coverage
+không phát hiện lỗi trực tiếp; nó trả lời câu hỏi những miền nào của không gian kiểm chứng chưa từng
+được quan sát, và do đó là thước đo độ tin cậy của hai cơ chế còn lại.
 
 \section{Kiến trúc tổng thể của Testbench}
 \label{sec:ver-arch}
 
-Module \texttt{tb\_i3c\_top} tạo clock/reset, khởi tạo DUT, \texttt{reg\_if} và \texttt{i3c\_if}. Mô hình
-pad dùng net \texttt{wire} có pull-up yếu. SCL của DUT được mô hình theo Open Drain; SDA kết hợp
-\texttt{sda\_o} và \texttt{sda\_oe}. I3C Target Agent có thể kéo hoặc điều khiển SDA theo pha giao thức.
-Virtual interface được chuyển vào UVM bằng \texttt{uvm\_config\_db}.
+Module \texttt{tb\_i3c\_top} tạo clock/reset, khởi tạo DUT cùng hai interface \texttt{reg\_if} và
+\texttt{i3c\_if}, và dựng mô hình pad: SCL và SDA là net \texttt{wire} có pull-up yếu
+(\texttt{pullup(weak1)}), SCL của DUT được nối theo kiểu Open Drain, còn SDA kết hợp \texttt{sda\_o} với
+\texttt{sda\_oe} để tái hiện đúng ngữ nghĩa output-enable của \cref{sec:rtl-phy}. Nhờ mô hình wired-AND
+này, I3C Target Agent có thể kéo SDA đồng thời với DUT như trên bus thật. Virtual interface được chuyển
+vào các component UVM qua \texttt{uvm\_config\_db}.
 
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[>=Latex,font=\scriptsize,node distance=0.55cm and 0.65cm,
-    b/.style={draw,rounded corners,minimum width=2.8cm,minimum height=0.85cm,align=center}]
-    \node[b,fill=blue!8] (test) {UVM Test};
-    \node[b,fill=blue!8,below=of test] (vseq) {Virtual Sequence};
-    \node[b,fill=blue!8,below=of vseq] (vsqr) {Virtual Sequencer};
-    \node[b,fill=green!9,below left=of vsqr] (ra) {Register Agent\\Sequencer/Driver/Monitor};
-    \node[b,fill=green!9,below right=of vsqr] (ia) {I3C Target Agent\\Sequencer/Driver/Monitor};
-    \node[b,fill=orange!10,below=1.0cm of vsqr] (dut) {DUT\\\texttt{i3c\_controller\_top}};
-    \node[b,left=of dut] (scb) {Scoreboard\\reference model};
-    \node[b,right=of dut] (cov) {Functional Coverage\\+ SVA};
-    \draw[->] (test)--(vseq); \draw[->] (vseq)--(vsqr);
-    \draw[->] (vsqr)--(ra); \draw[->] (vsqr)--(ia);
-    \draw[<->,thick] (ra)--(dut); \draw[<->,thick] (ia)--(dut);
-    \draw[->] (ra.west)-|(scb.north); \draw[->] (ia.east)-|(cov.north);
-    \draw[<->] (scb)--(dut); \draw[<->] (dut)--(cov);
-  \end{tikzpicture}
-  \caption{Topology của môi trường UVM.}
-  \label{fig:uvm-topology}
-\end{figure}
-
-\texttt{i3c\_env} khởi tạo Register Agent, I3C Target Agent, Virtual Sequencer, Scoreboard và ba coverage
-component. Hai coverage component nhận transaction riêng của register interface và I3C bus. Component
-\texttt{i3c\_correlated\_coverage} nhận item đã được Scoreboard ghép, nhờ đó có thể cover quan hệ giữa
-Command Descriptor, giao dịch bus và Response Descriptor.
+Cấu trúc UVM xếp theo tầng chuẩn: UVM Test khởi động Virtual Sequence; Virtual Sequence điều phối qua
+Virtual Sequencer; Virtual Sequencer giữ handle đến Sequencer của hai Agent; mỗi Agent gồm Sequencer,
+Driver và Monitor cho interface của mình. \texttt{i3c\_env} khởi tạo Register Agent, I3C Target Agent,
+Virtual Sequencer, Scoreboard và ba coverage component: \texttt{reg\_coverage} nhận transaction từ
+Register Monitor, \texttt{i3c\_coverage} nhận transaction từ I3C Monitor, và
+\texttt{i3c\_correlated\_coverage} nhận item đã được Scoreboard ghép từ cả hai phía, nhờ đó cover được
+quan hệ giữa Command Descriptor, giao dịch bus và Response Descriptor.
 
 \section{Luồng TLM và cơ chế Scoreboard}
 \label{sec:ver-tlm}
 
 Monitor không gọi trực tiếp hàm kiểm tra của Scoreboard. Mỗi Monitor phát transaction qua TLM analysis
-port. Trong \texttt{i3c\_env}, Register Monitor nối đến \texttt{reg\_fifo}; I3C Monitor nối đến
-\texttt{i3c\_fifo}. Hai \texttt{uvm\_tlm\_analysis\_fifo} tách thời điểm sampling khỏi thời điểm xử lý và
-cho phép Scoreboard tương quan hai dòng sự kiện có tốc độ khác nhau.
-
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[>=Latex,font=\small,node distance=0.55cm,
-    b/.style={draw,rounded corners,minimum width=3.0cm,minimum height=0.85cm,align=center}]
-    \node[b] (rm) {Register Monitor};
-    \node[b,right=of rm] (rf) {TLM analysis FIFO\\register transaction};
-    \node[b,below=of rm] (im) {I3C Monitor};
-    \node[b,right=of im] (if) {TLM analysis FIFO\\I3C transaction};
-    \node[b,right=1.0cm of rf] (scb) {Scoreboard\\model + compare};
-    \node[b,below=of scb] (cc) {Correlated Coverage};
-    \draw[->,thick] (rm)--(rf); \draw[->,thick] (im)--(if);
-    \draw[->,thick] (rf)--(scb); \draw[->,thick] (if)--(scb);
-    \draw[->,thick] (scb)--(cc);
-  \end{tikzpicture}
-  \caption{Luồng TLM từ Monitor đến Scoreboard và correlated coverage.}
-  \label{fig:tlm-flow}
-\end{figure}
+port; trong Scoreboard, Register Monitor nối đến \texttt{reg\_fifo} và I3C Monitor nối đến
+\texttt{i3c\_fifo}, đều là \texttt{uvm\_tlm\_analysis\_fifo}. Hai FIFO này tách thời điểm sampling khỏi
+thời điểm xử lý, cho phép Scoreboard tương quan hai dòng sự kiện có nhịp rất khác nhau --- truy cập
+thanh ghi diễn ra theo chu kỳ clock hệ thống, còn giao dịch bus kéo dài theo nhịp SCL.
 
 Reference model của Scoreboard lưu bản sao DAT, Command Descriptor đang chờ, TX data, expected RX data
-và expected response. Khi Register Monitor quan sát hai lần ghi Command Queue port, Scoreboard ghép
-Descriptor, giải mã \texttt{attr}, \texttt{dev\_idx}, \texttt{rnw}, \texttt{toc}, \texttt{wroc}, độ dài
-và transaction ID. Truy cập DAT cập nhật model địa chỉ. Ghi TX Data Buffer bổ sung payload kỳ vọng.
+và expected response. Khi Register Monitor quan sát hai lần ghi vào cổng Command Queue, Scoreboard ghép
+Descriptor 64-bit và giải mã \texttt{attr}, \texttt{dev\_idx}, \texttt{rnw}, \texttt{toc},
+\texttt{wroc}, độ dài cùng transaction ID. Truy cập DAT cập nhật model địa chỉ; ghi TX Data Buffer bổ
+sung payload kỳ vọng. Model do đó luôn phản ánh trạng thái mà phần mềm đã thiết lập, độc lập với RTL.
 
 I3C transaction được kiểm tra theo loại. Với private transfer, Scoreboard so sánh Address Header, RnW,
-payload, ACK/NACK và T-Bit. Với CCC, model kiểm tra opcode, dạng Broadcast/Direct, Target Address và event
-byte. Với ENTDAA, model theo dõi số Target, PID/BCR/DCR, Dynamic Address, address rejection và dữ liệu ghi
-vào RX Data Buffer. Response đọc từ CSR được đối chiếu với error status, transaction ID và data length.
+payload, ACK/NACK và T-Bit. Với CCC, model kiểm tra opcode, dạng Broadcast/Direct, Target Address và
+event byte. Với ENTDAA, model theo dõi số Target, chuỗi PID/BCR/DCR, Dynamic Address được cấp, trường
+hợp address rejection và ba DWORD kết quả ghi vào RX Data Buffer. Response mà Host đọc từ CSR được đối
+chiếu với error status, transaction ID và data length kỳ vọng.
 
-Sau khi hoàn tất phép so sánh, Scoreboard phát \texttt{i3c\_correlated\_item}. Item này mang thông tin đã
-được xác nhận từ cả hai phía, phù hợp để cover các cross như command class--response status, requested
-length--actual length và abort point--recovery. Việc chỉ sampling sau tương quan giảm nguy cơ coverage ghi
-nhận một giao dịch sai như một tình huống hợp lệ.
+Sau khi hoàn tất so sánh, Scoreboard phát \texttt{i3c\_correlated\_item} qua analysis port
+\texttt{correlated\_ap}. Item này mang thông tin đã xác nhận từ cả hai phía, phù hợp cho các cross như
+command class--response status, requested length--actual length hay abort point--recovery. Việc chỉ
+sampling sau khi tương quan thành công loại trừ khả năng coverage ghi nhận một giao dịch sai như một
+tình huống hợp lệ.
 
 \section{Kiểm tra bằng SVA}
 \label{sec:ver-sva}
 
-Chín checker được gắn bằng \texttt{bind} vào RTL. Phạm vi bind gồm top-level, PHY, bus monitor, SCL
-generator, FIFO, CSR, FSM phát lệnh và hai FSM ENTDAA. Checker thứ mười là
-\texttt{tb\_pad\_model\_sva}; checker này được khởi tạo trực tiếp trong Testbench vì cần quan sát cả tín
-hiệu DUT và mô hình net của Testbench.
-
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[font=\scriptsize,node distance=0.35cm and 0.45cm,
-    b/.style={draw,rounded corners,minimum width=3.1cm,minimum height=0.72cm,align=center}]
-    \node[b,fill=green!8] (core) {Protocol core\\\texttt{flow\_active}, ENTDAA};
-    \node[b,fill=green!8,right=of core] (bus) {Bus support\\SCL, monitor, PHY};
-    \node[b,fill=blue!8,below=of core] (host) {Host path\\CSR, FIFO};
-    \node[b,fill=orange!10,right=of host] (pad) {Top-level + pad model};
-    \node[b,below=0.7cm of $(host)!0.5!(pad)$] (sva) {SVA property groups\\assert property + cover property};
-    \draw[->] (core)--(sva); \draw[->] (bus)--(sva); \draw[->] (host)--(sva); \draw[->] (pad)--(sva);
-  \end{tikzpicture}
-  \caption{Nhóm checker SVA theo phạm vi tín hiệu.}
-  \label{fig:sva-map}
-\end{figure}
+Mười checker SVA bao phủ RTL theo phạm vi tín hiệu. Chín checker được gắn bằng \texttt{bind} vào chính
+module đích --- top-level, PHY, bus monitor, SCL generator, \texttt{sync\_fifo}, CSR,
+\texttt{flow\_active} và hai FSM ENTDAA --- nên quan sát được tín hiệu nội bộ mà không sửa RTL. Checker
+thứ mười, \texttt{tb\_pad\_model\_sva}, được khởi tạo trực tiếp trong Testbench vì cần đồng thời quan
+sát tín hiệu DUT và net của mô hình pad.
 
 Các property được chia theo chức năng:
 
@@ -154,55 +116,62 @@ Các property được chia theo chức năng:
   \item tính nhất quán giữa output-enable của DUT, interface và pad model.
 \end{itemize}
 
-Mỗi assertion có label \texttt{ap\_*}; cover property tương ứng dùng label \texttt{cp\_*}. Cover property
-đo việc antecedent và transition đã thực sự xảy ra, giúp phân biệt assertion pass do được kích hoạt với
-property chưa được exercise. Kết quả pass/miss thuộc \cref{ch:results}, không được suy ra từ số lượng
-property trong mã nguồn.
+Mỗi assertion mang label \texttt{ap\_*} và có cover property tương ứng label \texttt{cp\_*}. Cover
+property đo việc antecedent và transition đã thực sự xảy ra, giúp phân biệt assertion pass vì được kích
+hoạt với assertion pass rỗng do chưa bao giờ được exercise. Kết quả pass/miss của các property thuộc
+\cref{ch:results}; số lượng property trong mã nguồn tự nó không phải bằng chứng kiểm chứng.
 
 \section{Chiến lược Functional Coverage}
 \label{sec:ver-cov}
 
-Functional Coverage được tổ chức thành ba lớp. \texttt{reg\_coverage} cover địa chỉ CSR, read/write,
-default value, DAT index, Command/Response Descriptor, timing register và Queue port. \texttt{i3c\_coverage}
-cover transaction quan sát trên bus: loại Address Header, RnW, payload, ACK/NACK, CCC, ENTDAA và T-Bit.
-\texttt{i3c\_correlated\_coverage} cover quan hệ xuyên suốt sau khi Scoreboard đã ghép context.
+Functional Coverage được tổ chức thành ba lớp tương ứng ba nguồn quan sát. \texttt{reg\_coverage} cover
+địa chỉ CSR, chiều truy cập, default value, DAT index, Command/Response Descriptor, timing register và
+các Queue port. \texttt{i3c\_coverage} cover transaction trên bus: loại Address Header, RnW, payload,
+ACK/NACK, CCC, ENTDAA và T-Bit. \texttt{i3c\_correlated\_coverage} cover các quan hệ xuyên suốt chỉ xác
+định được sau khi Scoreboard đã ghép context hai phía.
 
-Các bin được thiết kế theo equivalence class thay vì liệt kê mọi giá trị. Payload có các nhóm zero, all
-ones, alternating và giá trị khác. Độ dài có nhóm zero, một byte, biên DWORD, nhiều DWORD và giá trị lớn.
-Địa chỉ có các vùng thấp, giữa, cao và reserved. Error status được cross với command class để kiểm tra rằng
-mỗi lỗi xuất hiện trong ngữ cảnh hợp lệ. Illegal bin chỉ dùng khi tình huống thực sự không được phép; tính
-năng ngoài phạm vi không được đánh dấu illegal chỉ vì RTL không hỗ trợ.
+Các bin được thiết kế theo equivalence class thay vì liệt kê mọi giá trị. Payload chia thành nhóm zero,
+all-ones, alternating và giá trị khác; độ dài chia thành zero, một byte, biên DWORD, nhiều DWORD và giá
+trị lớn; địa chỉ chia theo vùng thấp, giữa, cao và reserved. Error status được cross với command class
+để xác nhận mỗi mã lỗi xuất hiện trong đúng ngữ cảnh của nó. Illegal bin chỉ dùng cho tình huống giao
+thức thực sự cấm; tính năng ngoài phạm vi không bị đánh dấu illegal chỉ vì RTL không hỗ trợ.
 
-Coverage được thu thập bằng \texttt{COV=1}. Báo cáo merge phải ghi rõ danh sách test và timestamp. Tỷ lệ
-tổng chỉ có ý nghĩa cùng với uncovered-bin analysis, vì một cross lớn có thể chi phối tỷ lệ dù các luồng
-nominal đã đạt. Vì vậy, closure được đánh giá theo covergroup và theo yêu cầu, không chỉ bằng một con số.
+Coverage được thu thập khi chạy với \texttt{COV=1} và merge qua các lần chạy của regression. Tỷ lệ tổng
+chỉ có ý nghĩa khi đi kèm phân tích uncovered bin, vì một cross lớn có thể chi phối tỷ lệ dù các luồng
+nominal đã bao phủ đủ. Do đó closure được đánh giá theo từng covergroup và theo yêu cầu F1--F10, không
+chỉ bằng một con số tổng.
 
 \section{Register Agent}
 \label{sec:ver-regagent}
 
 Register Agent là Agent active ở phía Host. Sequencer nhận \texttt{reg\_seq\_item} chứa address, data và
-loại truy cập. Driver điều khiển \texttt{addr}, \texttt{wdata}, \texttt{wen}/\texttt{ren}, sau đó chờ
-\texttt{ready}. Monitor lấy mẫu transaction đã hoàn tất và phát qua analysis port.
+loại truy cập; Driver điều khiển \texttt{addr}, \texttt{wdata}, \texttt{wen}/\texttt{ren} rồi chờ
+\texttt{ready}; Monitor lấy mẫu transaction đã hoàn tất và phát qua analysis port. Vì giao thức thanh
+ghi đơn giản, giá trị của Agent nằm ở lớp Sequence xây bên trên: các thao tác đọc/ghi đơn và helper ghép
+Command Descriptor 64-bit từ hai lần ghi.
 
-Các Sequence cấp thấp cung cấp thao tác đọc/ghi đơn và helper cho Command Descriptor 64-bit. Virtual
-Sequence dùng các thao tác này để cấu hình DAT, nạp TX Data Buffer, ghi Command Queue, chờ Controller hoàn
-tất rồi đọc RX Data Buffer và Response Queue. Register Agent không dự đoán kết quả; prediction thuộc
-Scoreboard. Cách tách này giữ Driver không phụ thuộc vào protocol semantics.
+Virtual Sequence dùng các thao tác này để cấu hình DAT, nạp TX Data Buffer, ghi Command Queue, chờ
+Controller hoàn tất rồi đọc RX Data Buffer và Response Queue. Register Agent không dự đoán kết quả ---
+prediction thuộc về Scoreboard. Cách tách này giữ Driver độc lập với protocol semantics: cùng một Agent
+phục vụ cả test CSR thuần túy lẫn các kịch bản giao dịch đầy đủ.
 
-Các trường hợp kiểm chứng riêng của Agent gồm partial Command Descriptor, write khi Queue backpressure,
-unmapped address, mask bit reserved, software reset và read-pop behavior. Những kiểm tra side effect được
-thực hiện bởi Scoreboard và SVA thay vì lặp lại bằng điều kiện thủ công trong Virtual Sequence.
+Các trường hợp kiểm chứng riêng của phía thanh ghi gồm partial Command Descriptor (chỉ ghi một DWORD rồi
+truy cập khác), write khi Queue backpressure, unmapped address, mask bit reserved, software reset và
+read-pop behavior của các cổng đọc. Side effect của những thao tác này được kiểm tra bởi Scoreboard và
+SVA thay vì lặp lại bằng điều kiện thủ công trong từng Virtual Sequence.
 
 \section{I3C Target Agent}
 \label{sec:ver-i3cagent}
 
-I3C Target Agent đóng vai Target có thể lập trình. Driver phản hồi Address Header, phát ACK/NACK, nhận dữ
-liệu write, phát dữ liệu read và tham gia ENTDAA. Monitor quan sát bus độc lập với Driver và xây dựng
-\texttt{i3c\_item}. Sự độc lập này quan trọng: Scoreboard phải kiểm tra tín hiệu thực sự xuất hiện trên bus,
-không dùng lại transaction mà Driver dự định tạo.
+I3C Target Agent đóng vai một Target có thể lập trình trên bus. Driver phản hồi Address Header, phát
+ACK/NACK theo cấu hình, nhận dữ liệu write, phát dữ liệu read và tham gia ENTDAA. Monitor quan sát bus
+hoàn toàn độc lập với Driver và dựng \texttt{i3c\_item} từ tín hiệu thực tế. Sự độc lập này có ý nghĩa
+kiểm chứng: Scoreboard đối chiếu với những gì thật sự xuất hiện trên SDA/SCL, không phải với transaction
+mà Driver dự định tạo, nên lỗi của chính Driver cũng bị phát hiện.
 
-Driver dùng FSM pha gồm 13 giá trị. Các pha được nhóm trong \cref{tab:drv-phase}; bảng chỉ thể hiện vai trò,
-không mô tả state transition nội bộ của Driver.
+Driver hoạt động theo FSM pha gồm 13 giá trị, nhóm theo chức năng trong \cref{tab:drv-phase}. Driver
+không dùng delay tùy ý mà đồng bộ theo cạnh SCL và các event trong interface, nhờ đó hành vi không phụ
+thuộc tần số SCL được cấu hình.
 
 \begin{table}[H]
   \centering
@@ -210,7 +179,7 @@ không mô tả state transition nội bộ của Driver.
   \label{tab:drv-phase}
   \begin{tabular}{L{4.3cm} L{4.8cm} L{4.1cm}}
     \toprule
-    \textbf{Nhóm} & \textbf{Pha RTL/UVM} & \textbf{Chức năng} \\
+    \textbf{Nhóm} & \textbf{Pha} & \textbf{Chức năng} \\
     \midrule
     Chờ và địa chỉ & \texttt{DrvIdle}, \texttt{DrvAddrArbit}, \texttt{DrvAddrPushPull} & Phát hiện START và giải mã Address Header. \\
     Phản hồi & \texttt{DrvAck}, \texttt{DrvSelectNext}, \texttt{DrvStop} & ACK/NACK, chọn nhánh và kết thúc. \\
@@ -222,21 +191,22 @@ không mô tả state transition nội bộ của Driver.
   \end{tabular}
 \end{table}
 
-Sequence response của Target cấu hình Static/Dynamic Address, payload, điểm NACK, T-Bit kết thúc và bộ
-thông tin PID/BCR/DCR. Protocol context phân biệt ENTDAA, Direct CCC và Broadcast CCC để cùng một Address
-Header được phản hồi đúng theo pha trước đó. Driver không dùng delay tùy ý; nó đồng bộ theo cạnh SCL và
-event trong interface.
+Response sequence của Target cấu hình Static/Dynamic Address, payload, điểm NACK, T-Bit kết thúc và bộ
+định danh PID/BCR/DCR. Một biến protocol context phân biệt ENTDAA, Direct CCC và Broadcast CCC, để cùng
+một Address Header \texttt{7'h7E} được phản hồi đúng theo pha đã diễn ra trước đó --- điểm dễ nhầm nhất
+của một Target model I3C.
 
 \section{Virtual Sequencer và thư viện Virtual Sequence}
 \label{sec:ver-vseq}
 
-Virtual Sequencer giữ handle đến Register Sequencer và I3C Sequencer. Virtual Sequence khởi động Target
-response sequence, cấu hình DUT qua Register Agent, phát Command Descriptor và chờ các hoạt động hoàn tất.
-Nhờ đó, stimulus hai phía được điều phối trong một kịch bản duy nhất mà hai Agent vẫn tái sử dụng độc lập.
+Virtual Sequence là đơn vị kịch bản của môi trường: nó khởi động response sequence trên I3C Sequencer,
+cấu hình DUT qua Register Sequencer, phát Command Descriptor và chờ các hoạt động hoàn tất. Nhờ Virtual
+Sequencer, stimulus hai phía được điều phối trong một kịch bản duy nhất trong khi hai Agent vẫn độc lập
+và tái sử dụng được.
 
-Thư viện hiện được chia thành mười nhóm. \Cref{tab:vseq-cat} trình bày số lớp chạy được được đếm từ
-\texttt{i3c\_vseq\_list.sv}; các base class không nằm trong tổng. Danh sách tên đầy đủ được đặt tại
-\cref{app:vseq}.
+Thư viện hiện có 80 Virtual Sequence chạy được, chia thành mười nhóm như \cref{tab:vseq-cat}; con số
+được đếm từ \texttt{i3c\_vseq\_list.sv}, không tính bốn base class và một stimulus helper dùng chung.
+Danh sách tên đầy đủ được đặt tại \cref{app:vseq}.
 
 \begin{table}[H]
   \centering
@@ -257,41 +227,49 @@ Thư viện hiện được chia thành mười nhóm. \Cref{tab:vseq-cat} trìn
     I\textsuperscript{2}C & 3 & Read, write và length/partial RX. \\
     Response/error & 21 & NACK, overflow, underflow, abort, reset, backpressure và unsupported. \\
     \midrule
-    \textbf{Tổng} & \textbf{80} & Không tính bốn base class/helper. \\
+    \textbf{Tổng} & \textbf{80} & Không tính base class và stimulus helper. \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Mỗi Virtual Sequence tập trung vào behavior riêng của test. Chẳng hạn, test length sweep tạo nhiều độ dài
-nhưng không tự kiểm tra response success vì Scoreboard đã đảm nhiệm. Test error chỉ cấu hình điểm lỗi và
-kiểm tra policy đặc thù nếu cần. Quy tắc này hạn chế duplicate checking và làm failure dễ truy vết.
+Mỗi Virtual Sequence chỉ giữ phần kiểm tra đặc thù của kịch bản. Chẳng hạn, test length sweep tạo nhiều
+độ dài nhưng không tự so sánh payload vì Scoreboard đã đảm nhiệm; test error chỉ cấu hình điểm lỗi và
+kiểm tra policy riêng nếu có. Quy tắc này hạn chế duplicate checking, và khi một test fail, nguyên nhân
+truy được về đúng một cơ chế kiểm tra.
 
 \section{Quy trình build, run và debug}
 \label{sec:ver-run}
 
-Các target được chạy từ \texttt{src/verification} vì filelist dùng đường dẫn tương đối. Hai lệnh cơ bản là:
+Các target được chạy từ \texttt{src/verification} vì filelist dùng đường dẫn tương đối. Hai lệnh cơ bản
+là:
 
 \begin{lstlisting}[language=bash]
 make sim TEST=i3c_base_test SEQ=<sequence_name> SEED=<seed>
 make sim TEST=i3c_base_test SEQ=<sequence_name> SEED=<seed> COV=1
 \end{lstlisting}
 
-\texttt{make compile} thực hiện compile và elaborate. \texttt{make regression} gọi lần lượt các nhóm CSR,
-FIFO, bus, SDR write/read, Immediate Data, I\textsuperscript{2}C, CCC, DAA và error. Danh sách target và
-quy trình tạo coverage report được ghi tại \cref{app:build}.
+Môi trường dùng một test class duy nhất; Virtual Sequence được chọn qua biến \texttt{SEQ}, nhờ đó thêm
+kịch bản mới không đòi hỏi thêm test class. \texttt{make compile} thực hiện compile và elaborate;
+\texttt{make regression} gọi lần lượt các nhóm CSR, FIFO, bus, SDR write/read, Immediate Data,
+I\textsuperscript{2}C, CCC, DAA và error. Danh sách target cùng quy trình tạo coverage report được ghi
+tại \cref{app:build}.
 
 Quy trình debug bắt đầu từ phần tổng kết UVM và message đầu tiên có mức \texttt{UVM\_ERROR} hoặc
-\texttt{UVM\_FATAL}. Tiếp theo, assertion label hoặc Scoreboard mismatch được dùng để xác định lớp lỗi.
-Khi cần waveform debugging, simulation được chạy lại với \texttt{DUMP\_WAVES=1}; SimVision được dùng để
-theo dõi chuỗi Virtual Sequence $\rightarrow$ Driver $\rightarrow$ DUT $\rightarrow$ Monitor
-$\rightarrow$ Scoreboard. Seed, tên Sequence và command line phải được lưu cùng log để tái tạo lỗi.
+\texttt{UVM\_FATAL}. Assertion label hoặc Scoreboard mismatch xác định lớp lỗi; khi cần waveform,
+simulation được chạy lại với \texttt{DUMP\_WAVES=1} và SimVision được dùng để lần theo chuỗi Virtual
+Sequence $\rightarrow$ Driver $\rightarrow$ DUT $\rightarrow$ Monitor $\rightarrow$ Scoreboard. Seed,
+tên Sequence và command line được lưu cùng log để tái tạo lỗi.
 
-Một test chỉ đạt khi process simulation hoàn tất và UVM summary có zero error/fatal. Lệnh được pipe qua
-\texttt{tee}, nên exit code của shell không đủ để kết luận. Coverage run có thêm bước kiểm tra database và
-report; tỷ lệ coverage không thay thế điều kiện pass của test.
+Một test chỉ đạt khi process simulation hoàn tất và UVM summary có zero error/fatal. Vì lệnh chạy được
+pipe qua \texttt{tee}, exit code của shell không đủ để kết luận; tiêu chí đạt được kiểm tra trên nội
+dung log. Coverage run có thêm bước kiểm tra database và sinh report; tỷ lệ coverage không thay thế
+điều kiện pass của test.
 
 \section{Ánh xạ yêu cầu và tổng kết chương}
 \label{sec:ver-summary}
+
+\Cref{tab:req-ver-map} khép lại chương bằng ánh xạ từ từng nhóm yêu cầu sang stimulus và cơ chế kiểm
+tra chính; đây cũng là khung đối chiếu khi đánh giá kết quả ở \cref{ch:results}.
 
 \begin{table}[H]
   \centering
@@ -313,8 +291,8 @@ report; tỷ lệ coverage không thay thế điều kiện pass của test.
   \end{tabular}
 \end{table}
 
-Môi trường kết hợp Register Agent và I3C Target Agent dưới Virtual Sequencer, dùng Scoreboard để kiểm tra
-xuyên suốt, SVA để kiểm tra thuộc tính cục bộ và Functional Coverage để đo mức độ exercise. Cấu trúc này
-bao phủ cả software-visible register interface lẫn protocol behavior mà không đặt logic kiểm tra trong
-Virtual Sequence. Các số liệu pass/fail, uncovered bin và mức closure được tách sang \cref{ch:results} để
-phương pháp kiểm chứng không phụ thuộc vào một lần chạy cụ thể.
+Tóm lại, môi trường kết hợp Register Agent và I3C Target Agent dưới một Virtual Sequencer, dùng
+Scoreboard cho các quan hệ xuyên suốt, SVA cho thuộc tính cục bộ và Functional Coverage ba lớp để đo mức
+độ exercise. Cấu trúc này bao phủ cả software-visible register interface lẫn protocol behavior mà không
+đặt logic kiểm tra trong Virtual Sequence; các số liệu pass/fail, uncovered bin và mức closure được
+trình bày tại \cref{ch:results}.

@@ -1,9 +1,13 @@
 \chapter{Cơ sở lý thuyết và Yêu cầu hệ thống}
 \label{ch:background-requirements}
 
-Chương này giới hạn phần lý thuyết ở các khái niệm được sử dụng trực tiếp trong thiết kế. Phần sau của
-chương xác lập yêu cầu hệ thống và là cơ sở để lựa chọn kiến trúc ở \cref{ch:architecture}, xây dựng môi
-trường kiểm chứng ở \cref{ch:verification} và đánh giá kết quả ở \cref{ch:results}.
+Chương này gồm hai phần bổ trợ cho nhau. Phần thứ nhất trình bày cơ sở lý thuyết và được giới hạn có chủ
+đích ở những khái niệm mà thiết kế cùng môi trường kiểm chứng sử dụng trực tiếp: cơ chế tín hiệu của
+I\textsuperscript{2}C, chế độ SDR của MIPI I3C Basic, các điều kiện bus, hai kiểu lái Open Drain và
+Push-Pull, thủ tục cấp địa chỉ động và Common Command Code. Phần thứ hai chuyển các khái niệm đó thành
+yêu cầu hệ thống có thể kiểm chứng; các yêu cầu này là căn cứ để lựa chọn kiến trúc tại
+\cref{ch:architecture}, xây dựng môi trường UVM tại \cref{ch:verification} và đánh giá kết quả tại
+\cref{ch:results}.
 
 \section{Cơ sở lý thuyết}
 \label{sec:bg-theory}
@@ -11,140 +15,98 @@ trường kiểm chứng ở \cref{ch:verification} và đánh giá kết quả 
 \subsection{Tổng quan bus I\textsuperscript{2}C}
 \label{sec:bg-i2c}
 
-I\textsuperscript{2}C là bus nối tiếp đồng bộ dùng hai đường SDA và SCL. Các thiết bị chia sẻ bus bằng ngõ
-ra Open Drain: thiết bị chỉ chủ động kéo tín hiệu xuống thấp, còn mức cao được tạo bởi điện trở kéo lên.
-Một giao dịch thông thường gồm START, Address Header chứa địa chỉ 7-bit và RnW, các byte dữ liệu đi kèm
-ACK/NACK, sau đó kết thúc bằng STOP. Trong Fast Mode, tần số SCL tối đa là 400~kHz~\cite{nxp_i2c}.
+I\textsuperscript{2}C là bus nối tiếp đồng bộ hai dây gồm đường dữ liệu SDA và đường xung nhịp SCL. Mọi
+thiết bị nối vào bus qua ngõ ra Open Drain: mỗi thiết bị chỉ có khả năng kéo đường tín hiệu xuống mức
+thấp, còn mức cao được thiết lập bởi điện trở kéo lên bên ngoài. Cấu trúc wired-AND này cho phép nhiều
+thiết bị cùng chia sẻ hai đường tín hiệu và là nền tảng của cơ chế arbitration: khi hai thiết bị phát
+đồng thời, thiết bị phát mức thấp chiếm ưu thế, thiết bị còn lại phát hiện giá trị trên bus khác giá trị
+mình phát và tự rút lui mà không gây xung đột điện.
 
-Open Drain cho phép nhiều thiết bị cùng nối vào bus và hỗ trợ arbitration. Đổi lại, cạnh lên phụ thuộc
-điện trở kéo lên và điện dung tải. Static Address còn làm tăng công việc cấu hình khi nhiều Target giống
-nhau xuất hiện trên cùng bus. Đây là hai giới hạn trực tiếp liên quan đến phạm vi thiết kế của khóa luận.
+Một giao dịch I\textsuperscript{2}C điển hình bắt đầu bằng điều kiện START, tiếp theo là Address Header
+gồm địa chỉ 7-bit và bit hướng RnW, sau đó là các byte dữ liệu. Mỗi byte được bên nhận xác nhận bằng một
+bit ACK/NACK, và giao dịch kết thúc bằng điều kiện STOP. Trong Fast Mode, tần số SCL tối đa là
+400~kHz~\cite{nxp_i2c}.
+
+Hai giới hạn của I\textsuperscript{2}C liên quan trực tiếp đến phạm vi khóa luận. Thứ nhất, vì mức cao
+chỉ được tạo bởi điện trở kéo lên, thời gian cạnh lên phụ thuộc vào tích của điện trở kéo lên và điện
+dung tải trên bus; đây là nguyên nhân vật lý giới hạn tần số hoạt động. Thứ hai, mỗi thiết bị mang một
+Static Address cố định, nên việc tích hợp nhiều thiết bị cùng loại trên một bus đòi hỏi cấu hình chân
+địa chỉ hoặc thêm mạch phụ trợ, và hệ thống không có cách chuẩn hóa để phát hiện hay cấp phát địa chỉ
+lúc vận hành.
 
 \subsection{MIPI I3C Basic và chế độ SDR}
 \label{sec:bg-sdr}
 
-MIPI I3C giữ lại SDA và SCL nhưng định nghĩa lại vai trò thiết bị thành Controller và Target. Controller
-đang kiểm soát bus được gọi là Active Controller. Trong Single Data Rate Mode (SDR), một bit dữ liệu được
-truyền trong mỗi chu kỳ SCL. Đặc tả cho phép SCL đạt 12,5~MHz khi đáp ứng các tham số timing tương
-ứng~\cite{mipi_i3c_basic}.
+MIPI I3C Basic giữ nguyên hai đường SDA/SCL và khả năng cùng tồn tại với thiết bị
+I\textsuperscript{2}C, nhưng định nghĩa lại vai trò thiết bị thành Controller và Target; Controller đang
+nắm quyền điều khiển bus được gọi là Active Controller. Trong Single Data Rate Mode (SDR), một bit dữ
+liệu được truyền trong mỗi chu kỳ SCL và tần số SCL có thể đạt 12,5~MHz khi hệ thống đáp ứng các tham số
+timing tương ứng~\cite{mipi_i3c_basic}.
 
-Một SDR private transfer bắt đầu bằng START và Address Header. Pha cần arbitration hoặc phản hồi từ nhiều
-thiết bị sử dụng Open Drain; pha dữ liệu thông thường có thể sử dụng Push-Pull. Mỗi word dữ liệu I3C có
-thêm T-Bit. Khi Controller ghi, T-Bit mang odd parity của byte. Khi Controller đọc, T-Bit biểu diễn quyết
-định tiếp tục hoặc kết thúc truyền theo vai trò của bên phát và bên nhận~\cite{mipi_i3c_basic}.
-
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[x=0.76cm,y=0.72cm,>=Latex,font=\small]
-    \node[anchor=east] at (0,2.7) {I\textsuperscript{2}C};
-    \node[anchor=east] at (0,0.7) {I3C SDR};
-    \draw[thick] (0.2,3)--(1.0,3)--(1.0,2.4)--(2.0,2.4)--(2.0,3)--(3.0,3)--(3.0,2.4)--(4.0,2.4)--(4.0,3)--(5.0,3)--(5.0,2.4)--(6.0,2.4)--(6.0,3)--(10.5,3);
-    \draw[thick] (0.2,1)--(1.0,1)--(1.0,0.4)--(1.7,0.4)--(1.7,1)--(2.4,1)--(2.4,0.4)--(3.1,0.4)--(3.1,1)--(3.8,1)--(3.8,0.4)--(4.5,0.4)--(4.5,1)--(10.5,1);
-    \draw[<->] (0.3,2.1)--(6.0,2.1)
-      node[midway,below=5pt]{Open Drain, tối đa 400~kHz};
-    \draw[<->] (0.3,0.1)--(4.5,0.1)
-      node[midway,below=5pt]{Push-Pull trong pha dữ liệu};
-    \draw[->] (4.7,0.3)--(9.8,0.3) node[midway,below]{tối đa 12,5~MHz};
-  \end{tikzpicture}
-  \caption{Khác biệt định tính về cơ chế tín hiệu của I\textsuperscript{2}C và I3C SDR.}
-  \label{fig:i2c-vs-i3c}
-\end{figure}
+Cải tiến tốc độ của I3C đến từ việc phân chia lại kiểu lái theo từng pha. Chỉ những pha cần arbitration
+hoặc cần phản hồi từ nhiều thiết bị --- Address Header và các bit xác nhận --- còn giữ Open Drain; pha
+dữ liệu thông thường được chuyển sang Push-Pull, nhờ đó cạnh tín hiệu không còn phụ thuộc điện trở kéo
+lên. Bên cạnh đó, I3C thay bit ACK sau mỗi byte dữ liệu bằng T-Bit với ngữ nghĩa phụ thuộc hướng truyền:
+khi Controller ghi, T-Bit mang odd parity của byte vừa phát, cho phép Target phát hiện lỗi đơn bit; khi
+Controller đọc, T-Bit là phương tiện để bên phát dữ liệu báo tiếp tục hoặc để phía nhận kết thúc truyền
+theo thể thức chuyển giao quyền lái được đặc tả quy định~\cite{mipi_i3c_basic}.
 
 \subsection{START, Repeated START và STOP}
 \label{sec:bg-conditions}
 
-START được tạo khi SDA chuyển từ cao xuống thấp trong lúc SCL ở mức cao. STOP là chuyển tiếp ngược lại
-của SDA khi SCL cao. Repeated START (Sr) có dạng tín hiệu như START nhưng xuất hiện trước STOP, cho phép
-Active Controller chuyển sang một pha địa chỉ mới mà không nhả bus. Sau STOP, đặc tả phân biệt Bus Free
-Condition, Bus Available Condition và Bus Idle Condition theo thời gian duy trì mức cao của SDA/SCL. Thiết
-kế chỉ cần tạo và phát hiện các điều kiện cần cho giao dịch trong phạm vi; Hot-Join không được hiện thực.
+Các điều kiện bus của I3C kế thừa từ I\textsuperscript{2}C. START xuất hiện khi SDA chuyển từ cao xuống
+thấp trong lúc SCL ở mức cao; STOP là chuyển tiếp ngược lại của SDA khi SCL cao. Repeated START (Sr) có
+dạng sóng giống START nhưng xuất hiện khi giao dịch chưa có STOP, cho phép Active Controller mở một pha
+địa chỉ mới mà không nhả quyền điều khiển bus. Sau STOP, đặc tả còn phân biệt Bus Free Condition, Bus
+Available Condition và Bus Idle Condition theo khoảng thời gian SDA/SCL cùng duy trì mức cao; các mức
+phân biệt này chủ yếu phục vụ Hot-Join và IBI. Do hai tính năng đó nằm ngoài phạm vi, thiết kế chỉ cần
+tạo và phát hiện đúng START, Sr, STOP và bảo đảm thời gian Bus Free trước giao dịch kế tiếp.
 
 \subsection{Open Drain và Push-Pull}
 \label{sec:bg-odpp}
 
-Open Drain biểu diễn mức cao bằng trạng thái high-impedance và dùng phần tử kéo lên ngoài. Push-Pull chủ
-động điều khiển cả mức cao và mức thấp, nhờ đó giảm thời gian cạnh. Việc chuyển chế độ không thể thực hiện
-tùy ý: Address Header và ACK cần duy trì khả năng phản hồi trên bus, trong khi pha dữ liệu được chuyển sang
-Push-Pull theo định dạng giao dịch. \Cref{fig:od-pp} khái quát các pha mà RTL phải phân biệt.
-
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[node distance=0pt,font=\small]
-    \tikzset{phase/.style={draw,minimum height=1.25cm,align=center}}
-    \node[phase,minimum width=1.5cm,fill=gray!12] (st) {START};
-    \node[phase,minimum width=3.2cm,fill=blue!10,right=of st] (addr) {Address Header\\Open Drain};
-    \node[phase,minimum width=1.7cm,fill=blue!10,right=of addr] (ack) {ACK\\Open Drain};
-    \node[phase,minimum width=3.2cm,fill=green!12,right=of ack] (data) {Data + T-Bit\\Push-Pull};
-    \node[phase,minimum width=1.5cm,fill=gray!12,right=of data] (sp) {STOP};
-    \draw[->,thick] ([yshift=-0.9cm]addr.south west)--([yshift=-0.9cm]ack.south east)
-      node[midway,below]{pha có phản hồi từ Target};
-    \draw[->,thick] ([yshift=-0.9cm]data.south west)--([yshift=-0.9cm]data.south east)
-      node[midway,below]{pha truyền tốc độ cao};
-  \end{tikzpicture}
-  \caption{Phân chia pha Open Drain và Push-Pull trong SDR private transfer.}
-  \label{fig:od-pp}
-\end{figure}
+Open Drain biểu diễn mức cao bằng trạng thái high-impedance và nhờ phần tử kéo lên bên ngoài xác lập
+điện áp, còn Push-Pull điều khiển chủ động cả hai mức logic. Push-Pull cho cạnh tín hiệu nhanh nhưng
+không cho phép nhiều thiết bị cùng phát, vì vậy việc chuyển đổi giữa hai kiểu lái phải theo pha của giao
+thức: trong một SDR private transfer, START, Address Header và bit ACK diễn ra ở Open Drain vì Target
+cần khả năng phản hồi trên bus; từ sau ACK, các byte dữ liệu cùng T-Bit được truyền ở Push-Pull. Ranh
+giới chuyển đổi nằm ngay tại biên của pha xác nhận, do đó phần cứng phải nhận biết chính xác từng pha
+thay vì gắn cố định một kiểu lái cho mỗi giao dịch. Đây là một trong những yêu cầu điều khiển trung tâm
+mà RTL phải hiện thực.
 
 \subsection{Định dạng SDR private transfer}
+\label{sec:bg-frame}
 
-Address Header gồm Dynamic Address 7-bit và RnW. Target phản hồi ACK trước khi dữ liệu được truyền. Với
-private write, Active Controller phát từng byte và T-Bit odd parity. Với private read, Target phát dữ liệu;
-Active Controller sử dụng T-Bit để duy trì hoặc kết thúc giao dịch. Thiết kế phải bảo toàn thứ tự bit,
-đếm chính xác số byte và tạo STOP theo thuộc tính của Command Descriptor.
-
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[font=\small]
-    \tikzset{f/.style={draw,minimum height=1.05cm,align=center}}
-    \node[f,minimum width=1.2cm,fill=gray!12] (s) {S};
-    \node[f,minimum width=3.2cm,fill=blue!10,right=0pt of s] (a) {Dynamic Address\\+ RnW};
-    \node[f,minimum width=1.3cm,fill=blue!10,right=0pt of a] (k) {ACK};
-    \node[f,minimum width=2.3cm,fill=green!12,right=0pt of k] (d0) {Data[7:0]};
-    \node[f,minimum width=1.2cm,fill=green!12,right=0pt of d0] (t0) {T};
-    \node[f,minimum width=1.0cm,right=0pt of t0] (dots) {$\cdots$};
-    \node[f,minimum width=1.2cm,fill=gray!12,right=0pt of dots] (p) {P};
-    \node[below=0.35cm of a] {Open Drain};
-    \node[below=0.35cm of d0] {Push-Pull};
-  \end{tikzpicture}
-  \caption{Định dạng tổng quát của một SDR private transfer.}
-  \label{fig:sdr-frame}
-\end{figure}
+Một SDR private transfer có cấu trúc tuần tự như sau: điều kiện START; Address Header gồm Dynamic
+Address 7-bit và bit RnW phát ở Open Drain; bit ACK của Target; các word dữ liệu ở Push-Pull, mỗi byte
+đi kèm một T-Bit; cuối cùng là Repeated START nếu còn giao dịch nối tiếp hoặc STOP nếu kết thúc. Với
+private write, Active Controller phát từng byte cùng T-Bit odd parity. Với private read, Target phát dữ
+liệu và Active Controller dùng T-Bit để duy trì hoặc chấm dứt giao dịch. Từ định dạng này, ba nghĩa vụ
+của phần cứng được rút ra trực tiếp: bảo toàn thứ tự bit MSB-first, đếm chính xác số byte đã truyền hoặc
+nhận, và tạo STOP hay Sr đúng theo thuộc tính kết thúc ghi trong Command Descriptor.
 
 \subsection{Dynamic Address Assignment và ENTDAA}
 \label{sec:bg-daa}
 
-Dynamic Address Assignment (DAA) là quá trình Active Controller cấp Dynamic Address cho các Target I3C.
-Với ENTDAA, Active Controller phát I3C Broadcast Address \texttt{7'h7E}, RnW bằng Read và CCC
-\texttt{0x07}. Các Target chưa có địa chỉ tham gia arbitration bằng chuỗi 64-bit gồm PID 48-bit, BCR
-8-bit và DCR 8-bit. Sau khi nhận chuỗi này, Active Controller phát Dynamic Address và parity; Target xác
-nhận kết quả bằng ACK. Chu trình được lặp lại cho Target tiếp theo đến khi không còn phản hồi hoặc đạt số
-lượng được yêu cầu~\cite{mipi_i3c_basic}.
-
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[>=Latex,node distance=0.7cm and 1.2cm,font=\small,
-    box/.style={draw,rounded corners,align=center,minimum width=3.0cm,minimum height=0.9cm}]
-    \node[box] (c0) {Active Controller\\phát ENTDAA};
-    \node[box,below left=of c0] (t0) {Target A\\PID/BCR/DCR};
-    \node[box,below right=of c0] (t1) {Target B\\PID/BCR/DCR};
-    \node[box,below=1.8cm of c0] (arb) {Open Drain arbitration\\chọn một Target};
-    \node[box,below=of arb] (addr) {Phát Dynamic Address\\và nhận ACK};
-    \draw[->] (c0)--(t0); \draw[->] (c0)--(t1);
-    \draw[->] (t0)--(arb); \draw[->] (t1)--(arb);
-    \draw[->] (arb)--(addr);
-    \draw[->] (addr.east) -- ++(1.0,0) |- (c0.east) node[pos=0.25,right]{lặp};
-  \end{tikzpicture}
-  \caption{Một vòng arbitration và cấp Dynamic Address trong ENTDAA.}
-  \label{fig:entdaa}
-\end{figure}
+Dynamic Address Assignment (DAA) là thủ tục Active Controller cấp Dynamic Address cho các Target I3C,
+thay cho mô hình địa chỉ tĩnh của I\textsuperscript{2}C. Với ENTDAA, Active Controller phát START, gửi
+I3C Broadcast Address \texttt{7'h7E} với RnW bằng Write, và sau ACK phát byte CCC \texttt{0x07} để đưa
+các Target chưa có địa chỉ vào trạng thái tham gia cấp phát. Mỗi vòng cấp phát bắt đầu bằng Repeated
+START và Address Header \texttt{7'h7E} với RnW bằng Read: các Target đủ điều kiện cùng ACK, sau đó phát
+đồng thời chuỗi định danh 64-bit gồm PID 48-bit, BCR 8-bit và DCR 8-bit trên Open Drain. Nhờ tính chất
+wired-AND, thiết bị có chuỗi định danh nhỏ nhất thắng arbitration mà không cần trọng tài riêng. Active
+Controller thu chuỗi 64-bit của thiết bị thắng, phát Dynamic Address 7-bit kèm bit parity, và Target xác
+nhận bằng ACK. Chu trình lặp lại cho Target kế tiếp đến khi không còn thiết bị phản hồi Address Header
+hoặc đã cấp đủ số lượng yêu cầu, sau đó Active Controller kết thúc bằng STOP~\cite{mipi_i3c_basic}.
 
 \subsection{Common Command Code}
 \label{sec:bg-ccc}
 
-Common Command Code (CCC) cung cấp cơ chế điều khiển chuẩn hóa giữa Active Controller và Target. Broadcast
-CCC áp dụng cho các Target trên bus; Direct CCC bổ sung pha địa chỉ của một Target cụ thể. Tập CCC của
-thiết kế gồm ENEC, DISEC và ENTDAA. ENEC/DISEC được hỗ trợ ở cả dạng Broadcast và Direct. Chi tiết opcode
-và frame được đặt tại \cref{app:ccc}.
+Common Command Code (CCC) là cơ chế điều khiển chuẩn hóa giữa Active Controller và Target, được phát
+sau Address Header \texttt{7'h7E}. Broadcast CCC áp dụng cho mọi Target trên bus; Direct CCC bổ sung
+một pha Repeated START và Address Header của Target cụ thể trước phần dữ liệu lệnh. Tập CCC được hiện
+thực trong khóa luận gồm ENEC, DISEC ở cả hai dạng và ENTDAA, như \cref{tab:ccc}; định dạng frame chi
+tiết của từng lệnh được liệt kê tại \cref{app:ccc}.
 
 \begin{table}[H]
   \centering
@@ -163,11 +125,12 @@ và frame được đặt tại \cref{app:ccc}.
   \end{tabular}
 \end{table}
 
-\subsection{So sánh I3C và I\textsuperscript{2}C}
+\subsection{So sánh I3C và I\textsuperscript{2}C trong phạm vi thiết kế}
 \label{sec:bg-compare}
 
-\Cref{tab:i3c-vs-i2c} chỉ so sánh các thuộc tính liên quan trực tiếp đến phạm vi khóa luận. I3C còn định
-nghĩa nhiều tính năng khác, nhưng chúng không được dùng làm yêu cầu cho thiết kế này.
+\Cref{tab:i3c-vs-i2c} tổng hợp các thuộc tính khác biệt có ảnh hưởng trực tiếp đến kiến trúc RTL. I3C
+còn định nghĩa nhiều tính năng khác như HDR, IBI hay Hot-Join, nhưng chúng không được dùng làm yêu cầu
+cho thiết kế này nên không đưa vào so sánh.
 
 \begin{table}[H]
   \centering
@@ -188,6 +151,12 @@ nghĩa nhiều tính năng khác, nhưng chúng không được dùng làm yêu 
   \end{tabular}
 \end{table}
 
+Vì cả hai giao thức cùng chạy trên một cặp SDA/SCL, thiết kế phải tạo được hai bộ timing khác nhau từ
+cùng một clock hệ thống. \Cref{tab:timing} liệt kê các tham số chính dùng để xác lập cấu hình mặc định;
+giá trị I3C lấy từ MIPI I3C Basic v1.1.1, giá trị I\textsuperscript{2}C lấy từ UM10204
+Rev.~7.0~\cite{mipi_i3c_basic,nxp_i2c}. Trong RTL, mỗi tham số được biểu diễn bằng số chu kỳ clock hệ
+thống và có thể cấu hình qua CSR.
+
 \begin{table}[H]
   \centering
   \caption{Các tham số timing chính dùng để xác lập cấu hình mặc định.}
@@ -204,25 +173,28 @@ nghĩa nhiều tính năng khác, nhưng chúng không được dùng làm yêu 
   \end{tabular}
 \end{table}
 
-Các giá trị I3C lấy từ MIPI I3C Basic v1.1.1; các giá trị I\textsuperscript{2}C lấy từ UM10204
-Rev.~7.0~\cite{mipi_i3c_basic,nxp_i2c}. Trong RTL, timing được biểu diễn bằng số chu kỳ clock hệ thống và
-có thể cấu hình qua CSR.
-
 \subsection{Thuật ngữ UVM 1.2}
 \label{sec:bg-uvm}
 
 UVM là thư viện lớp SystemVerilog dùng để tổ chức Testbench có khả năng tái sử dụng. Agent đóng gói
-Sequencer, Driver và Monitor cho một interface. Sequence tạo transaction; Driver chuyển transaction thành
-tín hiệu; Monitor thực hiện chiều ngược lại. Scoreboard kiểm tra kết quả ở mức transaction. Functional
-Coverage đo các tình huống đã quan sát, còn SVA kiểm tra thuộc tính theo thời gian ở mức tín hiệu. Virtual
-Sequence điều phối nhiều Agent thông qua Virtual Sequencer~\cite{uvm12_ug,uvm12_ref}. Chương này chỉ xác
-lập thuật ngữ; topology cụ thể được trình bày tại \cref{ch:verification}.
+Sequencer, Driver và Monitor cho một interface: Sequence tạo transaction, Driver chuyển transaction
+thành tín hiệu, còn Monitor thực hiện chiều ngược lại một cách độc lập với Driver. Scoreboard kiểm tra
+tính đúng đắn ở mức transaction bằng cách đối chiếu dữ liệu quan sát với reference model. Functional
+Coverage đo các tình huống đã thực sự xảy ra trong simulation, còn SVA (SystemVerilog Assertions) kiểm
+tra thuộc tính theo chu kỳ ở mức tín hiệu. Virtual Sequence điều phối nhiều Agent thông qua Virtual
+Sequencer, nhờ đó một kịch bản có thể đồng thời cấu hình DUT qua bus thanh ghi và điều khiển phản hồi
+trên bus I3C~\cite{uvm12_ug,uvm12_ref}. Chương này chỉ xác lập thuật ngữ; topology cụ thể của môi
+trường được trình bày tại \cref{ch:verification}.
 
 \section{Yêu cầu hệ thống}
 \label{sec:req}
 
 \subsection{Yêu cầu chức năng}
 \label{sec:req-func}
+
+Từ cơ sở lý thuyết trên và phạm vi đã xác định ở \cref{ch:introduction}, yêu cầu chức năng của thiết kế được
+phát biểu thành mười mục F1--F10 trong \cref{tab:req-func}. Mỗi mục tương ứng một nhóm hành vi có thể
+kiểm chứng độc lập và được dùng làm đơn vị ánh xạ sang cơ chế kiểm chứng ở \cref{ch:verification}.
 
 \begin{table}[H]
   \centering
@@ -249,6 +221,10 @@ lập thuật ngữ; topology cụ thể được trình bày tại \cref{ch:ver
 \subsection{Các tính năng ngoài phạm vi}
 \label{sec:req-oos}
 
+Ranh giới phạm vi được phát biểu tường minh trong \cref{tab:req-oos} nhằm hai mục đích: tránh suy diễn
+yêu cầu ngầm trong quá trình thiết kế, và làm chuẩn khi xây dựng coverage --- một tính năng ngoài phạm
+vi không được tính vào coverage goal, cũng không bị đánh dấu là tình huống cấm chỉ vì RTL không hỗ trợ.
+
 \begin{table}[H]
   \centering
   \caption{Các tính năng không thuộc phạm vi hiện thực.}
@@ -268,7 +244,7 @@ lập thuật ngữ; topology cụ thể được trình bày tại \cref{ch:ver
   \end{tabular}
 \end{table}
 
-\subsection{Chỉ tiêu hiệu năng}
+\subsection{Chỉ tiêu hiệu năng và cấu hình}
 \label{sec:req-perf}
 
 \begin{table}[H]
@@ -283,28 +259,34 @@ lập thuật ngữ; topology cụ thể được trình bày tại \cref{ch:ver
     P2 & I3C SDR SCL & Có thể cấu hình đến 12,5~MHz \\
     P3 & I\textsuperscript{2}C Fast Mode SCL & Có thể cấu hình đến 400~kHz \\
     P4 & Độ sâu DAT & 32 mục \\
-    P5 & Độ rộng giao diện thanh ghi & 32 bit \\
+    P5 & Độ rộng dữ liệu giao diện thanh ghi & 32 bit \\
     \bottomrule
   \end{tabular}
 \end{table}
 
+Chỉ tiêu P1 xuất phát từ độ phân giải timing: để biểu diễn các tham số cỡ 24~ns của I3C bằng số nguyên
+chu kỳ với sai số chấp nhận được, chu kỳ clock hệ thống cần nhỏ hơn nhiều lần tham số nhỏ nhất; thiết
+kế chọn 3~ns làm chu kỳ danh định. Các chỉ tiêu còn lại cố định kích thước những cấu trúc mà phần mềm
+nhìn thấy, làm cơ sở cho bản đồ thanh ghi tại \cref{app:csr}.
+
 \subsection{Giao diện phần mềm}
 \label{sec:req-sw}
 
-Software-visible register interface sử dụng địa chỉ và dữ liệu 32-bit, hai tín hiệu yêu cầu đọc/ghi và
-tín hiệu hoàn tất. Phần mềm cấu hình enable, abort, software reset và timing qua CSR; ghi hai DWORD liên
-tiếp để tạo Command Descriptor 64-bit; ghi payload vào TX Data Buffer; đọc RX Data Buffer và Response
-Queue sau khi giao dịch kết thúc. DAT lưu Static Address hoặc Dynamic Address cùng thuộc tính loại Target.
-Giao diện không hỗ trợ burst hoặc transaction ID ở mức bus thanh ghi. Bản đồ đầy đủ được đưa vào
-\cref{app:csr}, còn định dạng Descriptor được đưa vào \cref{app:desc}.
+Software-visible register interface sử dụng địa chỉ 12-bit, dữ liệu 32-bit, hai tín hiệu yêu cầu
+đọc/ghi và một tín hiệu hoàn tất. Phần mềm cấu hình enable, abort, software reset và timing qua CSR;
+ghi hai DWORD liên tiếp vào cổng Command Queue để tạo Command Descriptor 64-bit; nạp payload vào TX
+Data Buffer; và sau khi giao dịch kết thúc, đọc RX Data Buffer cùng Response Queue. DAT lưu Static
+Address hoặc Dynamic Address kèm thuộc tính loại Target cho từng thiết bị. Giao diện không hỗ trợ burst
+hoặc transaction ID ở mức bus thanh ghi. Bản đồ thanh ghi đầy đủ được đặt tại \cref{app:csr}, định dạng
+Descriptor tại \cref{app:desc}.
 
 \subsection{Yêu cầu kiểm chứng}
 \label{sec:req-verif}
 
 Môi trường kiểm chứng phải tạo được stimulus cho toàn bộ yêu cầu F1--F10, bao gồm nominal case và các
 trường hợp ACK/NACK, độ dài biên, FIFO full/empty, reset và abort. Scoreboard phải kiểm tra payload,
-Address Header, T-Bit, Response Descriptor và side effect của CSR. SVA phải kiểm tra handshake, FSM, reset,
-Queue và các điều kiện bus quan trọng. Functional Coverage phải ghi nhận loại giao dịch, hướng truyền,
-địa chỉ, độ dài, response/error, trạng thái Buffer và các corner case. Mỗi regression log chỉ được xem là
-đạt khi phần tổng kết UVM có \texttt{UVM\_ERROR=0} và \texttt{UVM\_FATAL=0}; coverage được đánh giá riêng,
-không được dùng để thay thế kết quả kiểm tra đúng/sai.
+Address Header, T-Bit, Response Descriptor và side effect của CSR. SVA phải kiểm tra handshake, FSM,
+reset, Queue và các điều kiện bus quan trọng. Functional Coverage phải ghi nhận loại giao dịch, hướng
+truyền, địa chỉ, độ dài, response/error, trạng thái Buffer và các corner case. Một regression log chỉ
+được xem là đạt khi phần tổng kết UVM có \texttt{UVM\_ERROR=0} và \texttt{UVM\_FATAL=0}; coverage được
+đánh giá riêng và không được dùng thay cho kết quả kiểm tra đúng/sai.
