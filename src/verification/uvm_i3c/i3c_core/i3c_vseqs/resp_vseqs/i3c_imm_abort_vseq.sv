@@ -42,6 +42,7 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     immediate_data_trans_desc_t        imm_cmd;
     bit                         [31:0] resp;
     i3c_device_response_seq            dev_seq;
+    byte_queue_t                       random_data;
 
     enable_dut(bcast_en);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
@@ -50,14 +51,10 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = 4'd7;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = 3'd4;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = 8'hA1;
-    imm_cmd.data_byte2 = 8'hA2;
-    imm_cmd.data_byte3 = 8'hA3;
-    imm_cmd.data_byte4 = 8'hA4;
+    randomize_immediate_write_data(4, imm_cmd, random_data);
 
     dev_seq = i3c_device_response_seq::type_id::create(
         $sformatf("imm006_i3c_%s_dev_seq", private_addr_mode_name(bcast_en)));
@@ -97,6 +94,7 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     immediate_data_trans_desc_t        imm_cmd;
     bit                         [31:0] resp;
     i3c_device_response_seq            dev_seq;
+    byte_queue_t                       random_data;
 
     enable_dut(1'b0);
     write_dat_entry(0, 7'h52, 7'h00, 1'b1);
@@ -105,14 +103,10 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = 4'd7;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = 3'd4;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = 8'hB1;
-    imm_cmd.data_byte2 = 8'hB2;
-    imm_cmd.data_byte3 = 8'hB3;
-    imm_cmd.data_byte4 = 8'hB4;
+    randomize_immediate_write_data(4, imm_cmd, random_data);
 
     dev_seq = i3c_device_response_seq::type_id::create("imm006_i2c_dev_seq");
     dev_seq.target_addr = 7'h52;
@@ -152,17 +146,14 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
     bit                         [ 6:0] target_addr;
 
     target_addr = is_i3c ? 7'h08 : 7'h52;
-    exp_data.push_back(is_i3c ? 8'hC1 : 8'hD1);
-
     imm_cmd = '0;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = 4'hE;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = 3'd1;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = exp_data[0];
+    randomize_immediate_write_data(1, imm_cmd, exp_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(

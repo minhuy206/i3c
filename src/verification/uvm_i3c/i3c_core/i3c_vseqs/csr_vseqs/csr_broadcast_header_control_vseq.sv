@@ -1,7 +1,6 @@
 class csr_broadcast_header_control_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_broadcast_header_control_vseq)
 
-  localparam bit [31:0] TX_WORD = 32'hDEAD_BEEF;
   localparam int unsigned DATA_LENGTH = 4;
 
   function new(string name = "csr_broadcast_header_control_vseq");
@@ -69,11 +68,7 @@ class csr_broadcast_header_control_vseq extends csr_base_vseq;
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    exp_data.push_back(8'hEF);
-    exp_data.push_back(8'hBE);
-    exp_data.push_back(8'hAD);
-    exp_data.push_back(8'hDE);
-    tx_words.push_back(TX_WORD);
+    build_random_tx_words(DATA_LENGTH, exp_data, tx_words);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("CSR_003 %s write", private_addr_mode_name(broadcast_header_enable))),

@@ -2,7 +2,6 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_private_addr_nack_resp_vseq)
 
   localparam int unsigned DATA_LENGTH = 4;
-  localparam bit [31:0] TX_WORD = 32'hA5C3_5A3C;
   localparam bit [6:0] I2C_STATIC_ADDR = 7'h50;
   localparam bit [6:0] I3C_DYNAMIC_ADDR = 7'h08;
 
@@ -29,6 +28,7 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
 
   virtual task run_write_addr_nack_resp_case(bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
@@ -57,7 +57,7 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    tx_words.push_back(TX_WORD);
+    build_random_tx_words(DATA_LENGTH, exp_data, tx_words);
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
     check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit, 1'b0, 1'b0,
                       "after ERR_002 write address NACK RESP");
@@ -109,6 +109,7 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
 
   virtual task run_i2c_write_addr_nack_resp_case();
     transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
@@ -133,7 +134,7 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    tx_words.push_back(TX_WORD);
+    build_random_tx_words(DATA_LENGTH, exp_data, tx_words);
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
     check_queue_flags(tx_paths.name, tx_paths.full_bit, tx_paths.empty_bit, 1'b0, 1'b0,
                       "after ERR_002 i2c write address NACK RESP");
@@ -185,6 +186,7 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
     bit                         [31:0] resp;
     i3c_device_response_seq            dev_seq;
     byte_queue_t                       no_read_data;
+    byte_queue_t                       random_data;
 
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, I2C_STATIC_ADDR, I3C_DYNAMIC_ADDR, 1'b0);
@@ -217,12 +219,10 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = cfg.tid;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = 3'd2;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = 8'hAA;
-    imm_cmd.data_byte2 = 8'hBB;
+    randomize_immediate_write_data(cfg.data_length, imm_cmd, random_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
@@ -240,6 +240,7 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
     bit                         [31:0] resp;
     i3c_device_response_seq            dev_seq;
     byte_queue_t                       no_read_data;
+    byte_queue_t                       random_data;
 
     enable_dut(1'b0);
     write_dat_entry(0, I2C_STATIC_ADDR, I3C_DYNAMIC_ADDR, 1'b1);
@@ -265,12 +266,10 @@ class i3c_private_addr_nack_resp_vseq extends i3c_base_vseq;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = cfg.tid;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = 3'd2;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = 8'hD1;
-    imm_cmd.data_byte2 = 8'hD2;
+    randomize_immediate_write_data(cfg.data_length, imm_cmd, random_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(imm_cmd[31:0], imm_cmd[63:32]);

@@ -33,8 +33,8 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
   controller_pkg::dat_entry_t        dat_entry;
   bit                         [31:0] dat_raw;
   bit                                dat_reserved_nonzero;
-  controller_pkg::dat_entry_t        dat_shadow[DAT_DEPTH];
-  bit                                dat_shadow_valid[DAT_DEPTH];
+  controller_pkg::dat_entry_t        dat_shadow                [DAT_DEPTH];
+  bit                                dat_shadow_valid          [DAT_DEPTH];
 
   bit                                cmd_dw0_valid;
   bit                         [31:0] cmd_dw0;
@@ -225,21 +225,17 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
     }
 
     cp_cmd_code: coverpoint cmd_code iff (cmd_is_ccc) {
-      bins broadcast_enec  = {8'(ENEC)};
+      bins broadcast_enec = {8'(ENEC)};
       bins broadcast_disec = {8'(DISEC)};
-      bins direct_enec     = {8'(DIR_ENEC)};
-      bins direct_disec    = {8'(DIR_DISEC)};
-      bins entdaa          = {8'(ENTDAA)};
+      bins direct_enec = {8'(DIR_ENEC)};
+      bins direct_disec = {8'(DIR_DISEC)};
+      bins entdaa = {8'(ENTDAA)};
       bins unsupported = default;
     }
 
-    cp_cmd_sre: coverpoint cmd_sre iff (cmd_has_sre_dbp) {
-      bins disabled = {0}; bins enabled = {1};
-    }
+    cp_cmd_sre: coverpoint cmd_sre iff (cmd_has_sre_dbp) {bins disabled = {0}; bins enabled = {1};}
 
-    cp_cmd_dbp: coverpoint cmd_dbp iff (cmd_has_sre_dbp) {
-      bins absent = {0}; bins present = {1};
-    }
+    cp_cmd_dbp: coverpoint cmd_dbp iff (cmd_has_sre_dbp) {bins absent = {0}; bins present = {1};}
 
     cx_regular_rnw_len: cross cp_cmd_rnw, cp_cmd_data_len iff (cmd_attr == RegularTransfer);
 
@@ -247,15 +243,16 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
       ignore_bins reserved_attr = binsof (cp_cmd_attr.reserved);
     }
 
-    cx_cmd_attr_present: cross cp_cmd_attr, cp_cmd_present {
+    cx_cmd_attr_present: cross cp_cmd_attr, cp_cmd_present{
       ignore_bins non_applicable_attr =
           binsof (cp_cmd_attr.address_assignment) || binsof (cp_cmd_attr.reserved);
     }
 
     cx_cmd_sre_dbp: cross cp_cmd_sre, cp_cmd_dbp;
 
-    cx_cmd_attr_dat_idx: cross cp_cmd_attr, cp_cmd_dat_idx {
+    cx_cmd_attr_dat_idx: cross cp_cmd_attr, cp_cmd_dat_idx{
       ignore_bins reserved_attr = binsof (cp_cmd_attr.reserved);
+      ignore_bins combo_attr = binsof (cp_cmd_attr.combo);
     }
   endgroup
 
@@ -653,7 +650,7 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
 
       default: begin
         cmd_known_attr = 1'b0;
-        cmd_supported = 1'b0;
+        cmd_supported  = 1'b0;
       end
     endcase
   endfunction

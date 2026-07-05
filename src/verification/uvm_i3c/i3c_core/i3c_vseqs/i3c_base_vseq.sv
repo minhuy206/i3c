@@ -145,8 +145,8 @@ class i3c_base_vseq extends uvm_sequence;
     cfg.dev_idx                     = dev_idx;
     cfg.target_addr                 = target_addr;
     cfg.is_i3c                      = is_i3c;
-    cfg.addr_nack                    = addr_nack;
-    cfg.data_nack                    = data_nack;
+    cfg.addr_nack                   = addr_nack;
+    cfg.data_nack                   = data_nack;
     cfg.tx_before_cmd               = tx_before_cmd;
     cfg.wait_device_done            = wait_device_done;
     cfg.start_with_broadcast_header = start_with_broadcast_header && is_i3c;
@@ -250,9 +250,8 @@ class i3c_base_vseq extends uvm_sequence;
     write_dat_entry(index, static_addr, dynamic_addr, 1'b0);
   endtask
 
-  virtual function i3c_seq_item randomize_transfer_item(
-      string name = "transfer_item", int unsigned payload_len = 0,
-      bit [6:0] avoid_static_addr = 7'h7e, bit [6:0] avoid_dynamic_addr = 7'h7e);
+  virtual function i3c_seq_item randomize_transfer_item(string name = "transfer_item",
+                                                        int unsigned payload_len = 0);
     i3c_seq_item item;
 
     item = i3c_seq_item::type_id::create(name);
@@ -260,19 +259,15 @@ class i3c_base_vseq extends uvm_sequence;
     item.dynamic_addr_constraint_en = 1'b1;
     item.payload_constraint_en = 1'b1;
     item.payload_len = payload_len;
-    item.avoid_static_addr = avoid_static_addr;
-    item.avoid_dynamic_addr = avoid_dynamic_addr;
     `DV_CHECK_RANDOMIZE_FATAL(item, $sformatf("%s randomization failed", name))
     return item;
   endfunction
 
-  virtual task randomize_i3c_dat_target(
-      int index, output bit [6:0] static_addr, output bit [6:0] dynamic_addr,
-      input bit [6:0] avoid_static_addr = 7'h7e, input bit [6:0] avoid_dynamic_addr = 7'h7e);
+  virtual task randomize_i3c_dat_target(int index, output bit [6:0] static_addr,
+                                        output bit [6:0] dynamic_addr);
     i3c_seq_item item;
 
-    item = randomize_transfer_item($sformatf("dat_target_%0d_item", index), 0,
-                                   avoid_static_addr, avoid_dynamic_addr);
+    item = randomize_transfer_item($sformatf("dat_target_%0d_item", index), 0);
     static_addr = item.static_addr;
     dynamic_addr = item.addr;
     configure_i3c_dat_target(index, static_addr, dynamic_addr);
@@ -291,55 +286,20 @@ class i3c_base_vseq extends uvm_sequence;
     pack_payload_words(exp_data, tx_words);
   endfunction
 
-  virtual function void build_sdr_data_pattern_payload(int unsigned pattern_idx,
-                                                       ref byte_queue_t data);
-    bit [7:0] fixed_random[16] = '{
-        8'h3C,
-        8'hA7,
-        8'h19,
-        8'hE2,
-        8'h5D,
-        8'h80,
-        8'h0F,
-        8'hB4,
-        8'hC1,
-        8'h26,
-        8'h7A,
-        8'h93,
-        8'h48,
-        8'hDE,
-        8'h04,
-        8'hF0
-    };
+  virtual function void randomize_immediate_write_data(
+      int unsigned data_length, ref immediate_data_trans_desc_t cmd, ref byte_queue_t exp_data);
+    if (data_length > 4) begin
+      `uvm_fatal(`gfn, $sformatf(
+                           "Immediate write payload length %0d exceeds the four descriptor bytes",
+                           data_length))
+    end
 
-    data.delete();
-
-    case (pattern_idx)
-      0: begin
-        repeat (8) data.push_back(8'h00);
-      end
-      1: begin
-        repeat (8) data.push_back(8'hFF);
-      end
-      2: begin
-        for (int unsigned i = 0; i < 8; i++) begin
-          data.push_back(8'(8'h01 << i));
-        end
-      end
-      3: begin
-        for (int unsigned i = 0; i < 8; i++) begin
-          data.push_back(i[0] ? 8'h55 : 8'hAA);
-        end
-      end
-      4: begin
-        foreach (fixed_random[i]) begin
-          data.push_back(fixed_random[i]);
-        end
-      end
-      default: begin
-        `uvm_fatal(`gfn, $sformatf("Unsupported SDR data pattern index %0d", pattern_idx))
-      end
-    endcase
+    build_random_payload(data_length, exp_data);
+    cmd.dtt = 3'(data_length);
+    if (data_length > 0) cmd.def_or_data_byte1 = exp_data[0];
+    if (data_length > 1) cmd.data_byte2 = exp_data[1];
+    if (data_length > 2) cmd.data_byte3 = exp_data[2];
+    if (data_length > 3) cmd.data_byte4 = exp_data[3];
   endfunction
 
   virtual task wait_for_device_done(i3c_device_response_seq dev_seq, string ctxt,
@@ -379,8 +339,8 @@ class i3c_base_vseq extends uvm_sequence;
                                      output i3c_device_response_seq dev_seq);
     dev_seq                             = i3c_device_response_seq::type_id::create(cfg.seq_name);
     dev_seq.target_addr                 = cfg.target_addr;
-    dev_seq.addr_nack                    = cfg.addr_nack;
-    dev_seq.data_nack                    = cfg.data_nack;
+    dev_seq.addr_nack                   = cfg.addr_nack;
+    dev_seq.data_nack                   = cfg.data_nack;
     dev_seq.is_i3c                      = cfg.is_i3c;
     dev_seq.dir                         = dir;
     dev_seq.start_with_broadcast_header = cfg.start_with_broadcast_header;
@@ -470,14 +430,7 @@ class i3c_base_vseq extends uvm_sequence;
     read_response(resp);
   endtask
 
-  virtual task run_read_stimulus_words(transfer_stimulus_cfg_t cfg, byte_queue_t read_data,
-                                       output word_queue_t rx_words, output bit [31:0] resp,
-                                       output i3c_device_response_seq dev_seq);
-    run_read_stimulus_words_with_actual_len(cfg, read_data, cfg.data_length, rx_words, resp,
-                                            dev_seq);
-  endtask
-
-  virtual task run_read_stimulus_words_with_actual_len(
+  virtual task run_read_stimulus_words(
       transfer_stimulus_cfg_t cfg, byte_queue_t read_data, int unsigned actual_data_length,
       output word_queue_t rx_words, output bit [31:0] resp, output i3c_device_response_seq dev_seq,
       input bit final_t_bit = 1'b0);

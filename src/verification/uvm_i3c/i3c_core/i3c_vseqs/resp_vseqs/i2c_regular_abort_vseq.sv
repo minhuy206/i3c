@@ -322,7 +322,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
+    run_read_stimulus_words(cfg, read_data, cfg.data_length, rx_words, resp, dev_seq);
 
     check_all_queues_empty(cfg.ctxt);
   endtask

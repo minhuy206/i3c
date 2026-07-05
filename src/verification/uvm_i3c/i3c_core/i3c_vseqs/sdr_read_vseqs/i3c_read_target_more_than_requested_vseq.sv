@@ -1,8 +1,6 @@
 class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_read_target_more_than_requested_vseq)
 
-  // Cases include the tightest over-run boundary (target = requested + 1) to confirm the controller
-  // stops at exactly the requested count and stores no extra byte.
   localparam int unsigned NUM_CASES = 4;
 
   function new(string name = "i3c_read_target_more_than_requested_vseq");
@@ -28,10 +26,6 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
 
   endtask
 
-  // Continuation contrast: an over-length read is NOT an error, so a toc=0 over-length read must
-  // continue legitimately into the next queued command with exactly one Repeated START (the read
-  // takeover Sr becomes the continuation). This proves the controller does not misclassify normal
-  // over-length termination as an error that would suppress the continuation.
   virtual task run_more_than_requested_toc_zero_case();
     transfer_stimulus_cfg_t        rd_cfg;
     transfer_stimulus_cfg_t        wr_cfg;
@@ -145,8 +139,7 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_read_stimulus_words_with_actual_len(cfg, read_data, requested_length, rx_words, resp,
-                                            dev_seq, 1'b1);
+    run_read_stimulus_words(cfg, read_data, requested_length, rx_words, resp, dev_seq, 1'b1);
 
     `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b1,
                  $sformatf(

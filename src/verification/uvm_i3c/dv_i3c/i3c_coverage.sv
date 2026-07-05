@@ -49,6 +49,13 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     IDENTITY_OTHER
   } identity_pattern_e;
 
+  typedef enum bit [1:0] {
+    DAA_ADDR_LOW_VALID,
+    DAA_ADDR_MIDDLE_VALID,
+    DAA_ADDR_HIGH_VALID,
+    DAA_ADDR_RESERVED
+  } daa_assigned_addr_class_e;
+
   bit                       protocol;
   bus_op_e                  bus_op;
   bit                 [6:0] addr;
@@ -85,6 +92,8 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
   daa_round_outcome_e       daa_round_outcome;
   bit                       daa_identity_valid;
   identity_pattern_e        daa_identity_pattern;
+  daa_assigned_addr_class_e daa_assigned_addr_class;
+  bit                       daa_assigned_addr_parity;
 
   covergroup cg_address_phase;
     option.per_instance = 1;
@@ -301,6 +310,24 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     }
   endgroup
 
+  covergroup cg_daa_assigned_address;
+    option.per_instance = 1;
+
+    cp_address_class: coverpoint daa_assigned_addr_class {
+      bins low_valid = {DAA_ADDR_LOW_VALID};
+      bins middle_valid = {DAA_ADDR_MIDDLE_VALID};
+      bins high_valid = {DAA_ADDR_HIGH_VALID};
+      bins reserved = {DAA_ADDR_RESERVED};
+    }
+
+    cp_parity: coverpoint daa_assigned_addr_parity {
+      bins zero = {1'b0};
+      bins one = {1'b1};
+    }
+
+    cx_address_class_parity: cross cp_address_class, cp_parity;
+  endgroup
+
   function new(string name = "i3c_coverage", uvm_component parent = null);
     super.new(name, parent);
     cg_address_phase = new();
@@ -313,6 +340,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     cg_ccc_target = new();
     cg_daa_transaction = new();
     cg_daa_round = new();
+    cg_daa_assigned_address = new();
     previous_private_valid = 1'b0;
   endfunction
 
@@ -383,6 +411,13 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     return IDENTITY_OTHER;
   endfunction
 
+  function daa_assigned_addr_class_e classify_daa_assigned_address(bit [6:0] assigned_addr);
+    if (assigned_addr inside {[7'h08 : 7'h1f]}) return DAA_ADDR_LOW_VALID;
+    if (assigned_addr inside {[7'h20 : 7'h5f]}) return DAA_ADDR_MIDDLE_VALID;
+    if (assigned_addr inside {[7'h60 : 7'h77]}) return DAA_ADDR_HIGH_VALID;
+    return DAA_ADDR_RESERVED;
+  endfunction
+
   function void sample_address_phase(bit protocol, bus_op_e bus_op, bit [6:0] addr,
                                      bit address_nack, bit start_from_rstart);
     this.protocol     = protocol;
@@ -429,10 +464,10 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     ccc_event_t_bit_valid = (t.CCC != ENTDAA) && (t.data_nack_q.size() > 0);
     ccc_event_t_bit = ccc_event_t_bit_valid ? t.data_nack_q[0] : 1'b0;
     if ((t.CCC != ENTDAA) && !ccc_event_t_bit_valid) begin
-      foreach (t.CCC_direct[i]) begin
-        if (t.CCC_direct[i].data_nack_q.size() > 0) begin
+      foreach (t.CCC_direct_q[i]) begin
+        if (t.CCC_direct_q[i].data_nack_q.size() > 0) begin
           ccc_event_t_bit_valid = 1'b1;
-          ccc_event_t_bit = t.CCC_direct[i].data_nack_q[0];
+          ccc_event_t_bit = t.CCC_direct_q[i].data_nack_q[0];
           break;
         end
       end
@@ -445,11 +480,11 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
         cg_payload_byte.sample();
       end
 
-      foreach (t.CCC_direct[i]) begin
-        ccc_target_nack = t.CCC_direct[i].addr_nack;
+      foreach (t.CCC_direct_q[i]) begin
+        ccc_target_nack = t.CCC_direct_q[i].addr_nack;
         cg_ccc_target.sample();
-        foreach (t.CCC_direct[i].data_q[j]) begin
-          payload_byte = t.CCC_direct[i].data_q[j];
+        foreach (t.CCC_direct_q[i].data_q[j]) begin
+          payload_byte = t.CCC_direct_q[i].data_q[j];
           cg_payload_byte.sample();
         end
       end
@@ -460,14 +495,23 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     daa_joined_count = 0;
     daa_terminal_outcome = DAA_ROUND_OTHER;
 
-    foreach (t.CCC_direct[i]) begin
-      daa_round_outcome = classify_daa_round(t.CCC_direct[i]);
+    foreach (t.CCC_direct_q[i]) begin
+      daa_round_outcome = classify_daa_round(t.CCC_direct_q[i]);
       daa_terminal_outcome = daa_round_outcome;
-      daa_identity_valid = t.CCC_direct[i].data_q.size() >= 8;
-      daa_identity_pattern = daa_identity_valid ? classify_identity(t.CCC_direct[i]) :
+      daa_identity_valid = t.CCC_direct_q[i].data_q.size() >= 8;
+      daa_identity_pattern = daa_identity_valid ? classify_identity(t.CCC_direct_q[i]) :
           IDENTITY_OTHER;
       if (daa_round_outcome == DAA_ROUND_ACCEPTED) daa_joined_count++;
       cg_daa_round.sample();
+
+      // data_q[8] is present only after the complete assigned-address byte was
+      // observed. Bits [7:1] carry the address and bit [0] carries its parity.
+      if ((t.CCC_direct_q[i].num_data >= 9) && (t.CCC_direct_q[i].data_q.size() >= 9)) begin
+        daa_assigned_addr_class =
+            classify_daa_assigned_address(t.CCC_direct_q[i].data_q[8][7:1]);
+        daa_assigned_addr_parity = t.CCC_direct_q[i].data_q[8][0];
+        cg_daa_assigned_address.sample();
+      end
     end
 
     cg_daa_transaction.sample();
@@ -507,9 +551,9 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     header_nack = t.start_with_broadcast_header ? t.broadcast_header_nack : t.addr_nack;
     sample_address_phase(1'b1, t.bus_op, I3C_RSVD_ADDR, header_nack, t.start_from_rstart);
 
-    foreach (t.CCC_direct[i]) begin
-      sample_address_phase(1'b1, t.CCC_direct[i].bus_op, t.CCC_direct[i].addr,
-                           t.CCC_direct[i].addr_nack, t.CCC_direct[i].start_from_rstart);
+    foreach (t.CCC_direct_q[i]) begin
+      sample_address_phase(1'b1, t.CCC_direct_q[i].bus_op, t.CCC_direct_q[i].addr,
+                           t.CCC_direct_q[i].addr_nack, t.CCC_direct_q[i].start_from_rstart);
     end
 
     if (t.CCC_valid) begin
@@ -527,7 +571,8 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
                 "cg_payload_byte=%0.2f%% cg_i3c_read_end=%0.2f%% ",
                 "cg_private_transition=%0.2f%% ",
                 "cg_i2c_ack=%0.2f%% cg_ccc=%0.2f%% cg_ccc_target=%0.2f%% ",
-                "cg_daa_transaction=%0.2f%% cg_daa_round=%0.2f%%"
+                "cg_daa_transaction=%0.2f%% cg_daa_round=%0.2f%% ",
+                "cg_daa_assigned_address=%0.2f%%"
               },
               cg_address_phase.get_inst_coverage(),
               cg_bus_transfer.get_inst_coverage(),
@@ -538,7 +583,8 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
               cg_ccc.get_inst_coverage(),
               cg_ccc_target.get_inst_coverage(),
               cg_daa_transaction.get_inst_coverage(),
-              cg_daa_round.get_inst_coverage()
+              cg_daa_round.get_inst_coverage(),
+              cg_daa_assigned_address.get_inst_coverage()
               ), UVM_NONE)
   endfunction
 endclass

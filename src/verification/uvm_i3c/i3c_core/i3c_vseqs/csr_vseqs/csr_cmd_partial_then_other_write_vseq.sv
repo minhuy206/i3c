@@ -13,6 +13,8 @@ class csr_cmd_partial_then_other_write_vseq extends csr_base_vseq;
     bit                     [31:0] dword0;
     bit                     [31:0] dword1;
     bit                     [31:0] tx_data;
+    byte_queue_t                   exp_data;
+    word_queue_t                   tx_words;
     bit                     [63:0] cmd_wdata;
     uvm_hdl_data_t                 raw_hdl;
 
@@ -28,7 +30,8 @@ class csr_cmd_partial_then_other_write_vseq extends csr_base_vseq;
 
     dword0             = wr_cmd[31:0];
     dword1             = wr_cmd[63:32];
-    tx_data            = 32'h4433_2211;
+    build_random_tx_words(wr_cmd.data_length, exp_data, tx_words);
+    tx_data            = tx_words[0];
 
     reg_write(ADDR_CMD_QUEUE, dword0);
     check_cmd_staging_preserved("after CMD DWORD0 write", dword0);

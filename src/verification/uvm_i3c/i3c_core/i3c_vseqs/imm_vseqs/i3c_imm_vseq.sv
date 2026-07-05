@@ -24,9 +24,6 @@ class i3c_imm_vseq extends i3c_base_vseq;
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    exp_data.push_back(8'hAA);
-    exp_data.push_back(8'hBB);
-
     cfg = make_transfer_cfg(
         .ctxt($sformatf("IMM_001 %s", private_addr_mode_name(broadcast_header_enable))),
         .seq_name($sformatf("imm001_%s_dev_seq", private_addr_mode_name(broadcast_header_enable))),
@@ -39,7 +36,7 @@ class i3c_imm_vseq extends i3c_base_vseq;
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
-        .data_length(exp_data.size()),
+        .data_length(2),
         .settle_before_cmd(0),
         .timeout_cycles(0)
     );
@@ -48,12 +45,10 @@ class i3c_imm_vseq extends i3c_base_vseq;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = tid;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = 3'd2;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = 8'hAA;
-    imm_cmd.data_byte2 = 8'hBB;
+    randomize_immediate_write_data(cfg.data_length, imm_cmd, exp_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(imm_cmd[31:0], imm_cmd[63:32]);

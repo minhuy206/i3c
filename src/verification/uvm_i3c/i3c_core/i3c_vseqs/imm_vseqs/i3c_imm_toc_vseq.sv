@@ -35,9 +35,6 @@ class i3c_imm_toc_vseq extends i3c_base_vseq;
     enable_dut(broadcast_header_enable && !is_i2c);
     write_dat_entry(0, 7'h50, 7'h08, is_i2c);
 
-    exp_data.push_back(8'hAA);
-    exp_data.push_back(8'hBB);
-
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
             "IMM_003 %s %s toc%0d",
@@ -64,7 +61,7 @@ class i3c_imm_toc_vseq extends i3c_base_vseq;
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable && !is_i2c),
-        .data_length(exp_data.size()),
+        .data_length(2),
         .settle_before_cmd(0),
         .timeout_cycles(0)
     );
@@ -73,12 +70,10 @@ class i3c_imm_toc_vseq extends i3c_base_vseq;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = tid;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = 3'd2;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = toc;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = exp_data[0];
-    imm_cmd.data_byte2 = exp_data[1];
+    randomize_immediate_write_data(cfg.data_length, imm_cmd, exp_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(imm_cmd[31:0], imm_cmd[63:32]);

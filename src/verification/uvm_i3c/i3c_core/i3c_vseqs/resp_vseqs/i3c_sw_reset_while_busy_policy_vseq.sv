@@ -45,6 +45,7 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
     i3c_device_response_seq        dev_seq1;
     i3c_device_response_seq        dev_seq2;
     byte_queue_t                   no_read_data;
+    byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
     bit                     [31:0] status;
     bit                     [31:0] resp0;
@@ -58,12 +59,8 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
     cfg1 = make_write_cfg("ERR_015 busy SOFT_RST write[1]", "err015_dev_seq1", 4'h2, 4);
     cfg2 = make_write_cfg("ERR_015 busy SOFT_RST write[2]", "err015_dev_seq2", 4'h3, 4);
 
-    tx_words.push_back(32'h1312_1110);
-    tx_words.push_back(32'h2322_2120);
-    tx_words.push_back(32'h3332_3130);
-    tx_words.push_back(32'h4342_4140);
-    tx_words.push_back(32'h5352_5150);
-    tx_words.push_back(32'h6362_6160);
+    build_random_tx_words(cfg0.data_length + cfg1.data_length + cfg2.data_length,
+                          exp_data, tx_words);
 
     start_device_response(cfg0, 1'b0, no_read_data, dev_seq0);
     wait_for_device_request_issued(dev_seq0, cfg0.ctxt);

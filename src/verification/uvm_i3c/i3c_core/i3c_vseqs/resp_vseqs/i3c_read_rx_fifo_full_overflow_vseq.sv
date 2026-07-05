@@ -330,7 +330,7 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
+    run_read_stimulus_words(cfg, read_data, cfg.data_length, rx_words, resp, dev_seq);
     check_all_queues_empty(cfg.ctxt);
   endtask
 
@@ -368,10 +368,7 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
   virtual function void build_read_payload_len(int unsigned data_length,
                                                ref byte_queue_t read_data);
-    read_data.delete();
-    for (int unsigned i = 0; i < data_length; i++) begin
-      read_data.push_back(8'(8'h60 + i));
-    end
+    build_random_payload(data_length, read_data);
   endfunction
 
 endclass

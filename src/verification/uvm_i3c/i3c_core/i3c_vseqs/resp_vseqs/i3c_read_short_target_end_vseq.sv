@@ -78,9 +78,11 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    read_data.push_back(8'h90);
-    read_data.push_back(8'h91);
-    tx_words.push_back(32'h0000_7766);
+    build_random_payload(2, read_data);
+    begin
+      byte_queue_t exp_write_data;
+      build_random_tx_words(wr_cfg.data_length, exp_write_data, tx_words);
+    end
 
     run_toc_zero_read_write_stimulus(rd_cfg, wr_cfg, read_data, tx_words, rx, resp0, resp1,
                                      rstart_count, dev_seq0, dev_seq1);
@@ -104,8 +106,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
 
     enable_dut(1'b0);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
-    read_data.push_back(8'hD0 | {6'h0, sre, wroc});
-    read_data.push_back(8'hE0 | {6'h0, sre, wroc});
+    build_random_payload(ActualLength, read_data);
     cfg = make_transfer_cfg(
         .ctxt($sformatf("ERR_005 sre=%0b wroc=%0b", sre, wroc)),
         .seq_name($sformatf("err005_sre%0b_wroc%0b_dev_seq", sre, wroc)),
@@ -126,8 +127,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
     );
 
     if (sre || wroc) begin
-      run_read_stimulus_words_with_actual_len(cfg, read_data, ActualLength, rx_words, resp,
-                                              dev_seq);
+      run_read_stimulus_words(cfg, read_data, ActualLength, rx_words, resp, dev_seq);
     end else begin
       rd_cmd = build_regular_transfer_cmd(cfg, 1'b1, 1'b1);
       start_device_response(cfg, 1'b1, read_data, dev_seq);
@@ -188,7 +188,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
         .wroc(1'b1)
     );
 
-    run_read_stimulus_words_with_actual_len(cfg, read_data, actual_length, rx_words, resp, dev_seq);
+    run_read_stimulus_words(cfg, read_data, actual_length, rx_words, resp, dev_seq);
 
     check_all_queues_empty($sformatf(
                            "after ERR_005 req %0d actual %0d", requested_length, actual_length));
@@ -202,11 +202,7 @@ class i3c_read_short_target_end_vseq extends i3c_base_vseq;
 
   virtual function void build_payload(int unsigned case_idx, int unsigned actual_length,
                                       ref byte_queue_t read_data);
-    read_data.delete();
-
-    for (int unsigned i = 0; i < actual_length; i++) begin
-      read_data.push_back(8'(8'h90 + (case_idx * 8) + i));
-    end
+    build_random_payload(actual_length, read_data);
   endfunction
 
 endclass

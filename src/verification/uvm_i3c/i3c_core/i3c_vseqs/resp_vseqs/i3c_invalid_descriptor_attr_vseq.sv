@@ -213,6 +213,7 @@ class i3c_invalid_descriptor_attr_vseq extends i3c_base_vseq;
     immediate_data_trans_desc_t imm_cmd;
     i3c_device_response_seq     dev_seq;
     byte_queue_t                no_read_data;
+    byte_queue_t                random_data;
     bit [31:0]                  resp;
 
     recovery_tid++;
@@ -237,11 +238,10 @@ class i3c_invalid_descriptor_attr_vseq extends i3c_base_vseq;
     imm_cmd.attr              = ImmediateDataTransfer;
     imm_cmd.tid               = recovery_tid;
     imm_cmd.mode              = sdr0;
-    imm_cmd.dtt               = 3'd1;
     imm_cmd.toc               = 1'b1;
     imm_cmd.wroc              = 1'b1;
     imm_cmd.dev_idx           = 5'd0;
-    imm_cmd.def_or_data_byte1 = 8'h96;
+    randomize_immediate_write_data(cfg.data_length, imm_cmd, random_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(imm_cmd[31:0], imm_cmd[63:32]);

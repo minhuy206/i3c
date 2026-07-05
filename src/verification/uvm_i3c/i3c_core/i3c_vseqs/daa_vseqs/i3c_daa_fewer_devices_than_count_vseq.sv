@@ -33,7 +33,6 @@ class i3c_daa_fewer_devices_than_count_vseq extends i3c_base_vseq;
     assigned_dev_seq.target_addr = 7'h7e;
     assigned_dev_seq.addr_nack = 1'b0;
     assigned_dev_seq.is_i3c = 1'b1;
-    assigned_dev_seq.is_daa = 1'b1;
     assigned_dev_seq.dir = 1'b0;
     assigned_dev_seq.entdaa_join = 1'b1;
     assigned_dev_seq.daa_accept_addr = 1'b1;
@@ -52,7 +51,6 @@ class i3c_daa_fewer_devices_than_count_vseq extends i3c_base_vseq;
     no_device_seq.target_addr = 7'h7e;
     no_device_seq.addr_nack = 1'b1;
     no_device_seq.is_i3c = 1'b1;
-    no_device_seq.is_daa = 1'b1;
     no_device_seq.dir = 1'b0;
     no_device_seq.entdaa_join = 1'b0;
 

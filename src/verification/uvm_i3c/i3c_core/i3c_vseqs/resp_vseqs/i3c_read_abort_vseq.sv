@@ -28,7 +28,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
     word_queue_t                   rx_words;
 
     byte_queue_t                   read_data;
-    for (int i = 0; i < DATA_LENGTH; i++) read_data.push_back(8'hA0 + 8'(i));
+    build_random_payload(DATA_LENGTH, read_data);
 
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
@@ -88,7 +88,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
     word_queue_t                   rx_words;
 
     byte_queue_t                   read_data;
-    for (int i = 0; i < DATA_LENGTH_DEEP; i++) read_data.push_back(8'hB0 + 8'(i));
+    build_random_payload(DATA_LENGTH_DEEP, read_data);
 
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
@@ -160,7 +160,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
     word_queue_t                   rx_words;
 
     byte_queue_t                   read_data;
-    for (int i = 0; i < DATA_LENGTH; i++) read_data.push_back(8'hA0 + 8'(i));
+    build_random_payload(DATA_LENGTH, read_data);
 
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
@@ -258,7 +258,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
+    run_read_stimulus_words(cfg, read_data, cfg.data_length, rx_words, resp, dev_seq);
     check_all_queues_empty(cfg.ctxt);
   endtask
 

@@ -26,23 +26,18 @@ class i3c_imm_dtt_sweep_vseq extends i3c_base_vseq;
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    exp_data.push_back(8'hA1);
-    exp_data.push_back(8'hA2);
-    exp_data.push_back(8'hA3);
-    exp_data.push_back(8'hA4);
-
     imm_cmd = '0;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = tid;
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = dtt;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = exp_data[0];
-    imm_cmd.data_byte2 = exp_data[1];
-    imm_cmd.data_byte3 = exp_data[2];
-    imm_cmd.data_byte4 = exp_data[3];
+    if (dtt <= 3'd4) begin
+      randomize_immediate_write_data(dtt, imm_cmd, exp_data);
+    end else begin
+      imm_cmd.dtt = dtt;
+    end
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("IMM_002 %s dtt%0d", private_addr_mode_name(broadcast_header_enable), dtt)),

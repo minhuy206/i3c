@@ -56,20 +56,16 @@ class i3c_driver extends uvm_driver #(
   endfunction : is_broadcast_header
 
   function bit get_addr_ack(i3c_seq_item item, bit [6:0] addr);
-    get_addr_ack = !item.dev_nack;
     if (item.start_with_broadcast_header && is_broadcast_header(addr)) begin
-      get_addr_ack = 1'b1;
+      return 1'b1;
     end
+
+    return !item.addr_nack && (addr == item.addr);
   endfunction : get_addr_ack
 
   function string ack_to_string(bit ack);
     return ack ? "ACK" : "NACK";
   endfunction : ack_to_string
-
-  function void record_sampled_addr(ref i3c_seq_item rsp, bit [6:0] addr, bit dir);
-    rsp.sampled_addr_q.push_back(addr);
-    rsp.sampled_dir_q.push_back(dir);
-  endfunction : record_sampled_addr
 
   function bit direct_ccc_addr_match(i3c_seq_item req, bit [6:0] addr);
     if (req.ccc_target_addr_valid) return addr == req.ccc_target_addr;
@@ -108,7 +104,6 @@ class i3c_driver extends uvm_driver #(
     cfg.vif.sample_addr(msg, sampled_addr, sampled_dir);
     rsp.addr = sampled_addr;
     rsp.dir  = sampled_dir;
-    record_sampled_addr(rsp, rsp.addr, rsp.dir);
     `uvm_info(`gfn, $sformatf("Sampled %s=0x%h dir=%b", msg, rsp.addr, rsp.dir), UVM_MEDIUM)
   endtask : sample_addr
 
@@ -248,7 +243,7 @@ class i3c_driver extends uvm_driver #(
     bit addr_ack;
 
     if (proto_ctx == ProtoCtxDirectCcc) begin
-      addr_ack = !req.dev_nack && !rsp.dir && direct_ccc_addr_match(req, rsp.addr);
+      addr_ack = !req.addr_nack && !rsp.dir && direct_ccc_addr_match(req, rsp.addr);
       cfg.vif.device_i3c_send_addr_ack_handoff(cfg.tc.i3c_tc, addr_ack);
       `uvm_info(`gfn, $sformatf("Direct CCC target 0x%02h sent %s", rsp.addr, ack_to_string(
                                 addr_ack)), UVM_MEDIUM)
@@ -448,7 +443,6 @@ class i3c_driver extends uvm_driver #(
     sample_addr(rsp, "started addr");
     rsp.start_with_broadcast_header = req.start_with_broadcast_header &&
         is_broadcast_header(rsp.addr);
-    rsp.observed_broadcast_header = rsp.start_with_broadcast_header;
     set_drv_state(DrvAck);
   endtask : do_addr_arbit
 

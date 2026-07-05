@@ -55,7 +55,7 @@ class i3c_read_len_sweep_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
+    run_read_stimulus_words(cfg, read_data, cfg.data_length, rx_words, resp, dev_seq);
 
     check_all_queues_empty($sformatf("after SDRR_002 len %0d", data_length));
 

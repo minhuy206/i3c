@@ -31,8 +31,7 @@ class i3c_daa_multi_device_dat_loop_vseq extends i3c_base_vseq;
   endfunction
 
   virtual function bit [31:0] expected_pid_word0(i3c_daa_stimulus stimulus);
-    return {stimulus.pid[47:40], stimulus.pid[39:32], stimulus.pid[31:24],
-            stimulus.pid[23:16]};
+    return {stimulus.pid[47:40], stimulus.pid[39:32], stimulus.pid[31:24], stimulus.pid[23:16]};
   endfunction
 
   virtual function bit [31:0] expected_pid_word1(i3c_daa_stimulus stimulus);
@@ -44,7 +43,6 @@ class i3c_daa_multi_device_dat_loop_vseq extends i3c_base_vseq;
     dev_seq.target_addr = 7'h7e;
     dev_seq.addr_nack = 1'b0;
     dev_seq.is_i3c = 1'b1;
-    dev_seq.is_daa = 1'b1;
     dev_seq.dir = 1'b0;
     dev_seq.entdaa_join = 1'b1;
     dev_seq.daa_accept_addr = 1'b1;
@@ -64,8 +62,8 @@ class i3c_daa_multi_device_dat_loop_vseq extends i3c_base_vseq;
     addr_assign_desc_t             daa_cmd;
     bit                     [31:0] resp;
     word_queue_t                   rx_words;
-    i3c_device_response_seq        dev_seq  [DEVICE_COUNT];
-    i3c_daa_stimulus               stimulus [DEVICE_COUNT];
+    i3c_device_response_seq        dev_seq     [DEVICE_COUNT];
+    i3c_daa_stimulus               stimulus    [DEVICE_COUNT];
     int unsigned                   winner_order[DEVICE_COUNT];
 
     for (int unsigned i = 0; i < DEVICE_COUNT; i++) begin
@@ -133,8 +131,8 @@ class i3c_daa_multi_device_dat_loop_vseq extends i3c_base_vseq;
 
     poll_idle();
     for (int unsigned round = 0; round < DEVICE_COUNT; round++) begin
-      wait_for_device_done(dev_seq[winner_order[round]],
-                           $sformatf("DAA_004 device round %0d", round), 3000);
+      wait_for_device_done(dev_seq[winner_order[round]], $sformatf("DAA_004 device round %0d", round
+                           ), 3000);
     end
 
     read_rx_words(DEVICE_COUNT * 12, rx_words);
@@ -144,10 +142,10 @@ class i3c_daa_multi_device_dat_loop_vseq extends i3c_base_vseq;
       int unsigned winner;
 
       winner = winner_order[round];
-      `DV_CHECK_EQ(rx_words[(round*3)+0], expected_pid_word0(stimulus[winner]),
-                   $sformatf("DAA_004 winner[%0d] PID word0", round))
-      `DV_CHECK_EQ(rx_words[(round*3)+1], expected_pid_word1(stimulus[winner]),
-                   $sformatf("DAA_004 winner[%0d] PID/BCR/DCR word1", round))
+      `DV_CHECK_EQ(rx_words[(round*3)+0], expected_pid_word0(stimulus[winner]), $sformatf(
+                   "DAA_004 winner[%0d] PID word0", round))
+      `DV_CHECK_EQ(rx_words[(round*3)+1], expected_pid_word1(stimulus[winner]), $sformatf(
+                   "DAA_004 winner[%0d] PID/BCR/DCR word1", round))
     end
 
     check_all_queues_empty("after DAA_004 multi-device DAT loop");

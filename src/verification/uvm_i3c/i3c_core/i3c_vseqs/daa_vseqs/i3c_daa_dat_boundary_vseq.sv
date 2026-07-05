@@ -13,15 +13,15 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_last_entry_success();
-    addr_assign_desc_t      daa_cmd;
-    bit [31:0]              resp;
-    word_queue_t            rx_words;
-    i3c_device_response_seq dev_seq;
-    bit [6:0]               assigned_addr;
-    bit [47:0]              pid;
-    bit [7:0]               bcr;
-    bit [7:0]               dcr;
-    string                  ctxt;
+    addr_assign_desc_t             daa_cmd;
+    bit                     [31:0] resp;
+    word_queue_t                   rx_words;
+    i3c_device_response_seq        dev_seq;
+    bit                     [ 6:0] assigned_addr;
+    bit                     [47:0] pid;
+    bit                     [ 7:0] bcr;
+    bit                     [ 7:0] dcr;
+    string                         ctxt;
 
     assigned_addr = 7'h31;
     pid           = 48'h31_32_33_34_35_36;
@@ -32,26 +32,31 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
     enable_dut();
     write_dat_entry(31, 7'h00, assigned_addr, 1'b0);
 
-    daa_cmd           = '0;
-    daa_cmd.attr      = AddressAssignment;
-    daa_cmd.tid       = 4'd7;
-    daa_cmd.cmd       = ENTDAA;
-    daa_cmd.dev_idx   = 5'd31;
+    daa_cmd = '0;
+    daa_cmd.attr = AddressAssignment;
+    daa_cmd.tid = 4'd7;
+    daa_cmd.cmd = ENTDAA;
+    daa_cmd.dev_idx = 5'd31;
     daa_cmd.dev_count = 4'd1;
-    daa_cmd.wroc      = 1'b1;
-    daa_cmd.toc       = 1'b1;
+    daa_cmd.wroc = 1'b1;
+    daa_cmd.toc = 1'b1;
 
-    dev_seq                 = i3c_device_response_seq::type_id::create("daa007_last_dev_seq");
-    dev_seq.target_addr     = 7'h7e;
-    dev_seq.addr_nack     = 1'b0;
-    dev_seq.is_i3c          = 1'b1;
-    dev_seq.is_daa          = 1'b1;
-    dev_seq.dir             = 1'b0;
-    dev_seq.entdaa_join     = 1'b1;
+    dev_seq = i3c_device_response_seq::type_id::create("daa007_last_dev_seq");
+    dev_seq.target_addr = 7'h7e;
+    dev_seq.addr_nack = 1'b0;
+    dev_seq.is_i3c = 1'b1;
+    dev_seq.dir = 1'b0;
+    dev_seq.entdaa_join = 1'b1;
     dev_seq.daa_accept_addr = 1'b1;
-    dev_seq.daa_id_bytes    = '{
-      pid[47:40], pid[39:32], pid[31:24], pid[23:16],
-      pid[15:8], pid[7:0], bcr, dcr
+    dev_seq.daa_id_bytes = '{
+        pid[47:40],
+        pid[39:32],
+        pid[31:24],
+        pid[23:16],
+        pid[15:8],
+        pid[7:0],
+        bcr,
+        dcr
     };
 
     fork : device_response
@@ -70,11 +75,11 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_out_of_range_rejection();
-    addr_assign_desc_t daa_cmd;
-    bit [31:0]         resp;
-    string             ctxt;
+    addr_assign_desc_t        daa_cmd;
+    bit                [31:0] resp;
+    string                    ctxt;
 
-    ctxt = "DAA_007 out-of-range DAT span";
+    ctxt              = "DAA_007 out-of-range DAT span";
 
     daa_cmd           = '0;
     daa_cmd.attr      = AddressAssignment;

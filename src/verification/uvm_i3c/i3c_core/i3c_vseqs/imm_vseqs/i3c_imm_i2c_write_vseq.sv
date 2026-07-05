@@ -23,23 +23,14 @@ class i3c_imm_i2c_write_vseq extends i3c_base_vseq;
     byte_queue_t                       no_read_data;
     byte_queue_t                       exp_data;
 
-    exp_data.push_back(8'hD1);
-    exp_data.push_back(8'hD2);
-    exp_data.push_back(8'hD3);
-    exp_data.push_back(8'hD4);
-
     imm_cmd = '0;
     imm_cmd.attr = ImmediateDataTransfer;
     imm_cmd.tid = {1'b0, dtt};
     imm_cmd.mode = sdr0;
-    imm_cmd.dtt = dtt;
     imm_cmd.rnw = 1'b0;
     imm_cmd.toc = 1'b1;
     imm_cmd.wroc = 1'b1;
-    imm_cmd.def_or_data_byte1 = exp_data[0];
-    imm_cmd.data_byte2 = exp_data[1];
-    imm_cmd.data_byte3 = exp_data[2];
-    imm_cmd.data_byte4 = exp_data[3];
+    randomize_immediate_write_data(dtt, imm_cmd, exp_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("IMM_004 dtt%0d", dtt)),

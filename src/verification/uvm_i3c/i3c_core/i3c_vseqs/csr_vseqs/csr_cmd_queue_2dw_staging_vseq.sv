@@ -15,6 +15,7 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     bit                         [63:0] cmd_wdata;
     uvm_hdl_data_t                     raw_hdl;
     int unsigned                       exp_data_bytes;
+    byte_queue_t                       random_data;
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
@@ -22,13 +23,11 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     imm_cmd.attr              = ImmediateDataTransfer;
     imm_cmd.tid               = 4'd5;
     imm_cmd.mode              = sdr0;
-    imm_cmd.dtt               = 3'd2;
     imm_cmd.rnw               = 1'b0;
     imm_cmd.toc               = 1'b1;
     imm_cmd.wroc              = 1'b1;
     imm_cmd.dev_idx           = 5'd0;
-    imm_cmd.def_or_data_byte1 = 8'hA5;
-    imm_cmd.data_byte2        = 8'h3C;
+    randomize_immediate_write_data(2, imm_cmd, random_data);
     exp_data_bytes            = int'(imm_cmd.dtt);
 
     dword0                    = imm_cmd[31:0];
