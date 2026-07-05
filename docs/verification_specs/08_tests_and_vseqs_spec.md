@@ -277,7 +277,7 @@ Test Regular Transfer write with data from TX queue.
 4. write_cmd(dword0, dword1)
 5. Write TX data: write_tx_data(32'hDEAD_BEEF)
 6. Fork: start i3c_device_response_seq
-   - target_addr = 7'h08, data_cnt = 4, ack all
+   - target_addr = 7'h08, read_data_cnt = 4 (write direction: device just ACKs the 4 bytes)
 7. poll_idle()
 8. read_response(resp)
 9. Check resp[31:28] == Success

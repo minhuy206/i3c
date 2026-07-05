@@ -3,7 +3,7 @@
 > Status: New (structure adapted from reference)
 > Location: `src/verification/uvm_i3c/i3c_core/`
 > Reference: `i3c-core/verification/uvm_i3c/i3c_core/` (env, cfg, vseq, scoreboard)
-> Estimated LoC: ~400 lines (5 files)
+> Current scope: environment/config/sequencer, scoreboard shell + 6 `.svh` files, and correlated coverage model (~4300 lines across 13 core files)
 
 ## 1. Purpose
 
@@ -134,10 +134,13 @@ m_vsequencer.m_i3c_sequencer = m_i3c_agent.sequencer;
 ### 5.1. Purpose
 
 Verifies correct DUT behavior by comparing:
-1. Commands written via register agent → bus activity observed by I3C monitor
-2. Data sent via TX queue → data observed on I3C bus
-3. Data from I3C device → data read from RX queue
-4. Response descriptors → expected outcomes
+1. Commands written via register agent (CMD queue DWORDs, DAT writes, HC_CONTROL/RESET_CONTROL) → bus activity observed by the I3C monitor
+2. Data sent via the TX queue → data observed on the I3C bus (regular, immediate, and CCC payloads)
+3. Data from the I3C device → data read back from the RX queue (including ENTDAA PID/BCR/DCR/address results)
+4. Response descriptors (error status, length, TID) → a full reference model of the expected response, including abort/recovery/stall-recovery/WROC-completion policy
+5. Publishes derived, protocol-level observations (`i3c_correlated_item`) to `i3c_correlated_coverage` for functional coverage (§5.5)
+
+This is a full reference-model scoreboard, not a basic CMD↔bus correlation check.
 
 ### 5.2. Class Hierarchy
 
@@ -145,90 +148,60 @@ Verifies correct DUT behavior by comparing:
 uvm_scoreboard → i3c_scoreboard
 ```
 
-### 5.3. Analysis Ports (Input)
+The class body declares the analysis ports and internal model `typedef`s/state (§5.4), implements UVM lifecycle and top-level input dispatch inline (`new`, `build_phase`, `run_phase`, `process_req_items()`, `process_i3c_items()`, `process_hard_reset()`, `check_phase`), and then `extern`-declares the remaining helper methods; those helpers are implemented out-of-line across six `` `include``d `.svh` files (§5.5), each covering one grouping.
 
-| Port | Type | Source | Description |
-|------|------|--------|-------------|
-| `reg_fifo` | `uvm_tlm_analysis_fifo#(reg_seq_item)` | `reg_monitor.ap` | All register bus transactions |
-| `i3c_fifo` | `uvm_tlm_analysis_fifo#(i3c_item)` | `i3c_monitor.ap` | All I3C bus transactions |
+### 5.3. Analysis Ports
 
-### 5.4. Internal State
+| Port | Direction | Type | Source / Sink | Description |
+|------|-----------|------|--------|-------------|
+| `reg_fifo` | Input | `uvm_tlm_analysis_fifo#(reg_seq_item)` | `reg_agent.monitor.analysis_port` | All register bus transactions |
+| `i3c_fifo` | Input | `uvm_tlm_analysis_fifo#(i3c_item)` | `i3c_agent.monitor.analysis_port` | All I3C bus transactions |
+| `correlated_ap` | Output | `uvm_analysis_port#(i3c_correlated_item)` | → `i3c_correlated_coverage.analysis_export` (`i3c_env`, §6.4) | Derived per-transaction observations for cross-coverage, published from inside the checking logic itself (not a passive tap) |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `cmd_queue` | `i3c_response_desc_t [$]` | Expected commands in-flight |
-| `tx_data_queue` | `bit [31:0] [$]` | TX data written by SW |
-| `expected_i3c_addr` | `bit [6:0]` | Expected target address from CMD |
-| `expected_rnw` | `bit` | Expected R/W direction |
-| `expected_data_len` | `int` | Expected data length |
-| `pass_cnt` | `int` | Passed check count |
-| `fail_cnt` | `int` | Failed check count |
+### 5.4. Internal State (representative)
 
-### 5.5. Checking Logic
+The scoreboard carries a full expected-transaction model rather than a handful of scalars. Key `typedef`s and queues:
 
-**Phase 1 (basic checking):**
+| Type / field | Description |
+|-------|-------------|
+| `exp_txn_t` | One expected command: attr/opcode, address, R/W, `toc`/`wroc`/`sre`, data length, TID, DAT index, CCC/ENTDAA fields, immediate-data bytes, broadcast-header eligibility |
+| `dat_model_entry_t` | Shadow copy of one DAT entry (`valid`, `device`, static/dynamic address) — built from observed register writes (§ `handle_dat_write()`) |
+| `exp_rx_data_t` | One expected RX FIFO DWORD (read-back correlation id, TID, data length, word index, integrity-pattern classification) |
+| `exp_resp_t` / `exp_resp_seed_t` | Expected response descriptor state: status, length, command class, CCC/DAA result, address-result context, and (for `exp_resp_t`) abort/recovery/stall-recovery context. Command-history boundary is maintained separately in `previous_command_boundary` |
+| `daa_scan_state_t` | Per-ENTDAA-round scratch state (devices joined, rejected PID/BCR/DCR/address, terminating NACK) |
+| `exp_txn_queue`, `tx_data_queue`, `exp_rx_data_queue`, `exp_resp_queue` | In-flight expectation queues, one per model above |
+| `dat_model[DAT_DEPTH]` | Full shadow DAT array |
+| `pending_abort_*`, `recovery_*`, `stall_recovery_*`, `*_history_*` | Cross-transaction state carried between commands for abort/recovery/stall/command-boundary checking and coverage |
+
+### 5.5. Checking Logic — scoreboard shell + 6 include files
 
 ```
-run_phase() forks:
-  ├── process_reg_items()   — track CMD, TX writes, RESP reads
-  └── process_i3c_items()   — compare observed bus activity
+run_phase() forks (join):
+  ├── process_req_items()    — register-bus writes/reads: CMD DWORDs, DAT writes,
+  │                            HC_CONTROL/RESET_CONTROL, PIO_DATA_PORT TX push,
+  │                            RESP/PIO_DATA_PORT reads → check_resp()/check_rx_data()
+  ├── process_i3c_items()    — i3c_fifo.get() → check_i3c_txn() for every observed frame
+  └── process_hard_reset()   — on DUT reset: flush both FIFOs, handle_hard_reset()
 ```
 
-**process_reg_items():**
-```
-forever begin
-  reg_fifo.get(item);
-  case (item.addr)
-    ADDR_CMD_QUEUE: begin
-      // Track CMD descriptor staging
-      // After both DWORDs: decode cmd_attr, dev_idx, rnw, data_length
-      // Push expected transaction info
-    end
-    ADDR_PIO_DATA_PORT: begin
-      // Push TX data to tx_data_queue
-      tx_data_queue.push_back(item.wdata);
-    end
-    ADDR_RESP: begin
-      // Check response: err_status should be Success
-      if (item.rdata[31:28] != 4'b0000)
-        `uvm_error("SCB", $sformatf("Non-zero error status: %0h", item.rdata[31:28]))
-    end
-  endcase
-end
-```
+The class declares its full method surface as `extern` in `i3c_scoreboard.sv`, then closes with six `` `include``s — each file implements exactly the group of `extern` methods declared under its matching comment header in the class body:
 
-**process_i3c_items():**
-```
-forever begin
-  i3c_fifo.get(item);
-  // Check address matches expected
-  `DV_CHECK_EQ(item.addr, expected_i3c_addr, "Address mismatch")
-  // Check direction
-  `DV_CHECK_EQ(item.bus_op, expected_rnw ? BusOpRead : BusOpWrite, "Direction mismatch")
-  // For writes: compare data bytes against tx_data_queue
-  // For reads: data will be checked when SW reads RX queue
-  pass_cnt++;
-end
-```
+| Include file | Method group (per the `extern` table of contents) | Responsibility |
+|---|---|---|
+| `i3c_scoreboard_refmodel.svh` | "Reference model" | HC_CONTROL/RESET_CONTROL/DAT-write handling, SW/hard reset, command-descriptor validation, DAT lookups |
+| `i3c_scoreboard_bus.svh` | "Bus transaction checking" | Matches an observed `i3c_item` to its `exp_txn_t`, checks read/write data, ACK/T-bit sequencing, RX-word enqueue, TX-byte/ACK expectation building |
+| `i3c_scoreboard_ccc.svh` | "CCC and ENTDAA checking" | Broadcast/direct-CCC opcode and payload checking, ENTDAA per-round arbitration and DAT-assignment checking |
+| `i3c_scoreboard_resp.svh` | "RX/response and recovery modeling" | RX FIFO word checking, response-descriptor checking against the full expected-response model, abort/recovery/stall-recovery context tracking |
+| `i3c_scoreboard_cov.svh` | "Correlated coverage" | Classifies outcomes (length/NACK-position/short-boundary/data-pattern/DAA-span) and publishes `i3c_correlated_item`s + response/abort/recovery/DAA/CCC coverage events to `correlated_ap` |
+| `i3c_scoreboard_fmt.svh` | "Diagnostic formatting" | `` `uvm_error``/log message formatting helpers (byte/bit/ACK lists, optional-field printers) — no checking logic |
 
-### 5.6. End-of-Test Checks
+### 5.6. End-of-Test Checks (`check_phase`)
 
-```systemverilog
-function void check_phase(uvm_phase phase);
-  // Verify no unmatched commands
-  // Verify no unconsumed TX data
-  // Report pass/fail counts
-  `DV_EOT_PRINT_TLM_FIFO_CONTENTS(reg_seq_item, reg_fifo)
-  `DV_EOT_PRINT_TLM_FIFO_CONTENTS(i3c_item, i3c_fifo)
-endfunction
-```
+Reports (as `` `uvm_error``) any expected command, TX data word, or expected-response/RX-data-word that was never observed by end of test, then prints both analysis FIFOs' remaining contents via `` `DV_EOT_PRINT_TLM_FIFO_CONTENTS``.
 
-### 5.7. Phase 2 Enhancements
+### 5.7. Status
 
-- Full command descriptor decode and field-by-field comparison
-- CCC-specific checking
-- Data integrity CRC verification
-- Coverage collection from scoreboard observations
+CCC-specific checking, full command-descriptor decode, abort/recovery/stall-recovery modeling, and coverage collection from scoreboard observations (§5.5, `i3c_scoreboard_cov.svh`) are all implemented — none of this is deferred future work.
 
 ---
 
@@ -246,7 +219,10 @@ Top-level UVM environment. Instantiates agents, virtual sequencer, and scoreboar
 | `m_reg_agent` | `reg_agent` | Register bus agent |
 | `m_i3c_agent` | `i3c_agent` | I3C bus agent (Device mode) |
 | `m_vsequencer` | `i3c_virtual_sequencer` | Virtual sequencer |
-| `m_scoreboard` | `i3c_scoreboard` | Scoreboard |
+| `m_scoreboard` | `i3c_scoreboard` | Scoreboard (§5) |
+| `m_i3c_coverage` | `i3c_coverage` | I3C-bus-item covergroups (subscriber on the I3C monitor directly, always created) |
+| `m_reg_coverage` | `reg_coverage` | Register-bus covergroups (subscriber on the reg monitor directly, always created) |
+| `m_correlated_coverage` | `i3c_correlated_coverage` | Cross-domain covergroups fed only by the scoreboard's `correlated_ap` (created only when `cfg.en_scb`) |
 
 ### 6.3. build_phase
 
@@ -254,28 +230,30 @@ Top-level UVM environment. Instantiates agents, virtual sequencer, and scoreboar
 function void build_phase(uvm_phase phase);
   super.build_phase(phase);
 
-  // Get environment config
   if (!uvm_config_db#(i3c_env_cfg)::get(this, "", "cfg", cfg))
     `uvm_fatal(`gfn, "Failed to get i3c_env_cfg")
 
-  // Create virtual sequencer
   if (cfg.is_active) begin
     m_vsequencer = i3c_virtual_sequencer::type_id::create("m_vsequencer", this);
     m_vsequencer.cfg = cfg;
   end
 
-  // Create register agent
   m_reg_agent = reg_agent::type_id::create("m_reg_agent", this);
   uvm_config_db#(reg_agent_cfg)::set(this, "m_reg_agent", "cfg", cfg.m_reg_agent_cfg);
 
-  // Create I3C agent (Device mode)
   m_i3c_agent = i3c_agent::type_id::create("m_i3c_agent", this);
   uvm_config_db#(i3c_agent_cfg)::set(this, "m_i3c_agent", "cfg", cfg.m_i3c_agent_cfg);
   cfg.m_i3c_agent_cfg.en_monitor = 1'b1;
 
-  // Create scoreboard
-  if (cfg.en_scb)
+  m_i3c_coverage = i3c_coverage::type_id::create("m_i3c_coverage", this);
+  m_reg_coverage = reg_coverage::type_id::create("m_reg_coverage", this);
+
+  if (cfg.en_scb) begin
     m_scoreboard = i3c_scoreboard::type_id::create("m_scoreboard", this);
+    m_scoreboard.cfg = cfg;
+    m_correlated_coverage =
+        i3c_correlated_coverage::type_id::create("m_correlated_coverage", this);
+  end
 endfunction
 ```
 
@@ -285,15 +263,18 @@ endfunction
 function void connect_phase(uvm_phase phase);
   super.connect_phase(phase);
 
-  // Connect sequencer handles
   m_vsequencer.m_reg_sequencer = m_reg_agent.sequencer;
   m_vsequencer.m_i3c_sequencer = m_i3c_agent.sequencer;
 
-  // Connect analysis ports to scoreboard
   if (cfg.en_scb) begin
-    m_reg_agent.monitor.ap.connect(m_scoreboard.reg_fifo.analysis_export);
-    m_i3c_agent.monitor.ap.connect(m_scoreboard.i3c_fifo.analysis_export);
+    m_reg_agent.monitor.analysis_port.connect(m_scoreboard.reg_fifo.analysis_export);
+    m_i3c_agent.monitor.analysis_port.connect(m_scoreboard.i3c_fifo.analysis_export);
+    m_scoreboard.correlated_ap.connect(m_correlated_coverage.analysis_export);
   end
+
+  // Coverage subscribers tap the raw monitors directly, independent of en_scb
+  m_i3c_agent.monitor.analysis_port.connect(m_i3c_coverage.analysis_export);
+  m_reg_agent.monitor.analysis_port.connect(m_reg_coverage.analysis_export);
 endfunction
 ```
 
@@ -320,6 +301,10 @@ package i3c_env_pkg;
 
   `include "i3c_env_cfg.sv"
   `include "i3c_virtual_sequencer.sv"
+  `include "i3c_correlated_item.sv"
+  `include "i3c_coverage.sv"
+  `include "reg_coverage.sv"
+  `include "i3c_correlated_coverage.sv"
   `include "i3c_scoreboard.sv"
   `include "i3c_env.sv"
 
@@ -328,12 +313,14 @@ package i3c_env_pkg;
 endpackage
 ```
 
+`i3c_correlated_item.sv`/`i3c_coverage.sv`/`reg_coverage.sv`/`i3c_correlated_coverage.sv` must precede `i3c_scoreboard.sv` and `i3c_env.sv` because both reference these types (`i3c_scoreboard.correlated_ap` is typed `uvm_analysis_port#(i3c_correlated_item)`; `i3c_env` instantiates `i3c_coverage`/`reg_coverage`/`i3c_correlated_coverage` directly, §6.2/6.3).
+
 ---
 
 ## 8. Implementation Notes
 
-- The environment creates exactly **one register agent** and **one I3C agent** (single device)
-- The scoreboard in Phase 1 performs basic CMD→bus correlation; full protocol checking is Phase 2
-- The environment does NOT create coverage collectors in Phase 1
+- The environment creates exactly **one register agent** and **one I3C agent** (single device, though `i3c_agent_cfg` carries config slots for a second target — `i3c_target1`, `04_i3c_agent_spec.md` §11.2 — that this env does not populate)
+- The scoreboard performs full protocol/response/CCC/ENTDAA/abort/recovery reference-model checking, split across the scoreboard shell + 6 include files (§5.5); this is not deferred Phase-2 work
+- The environment always creates `i3c_coverage`/`reg_coverage` (raw per-domain coverage), and additionally creates `i3c_correlated_coverage` when `cfg.en_scb` (cross-domain coverage fed by the scoreboard, §6.2/6.4)
 - The `i3c_env_cfg.initialize()` method sets up default device configuration; tests can override before `build_phase`
-- Analysis port connections use `uvm_tlm_analysis_fifo` to decouple producers from consumers and prevent blocking
+- Analysis port connections use `uvm_tlm_analysis_fifo` (scoreboard inputs) to decouple producers from consumers and prevent blocking; the scoreboard's `correlated_ap` and the coverage subscribers' exports are plain `uvm_analysis_port`/`uvm_subscriber` connections instead

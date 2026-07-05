@@ -8,25 +8,26 @@ Build a UVM-based verification environment for the simplified I3C master control
 |----------|--------|
 | Simulator | **Xcelium** |
 | Bus timing | **Use CSR defaults** (t_low=13, t_high=13 cycles, etc.) |
-| I3C targets | **Single device** for Phase 1, scale later |
-| Functional coverage | **Deferred** to Phase 2 |
+| I3C targets | **Single device** exercised by the env (`i3c_agent_cfg` reserves a second target slot, `i3c_target1`, that is not populated — `04_i3c_agent_spec.md` §11.2) |
+| Functional coverage | **Implemented**: `i3c_coverage`/`reg_coverage` (raw per-domain) + `i3c_correlated_coverage` (cross-domain, fed by the scoreboard) — `06_env_spec.md` §5.5/§6, `10_functional_coverage_matrix.md` |
 | Host interface agent | **Custom `reg_agent`** (lightweight, matches simple addr/wen/ren CSR interface) |
 
 ## Per-File Specifications
 
-Detailed specifications for every verification file are in [docs/verification_specs/](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/):
+Detailed specifications for every verification file are in [docs/verification_specs/](.):
 
 | Spec File | Component |
 |-----------|-----------|
-| [01_dv_macros_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/01_dv_macros_spec.md) | DV macros include |
-| [02_csr_addr_pkg_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/02_csr_addr_pkg_spec.md) | CSR address constants package |
-| [03_reg_agent_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/03_reg_agent_spec.md) | Register bus agent (interface, driver, monitor, sequencer, cfg, seq_item, agent) |
-| [04_i3c_agent_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/04_i3c_agent_spec.md) | I3C bus agent (interface, driver, monitor, sequencer, cfg, seq_item, item, agent) |
-| [05_i3c_seq_lib_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/05_i3c_seq_lib_spec.md) | I3C sequence library (device response seq) |
-| [06_env_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/06_env_spec.md) | Environment, env config, virtual sequencer, scoreboard |
-| [07_tb_top_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/07_tb_top_spec.md) | Testbench top module |
-| [08_tests_and_vseqs_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/08_tests_and_vseqs_spec.md) | Base test, test package, all virtual sequences |
-| [09_build_infrastructure_spec.md](file:///Users/minhuy/Workspaces/i3c/docs/verification_specs/09_build_infrastructure_spec.md) | Makefile, filelist, README |
+| [01_dv_macros_spec.md](01_dv_macros_spec.md) | DV macros include |
+| [02_csr_addr_pkg_spec.md](02_csr_addr_pkg_spec.md) | CSR address constants package |
+| [03_reg_agent_spec.md](03_reg_agent_spec.md) | Register bus agent (interface, driver, monitor, sequencer, cfg, seq_item, agent) |
+| [04_i3c_agent_spec.md](04_i3c_agent_spec.md) | I3C bus agent (interface, driver, monitor, sequencer, cfg, seq_item, item, agent) |
+| [05_i3c_seq_lib_spec.md](05_i3c_seq_lib_spec.md) | I3C sequence library (device response seq) |
+| [06_env_spec.md](06_env_spec.md) | Environment, env config, virtual sequencer, scoreboard, coverage wiring |
+| [07_tb_top_spec.md](07_tb_top_spec.md) | Testbench top module |
+| [08_tests_and_vseqs_spec.md](08_tests_and_vseqs_spec.md) | Base test, test package, all virtual sequences |
+| [09_build_infrastructure_spec.md](09_build_infrastructure_spec.md) | Makefile, filelist, README |
+| [10_functional_coverage_matrix.md](10_functional_coverage_matrix.md) | Functional coverage model (covergroups, coverpoints, crosses) |
 
 ---
 
@@ -68,7 +69,7 @@ graph TB
 
 ---
 
-## File Tree
+## File Tree (current)
 
 ```
 src/verification/
@@ -76,55 +77,38 @@ src/verification/
 ├── Makefile
 └── uvm_i3c/
     ├── filelist.f
-    ├── dv_inc/
-    │   ├── dv_macros.svh
-    │   └── i3c_csr_addr_pkg.sv
-    ├── dv_reg/
-    │   ├── reg_agent_pkg.sv
-    │   ├── reg_if.sv
-    │   ├── reg_seq_item.sv
-    │   ├── reg_driver.sv
-    │   ├── reg_monitor.sv
-    │   ├── reg_sequencer.sv
-    │   ├── reg_agent.sv
-    │   └── reg_agent_cfg.sv
+    ├── dv_inc/                      # dv_macros.svh, i3c_csr_addr_pkg.sv
+    ├── dv_reg/                      # reg_agent_pkg + if/seq_item/driver/monitor/sequencer/agent/cfg
+    │   └── reg_coverage.sv          # raw register-bus covergroups
     ├── dv_i3c/
-    │   ├── i3c_timing_pkg.sv
-    │   ├── i3c_agent_pkg.sv
-    │   ├── i3c_if.sv
-    │   ├── i3c_seq_item.sv
-    │   ├── i3c_item.sv
-    │   ├── i3c_driver.sv
-    │   ├── i3c_monitor.sv
-    │   ├── i3c_sequencer.sv
-    │   ├── i3c_agent.sv
-    │   ├── i3c_agent_cfg.sv
-    │   └── seq_lib/
-    │       ├── i3c_seq_lib.sv
-    │       └── i3c_device_response_seq.sv
+    │   ├── i3c_timing_pkg.sv, i3c_agent_pkg.sv, i3c_if.sv
+    │   ├── i3c_seq_item.sv, i3c_item.sv, i3c_driver.sv, i3c_monitor.sv
+    │   ├── i3c_sequencer.sv, i3c_agent.sv, i3c_agent_cfg.sv
+    │   ├── i3c_coverage.sv          # raw I3C-item covergroups (04/10 specs)
+    │   └── seq_lib/                 # i3c_seq_lib.sv, i3c_device_response_seq.sv
     ├── i3c_core/
-    │   ├── tb_i3c_top.sv
-    │   ├── i3c_env_cfg.sv
-    │   ├── i3c_env.sv
-    │   ├── i3c_env_pkg.sv
+    │   ├── tb_i3c_top.sv, i3c_env_cfg.sv, i3c_env.sv, i3c_env_pkg.sv
     │   ├── i3c_virtual_sequencer.sv
-    │   ├── i3c_scoreboard.sv
-    │   ├── i3c_base_test.sv
-    │   ├── i3c_test_pkg.sv
+    │   ├── i3c_scoreboard.sv        # shell: analysis ports, model typedefs, extern method TOC
+    │   ├── i3c_scoreboard_{refmodel,bus,ccc,resp,cov,fmt}.svh  # 6 include files (06 spec §5.5)
+    │   ├── i3c_correlated_item.sv, i3c_correlated_coverage.sv  # cross-domain coverage
+    │   ├── i3c_base_test.sv, i3c_test_pkg.sv
+    │   ├── sva/                     # flow_active/csr_registers/sync_fifo/i3c_controller_top/tb_pad_model checkers
     │   └── i3c_vseqs/
-    │       ├── i3c_base_vseq.sv
-    │       ├── i3c_imm_vseq.sv
-    │       ├── i3c_write_vseq.sv
-    │       ├── i3c_read_vseq.sv
-    │       └── i3c_vseq_list.sv
+    │       ├── i3c_base_vseq.sv, i3c_vseq_list.sv
+    │       └── bus_vseqs/, ccc_vseqs/, csr_vseqs/, daa_vseqs/, fifo_vseqs/,
+    │           i2c_vseqs/, imm_vseqs/, resp_vseqs/, sdr_read_vseqs/, sdr_write_vseqs/
+    ├── block_tests/                 # standalone elaboration-guard tests (e.g. FIFO depth check)
     └── xrun.args                    # Xcelium compilation arguments
 ```
 
-**Total: ~30 new files**
+The flat `i3c_vseqs/{i3c_imm,i3c_write,i3c_read}_vseq.sv` set below (§ "Phase 1 Tests") reflects the very first cut of this environment; virtual sequences now live under the ten category directories above — see `docs/test_plan/I3C_Testplan.md` for the current test list and CLAUDE.md's `make *_regression` targets for how they're run.
 
 ---
 
-## Phase 1 Tests
+## Initial (Phase 1) Tests
+
+The environment's original three-test slice — kept here as the historical starting point:
 
 | Test Name | Description | Key Checks |
 |-----------|-------------|------------|
@@ -132,16 +116,18 @@ src/verification/
 | `i3c_write` | Regular transfer write (N bytes via TX queue) | Data on bus matches TX queue, response = Success |
 | `i3c_read` | Regular transfer read (N bytes to RX queue) | RX queue data matches device-driven data, response = Success |
 
-## Phase 2 Roadmap
+## Roadmap Status
 
-| Feature | Description |
-|---------|-------------|
-| ENTDAA test | Dynamic address assignment sequence |
-| CCC tests | Broadcast and direct CCC commands |
-| Error injection | NACK, queue overflow, abort |
-| Multi-device | Multiple I3C targets on bus |
-| Functional coverage | Covergroups for protocol, CSR, queues |
-| I2C legacy | I2C device transfers |
+Everything originally planned as "Phase 2" here is implemented; only multi-device remains out of scope:
+
+| Feature | Status |
+|---------|--------|
+| ENTDAA test | **Done** — `i3c_core/i3c_vseqs/daa_vseqs/` (single-device and multi-round arbitration, rejection, DAT-boundary cases) |
+| CCC tests | **Done** — `i3c_core/i3c_vseqs/ccc_vseqs/` (broadcast/direct ENEC/DISEC, ENTDAA opening frame) |
+| Error injection | **Done** — abort/reset/backpressure coverage across `resp_vseqs/`, `csr_vseqs/` (HC abort, SW reset while busy, RX/RESP FIFO full, NACK cases) |
+| Multi-device | **Not implemented** — the env config carries a second target slot (`i3c_agent_cfg.i3c_target1`) but only one device is populated (`i3c_env_cfg::initialize()`, `06_env_spec.md` §3) |
+| Functional coverage | **Done** — `i3c_coverage` (11 covergroups) + `i3c_correlated_coverage` (21 covergroups) + `reg_coverage`; see `10_functional_coverage_matrix.md` |
+| I2C legacy | **Done** — `i3c_core/i3c_vseqs/i2c_vseqs/` and I2C paths through `bus_vseqs/`/`resp_vseqs/` |
 
 ---
 
@@ -173,16 +159,15 @@ sequenceDiagram
 
 ## Build & Run (Xcelium)
 
+The raw `xrun` invocations originally sketched here are now wrapped by the top-level `Makefile` (see `CLAUDE.md` "Commands" and `09_build_infrastructure_spec.md`):
+
 ```bash
-# Compile + elaborate
 cd src/verification
-xrun -compile -elaborate -f uvm_i3c/filelist.f -uvmhome CDNS-1.2
-
-# Run smoke test
-xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_imm_vseq
-
-# Run with verbosity
-xrun -R +UVM_TESTNAME=i3c_base_test +UVM_TEST_SEQ=i3c_write_vseq +UVM_VERBOSITY=UVM_HIGH
+make compile                        # compile + elaborate only
+make sim SEQ=i3c_write_vseq          # compile + run a specific sequence
+make sim SEQ=i3c_write_vseq VERBOSITY=UVM_HIGH SEED=12345
+make regression                     # all CSR/FIFO/bus/SDR/IMM/I2C/CCC/DAA/error suites
+make csr_regression bus_regression sdr_regression ccc_regression daa_regression err_regression
 ```
 
 ## Coding Conventions

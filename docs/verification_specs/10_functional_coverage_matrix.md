@@ -112,11 +112,11 @@ Các mục bus-observable trong phần này thuộc `i3c_coverage`. Collector ch
 | BUS-003 | Address class | broadcast `0x7e`, I3C dynamic, I2C static, reserved/other negative | CSR broadcast, SDR, I2C, CCC, DAA | `Implemented` |
 | BUS-004 | Address ACK | ACK, NACK cho từng broadcast-header/target/CCC/DAA address phase | success và NACK vseqs | `Implemented` |
 | BUS-005 | Actual byte count | 0, 1, 2..4, 5..8, 9..16, 17..64, >64 | length sweep, abort/overflow | `Implemented` |
-| BUS-006 | Data pattern | all-zero, all-one, từng `AA/55`, từng walking-one bit, random/other | TX/RX byte-order và length sweep | `Implemented` |
+| BUS-006 | Data pattern | `cg_payload_byte.cp_data_pattern`: all-zero, all-one, từng `AA/55`, từng walking-one bit, random/other | TX/RX byte-order và length sweep | `Implemented` |
 | BUS-007 | Start source | START, repeated START cho từng address phase | TOC, direct CCC, DAA | `Implemented` |
 | BUS-008 | End condition | STOP, RSTART, RSTART+STOP, incomplete; interrupt là coverpoint riêng | TOC, abort, short-read | `Implemented` bus observation |
 | BUS-009 | Private preamble | dynamic-first, `0x7e/W + Sr + dynamic` | broadcast control, SDR read/write | `Implemented` |
-| BUS-010 | Transaction termination | normal, interrupted read; nguyên nhân HC abort/reset cần correlation/SVA | abort/reset vseqs | `Implemented` observation + `Planned` cause |
+| BUS-010 | Transaction termination | `cg_i3c_read_end.cx_t_bit_interrupted`: bus observation normal/interrupted × final T-bit target-end/controller-continue; `cg_abort_termination` phân loại HC abort/reset/protocol termination × abort point và byte boundary. Reset active-point chi tiết tiếp tục do SVA sở hữu | abort/reset vseqs | `Implemented` correlated cause + `SVA` internal point |
 | BUS-011 | Protocol × direction × length | I3C/I2C read/write × actual-length class | length sweep | `Implemented` |
 | BUS-012 | Address class × ACK | ACK/NACK ở broadcast, dynamic, static và direct CCC address | NACK vseqs | `Implemented` |
 | BUS-013 | Preamble × direction | enabled/disabled private preamble × read/write | CSR broadcast, SDR vseqs | `Implemented` |
@@ -129,16 +129,16 @@ Các mục bus-observable trong phần này thuộc `i3c_coverage`. Collector ch
 
 | ID | Feature/scenario | Coverage item và bins/cross | Test/vseq chính | Trạng thái |
 |---|---|---|---|---|
-| SDR-001 | SDR private write | direction=write, actual length bins; integrity remains scoreboard-owned | write baseline/length/back-to-back | `Implemented` bus fields |
+| SDR-001 | SDR private write | direction=write, actual length bins; payload pass được publish sau khi scoreboard so sánh đủ bus payload với TX FIFO model | write baseline/length/back-to-back | `Implemented` bus + correlated integrity |
 | SDR-002 | SDR private read | direction=read, actual length bins, partial DWORD 1/2/3 bytes | read baseline/length/back-to-back | `Implemented` |
 | SDR-003 | Write T-bit | T-bit 0, 1; parity match `~^byte` | write vseqs | `SVA` |
-| SDR-004 | Read T-bit outcome | final T-bit 0/1 × interrupted; exact/early/beyond requested needs correlation | read target-end vseqs | `Implemented` observation + `Planned` relation + `SVA` |
+| SDR-004 | Read T-bit outcome | `cg_sdr_read_length_t_bit.cx_t_bit_length_outcome`: final T-bit 0/1 × exact/early/beyond-requested; beyond là controller đã nhận đủ requested bytes nhưng target trả T-bit=1 để báo còn dữ liệu, không yêu cầu actual bus length vượt requested | read length sweep, target-end và more-than-requested vseqs | `Implemented` correlated + `SVA` |
 | SDR-005 | Zero-length write | address ACK then no data/T-bit, success length 0 | `i3c_write_len_sweep_vseq` | `SVA` |
 | SDR-006 | Partial final DWORD | byte remainder 1, 2, 3, 0 | read/write length sweep | `Implemented` + `SVA` read |
 | SDR-007 | TOC continuation | TOC0 accepted, missing continuation, unsupported continuation, TOC1 stop | TOC-zero vseqs | `SVA` |
-| SDR-008 | Multi-DAT target | DAT index/address 0, 1, boundary indices; payload remains per target | multi-DAT vseqs | `Planned` + `SVA` selected indices |
-| SDR-009 | Back-to-back direction | W=>W, R=>R, W=>R, R=>W; history clear khi reset/non-private | back-to-back/stress vseqs | `Implemented` |
-| SDR-010 | Data integrity | expected byte equals observed bus/RX byte; pass bin only in normal regression | scoreboard event | `Planned` correlated metric |
+| SDR-008 | Multi-DAT target | DAT index/address 0, 1, boundary indices; scoreboard đã check expected/observed target address và payload; functional cross DAT index × observed address/payload vẫn cần bổ sung | multi-DAT vseqs | Scoreboard check + `Planned` functional cross + `SVA` selected indices |
+| SDR-009 | Back-to-back direction | `cg_private_transition.cx_previous_next_op`: W=>W, R=>R, W=>R, R=>W; history clear khi reset/non-private | back-to-back/stress vseqs | `Implemented` |
+| SDR-010 | Data integrity | `cg_data_integrity.cx_pattern_direction_integrity`: zero/ones/AA55/walking-one/other × read/write × pass. Write sample sau full bus-payload check; read sample chỉ sau khi software đọc và scoreboard check toàn bộ RX FIFO payload. Fail vẫn là checker error và bị ignore khỏi positive closure | scoreboard event, SDR/I2C/byte-order/multi-DAT vseqs | Scoreboard check + `Implemented` correlated metric |
 
 ### 5.3 Immediate transfer
 
@@ -156,7 +156,7 @@ Các mục bus-observable trong phần này thuộc `i3c_coverage`. Collector ch
 |---|---|---|---|---|
 | I2C-001 | Static address selection | `cg_address_phase.cp_i2c_static_addr_range`: usable low `0x08..0x1f`, mid `0x20..0x5f`, high `0x60..0x77`; reserved addresses excluded from legal private-transfer stimulus; transmitted address checked against `DAT.static_address` by SVA | `i2c_regular_write_basic_vseq` | `Implemented` + `SVA` |
 | I2C-002 | Legacy direction | write, read | I2C basic vseqs | `Implemented` |
-| I2C-003 | Write ACK sequence | ACK all, NACK first hoặc after-progress; middle/last-requested cần requested-length correlation | I2C write và data-NACK vseq | `Implemented` observation + `Planned` position relation |
+| I2C-003 | Write ACK sequence | `cg_i2c_write_nack_position`: ACK-all/NACK first/middle/last-requested; position dùng first NACK index, requested length từ command và actual byte count từ bus | I2C write và data-NACK vseq | `Implemented` correlated |
 | I2C-004 | Read master ACK policy | ACK intermediate, NACK final/full boundary/abort boundary | I2C read/abort/overflow vseqs | `SVA` |
 | I2C-005 | Length/packing | 1, 2, 3, 4, >4; partial/full DWORD | `i2c_len_sweep_partial_rx_vseq` | `Implemented` + `SVA` |
 | I2C-006 | No broadcast preamble | I2C read/write never emits private `0x7e` header | I2C basic vseqs | `SVA` |
@@ -169,7 +169,7 @@ Các mục bus-observable trong phần này thuộc `i3c_coverage`. Collector ch
 
 | ID | Feature/scenario | Coverage item và bins/cross | Test/vseq chính | Trạng thái |
 |---|---|---|---|---|
-| CCC-001 | CCC form | broadcast, direct | CCC vseqs | `Implemented` |
+| CCC-001 | CCC form | `cg_ccc.cp_ccc_form`: broadcast, direct | CCC vseqs | `Implemented` |
 | CCC-002 | CCC opcode | ENEC, DISEC, ENTDAA, direct ENEC/DISEC, unsupported | CCC và invalid command vseqs | `Implemented` |
 | CCC-003 | Broadcast ENEC | opcode, opcode T-bit, event byte, event T-bit, STOP, success response | `i3c_ccc_broadcast_enec_vseq` | `SVA` |
 | CCC-004 | Broadcast DISEC | opcode, opcode T-bit, event byte, event T-bit, STOP, success response | `i3c_ccc_broadcast_disec_vseq` | `SVA` |
@@ -183,12 +183,12 @@ Các mục bus-observable trong phần này thuộc `i3c_coverage`. Collector ch
 | ID | Feature/scenario | Coverage item và bins/cross | Test/vseq chính | Trạng thái |
 |---|---|---|---|---|
 | DAA-001 | Requested device count | 0, 1, 2, 3..15 | DAA vseqs | `Implemented` command |
-| DAA-002 | Actual joined count | accepted assignment count 0, 1, 2, 3+ | single/no-device/multi-device vseqs | `Implemented` |
+| DAA-002 | Actual joined count | `cg_daa_transaction.cp_joined_count`: accepted assignment count 0, 1, 2, 3+ | single/no-device/multi-device vseqs | `Implemented` |
 | DAA-003 | DAA result | `cg_daa_result.cp_result`: assigned-all, fewer-than-count, no-device, address-rejected, overflow, abort | DAA và error vseqs | `Implemented` correlated |
 | DAA-004 | DAT start/boundary, multi-round progression và resolved identity stream | `cg_daa_dat_boundary.cx_start_span_response`: first/middle/last start × within/ends-at-last/crosses-boundary span × descriptor accepted/boundary-rejected; `cg_daa_result.cp_rstart_count` covers checked DAA round count. `i3c_daa_multi_device_dat_loop_vseq` checks RX result order against the pre-resolved PID/BCR/DCR order; this verifies controller handling of the resolved stream, not physical target arbitration | DAA multi-device DAT-loop and boundary vseqs | `Implemented` correlated + directed check |
 | DAA-005 | PID/BCR/DCR pattern | zero, all-one, AA/55-only, random/other trên 8 identity bytes | DAA stimulus variants | `Implemented` |
-| DAA-006 | Assigned address | low/mid/high valid; parity result 0/1; reserved negative | DAA vseqs | `Planned` (address × parity cross moved to `i3c_coverage`) |
-| DAA-007 | Round termination | assigned-address ACK/NACK, no-device address NACK, interrupted ID phase, other | DAA/error vseqs | `SVA` + `Implemented` bus observation |
+| DAA-006 | Assigned address | `cg_daa_assigned_address.cx_address_class_parity`: low `0x08..0x1f`, middle `0x20..0x5f`, high `0x60..0x77`, reserved × parity 0/1; chỉ sample round có đủ byte assigned-address | DAA single/multi/boundary/rejected vseqs | Scoreboard check + `Implemented` address × parity |
+| DAA-007 | Round termination | `cg_daa_round.cp_round_outcome`: assigned-address ACK/NACK, no-device address NACK, interrupted ID phase, other | DAA/error vseqs | `SVA` + `Implemented` bus observation |
 | DAA-008 | Requested × actual count | `cg_daa_result.cx_requested_joined_result`: exact, fewer, zero; DAT boundary remains under DAA-004 | DAA vseqs | `Implemented` correlated |
 | DAA-009 | Result × response status | `cg_daa_result_response.cx_result_response`: normal completion=>Success, reject=>Nack, overflow=>Ovl, abort=>HcAborted, sampled only after response status/TID/length correlation passes | DAA/error vseqs | `Implemented` correlated |
 | DAA-011 | DAA FSM paths | ACK receive ID, send address, result commit, no-device, wait-stop, idle return | DAA vseqs | `SVA` |
@@ -202,11 +202,11 @@ Các mục bus-observable trong phần này thuộc `i3c_coverage`. Collector ch
 |---|---|---|---|---|
 | RSP-001 | Error status | `cg_resp_desc.cp_resp_status`: Success, AddrHeader, Nack, Ovl, I3cShortReadErr, HcAborted, I2cDataNackOrI3cBusAborted, NotSupported | normal và response error vseqs | `SVA` selected outcomes + `Implemented` |
 | RSP-002 | Defined but unreachable status | Crc, Parity, Frame; `ignore_bins unreachable` trong `cp_resp_status` | N/A | `Excluded` until RTL can generate them |
-| RSP-003 | Response TID | `cp_resp_tid`: 0..15; equality với command TID cần correlated record | back-to-back, all response vseqs | `Implemented` field coverage + `Planned` correlated equality |
+| RSP-003 | Response TID | `cp_resp_tid`: 0..15; `cg_response_descriptor_correlation.cp_tid_match` so sánh command TID với observed RESP TID | back-to-back, all response vseqs | `Implemented` field coverage + scoreboard check + correlated equality |
 | RSP-004 | Actual response length | `cp_resp_data_len`: 0, 1, 2..4, 5..8, 9..16, >16 | normal/error length vseqs | `Implemented` |
 | RSP-005 | Reserved response bits | `cp_resp_reserved_zero`: exactly zero | all response-producing vseqs | `SVA`/scoreboard check + `Implemented` cover |
-| RSP-006 | WROC success policy | wroc0 no response, wroc1 one response | `i3c_wroc_policy_vseq` | `SVA` |
-| RSP-007 | WROC error override | error writes response for wroc0 and wroc1 | WROC/error vseqs | `SVA` |
+| RSP-006 | WROC success policy | `cg_response_presence_policy.cx_cmd_class_wroc_completion_presence`: command class × wroc0-absent/wroc1-present; exact cardinality and duplicate rejection remain scoreboard/SVA-owned | `i3c_wroc_policy_vseq` | `SVA` + checker + `Implemented` correlated presence |
+| RSP-007 | WROC error override | `cg_response_presence_policy.cx_cmd_class_wroc_completion_presence`: every applicable command class produces a response on error for wroc0 and wroc1; exact cardinality remains scoreboard/SVA-owned | WROC/error vseqs | `SVA` + checker + `Implemented` correlated presence |
 | RSP-008 | Status × command attribute | `cg_response_status.cx_status_cmd_class`: each reachable status for applicable Regular/Immediate/CCC/DAA class; impossible class/status pairs ignored | all response vseqs | `Implemented` correlated |
 | RSP-009 | Status × direction | `cg_response_status.cx_status_direction`: read/write applicable outcomes; DAA `Nack`×read, data-NACK×read và short-read×write ignored | all response vseqs | `Implemented` correlated |
 | RSP-010 | Requested × actual length | `cg_response_length.cx_requested_length_relation`: requested-length class × exact/short/zero/partial-abort/partial-overflow; sample only after bus length and RESP length match | read/write/error vseqs | `Implemented` correlated |
@@ -215,19 +215,19 @@ Các mục bus-observable trong phần này thuộc `i3c_coverage`. Collector ch
 
 | ID | Feature/scenario | Coverage item và bins/cross | Test/vseq chính | Trạng thái |
 |---|---|---|---|---|
-| ERR-001 | Private/broadcast address NACK | broadcast header, I3C private W/R, I2C W/R, direct CCC | NACK response vseqs | `SVA` + `Planned` bus |
-| ERR-002 | Data NACK | I2C regular, I2C immediate; first/middle/last byte | data-NACK vseqs | `SVA` + `Planned` position bins |
+| ERR-001 | Private/broadcast address NACK | `cg_address_phase.cx_addr_class_nack` cover ACK/NACK theo broadcast/dynamic/static; `cg_ccc_target.cx_ccc_target_nack` cover direct CCC target ACK/NACK | NACK response vseqs | `SVA` + `Implemented` bus observation |
+| ERR-002 | Data NACK | `cg_i2c_write_nack_position.cx_cmd_class_nack_position`: I2C Regular/Immediate × first/middle/last-requested/none | data-NACK vseqs | `SVA` + `Implemented` correlated |
 | ERR-003 | TX underflow | before first data word, after partial progress; I3C/I2C | `i3c_write_tx_fifo_underflow_vseq` | `SVA` |
 | ERR-004 | RX overflow | full boundary, partial DWORD; I3C/I2C/ENTDAA | RX overflow vseqs | `SVA` |
-| ERR-005 | Short read | SRE 0/1 × WROC 0/1, one-byte short, DWORD boundary, other partial length, `toc=0` suppression | `i3c_read_short_target_end_vseq` | `SVA` policy/boundary + `Planned` actual-length bins |
+| ERR-005 | Short read | `cg_short_read_boundary.cx_sre_wroc_boundary`: SRE 0/1 × WROC 0/1 × zero/one-byte/DWORD/partial-1/2/3 boundary; `toc=0` suppression tiếp tục do SVA/checker kiểm tra | `i3c_read_short_target_end_vseq` | `SVA` policy + `Implemented` correlated boundary |
 | ERR-006 | RESP FIFO backpressure | success response, error response, stable descriptor, release writes once | `i3c_resp_fifo_full_backpressure_vseq` | `SVA` |
 | ERR-007 | HC abort command class | regular write, regular read, I2C, immediate, CCC, DAA | abort policy vseqs | `SVA` |
 | ERR-008 | Abort entry point | idle holdoff, preamble, CCC, TX data, RX data, DAA, response stage | abort/reset vseqs | `SVA` |
-| ERR-009 | Abort data boundary | 0 bytes, 1..3 bytes, one DWORD, >one DWORD | abort vseqs | `Planned` correlated |
+| ERR-009 | Abort data boundary | `cg_abort_termination.cx_cause_byte_boundary`: 0 bytes, 1..3 bytes, one DWORD, >one DWORD × HC abort/reset/protocol termination | abort vseqs | `Implemented` correlated |
 | ERR-010 | Error priority over abort | AddrHeader, data NACK, DAA NACK, overflow, short-read, NotSupported | abort policy/error vseqs | `SVA` |
 | ERR-011 | Invalid descriptor | each attribute class invalid combination, no DAT/bus access, NotSupported response | invalid descriptor vseqs | `SVA` |
 | ERR-012 | Reset point | idle, command fetch, address, TX, RX, CCC/DAA, response write | reset vseqs | `SVA` |
-| ERR-013 | Recovery | next legal command passes after abort, hard reset, accepted SW reset | abort/reset vseqs | `Planned` correlated |
+| ERR-013 | Recovery | `cg_recovery`: source HC abort/reset/protocol termination × interrupted class/no-active-command × next command class × pass; context được consume đúng một lần | abort/reset vseqs | `Implemented` correlated |
 | ERR-014 | Bus stuck low | observed wait/no recovery timeout | future directed stimulus | `Excluded` from positive closure until recovery policy exists |
 
 ## 8. FIFO và internal control coverage do SVA sở hữu
@@ -257,26 +257,26 @@ Không tạo UVM coverpoint cho các tín hiệu `valid/ready`, pointer, depth h
 
 Các cross dưới đây không được đặt trực tiếp trong `reg_coverage` hoặc `i3c_coverage`, vì một subscriber đơn lẻ không có đủ command intent, observed bus result và response result. Chúng cần một transaction record đã correlation theo thứ tự command/TID trong scoreboard hoặc một dedicated coverage model.
 
-| ID | Cross | Mục tiêu | Điều kiện/ignore |
-|---|---|---|---|
-| COR-001 | command attribute × device type | Mỗi command class đi qua đúng I3C/I2C path | Ignore DAA×I2C; Combo nếu unsupported |
-| COR-002 | device type × direction × requested length | Đóng I3C/I2C read/write length space | Immediate chỉ write và DTT 0..4 |
-| COR-003 | command attribute × DAT index | Kiểm tra chọn target trên toàn DAT | Có thể group index 2..30 nếu không yêu cầu từng Cartesian bin |
-| COR-004 | command direction × bus direction | Command intent khớp bus observed direction | DAA/CCC có framing riêng, sample ở cross riêng |
-| COR-005 | requested address × observed address | Dynamic/static/direct/assigned address đúng | Broadcast preamble không thay thế target address |
-| COR-006 | broadcast enable × transaction type × first address | Control bit chỉ thay đổi private-I3C preamble | Ignore I2C first address=`0x7e` |
-| COR-007 | `cg_response_length.cx_requested_length_relation`: requested length × actual bus length × response length relation | Đóng success, short, abort, underflow/overflow boundary | Implemented cho Regular/Immediate; sample sau RESP correlation |
-| COR-008 | address ACK × response status | ACK/NACK được encode đúng | Broadcast header NACK=>AddrHeader; private NACK=>Nack |
-| COR-009 | `cg_response_status.cx_status_cmd_class`: command class × response status | End-to-end result cho Regular/Immediate/CCC/DAA | Implemented; chỉ reachable status mỗi class |
-| COR-010 | `cg_response_status.cx_status_direction`: direction × response status | Read/write error distribution | Implemented; ignore Nack/data-NACK×read và short-read×write |
-| COR-011 | WROC × completion class × response presence | Success suppression và error override | Response presence: none/exactly-one |
-| COR-012 | CCC opcode × form × target ACK × status | Broadcast/direct management path | ENTDAA dùng DAA result cross |
-| COR-013 | `cg_daa_result.cx_requested_joined_result`: DAA requested count × joined count × result | Exact/fewer/no-device/address reject/overflow/abort | Implemented; joined count không vượt requested/DAT capacity |
-| COR-014 | abort point × command class × response status | Abort coverage trên mọi active flow | Idle abort là holdoff, không có active-command response |
-| COR-015 | reset point × command class × recovery result | Reset không để stale queue/context | Recovery result: next command pass/fail |
-| COR-016 | previous command class × next command class × boundary | STOP và RSTART/back-to-back command mixing | Chỉ legal continuation pairs |
-| COR-017 | data pattern × direction × integrity result | End-to-end payload integrity | Mismatch bin chỉ dành checker-negative test, không phải closure bin normal |
-| COR-018 | stall type × command class × recovery | TX empty, RX full, RESP full, WaitCmd | Ignore non-applicable class/stall pairs |
+| ID | Cross | Mục tiêu | Điều kiện/ignore | Trạng thái |
+|---|---|---|---|---|
+| COR-001 | command attribute × device type | Mỗi command class đi qua đúng I3C/I2C path | Ignore DAA×I2C; Combo nếu unsupported | `Implemented` trong `reg_coverage.cx_cmd_attr_device` |
+| COR-002 | `cg_private_transfer_correlation.cx_protocol_direction_length`: device type × direction × requested length | Đóng I3C/I2C read/write length space | Immediate chỉ write và DTT 0..4 | `Implemented` |
+| COR-003 | command attribute × DAT index | Kiểm tra chọn target trên toàn DAT | Có thể group index 2..30 nếu không yêu cầu từng Cartesian bin | `Implemented` trong `reg_coverage.cx_cmd_attr_dat_idx` |
+| COR-004 | `cg_private_transfer_correlation.cx_cmd_observed_direction`: command direction × bus direction | Command intent khớp bus observed direction | DAA/CCC có framing riêng, sample ở cross riêng | Scoreboard check + `Implemented` correlated metric |
+| COR-005 | `cg_private_transfer_correlation.cx_dat_idx_addr_match`: DAT index/requested address × observed address equality | Dynamic/static target address đúng | Broadcast preamble không thay thế target address | Scoreboard check + `Implemented` correlated metric |
+| COR-006 | `cg_private_preamble_correlation.cx_policy_first_addr_match`: broadcast enable/protocol/preamble policy × first address equality | Control bit chỉ thay đổi private-I3C preamble | I2C không được dùng first address `0x7e`; continuation không lặp header | Scoreboard check + `Implemented` correlated metric |
+| COR-007 | `cg_response_length.cx_requested_length_relation`: requested length × actual bus length × response length relation | Đóng success, short, abort, underflow/overflow boundary | Sample sau RESP correlation; detailed byte-boundary bins theo ERR-005/009 vẫn có thể cần bổ sung | `Implemented` cho Regular/Immediate |
+| COR-008 | `cg_address_response_correlation.cx_phase_ack_status`: address phase × ACK/NACK × observed response status, chỉ sample sau khi status/TID/length của descriptor đã correlation thành công | ACK/NACK được encode đúng | Broadcast-header hoặc private/direct-target NACK => `AddrHeader`; ACK cho phép success hoặc lỗi phát sinh sau address phase | Scoreboard check + `Implemented` correlated metric |
+| COR-009 | `cg_response_status.cx_status_cmd_class`: command class × response status | End-to-end result cho Regular/Immediate/CCC/DAA | Chỉ reachable status mỗi class | `Implemented` |
+| COR-010 | `cg_response_status.cx_status_direction`: direction × response status | Read/write error distribution | Ignore Nack/data-NACK×read và short-read×write | `Implemented` |
+| COR-011 | `cg_response_presence_policy.cx_cmd_class_wroc_completion_presence`: command class × WROC × completion result × response presence | Success suppression và error override trên từng command class | wroc0-success: absent; wroc1-success và mọi error: present; duplicate/missing cardinality do scoreboard/SVA kiểm tra | Scoreboard/SVA check + `Implemented` correlated metric |
+| COR-012 | CCC opcode × form × target ACK × status | Broadcast/direct management path | ENTDAA dùng DAA result cross | `Implemented` opcode×form×status và bus target-ACK riêng + `Planned` combined cross |
+| COR-013 | `cg_daa_result.cx_requested_joined_result`: DAA requested count × joined count × result | Exact/fewer/no-device/address reject/overflow/abort | Joined count không vượt requested/DAT capacity; cần review thêm unreachable bins từ coverage report | `Implemented` |
+| COR-014 | `cg_abort_response.cx_abort_point_cmd_response`: abort point × command class × response status | Chỉ sample sau khi matching response descriptor pass status/TID/length correlation; reset không gán response giả | Idle abort là holdoff, không có active-command response | `SVA` point/policy + `Implemented` correlated metric |
+| COR-015 | `cg_recovery.cx_reset_point_class_result`: reset point × interrupted/no-active class × recovery result | Scoreboard phân biệt idle, queued-command và active-unknown; active FSM phase chi tiết thuộc SVA | Recovery result do matching response của command kế tiếp quyết định | `SVA` reset phase + `Implemented` correlated recovery metric |
+| COR-016 | `cg_command_boundary.cx_previous_next_boundary`: previous command class × next command class × STOP/RSTART/TOC continuation/idle-back-to-back/reset-cleared | STOP là successor đã nằm trong expected queue khi command trước hoàn tất; idle/back-to-back là queue rỗng rồi software mới cấp descriptor tiếp theo. History clear trên reset | Chỉ legal continuation pairs | `Implemented` combined boundary cross |
+| COR-017 | `cg_data_integrity.cx_pattern_direction_integrity`: data pattern × direction × integrity pass | End-to-end payload integrity; read chỉ publish sau full RX FIFO check | Mismatch tiếp tục là `uvm_error`, không phải positive closure bin | Scoreboard check + `Implemented` correlated metric |
+| COR-018 | `cg_stall_recovery.cx_stall_cmd_recovery`: TX empty/RX full/RESP full/WaitCmd × command class × pass | TX/RX lấy từ scoreboard FIFO inference, RESP-full từ queue state, WaitCmd từ legal TOC continuation; internal handshake thuộc SVA | Ignore non-applicable class/stall pairs | `SVA` stall behavior + `Implemented` correlated recovery metric |
 
 ## 10. Traceability theo feature và stimulus
 
@@ -288,7 +288,7 @@ Các cross dưới đây không được đặt trực tiếp trong `reg_coverag
 | Immediate | `i3c_imm_vseq`, `i3c_imm_dtt_sweep_vseq`, `i3c_imm_toc_vseq`, `i3c_imm_i2c_write_vseq` | `reg_coverage` + `i3c_coverage` + `i3c_correlated_coverage` + flow SVA |
 | I2C | `i2c_regular_write_basic_vseq`, `i2c_regular_read_basic_vseq`, `i2c_len_sweep_partial_rx_vseq` | `i3c_coverage` + flow/top SVA |
 | CCC | broadcast/direct ENEC/DISEC và ENTDAA opening-frame vseqs | `i3c_coverage` + flow SVA |
-| DAA | single/no-device/fewer/multi-round/address-rejected/DAT-boundary vseqs | `reg_coverage` + `i3c_coverage` + ENTDAA SVA |
+| DAA | single/no-device/fewer/multi-round/address-rejected/DAT-boundary vseqs | `reg_coverage` + `i3c_coverage` + `i3c_correlated_coverage` + ENTDAA SVA |
 | Errors | private/broadcast NACK, data NACK, short-read, underflow, overflow, RESP backpressure, abort, invalid descriptor vseqs | correlated coverage + flow SVA |
 | Reset/recovery | reset-idle, reset-transfer, SW-reset-busy, SW reset queue/staging vseqs | correlated coverage + top/CSR/flow/FIFO SVA |
 | Bus primitives | PHY, START/STOP/Sr, glitch, SCL timing/stall, byte order và pad model vseqs | bus/PHY/SCL/pad SVA |
@@ -309,9 +309,9 @@ Coverage sign-off chỉ hợp lệ khi đồng thời thỏa các điều kiện
 
 1. `i3c_coverage` đã triển khai common framing, protocol, direction, address, ACK/NACK, byte count, payload pattern, CCC form/opcode và DAA round/result observation.
 2. Mở rộng `reg_coverage`: command TID, mode, command-present và CCC opcode. Address class, queue software-port usage, DAT device/address, HC control field và timing CSR coverage đã được triển khai.
-3. Response descriptor tại `RESP_PORT`, `cg_resp_desc`, và các response cross RSP-008/009/010 trong correlated coverage đã được triển khai; phần TID equality vẫn còn planned.
-4. Tạo correlated transaction record trong scoreboard/coverage model; triển khai COR-001 đến COR-011 trước.
-5. Chạy các length, multi-DAT, CCC, DAA và error regressions; merge coverage; bổ sung stimulus chỉ cho các hole reachable.
+3. Response descriptor tại `RESP_PORT`, `cg_resp_desc`, response field equality và các response cross RSP-003/006/007/008/009/010 trong correlated coverage đã được triển khai.
+4. Correlated transaction record, response correlation, length/T-bit/NACK/short-boundary coverage và DAA assigned-address class × parity (DAA-006) đã được triển khai. Tiếp theo hoàn thiện combined cross COR-012 và review closure/waiver cho các lifecycle cross COR-014/015/018.
+5. Chạy các multi-DAT, CCC, DAA và error regressions; merge coverage; bổ sung stimulus chỉ cho các hole reachable.
 6. Review SVA coverage report, thêm waiver cho state/transition không reachable và tránh duplicate các SVA-owned coverpoints trong UVM.
 
 ## 13. Baseline hiện tại
@@ -326,10 +326,13 @@ Tại thời điểm tạo matrix:
 - `cg_timing_csr` đã được triển khai cho 18 timing CSR, numeric/default/reserved-upper class và ba cross theo địa chỉ; coverage được đặt tại collector thay vì trong `csr_timing_rw_vseq`;
 - `cg_reg_access.cp_addr_class` và `cx_access_addr_class` đã được triển khai cho mapped, aligned-unmapped và misaligned × read/write; `csr_unmapped_addr_no_side_effect_vseq`, seed 1 kết thúc với `UVM_ERROR=0`, `UVM_FATAL=0`;
 - `cg_queue_sw_port` đã được triển khai cho accepted CMD/TX push và RX/RESP pop request. `csr_cmd_partial_then_other_write_vseq` sample CMD/TX/RESP (`75%` contribution), `csr_rx_resp_read_pop_vseq` sample RX/RESP (`50%` contribution); cả hai seed 1 kết thúc với `UVM_ERROR=0`, `UVM_FATAL=0` và cần merge để báo số closure;
-- `i3c_coverage` đã được instantiate/connect và có mười covergroup bus-level: address phase, logical transfer, payload byte, I3C read termination, private direction transition, I2C ACK profile, CCC, direct CCC target và DAA transaction/round;
+- `i3c_coverage` đã được instantiate/connect và có mười một covergroup bus-level, gồm DAA assigned-address class × parity chỉ sample khi round có đủ byte thứ chín;
 - collector sample một lần khi monitor hoàn tất `i3c_item`, tách private broadcast preamble và các nested direct-CCC/DAA address phase; `i3c_monitor` latch `start_from_rstart` trước khi field `rstart` được tái sử dụng làm end condition;
-- internal FSM/FIFO/timing/reset/abort/invalid-cmd coverage được quan sát bằng `cover property` và `assert property` trong thư mục `i3c_core/sva/`; các functional covergroup bound vào RTL (`cg_flow_fsm`, `err014_reset_cg`, `err009_abort_cg`, `err010_invalid_cmd_cg`, `err011_addr_assign_desc_cg`, `daa_addr_parity_cg`, `err009_daa_abort_cg`) đã được loại bỏ; functional coverage hiện nằm trong `reg_coverage` (9 covergroup), `i3c_coverage` (10 covergroup) và `i3c_correlated_coverage` (7 covergroup); FSM state/transition reachability được đóng bằng Xcelium code/FSM coverage (`-coverage all`);
+- internal FSM/FIFO/timing/reset/abort/invalid-cmd coverage được quan sát bằng `cover property` và `assert property` trong thư mục `i3c_core/sva/`; functional coverage hiện nằm trong `reg_coverage` (9 covergroup), `i3c_coverage` (11 covergroup) và `i3c_correlated_coverage` (21 covergroup); FSM state/transition reachability được đóng bằng Xcelium code/FSM coverage (`-coverage all`);
+- Sau review correlation, `i3c_wroc_policy_vseq`, seed 1 đạt `UVM_ERROR=0`, `UVM_FATAL=0`; contribution là `cg_response_descriptor_correlation=91.67%`, `cg_address_response_correlation=79.17%`, `cg_response_presence_policy=84.33%` sau khi thêm command-class dimension. `csr_broadcast_header_control_vseq` đạt `cg_private_preamble_correlation=60.00%` sau khi thêm policy × first-address-match cross. `i3c_broadcast_header_nack_resp_vseq` cũng đạt `UVM_ERROR=0`, `UVM_FATAL=0`, `cg_address_response_correlation=37.50%` sau khi chỉ cho phép sample descriptor đã match, và hit broadcast-header NACK => `AddrHeader`;
 - `i3c_imm_dtt_sweep_vseq`, seed 1 đạt `UVM_ERROR=0`, `UVM_FATAL=0` và đóng phía I3C của cross DTT 0..4; `i3c_imm_i2c_write_vseq` cung cấp phía I2C của cross;
 - `i3c_private_addr_nack_resp_vseq` và `i3c_imm_data_nack_i2c_vseq`, seed 1 đều đạt `UVM_ERROR=0`, `UVM_FATAL=0`; coverage merge hit đủ ba bin `i3c,address_nack`, `i2c,address_nack` và `i2c,data_nack` của IMM-005;
+- Nhóm length/NACK seed 1 đều đạt `UVM_ERROR=0`, `UVM_FATAL=0`: `i3c_read_short_target_end_vseq` sample `cg_short_read_boundary=78.12%`; `i2c_data_nack_write_vseq` sample Regular first/middle/last (`cg_i2c_write_nack_position=58.93%`); `i3c_imm_data_nack_i2c_vseq` sample Immediate first/middle/last (`54.76%`); `i3c_read_len_sweep_vseq` và `i3c_read_target_more_than_requested_vseq` sample exact và beyond-requested, còn target-end sample early. Đây là contribution từng test, chưa phải số merge closure;
+- Nhóm #4..#9 seed 1 đều đạt `UVM_ERROR=0`, `UVM_FATAL=0`: DAA single-device sample `cg_daa_assigned_address=29.17%`; SDR read/write sample `cg_data_integrity=45.00%`; `i2c_regular_abort_vseq` sample khác zero cho abort termination/response/recovery; reset-during-transfer sample `cg_recovery=45.82%` và `cg_command_boundary=36.25%`; TOC-zero, TX-empty, RX-full và RESP-full focused tests đều sample khác zero cho `cg_stall_recovery`. Đây là contribution từng test, chưa phải số merge closure;
 - một coverage run với `i3c_imm_vseq`, seed 1 đã in `cg_reg_access=27.86%`, `cg_dat_entry=31.25%`, `cg_cmd_desc=19.06%` và `cg_resp_desc=35.42%`; đây là contribution của một test, không phải coverage closure của regression.
 - `csr_timing_rw_vseq`, seed 1 đạt `cg_timing_csr=100.00%`; `csr_broadcast_header_control_vseq` và `csr_hc_abort_control_vseq` đã sample `cg_hc_control`. Cả ba run kết thúc với `UVM_ERROR=0`, `UVM_FATAL=0`; coverage control cần merge regression để đánh giá closure.

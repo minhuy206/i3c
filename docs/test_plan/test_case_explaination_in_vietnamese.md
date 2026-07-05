@@ -611,6 +611,8 @@ Testbench program `DAT[0]` là I3C device có dynamic address `0x08`, và `DAT[1
 
 Kết quả mong đợi là bus thấy address theo đúng thứ tự `0x08/W` rồi `0x12/W`. Data payload của từng command phải đúng với TX FIFO data tương ứng, không được lấy nhầm payload giữa hai DAT index. RESP của mỗi command phải báo Success, TID đúng, length đúng, và tất cả queue empty sau test.
 
+Ngoài các case hai target, test chạy thêm một sweep xác định qua `dev_idx=0..31`. Mỗi DAT entry được program một dynamic address hợp lệ riêng, sau đó một write bốn byte được thực thi và hoàn tất trước khi chuyển sang index tiếp theo. Sweep này đóng đủ các bin command DAT index mà không làm thay đổi TID hoặc các scenario selector của những directed case khác.
+
 Test này quan trọng vì DAT index là contract giữa software command descriptor và hardware target lookup. Nếu controller luôn dùng DAT[0] hoặc giữ stale address từ command trước, các transfer multi-target sẽ đi sai device dù FIFO và data path vẫn có vẻ hoạt động.
 
 ## 4.5 I3C SDR Private Read

@@ -441,7 +441,7 @@ stateDiagram-v2
     accept, drive NACK in that byte's controller-owned ACK/NACK slot, then STOP.
     The rejected DWORD is not stored, while response `data_length` includes all bytes
     received through that rejected commit boundary.
-  - When `data_length` is reached successfully: → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`; target early termination (T-bit=0 before the requested length) always → `WriteResp` with `I3cShortReadErr`
+  - When `data_length` is reached successfully: → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`. Target early termination (T-bit=0 before the requested length, latched as `short_read_q`) always forces STOP and ends the transfer — no `toc=0` continuation is taken regardless of the next command, even when `sre=0`. Whether the termination is *reported* as an error is a separate, `sre`-gated decision (`short_read_error = short_read_q && reg_desc.sre`, §5.4): with `sre=1` → `WriteResp` with `I3cShortReadErr`; with `sre=0` the same termination is not an error — → `WriteResp` with `Success` if `wroc=1`, or → `Idle` with no response at all if `wroc=0`
   - **Controller read takeover / abort (MIPI I3C Basic v1.1.1 §5.1.2.3.4):** once the
     target has ACKed a read address it drives SDA push-pull, so the controller may only
     retake the bus at a **T-Bit** (9th bit), where the target parks SDA to High-Z. The
@@ -546,7 +546,7 @@ function automatic i3c_resp_err_status_e map_resp_err_status();
     return Nack;
   end else if (rx_overflow_q || tx_underflow_q) begin
     return Ovl;
-  end else if (short_read_q) begin
+  end else if (short_read_error) begin
     return I3cShortReadErr;
   end else if (not_supported_q) begin
     return NotSupported;
@@ -562,7 +562,7 @@ endfunction
 - `data_nack_q` — an I2C data byte was NACKed (set only on I2C regular-write/immediate data-byte NACK) → `I2cDataNackOrI3cBusAborted` (4'b1001), **not** `Nack`
 - `daa_nack_error_q` — ENTDAA address-assignment attempt was rejected after retry (from `daa_nack_error_i`) → `Nack` (4'b0101); this is the only path that emits `Nack`
 - `rx_overflow_q` / `tx_underflow_q` → `Ovl`
-- `short_read_q` → `I3cShortReadErr`
+- `short_read_error` (= `short_read_q && reg_desc.sre`) — target early termination (T-bit=0) is reported as an error only when `sre=1` → `I3cShortReadErr`; `short_read_q` alone always ends the transfer (STOP, no continuation), but with `sre=0` it is not an error — completion is `Success` (or no response at all if `wroc=0`)
 - `not_supported_q` → `NotSupported`
 - `hc_aborted_q` → `HcAborted`
 - none of the above → `Success`
