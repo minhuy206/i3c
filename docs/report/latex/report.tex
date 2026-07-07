@@ -165,12 +165,14 @@
 % ----- Tham chiếu chéo tiếng Việt -----
 \usepackage[nameinlink]{cleveref}
 \crefname{chapter}{Chương}{Chương}
+\crefname{appendix}{Phụ lục}{Phụ lục}
 \crefname{section}{Mục}{Mục}
 \crefname{figure}{Hình}{Hình}
 \crefname{table}{Bảng}{Bảng}
 \crefname{equation}{Công thức}{Công thức}
 \crefname{algorithm}{Thuật toán}{Thuật toán}
 \Crefname{chapter}{Chương}{Chương}
+\Crefname{appendix}{Phụ lục}{Phụ lục}
 \Crefname{section}{Mục}{Mục}
 \Crefname{figure}{Hình}{Hình}
 \Crefname{table}{Bảng}{Bảng}
@@ -234,10 +236,13 @@
 
 % ----- Phụ lục -----
 \appendix
+\renewcommand{\chaptername}{\appendixname}
+\crefalias{chapter}{appendix}
 \include{Appendix/appendixA}
 \include{Appendix/appendixB}
 \include{Appendix/appendixC}
 \include{Appendix/appendixD}
+\include{Appendix/appendixE}
 \include{Appendix/appendixG}
 \include{Appendix/appendixH}
 \include{Appendix/appendixI}

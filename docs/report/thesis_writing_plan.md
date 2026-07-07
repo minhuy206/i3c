@@ -66,6 +66,7 @@ Before adding a section, table, or figure, identify its owner. Other chapters us
 | 2026-06-24 | Protocol theory (Ch.2) | PASS — 12.5 MHz SDR PP ceiling; Table 87 minimums (tLOW/tHIGH 24 ns, tSU_PP 3 ns, tSCO max 12 ns); broadcast `7'h7E`; three bus conditions (§5.1.3.2.1–.3); ENEC 0x00/0x80, DISEC 0x01/0x81, ENTDAA 0x07 (Table 17); ENTDAA 48-bit PID + 8-bit BCR + 8-bit DCR then dyn-addr+parity ACK loop; T-Bit roles; OD addr/ACK vs PP data. No contradiction. |
 | 2026-06-28 | Architecture (Ch.3) | PASS — broadcast `7'h7E` (`I3C_RSVD_ADDR`), `CCC_ENTDAA=8'h07`, ENTDAA per-Target sequence in `entdaa_fsm.sv`, immediate-CCC set, write T-Bit odd parity, OD/PP phasing all match MIPI. Note: Response-Descriptor `ERR_STATUS` (0x0–0xA) is an HCI/TCRI interface convention (TCRI 7.1.3 Table 11), not a MIPI clause — presented as the implementation's interface error model. |
 | 2026-06-28 | Verification (Ch.4) | PASS — introduces no new protocol assertion; every protocol fact is a subset of the Ch.2/Ch.3 verified sets and is exercised, not redefined. |
+| 2026-07-07 | Results + Conclusion (Ch.5, Ch.6) | PASS — chapters report measured results and roadmap only; protocol mentions (OD address/ACK vs PP payload, T-Bit, START/STOP, ENTDAA loop) are subsets of the Ch.2/Ch.3 verified sets; IBI/Hot-Join/HDR appear as feature names without protocol claims. |
 
 ---
 

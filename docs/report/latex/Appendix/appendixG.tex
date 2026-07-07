@@ -18,23 +18,40 @@ make sim SEQ=i3c_write_vseq SEED=12345 VERBOSITY=UVM_HIGH
 \section*{Các bộ hồi quy}
 
 \begin{lstlisting}[language=bash]
-make smoke            # one smoke test
-make regression       # smoke + write + read
-make csr_regression   # 13 CSR tests
-make fifo_regression  # 4 FIFO tests + elaboration guard
+make smoke            # one smoke test (i3c_imm_vseq)
+make regression       # all 10 groups (80 tests)
+make csr_regression   # 14 CSR tests
+make fifo_regression  # 5 FIFO tests
 make bus_regression   # 11 bus-level tests
-make sdrw_regression  # 8 SDR write tests
-make sdrr_regression  # 9 SDR read tests
+make sdrw_regression  # 5 SDR write tests
+make sdrr_regression  # 6 SDR read tests
 make sdr_regression   # sdrw + sdrr
+make imm_regression   # 4 Immediate Data tests
+make i2c_regression   # 3 I2C tests
+make ccc_regression   # 5 CCC tests
+make daa_regression   # 6 DAA tests
+make err_regression   # 21 response/error tests
+\end{lstlisting}
+
+\section*{Sinh report coverage}
+
+Coverage database (\texttt{cov\_work/}) được merge qua các lần chạy với \texttt{COV=1}; hai target sau
+build công cụ trích xuất dựa trên thư viện UCIS của Xcelium rồi sinh report dạng văn bản
+(\texttt{coverage\_report.txt}, \texttt{sva\_coverage\_report.txt}) --- nguồn số liệu của
+\cref{ch:results} và \cref{app:regression}:
+
+\begin{lstlisting}[language=bash]
+make tools            # build ucd2json / ucd2sva (UCIS API)
+make cov_report       # functional coverage -> coverage_report.txt
+make sva_cov_report   # SVA pass/miss      -> sva_coverage_report.txt
 \end{lstlisting}
 
 \section*{Tiện ích}
 
 \begin{lstlisting}[language=bash]
 make clean            # remove xcelium.d, logs, waves, coverage artifacts
-make fifo_non_power_of_two_elaboration  # TC FIFO_005: expects elaboration FAIL
 \end{lstlisting}
 
-\noindent Kịch bản \texttt{fifo\_non\_power\_of\_two\_elaboration} \emph{kỳ vọng} elaboration thất bại với
-thông báo \texttt{sync\_fifo: Depth (3) must be a power of 2}; test đạt khi fatal này xuất hiện, minh chứng
-cho khẳng định biên dịch mô tả ở \cref{sec:rtl-queues}.
+\noindent Ràng buộc độ sâu FIFO không cần test riêng: \texttt{sync\_fifo} chứa assertion tại thời điểm
+elaboration, dừng với thông báo \texttt{sync\_fifo: Depth (\%0d) must be a power of 2} khi cấu hình độ
+sâu không phải lũy thừa của 2, minh chứng cho khẳng định biên dịch mô tả ở \cref{sec:rtl-queues}.
