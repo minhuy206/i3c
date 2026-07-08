@@ -1,7 +1,6 @@
 class i3c_imm_abort_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_imm_abort_vseq)
 
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
   localparam string ISSUE_PHASE_PATH = "tb_i3c_top.dut.u_ctrl.u_flow_fsm.issue_phase_q";
   localparam int unsigned IMM_ABORT_FSM_TIMEOUT = 5000;
 
@@ -31,7 +30,8 @@ class i3c_imm_abort_vseq extends i3c_base_vseq;
       if (!uvm_hdl_read(ISSUE_PHASE_PATH, phase_val)) begin
         `uvm_fatal(`gfn, $sformatf("%s: failed to read %s", ctxt, ISSUE_PHASE_PATH))
       end
-      if (state_val[3:0] == FSM_ISSUE_CMD && phase_val[7:0] == 8'd5) return;
+      if ((state_val[3:0] == IssueI3CWrite || state_val[3:0] == IssueI2CWrite) &&
+          phase_val[7:0] == 8'd5) return;
     end
     `uvm_fatal(`gfn, $sformatf(
                          "%s: immediate transfer did not complete its first data ACK/T-bit phase",

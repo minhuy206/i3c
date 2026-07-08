@@ -14,9 +14,6 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
   localparam string SCL_BUS_PATH = "tb_i3c_top.scl_bus";
   localparam string SDA_BUS_PATH = "tb_i3c_top.sda_bus";
 
-  localparam bit [3:0] FSM_INIT_WRITE = 4'd7;
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
-  localparam bit [3:0] FSM_WRITE_RESP = 4'd12;
   localparam bit [7:0] PHASE_ADDR_ACK = 8'd2;
   localparam bit [3:0] SCL_GENERATE_START = 4'd1;
   localparam bit [2:0] TX_DRIVE_BYTE = 3'd1;
@@ -275,7 +272,7 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
       @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
       if ((hdl_read_uint_lsb(
               FLOW_STATE_PATH, 4
-          ) == FSM_INIT_WRITE) && (hdl_read_uint_lsb(
+          ) == InitWrite) && (hdl_read_uint_lsb(
               ISSUE_PHASE_PATH, 8
           ) == PHASE_ADDR_ACK) && (hdl_read_uint_lsb(
               RX_FLOW_STATE_PATH, 3
@@ -290,7 +287,7 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
       @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
       if ((hdl_read_uint_lsb(
               FLOW_STATE_PATH, 4
-          ) == FSM_ISSUE_CMD) && (hdl_read_uint_lsb(
+          ) == IssueI3CWrite) && (hdl_read_uint_lsb(
               TX_FLOW_STATE_PATH, 3
           ) == TX_DRIVE_BYTE))
         return;
@@ -303,7 +300,7 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
       @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
       if ((hdl_read_uint_lsb(
               FLOW_STATE_PATH, 4
-          ) == FSM_ISSUE_CMD) && (hdl_read_uint_lsb(
+          ) == IssueI3CRead) && (hdl_read_uint_lsb(
               RX_FLOW_STATE_PATH, 3
           ) == RX_READ_BYTE))
         return;
@@ -316,7 +313,7 @@ class i3c_reset_during_transfer_phases_vseq extends bus_base_vseq;
       @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
       if ((hdl_read_uint_lsb(
               FLOW_STATE_PATH, 4
-          ) == FSM_WRITE_RESP) && hdl_read_bit(
+          ) == WriteResp) && hdl_read_bit(
               resp_paths.write_valid_path
           ) && !hdl_read_bit(
               resp_paths.write_ready_path

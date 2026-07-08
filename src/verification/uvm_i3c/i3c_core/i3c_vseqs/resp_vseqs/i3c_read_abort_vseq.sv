@@ -4,7 +4,6 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
   localparam int unsigned DATA_LENGTH = 8;
   localparam int unsigned DATA_LENGTH_DEEP = 16;
 
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
 
   function new(string name = "i3c_read_abort_vseq");
     super.new(name);
@@ -59,7 +58,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
 
     write_read_cmd(cfg, .toc(1'b1));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI3CRead, cfg.ctxt, device_done_timeout_cycles(cfg));
 
     reg_write(ADDR_HC_CONTROL, hc_control_value(
               .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));
@@ -123,7 +122,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
 
     write_read_cmd(cfg, .toc(1'b1));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI3CRead, cfg.ctxt, device_done_timeout_cycles(cfg));
     begin : wait_rx_committed
       int timeout = device_done_timeout_cycles(cfg);
       for (int i = 0; i < timeout; i++) begin
@@ -195,7 +194,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
 
     write_read_cmd(cfg, .toc(1'b0));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI3CRead, cfg.ctxt, device_done_timeout_cycles(cfg));
 
     reg_write(ADDR_HC_CONTROL, hc_control_value(
               .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));

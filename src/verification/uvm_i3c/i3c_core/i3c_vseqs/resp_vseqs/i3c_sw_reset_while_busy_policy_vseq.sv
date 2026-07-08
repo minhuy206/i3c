@@ -4,7 +4,6 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
   localparam string TX_FLOW_STATE_PATH = "tb_i3c_top.dut.u_ctrl.u_tx_flow.state_q";
   localparam string SW_RESET_PATH = "tb_i3c_top.dut.sw_reset";
 
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
   localparam bit [2:0] TX_DRIVE_BYTE = 3'd1;
   localparam bit [6:0] StaticAddr = 7'h50;
   localparam bit [6:0] DynamicAddr = 7'h08;
@@ -107,7 +106,7 @@ class i3c_sw_reset_while_busy_policy_vseq extends i3c_base_vseq;
       @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
       if ((hdl_read_uint_lsb(
               FLOW_FSM_STATE_PATH, 4
-          ) == FSM_ISSUE_CMD) && (hdl_read_uint_lsb(
+          ) == IssueI3CWrite) && (hdl_read_uint_lsb(
               TX_FLOW_STATE_PATH, 3
           ) == TX_DRIVE_BYTE))
         return;

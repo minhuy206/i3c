@@ -4,6 +4,7 @@ package i3c_env_pkg;
   import i3c_agent_pkg::*;
   import i3c_csr_addr_pkg::*;
   import i3c_pkg::*;
+  import controller_pkg::*;
 
   `include "uvm_macros.svh"
   `include "dv_macros.svh"

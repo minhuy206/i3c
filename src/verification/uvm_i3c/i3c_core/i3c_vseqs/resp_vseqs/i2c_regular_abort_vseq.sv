@@ -7,8 +7,6 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
   localparam int unsigned DATA_LENGTH = 8;
   localparam int unsigned DATA_LENGTH_DEEP = 16;
 
-  localparam bit [3:0] FSM_FETCH_TX_DATA = 4'd6;
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
 
   function new(string name = "i2c_regular_abort_vseq");
     super.new(name);
@@ -58,7 +56,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     write_tx_words(tx_words);
     write_write_cmd(cfg, .toc(1'b1));
 
-    wait_for_flow_fsm_state(FSM_FETCH_TX_DATA, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(FetchTxData, cfg.ctxt, device_done_timeout_cycles(cfg));
     tx_depth = hdl_read_fifo_depth(tx_paths.depth_path);
     `DV_CHECK_EQ(tx_depth, tx_words.size(),
                  $sformatf("%s: early abort should fire before TX FIFO word consumption", cfg.ctxt))
@@ -103,7 +101,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     write_write_cmd(cfg, .toc(1'b1));
 
     wait_for_tx_depth_below(tx_words.size(), tx_depth, cfg.ctxt);
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI2CWrite, cfg.ctxt, device_done_timeout_cycles(cfg));
     assert_hc_abort();
 
     finish_write_abort_case(cfg, exp_data, resp, dev_seq, "deep_abort");
@@ -143,7 +141,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     write_tx_words(tx_words);
     write_write_cmd(cfg, .toc(1'b0));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI2CWrite, cfg.ctxt, device_done_timeout_cycles(cfg));
     assert_hc_abort();
 
     finish_write_abort_case(cfg, exp_data, resp, dev_seq, "toc0_abort");
@@ -183,7 +181,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     settle_cycles(cfg.settle_before_cmd);
     write_read_cmd(cfg, .toc(1'b1));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI2CRead, cfg.ctxt, device_done_timeout_cycles(cfg));
     rx_depth = hdl_read_fifo_depth(rx_paths.depth_path);
     `DV_CHECK_EQ(rx_depth, 0, $sformatf("%s: early abort should fire before RX FIFO commit",
                                         cfg.ctxt))
@@ -261,7 +259,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     settle_cycles(cfg.settle_before_cmd);
     write_read_cmd(cfg, .toc(1'b0));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI2CRead, cfg.ctxt, device_done_timeout_cycles(cfg));
     assert_hc_abort();
 
     finish_read_abort_case(cfg, read_data, resp, dev_seq, "toc0_abort");

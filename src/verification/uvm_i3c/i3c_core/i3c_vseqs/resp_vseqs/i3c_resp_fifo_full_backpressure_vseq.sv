@@ -2,7 +2,6 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_resp_fifo_full_backpressure_vseq)
 
   localparam int unsigned RespFifoDepth = 8;
-  localparam bit [3:0] FSM_WRITE_RESP = 4'd12;
   localparam bit [6:0] I3cAddr = 7'h08;
 
   bit [31:0] prefill_words[RespFifoDepth];
@@ -80,7 +79,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     end
 
     repeat (8) begin
-      `DV_CHECK_EQ(hdl_read_uint_lsb(FLOW_FSM_STATE_PATH, 4), FSM_WRITE_RESP,
+      `DV_CHECK_EQ(hdl_read_uint_lsb(FLOW_FSM_STATE_PATH, 4), WriteResp,
                    $sformatf("%s: FSM must remain in WriteResp while RESP is full", ctxt))
       `DV_CHECK_EQ(hdl_read_bit(resp_paths.write_valid_path), 1'b1,
                    $sformatf("%s: pending response valid must remain asserted", ctxt))
@@ -157,7 +156,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     write_tx_words(tx_words);
     write_cmd(cmd[31:0], cmd[63:32]);
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
-    wait_for_flow_fsm_state(FSM_WRITE_RESP, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(WriteResp, cfg.ctxt, device_done_timeout_cycles(cfg));
 
     verify_response_stalled(expected_desc, cfg.ctxt);
     release_and_check_response(expected_desc, cfg.ctxt);
@@ -194,7 +193,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(cmd[31:0], cmd[63:32]);
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
-    wait_for_flow_fsm_state(FSM_WRITE_RESP, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(WriteResp, cfg.ctxt, device_done_timeout_cycles(cfg));
 
     verify_response_stalled(expected_desc, cfg.ctxt);
     release_and_check_response(expected_desc, cfg.ctxt);
