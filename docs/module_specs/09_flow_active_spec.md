@@ -199,10 +199,9 @@ typedef enum logic [3:0] {
   I3CBcastHeader    = 4'd4,   // Optional I3C broadcast-header preamble
   IssueImmediateCcc = 4'd5,   // Immediate CCC execution
   FetchTxData       = 4'd6,   // Fetch DWORD from TX FIFO
-  InitI3CWrite      = 4'd7,   // Initialize I3C write transaction
-  InitI3CRead       = 4'd8,   // Initialize I3C read transaction
-  InitI2CWrite      = 4'd9,   // Initialize I2C write transaction
-  InitI2CRead       = 4'd10,  // Initialize I2C read transaction
+  InitWrite         = 4'd7,   // Initialize write transaction (I3C or I2C)
+  InitRead          = 4'd8,   // Initialize read transaction (I3C or I2C)
+  // 4'd9, 4'd10 reserved (freed by the InitI3C*/InitI2C* merge)
   IssueCmd          = 4'd11,  // Drive command/data bytes on bus
   WriteResp         = 4'd12   // Generate and write response descriptor
 } flow_fsm_state_e;
@@ -221,8 +220,8 @@ typedef enum logic [1:0] {
 ```
 
 `bcast_header_next_q` is latched in `WaitDAT` alongside the main FSM state and read back in
-`I3CBcastHeader` to choose its successor state (`IssueImmediateCcc`/`IssueCmd`/`InitI3CWrite`/
-`InitI3CRead`) — see the dispatch edges in the diagram below.
+`I3CBcastHeader` to choose its successor state (`IssueImmediateCcc`/`IssueCmd`/`InitWrite`/
+`InitRead`) — see the dispatch edges in the diagram below.
 
 ```mermaid
 stateDiagram-v2
@@ -234,17 +233,17 @@ stateDiagram-v2
     FetchDAT --> WriteResp: invalid descriptor (NotSupported, no DAT/bus access)
     FetchDAT --> WaitDAT: valid descriptor, dat_read_valid_hw_q=1
 
-    WaitDAT --> InitI2CWrite: q=0, I2C + Immediate/Regular Write
+    WaitDAT --> InitWrite: q=0, I2C + Immediate/Regular Write
     WaitDAT --> I3CBcastHeader: q=0, I3C + broadcast_header_enable_i (private) or CCC/ENTDAA
-    WaitDAT --> InitI3CWrite: q=0, private I3C Immediate/Regular Write, no broadcast header
-    WaitDAT --> InitI3CRead: q=0, I3C Regular + Read, no broadcast header
-    WaitDAT --> InitI2CWrite: q=0, I2C Regular + Write
-    WaitDAT --> InitI2CRead: q=0, I2C Regular + Read
+    WaitDAT --> InitWrite: q=0, private I3C Immediate/Regular Write, no broadcast header
+    WaitDAT --> InitRead: q=0, I3C Regular + Read, no broadcast header
+    WaitDAT --> InitWrite: q=0, I2C Regular + Write
+    WaitDAT --> InitRead: q=0, I2C Regular + Read
 
     I3CBcastHeader --> IssueImmediateCcc: bcast_header_next_q=BcastHeaderBroadcastCCC/DirectCCC
     I3CBcastHeader --> IssueCmd: bcast_header_next_q=BcastHeaderEntdaa
-    I3CBcastHeader --> InitI3CWrite: bcast_header_next_q=BcastHeaderPrivate, Immediate/Regular Write
-    I3CBcastHeader --> InitI3CRead: bcast_header_next_q=BcastHeaderPrivate, Regular Read
+    I3CBcastHeader --> InitWrite: bcast_header_next_q=BcastHeaderPrivate, Immediate/Regular Write
+    I3CBcastHeader --> InitRead: bcast_header_next_q=BcastHeaderPrivate, Regular Read
 
     IssueImmediateCcc --> WriteResp: transfer complete, wroc=1
     IssueImmediateCcc --> Idle: successful transfer complete, wroc=0
@@ -257,19 +256,16 @@ stateDiagram-v2
     IssueCmd --> Idle: successful transfer complete with wroc=0
     IssueCmd --> FetchDAT: toc=0 continuation — next queued command accepted in-line (accept_continuation_cmd), no return to Idle
 
-    InitI3CWrite --> FetchTxData: regular/combo I3C write address phase complete
-    InitI3CWrite --> IssueCmd: private immediate I3C address phase complete
-    InitI3CRead --> IssueCmd: I3C read address phase complete
-    InitI2CWrite --> FetchTxData: regular/combo I2C write address phase complete
-    InitI2CWrite --> IssueCmd: immediate I2C address phase complete
-    InitI2CRead --> IssueCmd: I2C read initialized
+    InitWrite --> FetchTxData: regular/combo I3C or I2C write address phase complete
+    InitWrite --> IssueCmd: private immediate I3C or I2C address phase complete
+    InitRead --> IssueCmd: I3C or I2C read address phase complete
 
     WriteResp --> Idle: response written
 
     IssueCmd --> IssueCmd: HC abort (abort_i) on active I3C/I2C read — STOP deferred to next T-Bit/ACK boundary (abort_active_state/abort_stop_now/abort_stop_required), then terminates via the FetchTxData/WriteResp edges above
 ```
 
-### 5.2. State Descriptions (All 13 States)
+### 5.2. State Descriptions (11 Active States, 2 Reserved Encodings)
 
 #### Idle (State 0) — IMPLEMENTED in reference
 
@@ -298,11 +294,11 @@ stateDiagram-v2
 - **Outputs:** none (all defaults; `dat_read_valid_hw_d = 0` is critical — lets `q` drop to 0)
 - **Transition (on `!dat_read_valid_hw_q`):**
   - Immediate CCC (`cp = 1`) → `I3CBcastHeader`
-  - Private immediate I3C (`cp = 0`) → `I3CBcastHeader` when `broadcast_header_enable_i = 1`; otherwise `InitI3CWrite`. Immediate transfers do not support continuation via `toc = 0`.
-  - Legacy I2C immediate → `InitI2CWrite`
+  - Private immediate I3C (`cp = 0`) → `I3CBcastHeader` when `broadcast_header_enable_i = 1`; otherwise `InitWrite`. Immediate transfers do not support continuation via `toc = 0`.
+  - Legacy I2C immediate → `InitWrite`
   - Valid `cmd_attr == AddressAssignment` → `I3CBcastHeader` (ENTDAA); descriptor validation already occurred in `FetchDAT`
-  - Private regular I3C write/read → `I3CBcastHeader` only when `broadcast_header_enable_i = 1` and this is not a continuation; otherwise `InitI3CWrite`/`InitI3CRead`
-  - Legacy I2C regular write/read → `InitI2CWrite`/`InitI2CRead`
+  - Private regular I3C write/read → `I3CBcastHeader` only when `broadcast_header_enable_i = 1` and this is not a continuation; otherwise `InitWrite`/`InitRead`
+  - Legacy I2C regular write/read → `InitWrite`/`InitRead`
 - **Timing cost:** +2 cycles vs original FetchDAT direct dispatch (negligible vs SCL timing)
 
 #### I3CBcastHeader (State 4)
@@ -314,8 +310,8 @@ stateDiagram-v2
 
 #### Legacy I2C immediate write
 
-- **Path:** `WaitDAT` -> `InitI2CWrite` -> `IssueCmd` -> `WriteResp`.
-- **Address phase:** `InitI2CWrite` generates START, sends `{static_address, Write}`, and reads ACK.
+- **Path:** `WaitDAT` -> `InitWrite` -> `IssueCmd` -> `WriteResp`.
+- **Address phase:** `InitWrite` generates START, sends `{static_address, Write}`, and reads ACK.
 - **Data phase:** `IssueCmd` sends up to four inline descriptor bytes and reads the I2C ACK/NACK after each byte.
 - **OD/PP:** Open-Drain throughout.
 - **Completion:** Generate STOP after all bytes, address NACK, data NACK, or HC abort.
@@ -372,45 +368,25 @@ stateDiagram-v2
   - → `IssueCmd` when data captured
   - → `WriteResp` with response error `Ovl` if TX FIFO is empty when the controller needs the next DWORD
 
-#### InitI3CWrite (State 7) — **NEW (was TODO)**
+#### InitWrite (State 7) — **NEW (was TODO)**; merges the former InitI3CWrite/InitI2CWrite
 
-- **Purpose:** Initialize a regular I3C write transaction
+- **Purpose:** Initialize a regular write transaction, I3C or I2C, selected by `!dat_entry.device`/`dat_entry.device`
 - **Actions:**
-  - Generate START or repeated START through the shared I3C address preamble
-  - Send `{dynamic_address, 1'b0}` from the DAT entry
+  - Generate START or repeated START through the shared I3C/I2C address preamble (`drive_i3c_addr_preamble`/`drive_i2c_addr_preamble`, selected by `target_is_i3c`)
+  - I3C: send `{dynamic_address, 1'b0}` from the DAT entry. I2C: send `{static_address, 1'b0}`
   - Read address ACK and set `AddrHeader` response status on NACK
-- **OD/PP:** Open-Drain for START/address/ACK; later data phase is Push-Pull in `IssueCmd`
-- **Transition:** → `FetchTxData` when `data_length > 0`; → `IssueCmd` for zero-length writes
+- **OD/PP:** Open-Drain for START/address/ACK throughout (I2C never switches to Push-Pull); for I3C the later data phase is Push-Pull in `IssueCmd`
+- **Transition:** I3C regular → `FetchTxData` when `data_length > 0`, else `IssueCmd`. I2C regular → `FetchTxData` unconditionally. Either mode, immediate → `IssueCmd`
 
-#### InitI3CRead (State 8) — **NEW (was TODO)**
+#### InitRead (State 8) — **NEW (was TODO)**; merges the former InitI3CRead/InitI2CRead
 
-- **Purpose:** Initialize a regular I3C read transaction
+- **Purpose:** Initialize a regular read transaction, I3C or I2C, selected by `!dat_entry.device`/`dat_entry.device`
 - **Actions:**
-  - Generate START or repeated START through the shared I3C address preamble
-  - Send `{dynamic_address, 1'b1}` from the DAT entry
+  - Generate START or repeated START through the shared I3C/I2C address preamble, selected by `target_is_i3c`
+  - I3C: send `{dynamic_address, 1'b1}` from the DAT entry. I2C: send `{static_address, 1'b1}`
   - Read address ACK and set `AddrHeader` response status on NACK
-- **OD/PP:** Open-Drain for START/address/ACK; later read data phase uses Push-Pull timing/ownership rules in `IssueCmd`
+- **OD/PP:** Open-Drain for START/address/ACK throughout (I2C never switches to Push-Pull); for I3C the later read data phase uses Push-Pull timing/ownership rules in `IssueCmd`
 - **Transition:** → `IssueCmd` after address phase, or → `WriteResp` on NACK after STOP
-
-#### InitI2CWrite (State 9) — **NEW (was TODO)**
-
-- **Purpose:** Initialize a regular I2C write transaction
-- **Actions:**
-  - Generate START (Open-Drain)
-  - Send `{static_address, 1'b0}` (I2C address + write bit)
-  - Read ACK — if NACK, latch `addr_nack_q` → response status `AddrHeader`
-- **OD/PP:** Open-Drain throughout
-- **Transition:** → `IssueCmd` to send data bytes, or → `WriteResp` on NACK
-
-#### InitI2CRead (State 10) — **NEW (was TODO)**
-
-- **Purpose:** Initialize a regular I2C read transaction
-- **Actions:**
-  - Generate START (Open-Drain)
-  - Send `{static_address, 1'b1}` (I2C address + read bit)
-  - Read ACK — if NACK, latch `addr_nack_q` → response status `AddrHeader`
-- **OD/PP:** Open-Drain throughout
-- **Transition:** → `IssueCmd` to receive data bytes, or → `WriteResp` on NACK
 
 #### TX FIFO underflow handling
 
@@ -602,7 +578,7 @@ end
 | Implemented states        | 6 of 14 (8 TODO)                             | All 14 implemented                 |
 | IssueImmediateCcc         | Empty TODO                                   | Full implementation                |
 | FetchTxData               | Empty TODO                                   | Full implementation                |
-| InitI2CWrite/Read         | Empty TODO                                   | Full implementation                |
+| InitWrite/Read (I2C path)  | Empty TODO                                   | Full implementation                |
 | TX underflow / RX overflow | Incomplete or delegated handling            | Error response with `Ovl`          |
 | IssueCmd                  | Empty TODO                                   | Full implementation                |
 | WaitDAT (State 3)         | Not present                                  | Added for M-6 DAT capture fix      |

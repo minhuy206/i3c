@@ -93,10 +93,9 @@ module flow_active
     I3CBcastHeader    = 4'd4,
     IssueImmediateCcc = 4'd5,
     FetchTxData       = 4'd6,
-    InitI3CWrite      = 4'd7,
-    InitI3CRead       = 4'd8,
-    InitI2CWrite      = 4'd9,
-    InitI2CRead       = 4'd10,
+    InitWrite         = 4'd7,
+    InitRead          = 4'd8,
+    // 4'd9, 4'd10 reserved: freed by the Init merge, reused by the IssueCmd decomposition
     IssueCmd          = 4'd11,
     WriteResp         = 4'd12
   } flow_fsm_state_e;
@@ -866,9 +865,9 @@ module flow_active
             if (cmd_attr == ImmediateDataTransfer) begin
               if (!imm_desc.cp) begin
                 if (!target_is_i3c) begin
-                  state_d = InitI2CWrite;
+                  state_d = InitWrite;
                 end else if (!broadcast_header_enable_i) begin
-                  state_d = InitI3CWrite;
+                  state_d = InitWrite;
                 end else begin
                   state_d = I3CBcastHeader;
                 end
@@ -879,17 +878,17 @@ module flow_active
               state_d = I3CBcastHeader;
             end else if (cmd_dir == Write) begin
               if (!target_is_i3c) begin
-                state_d = InitI2CWrite;
+                state_d = InitWrite;
               end else if (cont_pending_q || !broadcast_header_enable_i) begin
-                state_d = InitI3CWrite;
+                state_d = InitWrite;
               end else begin
                 state_d = I3CBcastHeader;
               end
             end else begin
               if (!target_is_i3c) begin
-                state_d = InitI2CRead;
+                state_d = InitRead;
               end else if (cont_pending_q || !broadcast_header_enable_i) begin
-                state_d = InitI3CRead;
+                state_d = InitRead;
               end else begin
                 state_d = I3CBcastHeader;
               end
@@ -908,9 +907,9 @@ module flow_active
             unique case (bcast_header_next_q)
               BcastHeaderPrivate: begin
                 if (cmd_attr == ImmediateDataTransfer) begin
-                  state_d = InitI3CWrite;
+                  state_d = InitWrite;
                 end else begin
-                  state_d = (cmd_dir == Read) ? InitI3CRead : InitI3CWrite;
+                  state_d = (cmd_dir == Read) ? InitRead : InitWrite;
                 end
               end
 
@@ -963,7 +962,7 @@ module flow_active
           end
         end
 
-        InitI2CWrite: begin
+        InitWrite: begin
           if (addr_nack_q) begin
             if (scl_stop_done_q) begin
               state_d = WriteResp;
@@ -971,37 +970,15 @@ module flow_active
           end else if (issue_phase_q > PhaseAddrAck) begin
             if (cmd_attr == ImmediateDataTransfer) begin
               state_d = IssueCmd;
+            end else if (target_is_i3c) begin
+              state_d = (remaining_len_q > 16'h0) ? FetchTxData : IssueCmd;
             end else begin
               state_d = FetchTxData;
             end
           end
         end
 
-        InitI2CRead: begin
-          if (addr_nack_q) begin
-            if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end else if (issue_phase_q > PhaseAddrAck) begin
-            state_d = IssueCmd;
-          end
-        end
-
-        InitI3CWrite: begin
-          if (addr_nack_q) begin
-            if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end else if (issue_phase_q > PhaseAddrAck) begin
-            if (cmd_attr == ImmediateDataTransfer) begin
-              state_d = IssueCmd;
-            end else begin
-              state_d = (remaining_len_q > 16'h0) ? FetchTxData : IssueCmd;
-            end
-          end
-        end
-
-        InitI3CRead: begin
+        InitRead: begin
           if (addr_nack_q) begin
             if (scl_stop_done_q) begin
               state_d = WriteResp;
@@ -1410,45 +1387,29 @@ module flow_active
           end
         end
 
-        InitI3CWrite: begin
-          sel_i3c_i2c = 1'b1;
-          gen_clock   = 1'b1;
+        InitWrite: begin
+          sel_i3c_i2c    = target_is_i3c;
+          use_i2c_timing = !target_is_i3c;
+          sel_od_pp      = 1'b0;
+          gen_clock      = 1'b1;
           if (addr_nack_q) begin
             request_stop(1'b0);
-          end else begin
+          end else if (target_is_i3c) begin
             drive_i3c_addr_preamble(Write);
-          end
-        end
-
-        InitI3CRead: begin
-          sel_i3c_i2c = 1'b1;
-          gen_clock   = 1'b1;
-          if (addr_nack_q) begin
-            request_stop(1'b0);
-          end else begin
-            drive_i3c_addr_preamble(Read);
-          end
-        end
-
-        InitI2CWrite: begin
-          sel_i3c_i2c = 1'b0;
-          use_i2c_timing = 1'b1;
-          sel_od_pp = 1'b0;
-          gen_clock = 1'b1;
-          if (addr_nack_q) begin
-            request_stop(1'b0);
           end else begin
             drive_i2c_addr_preamble(Write);
           end
         end
 
-        InitI2CRead: begin
-          sel_i3c_i2c = 1'b0;
-          use_i2c_timing = 1'b1;
-          sel_od_pp = 1'b0;
-          gen_clock = 1'b1;
+        InitRead: begin
+          sel_i3c_i2c    = target_is_i3c;
+          use_i2c_timing = !target_is_i3c;
+          sel_od_pp      = 1'b0;
+          gen_clock      = 1'b1;
           if (addr_nack_q) begin
             request_stop(1'b0);
+          end else if (target_is_i3c) begin
+            drive_i3c_addr_preamble(Read);
           end else begin
             drive_i2c_addr_preamble(Read);
           end
@@ -1747,9 +1708,9 @@ module flow_active
       scl_use_od_low = !sel_od_pp;
     end else if (state_q == IssueImmediateCcc) begin
       scl_use_od_low = !sel_od_pp;
-    end else if (state_q == InitI3CWrite) begin
+    end else if (state_q == InitWrite && target_is_i3c) begin
       scl_use_od_low = !sel_od_pp;
-    end else if (state_q == InitI3CRead) begin
+    end else if (state_q == InitRead && target_is_i3c) begin
       scl_use_od_low = !sel_od_pp;
     end else if (state_q == IssueCmd && (cmd_attr == AddressAssignment || target_is_i3c)) begin
       scl_use_od_low = !sel_od_pp;

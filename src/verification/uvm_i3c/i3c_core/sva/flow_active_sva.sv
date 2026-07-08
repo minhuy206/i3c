@@ -117,10 +117,9 @@ module flow_active_sva
   localparam logic [3:0] I3CBcastHeader = 4'd4;
   localparam logic [3:0] IssueImmediateCcc = 4'd5;
   localparam logic [3:0] FetchTxData = 4'd6;
-  localparam logic [3:0] InitI3CWrite = 4'd7;
-  localparam logic [3:0] InitI3CRead = 4'd8;
-  localparam logic [3:0] InitI2CWrite = 4'd9;
-  localparam logic [3:0] InitI2CRead = 4'd10;
+  localparam logic [3:0] InitWrite = 4'd7;
+  localparam logic [3:0] InitRead = 4'd8;
+  // 4'd9, 4'd10 reserved: freed by the Init merge, reused by the IssueCmd decomposition
   localparam logic [3:0] IssueCmd = 4'd11;
   localparam logic [3:0] WriteResp = 4'd12;
 
@@ -291,12 +290,12 @@ module flow_active_sva
           expected_sel_od_pp = expected_imm_sel_od_pp(desc, phase, addr_after_rstart);
         end
 
-        InitI3CWrite: begin
-          expected_sel_od_pp = (phase == PhaseAddr) && addr_after_rstart;
+        InitWrite: begin
+          expected_sel_od_pp = !dat.device && (phase == PhaseAddr) && addr_after_rstart;
         end
 
-        InitI3CRead: begin
-          expected_sel_od_pp = (phase == PhaseAddr) && addr_after_rstart;
+        InitRead: begin
+          expected_sel_od_pp = !dat.device && (phase == PhaseAddr) && addr_after_rstart;
         end
 
         IssueCmd: begin
@@ -342,9 +341,9 @@ module flow_active_sva
         expected_scl_use_od_low = !expected_sel;
       end else if (state == IssueImmediateCcc) begin
         expected_scl_use_od_low = !expected_sel;
-      end else if (state == InitI3CWrite) begin
+      end else if (state == InitWrite && !dat.device) begin
         expected_scl_use_od_low = !expected_sel;
-      end else if (state == InitI3CRead) begin
+      end else if (state == InitRead && !dat.device) begin
         expected_scl_use_od_low = !expected_sel;
       end else if (state == IssueCmd && ((attr == AddressAssignment) || !dat.device)) begin
         expected_scl_use_od_low = !expected_sel;
@@ -391,8 +390,7 @@ module flow_active_sva
   function automatic logic imm_private_active_state();
     return (cmd_attr == ImmediateDataTransfer) &&
            !imm_desc.cp &&
-           ((state_q == InitI3CWrite) ||
-            (state_q == InitI2CWrite) ||
+           ((state_q == InitWrite) ||
             (state_q == IssueCmd));
   endfunction
 
@@ -411,7 +409,7 @@ module flow_active_sva
   endfunction
 
   function automatic logic legal_imm_private_addr_rstart();
-    return state_q == InitI3CWrite &&
+    return state_q == InitWrite &&
            i3c_immediate_private_write() &&
            issue_phase_q == PhaseStart &&
            next_start_is_rstart_q &&
@@ -419,8 +417,8 @@ module flow_active_sva
   endfunction
 
   function automatic logic i2c_active_state();
-    return (state_q == InitI2CWrite) ||
-           (state_q == InitI2CRead) ||
+    return (state_q == InitWrite) ||
+           (state_q == InitRead) ||
            (state_q == FetchTxData) ||
            (state_q == IssueCmd);
   endfunction
@@ -553,7 +551,7 @@ module flow_active_sva
 
 
   function automatic logic sdr_write_active_state();
-    return (state_q == InitI3CWrite) ||
+    return (state_q == InitWrite) ||
            (state_q == FetchTxData) ||
            (state_q == IssueCmd);
   endfunction
@@ -863,7 +861,7 @@ module flow_active_sva
 
   ap_sdr_write_addr_uses_dynamic_address :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             sdr_regular_i3c_write() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte
@@ -873,7 +871,7 @@ module flow_active_sva
 
   cp_sdr_write_addr_uses_dynamic_address :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             sdr_regular_i3c_write() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte &&
@@ -881,7 +879,7 @@ module flow_active_sva
 
   ap_sdr_write_zero_len_no_data_phase :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            (state_q == InitI3CWrite || state_q == IssueCmd) &&
+                                            (state_q == InitWrite || state_q == IssueCmd) &&
                                             sdr_regular_i3c_write() &&
                                             !addr_nack_q &&
                                             remaining_len_q == 16'h0 &&
@@ -893,7 +891,7 @@ module flow_active_sva
 
   cp_sdr_write_zero_len_no_data_phase :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            (state_q == InitI3CWrite || state_q == IssueCmd) &&
+                                            (state_q == InitWrite || state_q == IssueCmd) &&
                                             sdr_regular_i3c_write() &&
                                             !addr_nack_q &&
                                             remaining_len_q == 16'h0 &&
@@ -1194,15 +1192,15 @@ module flow_active_sva
 
   ap_init_i3c_write_no_tx_pop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             sdr_regular_i3c_write()
                                             |->
                                             !tx_queue_rready_o)
-  else $error("flow_active_sva: InitI3CWrite must not pop TX FIFO before address ACK in %m");
+  else $error("flow_active_sva: InitWrite must not pop TX FIFO before address ACK in %m");
 
   cp_init_i3c_write_addr_ack_to_fetch_tx :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             sdr_regular_i3c_write() &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck &&
@@ -1212,23 +1210,23 @@ module flow_active_sva
 
   ap_init_i3c_read_no_rx_data_req :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read()
                                             |->
                                             !bus_rx_req_byte &&
                                             !rx_queue_wvalid)
-  else $error("flow_active_sva: InitI3CRead must not request read data or push RX FIFO in %m");
+  else $error("flow_active_sva: InitRead must not request read data or push RX FIFO in %m");
 
   cp_init_i3c_read_no_rx_data_req :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read() &&
                                             !bus_rx_req_byte &&
                                             !rx_queue_wvalid);
 
   ap_sdr_read_addr_uses_dynamic_address :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte
@@ -1238,7 +1236,7 @@ module flow_active_sva
 
   cp_sdr_read_addr_uses_dynamic_address :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte &&
@@ -1246,17 +1244,17 @@ module flow_active_sva
 
   ap_init_i3c_read_addr_ack_to_issue_cmd :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read() &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck
                                             |=>
                                             state_q == IssueCmd)
-  else $error("flow_active_sva: InitI3CRead must enter IssueCmd after address ACK in %m");
+  else $error("flow_active_sva: InitRead must enter IssueCmd after address ACK in %m");
 
   cp_init_i3c_read_addr_ack_to_issue_cmd :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read() &&
                                             !addr_nack_q &&
                                             issue_phase_q > PhaseAddrAck
@@ -1265,7 +1263,7 @@ module flow_active_sva
 
   ap_sdr_write_addr_nack_no_data_phase :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                                         (state_q == InitI3CWrite ||
+                                                         (state_q == InitWrite ||
                                                           state_q == IssueCmd) &&
                                                          sdr_regular_i3c_write() &&
                                                          addr_nack_q
@@ -1277,7 +1275,7 @@ module flow_active_sva
 
   cp_sdr_write_addr_nack_no_data_phase :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                                         (state_q == InitI3CWrite ||
+                                                         (state_q == InitWrite ||
                                                           state_q == IssueCmd) &&
                                                          sdr_regular_i3c_write() &&
                                                          addr_nack_q &&
@@ -1288,7 +1286,7 @@ module flow_active_sva
   ap_sdr_write_addr_nack_sample_no_data_phase :
   assert property (
       @(posedge clk_i) disable iff (!rst_ni)
-      (state_q == InitI3CWrite || state_q == IssueCmd) &&
+      (state_q == InitWrite || state_q == IssueCmd) &&
       sdr_regular_i3c_write() &&
       issue_phase_q == PhaseAddrAck &&
       bus_rx_done_i &&
@@ -1300,7 +1298,7 @@ module flow_active_sva
 
   cp_sdr_write_addr_nack_sample_no_data_phase :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-      (state_q == InitI3CWrite || state_q == IssueCmd) &&
+      (state_q == InitWrite || state_q == IssueCmd) &&
       sdr_regular_i3c_write() &&
       issue_phase_q == PhaseAddrAck &&
       bus_rx_done_i &&
@@ -1311,7 +1309,7 @@ module flow_active_sva
   ap_sdr_write_addr_nack_eventually_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
       addr_nack_q
-  ) && (state_q == InitI3CWrite || state_q == IssueCmd) && sdr_regular_i3c_write() |->
+  ) && (state_q == InitWrite || state_q == IssueCmd) && sdr_regular_i3c_write() |->
       ##[1:AddrNackRespTimeoutCycles] (state_q == WriteResp && addr_nack_resp_matches()))
   else
     $error(
@@ -1470,7 +1468,7 @@ module flow_active_sva
 
   ap_sdr_read_addr_nack_no_data_phase :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                                         state_q == InitI3CRead &&
+                                                         state_q == InitRead &&
                                                          sdr_regular_i3c_read() &&
                                                          addr_nack_q
                                                          |->
@@ -1482,7 +1480,7 @@ module flow_active_sva
 
   cp_sdr_read_addr_nack_no_data_phase :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                                         state_q == InitI3CRead &&
+                                                         state_q == InitRead &&
                                                          sdr_regular_i3c_read() &&
                                                          addr_nack_q &&
                                                          gen_stop_o &&
@@ -1493,7 +1491,7 @@ module flow_active_sva
   ap_sdr_read_addr_nack_sample_no_data_phase :
   assert property (
       @(posedge clk_i) disable iff (!rst_ni)
-      state_q == InitI3CRead &&
+      state_q == InitRead &&
       sdr_regular_i3c_read() &&
       issue_phase_q == PhaseAddrAck &&
       bus_rx_done_i &&
@@ -1508,7 +1506,7 @@ module flow_active_sva
 
   cp_sdr_read_addr_nack_sample_no_data_phase :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-      state_q == InitI3CRead &&
+      state_q == InitRead &&
       sdr_regular_i3c_read() &&
       issue_phase_q == PhaseAddrAck &&
       bus_rx_done_i &&
@@ -1523,7 +1521,7 @@ module flow_active_sva
   ap_sdr_read_addr_nack_eventually_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
       addr_nack_q
-  ) && state_q == InitI3CRead && sdr_regular_i3c_read() |->
+  ) && state_q == InitRead && sdr_regular_i3c_read() |->
       ##[1:AddrNackRespTimeoutCycles] (state_q == WriteResp && addr_nack_resp_matches()))
   else
     $error(
@@ -2069,7 +2067,7 @@ module flow_active_sva
 
   ap_sdr_read_rstart_instead_of_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read() &&
                                             issue_phase_q == PhaseStart &&
                                             next_start_is_rstart_q
@@ -2096,7 +2094,7 @@ module flow_active_sva
                                             broadcast_header_enable_i &&
                                             sdr_regular_i3c_read()
                                             ##[1:8]
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             next_start_is_rstart_q);
 
   cp_toc0_accept_then_rstart_then_toc1_stop_read :
@@ -2111,7 +2109,7 @@ module flow_active_sva
                                             cmd_queue_rready_o &&
                                             !gen_stop_o
                                             ##[1:64]
-                                            state_q == InitI3CRead &&
+                                            state_q == InitRead &&
                                             sdr_regular_i3c_read() &&
                                             issue_phase_q == PhaseStart &&
                                             next_start_is_rstart_q &&
@@ -2247,7 +2245,7 @@ module flow_active_sva
 
   ap_rstart_instead_of_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             sdr_regular_i3c_write() &&
                                             issue_phase_q == PhaseStart &&
                                             next_start_is_rstart_q
@@ -2274,7 +2272,7 @@ module flow_active_sva
                                             broadcast_header_enable_i &&
                                             sdr_regular_i3c_write()
                                             ##[1:8]
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             next_start_is_rstart_q);
 
   ap_toc1_requests_stop :
@@ -2296,7 +2294,7 @@ module flow_active_sva
                                             cmd_queue_rready_o &&
                                             !gen_stop_o
                                             ##[1:64]
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             sdr_regular_i3c_write() &&
                                             issue_phase_q == PhaseStart &&
                                             next_start_is_rstart_q &&
@@ -2327,7 +2325,7 @@ module flow_active_sva
                                             cmd_queue_rready_o &&
                                             !gen_stop_o
                                             ##[1:128]
-                                            state_q == InitI3CWrite &&
+                                            state_q == InitWrite &&
                                             cont_pending_q &&
                                             sdr_regular_i3c_write() &&
                                             issue_phase_q == PhaseStart &&
@@ -2372,7 +2370,7 @@ module flow_active_sva
   // I2C write address byte = {static_address, W}.
   ap_i2c_write_addr_uses_static_address :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI2CWrite &&
+                                            state_q == InitWrite &&
                                             i2c_regular_write() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte
@@ -2383,7 +2381,7 @@ module flow_active_sva
 
   cp_i2c_write_addr_uses_static_address :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI2CWrite &&
+                                            state_q == InitWrite &&
                                             i2c_regular_write() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte &&
@@ -2392,7 +2390,7 @@ module flow_active_sva
   // I2C read address byte = {static_address, R}.
   ap_i2c_read_addr_uses_static_address :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI2CRead &&
+                                            state_q == InitRead &&
                                             i2c_regular_read() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte
@@ -2403,7 +2401,7 @@ module flow_active_sva
 
   cp_i2c_read_addr_uses_static_address :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI2CRead &&
+                                            state_q == InitRead &&
                                             i2c_regular_read() &&
                                             issue_phase_q == PhaseAddr &&
                                             bus_tx_req_byte &&
@@ -2772,7 +2770,7 @@ module flow_active_sva
                                             !dat_read_valid_hw_o &&
                                             !cont_pending_q
                                             |=>
-                                            state_q == InitI2CWrite)
+                                            state_q == InitWrite)
   else $error("flow_active_sva: I2C write must skip the I3C broadcast header in %m");
 
   cp_i2c_write_skips_broadcast_header :
@@ -2783,7 +2781,7 @@ module flow_active_sva
                                             !dat_read_valid_hw_o &&
                                             !cont_pending_q
                                             ##1
-                                            state_q == InitI2CWrite);
+                                            state_q == InitWrite);
 
   ap_i2c_read_skips_broadcast_header :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2792,7 +2790,7 @@ module flow_active_sva
                                             !dat_read_valid_hw_o &&
                                             !cont_pending_q
                                             |=>
-                                            state_q == InitI2CRead)
+                                            state_q == InitRead)
   else $error("flow_active_sva: I2C read must skip the I3C broadcast header in %m");
 
   cp_i2c_read_skips_broadcast_header :
@@ -2803,7 +2801,7 @@ module flow_active_sva
                                             !dat_read_valid_hw_o &&
                                             !cont_pending_q
                                             ##1
-                                            state_q == InitI2CRead);
+                                            state_q == InitRead);
 
   ap_i2c_never_enters_broadcast_header :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2974,8 +2972,8 @@ module flow_active_sva
   cp_timing_mode_i3c :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             (sdr_regular_i3c_write() || sdr_regular_i3c_read()) &&
-                                            (state_q == InitI3CWrite ||
-                                             state_q == InitI3CRead ||
+                                            (state_q == InitWrite ||
+                                             state_q == InitRead ||
                                              state_q == IssueCmd) &&
                                             !use_i2c_timing_o);
 
@@ -3064,7 +3062,7 @@ module flow_active_sva
   // IMM_004: I2C immediate address byte = {static_address, W}.
   ap_i2c_imm_addr_uses_static_address :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI2CWrite &&
+                                            state_q == InitWrite &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
                                             dat_entry.device &&
@@ -3077,7 +3075,7 @@ module flow_active_sva
 
   cp_i2c_imm_addr_uses_static_address :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == InitI2CWrite &&
+                                            state_q == InitWrite &&
                                             cmd_attr == ImmediateDataTransfer &&
                                             !imm_desc.cp &&
                                             dat_entry.device &&
@@ -3493,7 +3491,7 @@ module flow_active_sva
                                             hc_aborted_q);
 
   // IMM_001/002: private-start prefix selection — broadcast-header detour only
-  // when enabled, straight to InitI3CWrite otherwise (cp_private_start_prefix).
+  // when enabled, straight to InitWrite otherwise (cp_private_start_prefix).
   cp_imm_bcast_header_path :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WaitDAT &&
@@ -3518,7 +3516,7 @@ module flow_active_sva
                                             imm_desc.dtt <= 3'd4 &&
                                             !dat_read_valid_hw_o
                                             ##1
-                                            state_q == InitI3CWrite);
+                                            state_q == InitWrite);
 
   // IMM_001/002: the broadcast header (when taken) drives the 0x7E reserved
   // address, not a target address — confirms the 7E+W preamble.
