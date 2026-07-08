@@ -9,6 +9,7 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     immediate_data_trans_desc_t        imm_cmd;
     i3c_device_response_seq            dev_seq;
     bit                         [31:0] data;
+    bit                         [31:0] hc_status_before;
     bit                         [31:0] resp;
     byte_queue_t                       random_data;
     event                              disabled_window_done;
@@ -65,6 +66,16 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     `DV_CHECK_EQ(data[HC_STS_FSM_IDLE_BIT], 1'b1,
                  "csr_enable_disable_vseq: HC_STATUS.FSM_IDLE should be set after completion")
     check_all_queues_empty("after csr_enable_disable_vseq first enable run");
+
+    hc_status_before = data;
+    reg_write(ADDR_HC_STATUS, 32'hFFFF_FFFF);
+    reg_read(ADDR_HC_STATUS, data);
+    `DV_CHECK_EQ(data, hc_status_before,
+                 "csr_enable_disable_vseq: all-ones write changed read-only HC_STATUS")
+    reg_write(ADDR_HC_STATUS, 32'h0000_0000);
+    reg_read(ADDR_HC_STATUS, data);
+    `DV_CHECK_EQ(data, hc_status_before,
+                 "csr_enable_disable_vseq: all-zeroes write changed read-only HC_STATUS")
 
     disable_dut();
     reg_read(ADDR_HC_CONTROL, data);

@@ -53,7 +53,8 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
   bit                                cmd_present;
   bit                         [ 7:0] cmd_code;
   bit                                cmd_sre;
-  bit                                cmd_dbp;
+
+  // bit                                cmd_dbp; // Decoded for descriptor visibility only. Regular CCC is unsupported, so DBP is not sampled.
 
   bit                                cmd_has_rnw;
   bit                                cmd_has_data_len;
@@ -61,7 +62,7 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
   bit                                cmd_has_dev_count;
   bit                                cmd_has_mode;
   bit                                cmd_has_present;
-  bit                                cmd_has_sre_dbp;
+  bit                                cmd_has_sre;
   bit                                cmd_is_ccc;
   bit                                cmd_known_attr;
   bit                                cmd_supported;
@@ -233,22 +234,19 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
       bins unsupported = default;
     }
 
-    cp_cmd_sre: coverpoint cmd_sre iff (cmd_has_sre_dbp) {bins disabled = {0}; bins enabled = {1};}
-
-    cp_cmd_dbp: coverpoint cmd_dbp iff (cmd_has_sre_dbp) {bins absent = {0}; bins present = {1};}
+    cp_cmd_sre: coverpoint cmd_sre iff (cmd_has_sre) {bins disabled = {0}; bins enabled = {1};}
 
     cx_regular_rnw_len: cross cp_cmd_rnw, cp_cmd_data_len iff (cmd_attr == RegularTransfer);
 
     cx_cmd_attr_toc: cross cp_cmd_attr, cp_cmd_toc{
       ignore_bins reserved_attr = binsof (cp_cmd_attr.reserved);
+      ignore_bins combo_attr = binsof (cp_cmd_attr.combo);
     }
 
     cx_cmd_attr_present: cross cp_cmd_attr, cp_cmd_present{
       ignore_bins non_applicable_attr =
-          binsof (cp_cmd_attr.address_assignment) || binsof (cp_cmd_attr.reserved);
+          binsof (cp_cmd_attr.address_assignment) || binsof (cp_cmd_attr.reserved) || binsof (cp_cmd_attr.combo);
     }
-
-    cx_cmd_sre_dbp: cross cp_cmd_sre, cp_cmd_dbp;
 
     cx_cmd_attr_dat_idx: cross cp_cmd_attr, cp_cmd_dat_idx{
       ignore_bins reserved_attr = binsof (cp_cmd_attr.reserved);
@@ -271,7 +269,10 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
       bins i3c = {0}; bins legacy_i2c = {1};
     }
 
-    cx_cmd_attr_device: cross cp_cmd_corr_attr, cp_cmd_device_type;
+    cx_cmd_attr_device: cross cp_cmd_corr_attr, cp_cmd_device_type{
+      ignore_bins legacy_i2c_address_assignment =
+          binsof (cp_cmd_device_type.legacy_i2c) && binsof (cp_cmd_corr_attr.address_assignment);
+    }
   endgroup
 
   covergroup cg_cmd_transition;
@@ -572,7 +573,6 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
     cmd_present = 1'b0;
     cmd_code = raw_desc[14:7];
     cmd_sre = 1'b0;
-    cmd_dbp = 1'b0;
 
     cmd_has_rnw = 1'b0;
     cmd_has_data_len = 1'b0;
@@ -580,7 +580,7 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
     cmd_has_dev_count = 1'b0;
     cmd_has_mode = 1'b0;
     cmd_has_present = 1'b0;
-    cmd_has_sre_dbp = 1'b0;
+    cmd_has_sre = 1'b0;
     cmd_is_ccc = 1'b0;
     cmd_known_attr = 1'b1;
     cmd_supported = 1'b0;
@@ -594,12 +594,11 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
         cmd_present = regular_desc.cp;
         cmd_code = regular_desc.cmd;
         cmd_sre = regular_desc.sre;
-        cmd_dbp = regular_desc.dbp;
         cmd_has_rnw = 1'b1;
         cmd_has_data_len = 1'b1;
         cmd_has_mode = 1'b1;
         cmd_has_present = 1'b1;
-        cmd_has_sre_dbp = 1'b1;
+        cmd_has_sre = 1'b1;
         cmd_supported = !regular_desc.cp && (regular_desc.mode == sdr0);
         current_cmd_class = regular_desc.rnw ? CMD_CLASS_REG_READ : CMD_CLASS_REG_WRITE;
       end

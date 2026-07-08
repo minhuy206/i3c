@@ -12,6 +12,8 @@ function void i3c_scoreboard::check_ccc_txn(i3c_item item, exp_txn_t exp);
   bit                   daa_response_valid;
   i3c_daa_result_e      daa_result;
   i3c_resp_cmd_class_e  cmd_class;
+  int unsigned          joined_count;
+  txn_cov_outcome_t     outcome;
 
   is_direct_ccc      = exp.cmd_code[7];
   is_entdaa          = (i3c_ccc_e'(exp.cmd_code) == ENTDAA);
@@ -21,18 +23,25 @@ function void i3c_scoreboard::check_ccc_txn(i3c_item item, exp_txn_t exp);
   daa_response_valid = 1'b0;
   daa_result         = DAA_RESULT_OTHER;
   cmd_class          = classify_response_cmd(exp.cmd_attr, exp.is_ccc);
+  joined_count       = 0;
+  outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
+              resp_status: Success};
 
   `DV_CHECK_EQ(item.addr, exp.addr, "CCC broadcast address mismatch")
   `DV_CHECK_EQ(item.bus_op, BusOpWrite, "CCC broadcast direction mismatch")
 
-  if (check_ccc_bcast_header_nack(item, exp, cmd_class)) return;
+  if (check_ccc_bcast_header_nack(item, exp, cmd_class, outcome)) begin
+    publish_ccc_coverage(exp, outcome, 0);
+    return;
+  end
 
   check_ccc_opcode(item, exp);
 
   if (is_direct_ccc) begin
     check_ccc_direct_phase(item, exp, resp_status, resp_len, direct_idx, direct_item);
   end else if (is_entdaa) begin
-    check_ccc_entdaa(item, exp, resp_status, resp_len, daa_response_valid, daa_result);
+    check_ccc_entdaa(item, exp, resp_status, resp_len, daa_response_valid, daa_result,
+                     joined_count);
   end else begin
     check_ccc_broadcast_payload(item, exp);
   end
@@ -59,11 +68,21 @@ function void i3c_scoreboard::check_ccc_txn(i3c_item item, exp_txn_t exp);
              (item.CCC_direct_q[item.CCC_direct_q.size()-1].num_data >= 9) ?
              DAA_ASSIGNED_ADDRESS : DAA_ID) : CCC;
     prepare_abort_response(HC_ABORT, point, resp_len);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = HC_ABORT;
+    outcome.abort_point = point;
   end else if (is_entdaa && (resp_status == Nack)) begin
     prepare_abort_response(PROTOCOL_TERMINATION, DAA_ASSIGNED_ADDRESS, resp_len);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = PROTOCOL_TERMINATION;
+    outcome.abort_point = DAA_ASSIGNED_ADDRESS;
   end else if (resp_status == NotSupported) begin
     prepare_abort_response(PROTOCOL_TERMINATION, RESPONSE, resp_len);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = PROTOCOL_TERMINATION;
+    outcome.abort_point = RESPONSE;
   end
+  outcome.resp_status = resp_status;
   record_exp_resp('{
       rnw:                     1'b0,
       tid:                     exp.tid,
@@ -94,6 +113,13 @@ function void i3c_scoreboard::check_ccc_txn(i3c_item item, exp_txn_t exp);
     start_stall_recovery(STALL_RX_FULL, cmd_class);
   end
 
+  if (is_entdaa) begin
+    publish_entdaa_coverage(exp, joined_count, item.CCC_direct_q.size(), daa_result, outcome,
+                            resp_len);
+  end else begin
+    publish_ccc_coverage(exp, outcome, resp_len);
+  end
+
   if (is_direct_ccc) begin
     if (direct_idx >= 0) begin
       log_ccc_direct_data(item, exp, direct_idx, direct_item, resp_status, resp_len);
@@ -105,8 +131,11 @@ function void i3c_scoreboard::check_ccc_txn(i3c_item item, exp_txn_t exp);
   end
 endfunction
 
-function bit i3c_scoreboard::check_ccc_bcast_header_nack(i3c_item item, exp_txn_t exp,
-                                                         i3c_resp_cmd_class_e cmd_class);
+function bit i3c_scoreboard::check_ccc_bcast_header_nack(
+    i3c_item item, exp_txn_t exp, i3c_resp_cmd_class_e cmd_class,
+    output txn_cov_outcome_t outcome);
+  outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
+              resp_status: Success};
   if (!item.addr_nack) return 1'b0;
 
   `DV_CHECK_EQ(item.CCC_valid, 1'b0, "Broadcast header NACK should suppress CCC opcode")
@@ -114,6 +143,10 @@ function bit i3c_scoreboard::check_ccc_bcast_header_nack(i3c_item item, exp_txn_
   `DV_CHECK_EQ(item.CCC_direct_q.size(), 0, "Broadcast header NACK should have no direct phase")
   `DV_CHECK_EQ(item.stop, 1'b1, "NACKed CCC should end with STOP")
   prepare_abort_response(PROTOCOL_TERMINATION, PREAMBLE, 0);
+  outcome.abort_valid = 1'b1;
+  outcome.abort_cause = PROTOCOL_TERMINATION;
+  outcome.abort_point = PREAMBLE;
+  outcome.resp_status = AddrHeader;
   record_exp_resp('{
       rnw:                     1'b0,
       tid:                     exp.tid,
@@ -242,13 +275,13 @@ endfunction
 
 function void i3c_scoreboard::check_ccc_entdaa(i3c_item item, exp_txn_t exp,
                                ref i3c_resp_err_status_e resp_status, ref int resp_len,
-                               ref bit daa_response_valid, ref i3c_daa_result_e daa_result);
+                               ref bit daa_response_valid, ref i3c_daa_result_e daa_result,
+                               output int unsigned joined_count);
   daa_scan_state_t st;
 
   // ENTDAA opening frame: broadcast leg carries only the opcode (no payload bytes).
   // CCC_direct_q holds each 7E+R DAA round: one per device slot + the terminating NACK round.
   `DV_CHECK_EQ(item.num_data, 0, "ENTDAA opening frame should carry no payload bytes")
-  `DV_CHECK_GT(item.CCC_direct_q.size(), 0, "ENTDAA should have at least one 7E+R round")
   st.devices_joined_local = 0;
   st.terminating_nack_seen = 1'b0;
   st.address_rejected_once = 1'b0;
@@ -258,6 +291,12 @@ function void i3c_scoreboard::check_ccc_entdaa(i3c_item item, exp_txn_t exp,
   st.rejected_bcr = '0;
   st.rejected_dcr = '0;
   st.rejected_addr = '0;
+  if (exp.daa_addr_reserved[0]) begin
+    `DV_CHECK_EQ(item.CCC_direct_q.size(), 0,
+                 "ENTDAA with reserved first assigned address should not issue a DAA round")
+  end else begin
+    `DV_CHECK_GT(item.CCC_direct_q.size(), 0, "ENTDAA should have at least one 7E+R round")
+  end
   `DV_CHECK_LE(item.CCC_direct_q.size(), exp.daa_dev_count + 1,
                "ENTDAA emitted more rounds than dev_count permits")
   foreach (item.CCC_direct_q[i]) begin
@@ -269,6 +308,12 @@ function void i3c_scoreboard::check_ccc_entdaa(i3c_item item, exp_txn_t exp,
     st.hc_abort_seen = 1'b1;
     resp_status      = HcAborted;
   end
+  if ((st.devices_joined_local < exp.daa_dev_count) &&
+      exp.daa_addr_reserved[st.devices_joined_local]) begin
+    st.address_reject_error = 1'b1;
+    resp_status             = NotSupported;
+    resp_len                = st.devices_joined_local * 12;
+  end
   if (st.devices_joined_local < exp.daa_dev_count) begin
     `DV_CHECK_EQ(st.terminating_nack_seen || st.address_reject_error || st.hc_abort_seen, 1'b1,
                  "ENTDAA stopped before dev_count without a terminating condition")
@@ -277,8 +322,7 @@ function void i3c_scoreboard::check_ccc_entdaa(i3c_item item, exp_txn_t exp,
                  "ENTDAA issued a no-device round after satisfying dev_count")
   end
   daa_result = resolve_daa_result(exp, st, resp_status);
-  publish_daa_correlated_item(exp, st.devices_joined_local, item.CCC_direct_q.size(), daa_result,
-                              resp_status);
+  joined_count = st.devices_joined_local;
   daa_response_valid = 1'b1;
   // RTL reports the number of DAA result bytes actually committed into RX FIFO:
   // 3 RX dwords per joined device unless RX FIFO overflows first.

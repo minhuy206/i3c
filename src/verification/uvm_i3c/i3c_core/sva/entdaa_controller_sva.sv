@@ -1,5 +1,6 @@
 module entdaa_controller_sva
   import controller_pkg::dat_entry_t;
+  import i3c_pkg::is_i3c_rsvd_addr;
 #(
     parameter int unsigned DatDepth = 32,
     localparam int unsigned DatAw = $clog2(DatDepth)
@@ -13,6 +14,7 @@ module entdaa_controller_sva
     input logic [3:0] dev_count_i,
     input logic bus_stop_det_i,
 
+    input logic invalid_addr_o,
     input logic req_rstart_o,
 
     input logic dat_read_valid_o,
@@ -57,31 +59,52 @@ module entdaa_controller_sva
     end
   endfunction
 
-  ap_entdaa_start_requests_rstart: assert property (
+  function automatic logic dat_dynamic_addr_is_reserved(input logic [31:0] dat_word);
+    return is_i3c_rsvd_addr(sva_dat_dynamic_addr(dat_word));
+  endfunction
+
+  ap_entdaa_start_reads_dat: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
     (state_q == StartLoop && dev_round_q < dev_count_i && !bus_stop_det_i)
-    |=> (state_q == RequestRStart && req_rstart_o)
-  );
-
-  cp_entdaa_start_requests_rstart: cover property (
-    @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == StartLoop && dev_round_q < dev_count_i && !bus_stop_det_i)
-    ##1 (state_q == RequestRStart && req_rstart_o)
-  );
-
-  ap_entdaa_dat_read_index: assert property (
-    @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == WaitRStart)
     |->
     (dat_read_valid_o &&
      dat_index_o == expected_dat_index(dat_sum))
   );
 
-  cp_entdaa_dat_read_index: cover property (
+  cp_entdaa_start_reads_dat: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == WaitRStart &&
+    (state_q == StartLoop &&
+     dev_round_q < dev_count_i &&
+     !bus_stop_det_i &&
      dat_read_valid_o &&
      dat_index_o == expected_dat_index(dat_sum))
+  );
+
+  ap_entdaa_valid_dat_requests_rstart: assert property (
+    @(posedge clk_i) disable iff (!rst_ni)
+    (state_q == ReadDAT && !bus_stop_det_i && !dat_dynamic_addr_is_reserved(dat_rdata_i))
+    |=> (state_q == RequestRStart && req_rstart_o)
+  );
+
+  cp_entdaa_valid_dat_requests_rstart: cover property (
+    @(posedge clk_i) disable iff (!rst_ni)
+    (state_q == ReadDAT && !bus_stop_det_i && !dat_dynamic_addr_is_reserved(dat_rdata_i))
+    ##1 (state_q == RequestRStart && req_rstart_o)
+  );
+
+  ap_entdaa_reserved_dat_rejects_before_rstart: assert property (
+    @(posedge clk_i) disable iff (!rst_ni)
+    (state_q == ReadDAT && !bus_stop_det_i && dat_dynamic_addr_is_reserved(dat_rdata_i))
+    |->
+    (!req_rstart_o)
+    ##1 (state_q == Done && invalid_addr_o)
+  );
+
+  cp_entdaa_reserved_dat_rejects_before_rstart: cover property (
+    @(posedge clk_i) disable iff (!rst_ni)
+    (state_q == ReadDAT && !bus_stop_det_i && dat_dynamic_addr_is_reserved(dat_rdata_i) &&
+     !req_rstart_o)
+    ##1 (state_q == Done && invalid_addr_o)
   );
 
   ap_entdaa_read_dat_latches_dynamic_addr: assert property (
@@ -176,6 +199,7 @@ bind entdaa_controller entdaa_controller_sva #(
     .daa_addr_q,
     .dev_count_i,
     .bus_stop_det_i,
+    .invalid_addr_o,
     .req_rstart_o,
     .dat_read_valid_o,
     .dat_index_o,

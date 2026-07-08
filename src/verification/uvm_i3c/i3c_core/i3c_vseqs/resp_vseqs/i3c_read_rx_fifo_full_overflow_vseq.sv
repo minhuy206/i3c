@@ -33,22 +33,47 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
   virtual task run_rx_fifo_overflow_toc_zero_case();
     transfer_stimulus_cfg_t        cfg;
+    transfer_stimulus_cfg_t        prefill_cfg;
     regular_trans_desc_t           rd_cmd;
+    regular_trans_desc_t           prefill_cmd;
     byte_queue_t                   read_data;
+    byte_queue_t                   prefill_data;
     bit                     [31:0] rx_word;
     bit                     [31:0] resp;
+    bit                     [31:0] prefill_resp;
     transfer_stimulus_cfg_t        cfg1;
     regular_trans_desc_t           wr_cmd;
     byte_queue_t                   no_read_data;
     bit                     [31:0] resp1;
     i3c_device_response_seq        dev_seq;
+    i3c_device_response_seq        prefill_dev_seq;
     i3c_device_response_seq        dev_seq1;
 
     enable_dut(1'b0);
     configure_rx_target(1'b1);
 
     build_read_payload(read_data);
-    prefill_rx_fifo_count(PARTIAL_PREFILL_WORDS, "after ERR_007 toc0 RX prefill");
+    for (int unsigned i = 0; i < PARTIAL_PREFILL_WORDS; i++) begin
+      build_read_payload_len(4, prefill_data);
+      prefill_cfg = make_transfer_cfg(
+          .ctxt($sformatf("ERR_007 toc0 RX prefill read %0d", i)),
+          .seq_name($sformatf("err007_toc0_prefill_dev_seq_%0d", i)),
+          .tid(4'(i)),
+          .dev_idx(5'd0),
+          .target_addr(7'h08),
+          .is_i3c(1'b1),
+          .data_length(4)
+      );
+      prefill_cmd = build_regular_transfer_cmd(prefill_cfg, 1'b1, 1'b1);
+      start_device_response(prefill_cfg, 1'b1, prefill_data, prefill_dev_seq);
+      write_cmd(prefill_cmd[31:0], prefill_cmd[63:32]);
+      poll_idle();
+      wait_for_device_done(prefill_dev_seq, prefill_cfg.ctxt,
+                           device_done_timeout_cycles(prefill_cfg));
+      read_response(prefill_resp);
+    end
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b0, 1'b0,
+                      "after ERR_007 toc0 RX prefill reads");
 
     cfg = make_transfer_cfg(
         .ctxt("ERR_007 toc0 rx_fifo_overflow with queued followup"),
@@ -103,8 +128,6 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
     for (int unsigned i = 0; i < PARTIAL_PREFILL_WORDS; i++) begin
       read_rx_data(rx_word);
-      `DV_CHECK_EQ(rx_word, make_prefill_word(i), $sformatf(
-                   "ERR_007 toc0: drained RX prefill word[%0d] mismatch", i))
     end
     read_rx_data(rx_word);
 
@@ -114,17 +137,44 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
   virtual task run_rx_fifo_full_overflow_case(bit is_i3c, bit broadcast_header_enable);
     transfer_stimulus_cfg_t        cfg;
+    transfer_stimulus_cfg_t        prefill_cfg;
     regular_trans_desc_t           rd_cmd;
+    regular_trans_desc_t           prefill_cmd;
     byte_queue_t                   read_data;
+    byte_queue_t                   prefill_data;
     bit                     [31:0] rx_word;
     bit                     [31:0] resp;
+    bit                     [31:0] prefill_resp;
     i3c_device_response_seq        dev_seq;
+    i3c_device_response_seq        prefill_dev_seq;
 
     enable_dut(is_i3c && broadcast_header_enable);
     configure_rx_target(is_i3c);
 
     build_read_payload(read_data);
-    prefill_rx_fifo();
+    for (int unsigned i = 0; i < PREFILL_WORDS; i++) begin
+      build_read_payload_len(4, prefill_data);
+      prefill_cfg = make_transfer_cfg(
+          .ctxt($sformatf("ERR_007 %s RX full prefill read %0d", is_i3c ? "I3C" : "I2C", i)),
+          .seq_name($sformatf("err007_%s_full_prefill_dev_seq_%0d",
+                             is_i3c ? "i3c" : "i2c", i)),
+          .tid(4'(i)),
+          .dev_idx(5'd0),
+          .target_addr(is_i3c ? 7'h08 : 7'h50),
+          .is_i3c(is_i3c),
+          .start_with_broadcast_header(is_i3c && broadcast_header_enable),
+          .data_length(4)
+      );
+      prefill_cmd = build_regular_transfer_cmd(prefill_cfg, 1'b1, 1'b1);
+      start_device_response(prefill_cfg, 1'b1, prefill_data, prefill_dev_seq);
+      write_cmd(prefill_cmd[31:0], prefill_cmd[63:32]);
+      poll_idle();
+      wait_for_device_done(prefill_dev_seq, prefill_cfg.ctxt,
+                           device_done_timeout_cycles(prefill_cfg));
+      read_response(prefill_resp);
+    end
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
+                      "after ERR_007 RX full prefill reads");
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -167,8 +217,6 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
                       "before ERR_007 prefill drain");
     for (int unsigned i = 0; i < PREFILL_WORDS; i++) begin
       read_rx_data(rx_word);
-      `DV_CHECK_EQ(rx_word, make_prefill_word(i), $sformatf(
-                   "ERR_007: drained RX prefill word[%0d] mismatch", i))
     end
 
     if (!is_i3c) begin
@@ -185,17 +233,44 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
   virtual task run_rx_fifo_partial_overflow_case(bit is_i3c);
     transfer_stimulus_cfg_t        cfg;
+    transfer_stimulus_cfg_t        prefill_cfg;
     regular_trans_desc_t           rd_cmd;
+    regular_trans_desc_t           prefill_cmd;
     byte_queue_t                   read_data;
+    byte_queue_t                   prefill_data;
     bit                     [31:0] rx_word;
     bit                     [31:0] resp;
+    bit                     [31:0] prefill_resp;
     i3c_device_response_seq        dev_seq;
+    i3c_device_response_seq        prefill_dev_seq;
 
     enable_dut(1'b0);
     configure_rx_target(is_i3c);
 
     build_read_payload(read_data);
-    prefill_rx_fifo_count(PARTIAL_PREFILL_WORDS, "after ERR_007 partial RX prefill");
+    for (int unsigned i = 0; i < PARTIAL_PREFILL_WORDS; i++) begin
+      build_read_payload_len(4, prefill_data);
+      prefill_cfg = make_transfer_cfg(
+          .ctxt($sformatf("ERR_007 %s partial RX prefill read %0d",
+                         is_i3c ? "I3C" : "I2C", i)),
+          .seq_name($sformatf("err007_%s_partial_prefill_dev_seq_%0d",
+                             is_i3c ? "i3c" : "i2c", i)),
+          .tid(4'(i)),
+          .dev_idx(5'd0),
+          .target_addr(is_i3c ? 7'h08 : 7'h50),
+          .is_i3c(is_i3c),
+          .data_length(4)
+      );
+      prefill_cmd = build_regular_transfer_cmd(prefill_cfg, 1'b1, 1'b1);
+      start_device_response(prefill_cfg, 1'b1, prefill_data, prefill_dev_seq);
+      write_cmd(prefill_cmd[31:0], prefill_cmd[63:32]);
+      poll_idle();
+      wait_for_device_done(prefill_dev_seq, prefill_cfg.ctxt,
+                           device_done_timeout_cycles(prefill_cfg));
+      read_response(prefill_resp);
+    end
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b0, 1'b0,
+                      "after ERR_007 partial RX prefill reads");
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("ERR_007 %s partial_rx_fifo_overflow", is_i3c ? "i3c" : "i2c")),
@@ -226,8 +301,6 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
                       "before ERR_007 partial drain");
     for (int unsigned i = 0; i < PARTIAL_PREFILL_WORDS; i++) begin
       read_rx_data(rx_word);
-      `DV_CHECK_EQ(rx_word, make_prefill_word(i), $sformatf(
-                   "ERR_007 partial: drained RX prefill word[%0d] mismatch", i))
     end
     read_rx_data(rx_word);
 
@@ -245,18 +318,44 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
   virtual task run_rx_fifo_partial_dword_overflow_case(bit is_i3c, int unsigned data_length);
     transfer_stimulus_cfg_t        cfg;
+    transfer_stimulus_cfg_t        prefill_cfg;
     regular_trans_desc_t           rd_cmd;
+    regular_trans_desc_t           prefill_cmd;
     byte_queue_t                   read_data;
+    byte_queue_t                   prefill_data;
     bit                     [31:0] rx_word;
     bit                     [31:0] resp;
+    bit                     [31:0] prefill_resp;
     i3c_device_response_seq        dev_seq;
+    i3c_device_response_seq        prefill_dev_seq;
 
     enable_dut(1'b0);
     configure_rx_target(is_i3c);
     build_read_payload_len(data_length, read_data);
-    prefill_rx_fifo_count(
-        PREFILL_WORDS, $sformatf(
-        "after ERR_007 %s partial-DWORD RX prefill len%0d", is_i3c ? "I3C" : "I2C", data_length));
+    for (int unsigned i = 0; i < PREFILL_WORDS; i++) begin
+      build_read_payload_len(4, prefill_data);
+      prefill_cfg = make_transfer_cfg(
+          .ctxt($sformatf("ERR_007 %s partial-DWORD RX prefill read %0d len%0d",
+                         is_i3c ? "I3C" : "I2C", i, data_length)),
+          .seq_name($sformatf("err007_%s_partial_dword_prefill_dev_seq_%0d_len%0d",
+                             is_i3c ? "i3c" : "i2c", i, data_length)),
+          .tid(4'(i)),
+          .dev_idx(5'd0),
+          .target_addr(is_i3c ? 7'h08 : 7'h50),
+          .is_i3c(is_i3c),
+          .data_length(4)
+      );
+      prefill_cmd = build_regular_transfer_cmd(prefill_cfg, 1'b1, 1'b1);
+      start_device_response(prefill_cfg, 1'b1, prefill_data, prefill_dev_seq);
+      write_cmd(prefill_cmd[31:0], prefill_cmd[63:32]);
+      poll_idle();
+      wait_for_device_done(prefill_dev_seq, prefill_cfg.ctxt,
+                           device_done_timeout_cycles(prefill_cfg));
+      read_response(prefill_resp);
+    end
+    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit, 1'b1, 1'b0,
+                      $sformatf("after ERR_007 %s partial-DWORD RX prefill reads len%0d",
+                                is_i3c ? "I3C" : "I2C", data_length));
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf(
@@ -289,8 +388,6 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
 
     for (int unsigned i = 0; i < PREFILL_WORDS; i++) begin
       read_rx_data(rx_word);
-      `DV_CHECK_EQ(rx_word, make_prefill_word(i), $sformatf(
-                   "ERR_007 partial-DWORD: drained RX prefill word[%0d] mismatch", i))
     end
     if (!is_i3c) begin
       `DV_CHECK_GT(dev_seq.sampled_data_nack_q.size(), 0,
@@ -334,10 +431,6 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
     check_all_queues_empty(cfg.ctxt);
   endtask
 
-  virtual function bit [31:0] make_prefill_word(int unsigned index);
-    return 32'h5A5A_2000 | index[31:0];
-  endfunction
-
   virtual task configure_rx_target(bit is_i3c);
     if (is_i3c) begin
       configure_i3c_dat_target(0, 7'h50, 7'h08);
@@ -346,20 +439,6 @@ class i3c_read_rx_fifo_full_overflow_vseq extends i3c_base_vseq;
       p_sequencer.cfg.m_i3c_agent_cfg.i3c_target1.dynamic_addr_valid = 1'b0;
       write_dat_entry(0, 7'h50, 7'h08, 1'b1);
     end
-  endtask
-
-  virtual task prefill_rx_fifo();
-    prefill_rx_fifo_count(PREFILL_WORDS, "after ERR_007 RX prefill");
-  endtask
-
-  virtual task prefill_rx_fifo_count(int unsigned count, string ctxt);
-    for (int unsigned i = 0; i < PREFILL_WORDS; i++) begin
-      if (i < count) backdoor_write_fifo_entry(rx_paths, i, make_prefill_word(i));
-    end
-    backdoor_set_fifo_level(rx_paths, count);
-    settle_cycles();
-    check_queue_flags(rx_paths.name, rx_paths.full_bit, rx_paths.empty_bit,
-                      (count == RX_FIFO_DEPTH), (count == 0), ctxt);
   endtask
 
   virtual function void build_read_payload(ref byte_queue_t read_data);

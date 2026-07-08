@@ -98,7 +98,7 @@ module controller_active
   logic flow_dat_read_valid;
   logic [DatAw-1:0] flow_dat_index;
 
-  logic daa_done, daa_nack_error, daa_req_stop, daa_stopped;
+  logic daa_done, daa_nack_error, daa_invalid_addr, daa_req_stop, daa_stopped;
   logic daa_req_rstart;
   logic daa_tx_req_byte, daa_tx_req_bit;
   logic [7:0] daa_tx_req_value;
@@ -352,6 +352,7 @@ module controller_active
       .daa_stop_req_i                (daa_req_stop),
       .daa_stopped_i                 (daa_stopped),
       .daa_nack_error_i              (daa_nack_error),
+      .daa_invalid_addr_i            (daa_invalid_addr),
       .daa_address_i                 (daa_address),
       .daa_address_valid_i           (daa_address_valid),
       .daa_pid_i                     (daa_pid),
@@ -375,6 +376,7 @@ module controller_active
       .dev_idx_i               (flow_daa_dev_idx),
       .done_o                  (daa_done),
       .nack_error_o            (daa_nack_error),
+      .invalid_addr_o          (daa_invalid_addr),
       .req_stop_o              (daa_req_stop),
       .stopped_o               (daa_stopped),
       .req_rstart_o            (daa_req_rstart),
