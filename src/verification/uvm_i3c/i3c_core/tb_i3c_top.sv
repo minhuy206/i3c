@@ -24,6 +24,7 @@ module tb_i3c_top;
   logic scl_i, sda_i;
   logic resp_valid;
 
+  assign sda_oe = sel_od_pp || !sda_o;
   assign scl_bus = (scl_o === 1'b0) ? 1'b0 : 1'bz;
   assign sda_bus = sda_oe ? sda_o : 1'bz;
 
@@ -70,7 +71,6 @@ module tb_i3c_top;
       .scl_o      (scl_o),
       .sda_i      (sda_i),
       .sda_o      (sda_o),
-      .sda_oe_o   (sda_oe),
       .sel_od_pp_o(sel_od_pp)
   );
 

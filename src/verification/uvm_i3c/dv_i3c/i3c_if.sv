@@ -500,8 +500,7 @@ interface i3c_if (
     handoff_seen = 1'b0;
     fork
       begin
-        if (pp_phase) wait (dut_sda_oe === 1'b0 && dut_sel_od_pp === 1'b1);
-        else wait (dut_sda_oe === 1'b0);
+        wait (dut_sda_oe === 1'b0);
         handoff_seen = 1'b1;
       end
       begin

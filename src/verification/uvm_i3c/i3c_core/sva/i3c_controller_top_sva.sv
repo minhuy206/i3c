@@ -29,11 +29,9 @@ module i3c_controller_top_sva #(
     input logic flow_gen_stop_i,
     input logic flow_gen_clock_i,
     input logic flow_use_i2c_timing_i,
-    input logic ctrl_sda_oe_to_phy_i,
     input logic scl_o,
     input logic sda_o,
-    input logic sel_od_pp_o,
-    input logic sda_oe_o
+    input logic sel_od_pp_o
 );
 
   localparam logic [AddrWidth-1:0] ADDR_HC_CONTROL = 12'h004;
@@ -49,6 +47,7 @@ module i3c_controller_top_sva #(
   logic queue_status_read;
   logic disabled_window;
   logic disabled_bus_idle;
+  logic sda_oe;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : track_first_enable
     if (!rst_ni) seen_enable_q <= 1'b0;
@@ -59,21 +58,22 @@ module i3c_controller_top_sva #(
   assign hc_control_read = reg_ren_i && !reg_wen_i && (reg_addr_i == ADDR_HC_CONTROL);
   assign queue_status_read = reg_ren_i && !reg_wen_i && (reg_addr_i == ADDR_QUEUE_STATUS);
   assign disabled_window = !ctrl_enable_i;
+  assign sda_oe = sel_od_pp_o || !sda_o;
   assign disabled_bus_idle =
       !flow_gen_start_i && !flow_gen_rstart_i && !flow_gen_stop_i &&
-      !flow_gen_clock_i && !ctrl_sda_oe_to_phy_i && !sda_oe_o;
+      !flow_gen_clock_i && !sda_oe;
 
   ap_hard_reset_forces_idle_and_releases_bus :
   assert property (@(posedge clk_i)
                    !rst_ni |->
                    (i3c_fsm_idle_i && scl_o && sda_o &&
-                    !sda_oe_o && !sel_od_pp_o))
+                    !sda_oe && !sel_od_pp_o))
   else $error("i3c_controller_top_sva: hard reset did not force idle and release the bus");
 
   cp_hard_reset_forces_idle_and_releases_bus :
   cover property (@(posedge clk_i)
                   !rst_ni && i3c_fsm_idle_i && scl_o && sda_o &&
-                  !sda_oe_o && !sel_od_pp_o);
+                  !sda_oe && !sel_od_pp_o);
 
   ap_hard_reset_release_has_no_queue_activity :
   assert property (@(posedge clk_i)
@@ -183,12 +183,12 @@ module i3c_controller_top_sva #(
 
   ap_bus014_i2c_timing_never_drives_sda_high :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   ctrl_enable_i && flow_use_i2c_timing_i |-> !(sda_oe_o && sda_o))
+                   ctrl_enable_i && flow_use_i2c_timing_i |-> !(sda_oe && sda_o))
   else $error("i3c_controller_top_sva: BUS_014 I2C open-drain path drove SDA high");
 
   cp_bus014_i2c_timing_never_drives_sda_high :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  ctrl_enable_i && flow_use_i2c_timing_i && !(sda_oe_o && sda_o));
+                  ctrl_enable_i && flow_use_i2c_timing_i && !(sda_oe && sda_o));
 
   cp_cmd_start_after_enable :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -226,9 +226,7 @@ bind i3c_controller_top i3c_controller_top_sva #(
     .flow_gen_stop_i(u_ctrl.flow_gen_stop),
     .flow_gen_clock_i(u_ctrl.flow_gen_clock),
     .flow_use_i2c_timing_i(u_ctrl.flow_use_i2c_timing),
-    .ctrl_sda_oe_to_phy_i(ctrl_sda_oe_to_phy),
     .scl_o,
     .sda_o,
-    .sel_od_pp_o,
-    .sda_oe_o
+    .sel_od_pp_o
 );

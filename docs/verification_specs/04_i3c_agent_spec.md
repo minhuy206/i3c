@@ -37,10 +37,10 @@ SystemVerilog interface modeling the physical I3C bus with open-drain emulation.
 The current `i3c_if.sv` (640 lines) has diverged substantially from the ChipAlliance reference — it
 is Device-mode only (no host-side drive signals: the agent never plays the controller role), adds
 explicit START/RSTART/STOP setup/hold timing checks (`` `uvm_error `` on violation), and adds an
-SDA handoff protocol (`wait_for_i3c_target_sda_handoff()`) that watches the DUT's own
-`dut_sel_od_pp_i`/`dut_sda_oe_i`/`dut_sda_o_i` outputs to know when the controller has released the
-bus for the target/device to drive. Task names and signal names below are read directly off current
-source — do not port from `i3c-core`.
+SDA handoff protocol (`wait_for_i3c_target_sda_handoff()`) that watches the DUT-derived
+`dut_sda_oe_i` plus `dut_sda_o_i` status to know when the controller has released the bus for the
+target/device to drive. Task names and signal names below are read directly off current source — do
+not port from `i3c-core`.
 
 ### 3.3. Ports
 
@@ -49,7 +49,7 @@ source — do not port from `i3c-core`.
 | `clk_i` | Input | System clock |
 | `rst_ni` | Input | Active-low reset |
 | `dut_sel_od_pp_i` | Input | DUT's OD/PP select — `1` = push-pull data phase (from `sel_od_pp_o`) |
-| `dut_sda_oe_i` | Input | DUT's SDA output-enable (from the PHY) — used to detect controller SDA release |
+| `dut_sda_oe_i` | Input | TB-derived SDA output-enable (`dut_sel_od_pp_i || !dut_sda_o_i`) — used to detect controller SDA release |
 | `dut_sda_o_i` | Input | DUT's driven SDA value — used to detect the specific STOP-before-handoff case |
 | `scl_io` | Inout wire | SCL bus (open-drain emulated) |
 | `sda_io` | Inout wire | SDA bus (open-drain emulated, device side only) |
@@ -126,7 +126,7 @@ numbers.
 | `wait_for_device_ack_or_nack(output ack_r)` | Sample SDA on SCL posedge as the device's own driven ACK/NACK |
 | `time_check(delay, exp_value, check_wire, msg)` | Generic setup/hold timing assertion helper (`` `uvm_error `` on violation) |
 | `device_i2c_send_bit(tc, bit_i)` | Drive one I2C OD bit with `tSetupBit`/`tClockPulse`/`tHoldBit` timing |
-| `wait_for_i3c_target_sda_handoff(phase, output ok, pp_phase=0)` | Wait for the DUT to release SDA (`dut_sda_oe`, and `dut_sel_od_pp` when `pp_phase=1`) before the device drives; handles the STOP-before-handoff race |
+| `wait_for_i3c_target_sda_handoff(phase, output ok, pp_phase=0)` | Wait for the DUT to release SDA (`dut_sda_oe == 0`) before the device drives; `pp_phase` controls the device-side drive mode, not the release condition |
 | `device_i3c_raw_od_send_bit(tc, bit_i)` | Drive one I3C OD bit (no handoff wait) — used by ENTDAA/CCC OD phases |
 | `device_i3c_send_addr_ack_handoff(tc, ack)` | Address ACK/NACK with SDA handoff, held through `tSCO` (read-direction handoff to target) |
 | `device_i3c_send_addr_ack_no_handoff(tc, ack)` | Address ACK/NACK with SDA handoff but SDA held after (write-direction, target keeps driving) |
@@ -141,13 +141,15 @@ numbers.
 The DUT's PHY (`src/rtl/i3c_controller_top.sv:23-26`) is **direct-drive** (separate `scl_i`/`scl_o` and `sda_i`/`sda_o` pairs), not tri-state. The agent's `i3c_if.sv` therefore owns the open-drain emulation that a real bus would provide. See spec 07 §5 for the bus-model wiring at `tb_i3c_top` and how DUT outputs feed `scl_io`/`sda_io`.
 
 In `tb_i3c_top.sv`, the bus/pad ownership model is wired as follows. SCL is modeled as
-open-drain, while SDA uses the DUT's explicit output-enable so push-pull high drive remains visible:
+open-drain, while SDA derives output-enable from the DUT's `sel_od_pp_o` and `sda_o` so push-pull
+high drive remains visible:
 
 ```systemverilog
 wire scl_bus, sda_bus;
 logic scl_o, sda_o;
 logic sda_oe, sel_od_pp;
 
+assign sda_oe = sel_od_pp || !sda_o;
 assign scl_bus = (scl_o === 1'b0) ? 1'b0 : 1'bz;
 assign sda_bus = sda_oe ? sda_o : 1'bz;
 

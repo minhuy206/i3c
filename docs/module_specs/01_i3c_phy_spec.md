@@ -55,10 +55,8 @@ The PHY (Physical Layer) module provides the electrical interface between the I3
 | --------------- | --------- | ----- | ------------------------------------------ |
 | `ctrl_scl_i`    | Input     | 1     | SCL value from controller (to drive bus)   |
 | `ctrl_sda_i`    | Input     | 1     | SDA value from controller (to drive bus)   |
-| `ctrl_sda_oe_i` | Input     | 1     | SDA output-enable from controller          |
 | `ctrl_scl_o`    | Output    | 1     | Synchronized SCL for controller logic      |
 | `ctrl_sda_o`    | Output    | 1     | Synchronized SDA for controller logic      |
-| `sda_oe_o`      | Output    | 1     | Pass-through of SDA output-enable to bus   |
 
 ### Mode Control
 
@@ -128,11 +126,10 @@ The output path is purely combinational — no additional latency:
 ```systemverilog
 assign scl_o       = ctrl_scl_i;
 assign sda_o       = ctrl_sda_i;
-assign sda_oe_o    = ctrl_sda_oe_i;
 assign sel_od_pp_o = sel_od_pp_i;
 ```
 
-The actual OD/PP behavior is determined by the external bus driver (pad cell or FPGA tri-state buffer):
+The actual SDA output-enable is derived by the external bus driver (pad cell, wrapper, or testbench) from `sel_od_pp_o || !sda_o`:
 
 - **Open-Drain (sel_od_pp = 0):** Output can only pull LOW or release to high-impedance.
 - **Push-Pull (sel_od_pp = 1):** Output actively drives both HIGH and LOW.

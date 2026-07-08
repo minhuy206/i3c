@@ -503,13 +503,13 @@ Implementation note: BUS_012 không cần vseq riêng. Stimulus đã có từ c�
 
 ### BUS_013 - `tb_pad_model_odpp_wiring`
 
-Test này kiểm tra pad model trong testbench sau khi DUT đã có `sda_oe_o` và `sel_od_pp_o`.
+Test này kiểm tra pad model trong testbench sau khi DUT export `sda_o` và `sel_od_pp_o`, còn testbench tự derive `sda_oe`.
 
-`sel_od_pp_o` cho biết bus đang ở mode open-drain hay push-pull. `sda_oe_o` cho biết DUT có đang thật sự drive SDA hay không. Hai signal này khác nhau và đều cần thiết để testbench model SDA đúng.
+`sel_od_pp_o` cho biết active drive đang ở mode open-drain hay push-pull. `sda_oe` trong testbench được tính bằng `sel_od_pp_o || !sda_o` để biết DUT có đang thật sự drive SDA hay không.
 
-Testbench sẽ quan sát `sda_oe_o`, `sda_o`, `sel_od_pp_o`, và `sda_bus` trong các transaction I3C write/read hiện có.
+Testbench sẽ quan sát `sda_oe` đã derive, `sda_o`, `sel_od_pp_o`, và `sda_bus` trong các transaction I3C write/read hiện có.
 
-Kết quả mong đợi là `tb_i3c_top` chỉ drive SDA khi `sda_oe_o=1`. Khi `sda_oe_o=0`, testbench phải release SDA về `Z` để pull-up hoặc target có thể điều khiển bus.
+Kết quả mong đợi là `tb_i3c_top` chỉ drive SDA khi `sda_oe=1`. Khi `sda_oe=0`, testbench phải release SDA về `Z` để pull-up hoặc target có thể điều khiển bus.
 
 Ví dụ trong I3C write data phase, DUT có thể dùng push-pull và drive SDA trực tiếp. Nhưng trong I3C read data phase, target là bên drive data, nên DUT phải release SDA dù data phase đang là push-pull.
 
@@ -523,7 +523,7 @@ Test này kiểm tra I2C legacy transfer không bao giờ bật push-pull mode.
 
 Trong thiết kế này, DAT entry có bit `device=1` được xem là I2C legacy target. Với I2C, controller phải giữ open-drain trong toàn bộ transaction: START, address, ACK, data byte, final NACK, và STOP. I2C không dùng push-pull data phase như I3C SDR.
 
-Testbench sẽ program một DAT entry là I2C device với static address hợp lệ, sau đó chạy cả I2C write và I2C read. Trong suốt transaction, testbench quan sát `sel_od_pp_o`, `sda_oe_o`, `sda_o`, và bus SDA thực tế.
+Testbench sẽ program một DAT entry là I2C device với static address hợp lệ, sau đó chạy cả I2C write và I2C read. Trong suốt transaction, testbench quan sát `sel_od_pp_o`, derived `sda_oe`, `sda_o`, và bus SDA thực tế.
 
 Kết quả mong đợi là `sel_od_pp_o` luôn bằng 0 trong toàn bộ I2C transaction. Khi DUT cần kéo SDA low, nó dùng open-drain low. Khi line cần high hoặc target drive ACK/data, DUT phải release SDA đúng lúc. Không được có phase nào DUT chuyển sang push-pull.
 
