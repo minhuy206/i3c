@@ -8,6 +8,7 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
   bit                     expected_rstart;
   bit                     expected_stop;
   i3c_resp_cmd_class_e    cmd_class;
+  txn_cov_outcome_t       outcome;
 
   if (exp_txn_queue.size() == 0) begin
     `uvm_error(`gfn, $sformatf("Unexpected I3C txn: addr=0x%02h op=%s", item.addr,
@@ -23,6 +24,8 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
 
   exp = exp_txn_queue.pop_front();
   txn_aborted = 1'b0;
+  outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
+              resp_status: Success};
   sample_command_boundary_on_start(exp);
 
   if (exp.is_ccc) begin
@@ -39,7 +42,6 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
   `DV_CHECK_EQ(item.bus_op, exp.rnw ? BusOpRead : BusOpWrite, "Transfer direction mismatch")
   `DV_CHECK_EQ(item.start_with_broadcast_header, exp.start_with_broadcast_header,
                "Broadcast header preamble mismatch")
-  publish_correlated_item(item, exp);
   if (item.start_with_broadcast_header || exp.start_with_broadcast_header) begin
     `DV_CHECK_EQ(item.broadcast_header_nack, 1'b0, "Broadcast header preamble was not ACKed")
   end
@@ -51,6 +53,10 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
     `DV_CHECK_EQ(item.data_nack_q.size(), 0, "Address NACK should not collect data T-bits")
     if (!exp.rnw && exp.uses_tx_queue && exp.data_length > 0) consume_tx_data_words(1);
     prepare_abort_response(PROTOCOL_TERMINATION, ADDRESS, 0);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = PROTOCOL_TERMINATION;
+    outcome.abort_point = ADDRESS;
+    outcome.resp_status = AddrHeader;
     cmd_class = classify_response_cmd(exp.cmd_attr, exp.is_ccc);
     record_exp_resp('{
         rnw:                     exp.rnw,
@@ -73,6 +79,11 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
         address_acked:           1'b0
     });
     start_recovery_context(RECOVERY_PROTOCOL_TERMINATION, cmd_class);
+    if (exp.rnw) begin
+      publish_read_coverage(item, exp, outcome);
+    end else begin
+      publish_write_coverage(item, exp, outcome);
+    end
     advance_private_transfer(exp, 1'b1);
     print_i3c_end(item, exp, 1'b0, 1'b1);
     record_command_history(exp, item, 1'b1);
@@ -82,13 +93,16 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
   end
 
   if (exp.rnw) begin
-    check_read_txn(item, exp, expected_rstart, expected_stop, txn_aborted);
+    check_read_txn(item, exp, expected_rstart, expected_stop, txn_aborted, outcome);
+    publish_read_coverage(item, exp, outcome);
   end else if (exp.cmd_attr == ImmediateDataTransfer) begin
-    txn_aborted = check_immediate_write_txn(item, exp);
+    txn_aborted = check_immediate_write_txn(item, exp, outcome);
+    publish_write_coverage(item, exp, outcome);
     expected_rstart = txn_aborted ? 1'b0 : !exp.toc;
     expected_stop = txn_aborted ? 1'b1 : exp.toc;
   end else begin
-    txn_aborted = check_write_txn(item, exp);
+    txn_aborted = check_write_txn(item, exp, outcome);
+    publish_write_coverage(item, exp, outcome);
     expected_rstart = txn_aborted ? 1'b0 : !exp.toc;
     expected_stop = txn_aborted ? 1'b1 : exp.toc;
   end
@@ -188,7 +202,8 @@ endfunction
 // --------------------------------------------------------------------------
 
 function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, output bit expected_rstart,
-                             output bit expected_stop, output bit txn_aborted);
+                             output bit expected_stop, output bit txn_aborted,
+                             output txn_cov_outcome_t outcome);
   int                      read_id;
   i3c_resp_err_status_e    resp_status;
   i3c_resp_cmd_class_e     cmd_class;
@@ -197,6 +212,8 @@ function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, outpu
   resp_status = Success;
   txn_aborted = 1'b0;
   cmd_class = classify_response_cmd(exp.cmd_attr, exp.is_ccc);
+  outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
+              resp_status: Success};
 
   `DV_CHECK_EQ(item.addr, exp.addr, "Read target address mismatch")
   `DV_CHECK_EQ(item.bus_op, BusOpRead, "Read transfer direction mismatch")
@@ -215,9 +232,16 @@ function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, outpu
   end
   if (resp_status == HcAborted) begin
     prepare_abort_response(HC_ABORT, RX_DATA, item.num_data);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = HC_ABORT;
+    outcome.abort_point = RX_DATA;
   end else if (txn_aborted || (resp_status == NotSupported)) begin
     prepare_abort_response(PROTOCOL_TERMINATION, RX_DATA, item.num_data);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = PROTOCOL_TERMINATION;
+    outcome.abort_point = RX_DATA;
   end
+  outcome.resp_status = resp_status;
   record_exp_resp('{
       rnw:                     1'b1,
       tid:                     exp.tid,
@@ -273,6 +297,11 @@ function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, outpu
 endfunction
 
 function void i3c_scoreboard::check_read_ack_or_t_bits(i3c_item item, exp_txn_t exp);
+  if (!exp.target_is_i3c) begin
+    check_i2c_read_ack_sequence(item);
+    return;
+  end
+
   for (int i = 0; i < item.num_data; i++) begin
     if (i < item.data_nack_q.size()) begin
       bit exp_bit;
@@ -281,6 +310,20 @@ function void i3c_scoreboard::check_read_ack_or_t_bits(i3c_item item, exp_txn_t 
       `DV_CHECK_EQ(item.data_nack_q[i], exp_bit, $sformatf("Read bus %s[%0d] mismatch",
                                                            rx_ack_or_t_bit_label(
                                                            exp.target_is_i3c), i))
+    end
+  end
+endfunction
+
+function void i3c_scoreboard::check_i2c_read_ack_sequence(i3c_item item);
+  for (int i = 0; i < item.num_data; i++) begin
+    if (i < item.data_nack_q.size()) begin
+      if (i == (item.num_data - 1)) begin
+        `DV_CHECK_EQ(item.data_nack_q[i], SampledNack,
+                     "I2C read Controller must NACK the final data byte")
+      end else begin
+        `DV_CHECK_EQ(item.data_nack_q[i], SampledAck, $sformatf(
+                     "I2C read Controller NACK before final data byte at index %0d", i))
+      end
     end
   end
 endfunction
@@ -417,7 +460,8 @@ endfunction
 // Private-transfer write checking and TX FIFO model
 // --------------------------------------------------------------------------
 
-function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp);
+function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp,
+                                             output txn_cov_outcome_t outcome);
   bit                      inferred_tx_underflow;
   bit                      inferred_hc_abort;
   bit                      inferred_data_nack;
@@ -430,6 +474,8 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp);
   inferred_data_nack    = 1'b0;
   missing_continuation  = 1'b0;
   cmd_class = classify_response_cmd(exp.cmd_attr, exp.is_ccc);
+  outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
+              resp_status: Success};
 
   if (exp.uses_tx_queue) begin
     if (item.num_data < exp.data_length) begin
@@ -473,11 +519,21 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp);
                   missing_continuation  ? NotSupported : Success;
     if (inferred_hc_abort) begin
       prepare_abort_response(HC_ABORT, TX_DATA, item.num_data);
+      outcome.abort_valid = 1'b1;
+      outcome.abort_cause = HC_ABORT;
+      outcome.abort_point = TX_DATA;
     end else if (inferred_data_nack) begin
       prepare_abort_response(PROTOCOL_TERMINATION, TX_DATA, item.num_data);
+      outcome.abort_valid = 1'b1;
+      outcome.abort_cause = PROTOCOL_TERMINATION;
+      outcome.abort_point = TX_DATA;
     end else if (missing_continuation) begin
       prepare_abort_response(PROTOCOL_TERMINATION, RESPONSE, item.num_data);
+      outcome.abort_valid = 1'b1;
+      outcome.abort_cause = PROTOCOL_TERMINATION;
+      outcome.abort_point = RESPONSE;
     end
+    outcome.resp_status = resp_status;
     record_exp_resp('{
         rnw:                     1'b0,
         tid:                     exp.tid,
@@ -511,7 +567,8 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp);
   return inferred_tx_underflow || inferred_hc_abort || inferred_data_nack || missing_continuation;
 endfunction
 
-function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t exp);
+function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t exp,
+                                                       output txn_cov_outcome_t outcome);
   bit                      inferred_hc_abort;
   bit                      inferred_data_nack;
   i3c_resp_err_status_e    resp_status;
@@ -520,6 +577,8 @@ function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t 
   inferred_hc_abort  = 1'b0;
   inferred_data_nack = 1'b0;
   cmd_class = classify_response_cmd(exp.cmd_attr, exp.is_ccc);
+  outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
+              resp_status: Success};
 
   if (item.num_data < exp.data_length) begin
     inferred_data_nack = !exp.target_is_i3c && data_nack_q_has_nack(item);
@@ -560,11 +619,21 @@ function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t 
   end
   if (inferred_hc_abort) begin
     prepare_abort_response(HC_ABORT, TX_DATA, item.num_data);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = HC_ABORT;
+    outcome.abort_point = TX_DATA;
   end else if (inferred_data_nack) begin
     prepare_abort_response(PROTOCOL_TERMINATION, TX_DATA, item.num_data);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = PROTOCOL_TERMINATION;
+    outcome.abort_point = TX_DATA;
   end else if (!exp.toc) begin
     prepare_abort_response(PROTOCOL_TERMINATION, RESPONSE, item.num_data);
+    outcome.abort_valid = 1'b1;
+    outcome.abort_cause = PROTOCOL_TERMINATION;
+    outcome.abort_point = RESPONSE;
   end
+  outcome.resp_status = resp_status;
   record_exp_resp('{
       rnw:                     1'b0,
       tid:                     exp.tid,

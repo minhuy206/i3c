@@ -73,11 +73,9 @@ function i3c_daa_dat_span_e i3c_scoreboard::classify_daa_dat_span(int unsigned s
   return DAA_DAT_SPAN_WITHIN_TABLE;
 endfunction
 
-function void i3c_scoreboard::publish_correlated_item(i3c_item item, exp_txn_t exp);
-  i3c_correlated_item correlated_item;
-  int                 first_nack_idx;
-
-  correlated_item = i3c_correlated_item::type_id::create("correlated_item");
+function void i3c_scoreboard::fill_private_transfer_coverage(
+    ref i3c_correlated_item correlated_item, i3c_item item, exp_txn_t exp,
+    txn_cov_outcome_t outcome);
   correlated_item.private_transfer_valid = 1'b1;
   correlated_item.cmd_attr = exp.cmd_attr;
   correlated_item.cmd_present = exp.cmd_present;
@@ -100,25 +98,46 @@ function void i3c_scoreboard::publish_correlated_item(i3c_item item, exp_txn_t e
   correlated_item.observed_first_addr =
       item.start_with_broadcast_header ? I3C_RSVD_ADDR : item.addr;
   correlated_item.addr_nack = item.addr_nack;
-  correlated_item.data_nack     = !item.addr_nack && !exp.target_is_i3c && !exp.rnw &&
-                                  data_nack_q_has_nack(item);
+  correlated_item.abort_valid = outcome.abort_valid;
+  correlated_item.abort_cause = outcome.abort_cause;
+  correlated_item.abort_point = outcome.abort_point;
+  correlated_item.abort_byte_boundary = classify_abort_byte_boundary(item.num_data);
+endfunction
+
+function void i3c_scoreboard::publish_read_coverage(i3c_item item, exp_txn_t exp,
+                                                     txn_cov_outcome_t outcome);
+  i3c_correlated_item correlated_item;
+
+  correlated_item = i3c_correlated_item::type_id::create("read_correlated_item");
+  fill_private_transfer_coverage(correlated_item, item, exp, outcome);
   correlated_item.length_t_bit_valid = exp.target_is_i3c && exp.rnw &&
                                        !item.addr_nack && (item.num_data > 0);
   correlated_item.final_t_bit = read_final_t_bit(item);
   correlated_item.length_outcome =
       classify_length_outcome(exp.data_length, item.num_data, read_final_t_bit(item));
 
-  first_nack_idx = find_first_nack_idx(item);
-  correlated_item.nack_position_valid = !exp.target_is_i3c && !exp.rnw && !item.addr_nack &&
-                                        (exp.data_length > 0) && (item.num_data > 0);
-  correlated_item.first_nack_idx = first_nack_idx;
-  correlated_item.nack_position =
-      classify_nack_position(first_nack_idx, exp.data_length, item.num_data);
-
   correlated_item.short_boundary_valid = exp.target_is_i3c && exp.rnw && !item.addr_nack &&
                                           (item.num_data < exp.data_length);
   correlated_item.sre = exp.sre;
   correlated_item.short_boundary = classify_short_boundary(item.num_data);
+  correlated_ap.write(correlated_item);
+endfunction
+
+function void i3c_scoreboard::publish_write_coverage(i3c_item item, exp_txn_t exp,
+                                                      txn_cov_outcome_t outcome);
+  i3c_correlated_item correlated_item;
+  int                 first_nack_idx;
+
+  correlated_item = i3c_correlated_item::type_id::create("write_correlated_item");
+  fill_private_transfer_coverage(correlated_item, item, exp, outcome);
+  correlated_item.data_nack = !item.addr_nack && !exp.target_is_i3c &&
+                              data_nack_q_has_nack(item);
+  first_nack_idx = find_first_nack_idx(item);
+  correlated_item.nack_position_valid = !exp.target_is_i3c && !item.addr_nack &&
+                                        (exp.data_length > 0) && (item.num_data > 0);
+  correlated_item.first_nack_idx = first_nack_idx;
+  correlated_item.nack_position =
+      classify_nack_position(first_nack_idx, exp.data_length, item.num_data);
   correlated_ap.write(correlated_item);
 endfunction
 
@@ -148,15 +167,32 @@ function void i3c_scoreboard::publish_command_boundary(i3c_resp_cmd_class_e prev
   correlated_ap.write(correlated_item);
 endfunction
 
-function void i3c_scoreboard::publish_daa_correlated_item(exp_txn_t exp, int unsigned joined_count,
-                                          int unsigned rstart_count, i3c_daa_result_e result,
-                                          i3c_resp_err_status_e resp_status);
+function void i3c_scoreboard::publish_ccc_coverage(exp_txn_t exp, txn_cov_outcome_t outcome,
+                                                   int unsigned byte_count);
+  i3c_correlated_item correlated_item;
+
+  correlated_item = i3c_correlated_item::type_id::create("ccc_correlated_item");
+  correlated_item.cmd_attr = exp.cmd_attr;
+  correlated_item.tid = exp.tid;
+  correlated_item.ccc_opcode = i3c_ccc_e'(exp.cmd_code);
+  correlated_item.ccc_direct = exp.cmd_code[7];
+  correlated_item.resp_status = outcome.resp_status;
+  correlated_item.abort_valid = outcome.abort_valid;
+  correlated_item.abort_cause = outcome.abort_cause;
+  correlated_item.abort_point = outcome.abort_point;
+  correlated_item.abort_byte_boundary = classify_abort_byte_boundary(byte_count);
+  correlated_ap.write(correlated_item);
+endfunction
+
+function void i3c_scoreboard::publish_entdaa_coverage(exp_txn_t exp, int unsigned joined_count,
+                                      int unsigned rstart_count, i3c_daa_result_e result,
+                                      txn_cov_outcome_t outcome, int unsigned byte_count);
   i3c_correlated_item correlated_item;
 
   correlated_item = i3c_correlated_item::type_id::create("daa_correlated_item");
   correlated_item.cmd_attr = exp.cmd_attr;
   correlated_item.tid = exp.tid;
-  correlated_item.resp_status = resp_status;
+  correlated_item.resp_status = outcome.resp_status;
   correlated_item.daa_valid = 1'b1;
   correlated_item.daa_requested_count = exp.daa_dev_count;
   correlated_item.daa_joined_count = joined_count;
@@ -165,6 +201,10 @@ function void i3c_scoreboard::publish_daa_correlated_item(exp_txn_t exp, int uns
   correlated_item.daa_dat_valid = 1'b1;
   correlated_item.daa_start_index = exp.daa_dev_idx;
   correlated_item.daa_dat_span = classify_daa_dat_span(exp.daa_dev_idx, exp.daa_dev_count);
+  correlated_item.abort_valid = outcome.abort_valid;
+  correlated_item.abort_cause = outcome.abort_cause;
+  correlated_item.abort_point = outcome.abort_point;
+  correlated_item.abort_byte_boundary = classify_abort_byte_boundary(byte_count);
   correlated_ap.write(correlated_item);
 endfunction
 

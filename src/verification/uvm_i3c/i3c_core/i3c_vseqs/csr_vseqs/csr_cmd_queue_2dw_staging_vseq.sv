@@ -10,6 +10,7 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     i3c_device_response_seq            dev_seq;
     bit                         [31:0] status;
     bit                         [31:0] resp;
+    bit                         [31:0] cmd_readback;
     bit                         [31:0] dword0;
     bit                         [31:0] dword1;
     bit                         [63:0] cmd_wdata;
@@ -44,6 +45,19 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit, 1'b0, 1'b1,
                       "after CMD DWORD0 write");
 
+    reg_read(ADDR_CMD_QUEUE, cmd_readback);
+    settle_cycles();
+    `DV_CHECK_EQ(cmd_readback, 32'h0,
+                 "csr_cmd_queue_2dw_staging_vseq: CMD_QUEUE read should return zero")
+    `DV_CHECK_EQ(hdl_read_bit(csr_paths.cmd_staging_valid_path), 1'b1,
+                 "csr_cmd_queue_2dw_staging_vseq: CMD_QUEUE read cleared DWORD0 staging")
+    `DV_CHECK_EQ(hdl_read_word(csr_paths.cmd_dword0_path), dword0,
+                 "csr_cmd_queue_2dw_staging_vseq: CMD_QUEUE read changed staged DWORD0")
+    `DV_CHECK_EQ(hdl_read_bit(cmd_paths.write_valid_path), 1'b0,
+                 "csr_cmd_queue_2dw_staging_vseq: CMD_QUEUE read pushed a command")
+    check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit, 1'b0, 1'b1,
+                      "after CMD_QUEUE read with DWORD0 staged");
+
     reg_write(ADDR_CMD_QUEUE, dword1);
     settle_cycles();
     raw_hdl = hdl_read_checked(cmd_paths.write_data_path);
@@ -54,6 +68,13 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
                  "csr_cmd_queue_2dw_staging_vseq: emitted CMD dword order mismatch")
     check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit, 1'b0, 1'b0,
                       "after CMD DWORD1 write");
+
+    reg_read(ADDR_CMD_QUEUE, cmd_readback);
+    settle_cycles();
+    `DV_CHECK_EQ(cmd_readback, 32'h0,
+                 "csr_cmd_queue_2dw_staging_vseq: queued CMD_QUEUE read should return zero")
+    check_queue_flags(cmd_paths.name, cmd_paths.full_bit, cmd_paths.empty_bit, 1'b0, 1'b0,
+                      "after CMD_QUEUE read with command queued");
 
     dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr   = 7'h08;

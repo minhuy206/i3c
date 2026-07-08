@@ -69,6 +69,7 @@ module flow_active
     input  logic       daa_stop_req_i,
     input  logic       daa_stopped_i,
     input  logic       daa_nack_error_i,
+    input  logic       daa_invalid_addr_i,
 
     input logic [ 6:0] daa_address_i,
     input logic        daa_address_valid_i,
@@ -1488,6 +1489,7 @@ module flow_active
                   daa_dev_idx   = aa_desc.dev_idx;
                   hc_aborted_d |= abort_i;
                   daa_nack_error_d |= daa_nack_error_i;
+                  not_supported_d |= daa_invalid_addr_i;
                   if (daa_wr_busy_q) begin
                     rx_queue_wdata = daa_rx_result_word(daa_wr_phase_q, daa_pid_q, daa_bcr_q,
                                                         daa_dcr_q, daa_addr_q);

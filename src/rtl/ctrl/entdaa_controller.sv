@@ -1,5 +1,6 @@
 module entdaa_controller
   import controller_pkg::dat_entry_t;
+  import i3c_pkg::is_i3c_rsvd_addr;
 #(
     parameter int unsigned DatDepth = 32,
     parameter int unsigned DatAw = $clog2(DatDepth)
@@ -13,6 +14,7 @@ module entdaa_controller
     input logic [4:0] dev_idx_i,
     output logic done_o,
     output logic nack_error_o,
+    output logic invalid_addr_o,
     output logic req_stop_o,
     output logic stopped_o,
 
@@ -57,10 +59,14 @@ module entdaa_controller
   } state_e;
 
   state_e state_q, state_d;
+  dat_entry_t entry;
+  assign entry = dat_entry_t'(dat_rdata_i);
+
   logic [3:0] dev_round_q, dev_round_d;
   logic [6:0] daa_addr_q, daa_addr_d;
   logic addr_rejected_once_q, addr_rejected_once_d;
   logic nack_error_q, nack_error_d;
+  logic invalid_addr_q, invalid_addr_d;
   logic stop_pending_q, stop_pending_d;
   logic completed_by_stop_q, completed_by_stop_d;
 
@@ -118,6 +124,7 @@ module entdaa_controller
       daa_addr_q           <= 7'h0;
       addr_rejected_once_q <= 1'b0;
       nack_error_q         <= 1'b0;
+      invalid_addr_q       <= 1'b0;
       stop_pending_q       <= 1'b0;
       completed_by_stop_q  <= 1'b0;
     end else begin
@@ -126,6 +133,7 @@ module entdaa_controller
       daa_addr_q           <= daa_addr_d;
       addr_rejected_once_q <= addr_rejected_once_d;
       nack_error_q         <= nack_error_d;
+      invalid_addr_q       <= invalid_addr_d;
       stop_pending_q       <= stop_pending_d || stop_i;
       completed_by_stop_q  <= completed_by_stop_d;
     end
@@ -145,7 +153,7 @@ module entdaa_controller
 
         StartLoop: begin
           if (dev_round_q < dev_count_i) begin
-            state_d = RequestRStart;
+            state_d = ReadDAT;
           end else begin
             state_d = Done;
           end
@@ -157,12 +165,12 @@ module entdaa_controller
 
         WaitRStart: begin
           if (bus_rstart_det_i) begin
-            state_d = ReadDAT;
+            state_d = RunEntdaa;
           end
         end
 
         ReadDAT: begin
-          state_d = RunEntdaa;
+          state_d = is_i3c_rsvd_addr(entry.dynamic_address) ? Done : RequestRStart;
         end
 
         RunEntdaa: begin
@@ -197,6 +205,7 @@ module entdaa_controller
     daa_addr_d               = daa_addr_q;
     addr_rejected_once_d     = addr_rejected_once_q;
     nack_error_d             = nack_error_q;
+    invalid_addr_d           = invalid_addr_q;
     stop_pending_d           = stop_pending_q;
     completed_by_stop_d      = completed_by_stop_q;
 
@@ -207,6 +216,7 @@ module entdaa_controller
     start_daa                = 1'b0;
     done_o                   = 1'b0;
     nack_error_o             = nack_error_q;
+    invalid_addr_o           = invalid_addr_q;
     req_stop_o               = 1'b0;
     stopped_o                = 1'b0;
     daa_address_o            = 7'h0;
@@ -237,22 +247,21 @@ module entdaa_controller
           dev_round_d          = 4'h0;
           addr_rejected_once_d = 1'b0;
           nack_error_d         = 1'b0;
+          invalid_addr_d       = 1'b0;
           stop_pending_d       = stop_i;
           completed_by_stop_d  = 1'b0;
         end
       end
 
-      RequestRStart: begin
-        req_rstart_o = 1'b1;
-      end
-
-      WaitRStart: begin
-        dat_read_valid_o = 1'b1;
-        dat_sum = {1'b0, dev_idx_i} + {2'b00, dev_round_q};
-        if (dat_sum >= DatDepth) begin
-          dat_index_o = DatDepth - 1;
-        end else begin
-          dat_index_o = dat_sum[DatAw-1:0];
+      StartLoop: begin
+        if (dev_round_q < dev_count_i) begin
+          dat_read_valid_o = 1'b1;
+          dat_sum = {1'b0, dev_idx_i} + {2'b00, dev_round_q};
+          if (dat_sum >= DatDepth) begin
+            dat_index_o = DatDepth - 1;
+          end else begin
+            dat_index_o = dat_sum[DatAw-1:0];
+          end
         end
       end
 
@@ -260,6 +269,13 @@ module entdaa_controller
         dat_entry_t entry;
         entry      = dat_entry_t'(dat_rdata_i);
         daa_addr_d = entry.dynamic_address;
+        if (is_i3c_rsvd_addr(entry.dynamic_address)) begin
+          invalid_addr_d = 1'b1;
+        end
+      end
+
+      RequestRStart: begin
+        req_rstart_o = 1'b1;
       end
 
       RunEntdaa: begin
@@ -305,6 +321,7 @@ module entdaa_controller
         if (!daa_valid_i) begin
           addr_rejected_once_d = 1'b0;
           nack_error_d         = 1'b0;
+          invalid_addr_d       = 1'b0;
           stop_pending_d       = 1'b0;
           completed_by_stop_d  = 1'b0;
         end

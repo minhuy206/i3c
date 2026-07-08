@@ -23,10 +23,9 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
   typedef enum bit [2:0] {
     ACK_NO_DATA,
     ACK_ALL,
-    WRITE_NACK_FIRST,
-    WRITE_NACK_AFTER_PROGRESS,
-    READ_NACK,
-    ACK_PROFILE_OTHER
+    NACK_FIRST,
+    NACK_AFTER_PROGRESS,
+    READ_NACK
   } i2c_ack_profile_e;
 
   typedef enum bit {
@@ -35,65 +34,58 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
   } ccc_form_e;
 
   typedef enum bit [2:0] {
-    DAA_ROUND_ACCEPTED,
-    DAA_ROUND_ADDR_REJECTED,
-    DAA_ROUND_NO_DEVICE,
-    DAA_ROUND_ID_INTERRUPTED,
-    DAA_ROUND_OTHER
+    ACCEPTED,
+    ADDR_REJECTED,
+    NO_DEVICE,
+    ID_INTERRUPTED,
+    OTHER
   } daa_round_outcome_e;
 
   typedef enum bit [1:0] {
-    IDENTITY_ZERO,
-    IDENTITY_ONES,
-    IDENTITY_ALTERNATING,
-    IDENTITY_OTHER
-  } identity_pattern_e;
-
-  typedef enum bit [1:0] {
-    DAA_ADDR_LOW_VALID,
-    DAA_ADDR_MIDDLE_VALID,
-    DAA_ADDR_HIGH_VALID,
-    DAA_ADDR_RESERVED
+    ADDR_LOW_VALID,
+    ADDR_MIDDLE_VALID,
+    ADDR_HIGH_VALID,
+    ADDR_RESERVED
   } daa_assigned_addr_class_e;
 
-  bit                       protocol;
-  bus_op_e                  bus_op;
-  bit                 [6:0] addr;
-  bus_addr_class_e          addr_class;
-  bit                       addr_nack;
-  start_source_e            start_source;
+  bit                             protocol;
+  bus_op_e                        bus_op;
+  bit                       [6:0] addr;
+  bus_addr_class_e                addr_class;
+  bit                             addr_nack;
+  start_source_e                  start_source;
 
-  int unsigned              actual_len;
-  end_condition_e           end_condition;
-  bit                       interrupted;
-  bit                       private_preamble;
-  int unsigned              final_remainder;
-  bit                       i3c_read_has_data;
-  bit                       i3c_final_t_bit;
+  int unsigned                    actual_len;
+  end_condition_e                 end_condition;
+  bit                             interrupted;
+  bit                             private_preamble;
+  int unsigned                    final_remainder;
+  bit                             i3c_read_has_data;
+  bit                             i3c_final_t_bit;
 
-  bit                 [7:0] payload_byte;
+  bit                       [7:0] payload_byte;
 
-  bus_op_e                  previous_op;
-  bus_op_e                  current_op;
-  bit                       previous_private_valid;
+  bus_op_e                        previous_op;
+  bus_op_e                        current_op;
+  bit                             previous_private_valid;
 
-  i2c_ack_profile_e         i2c_ack_profile;
+  i2c_ack_profile_e               i2c_ack_profile;
 
-  ccc_form_e                ccc_form;
-  bit                 [7:0] ccc_opcode;
-  bit                       ccc_header_nack;
-  bit                       ccc_opcode_t_bit;
-  bit                       ccc_event_t_bit_valid;
-  bit                       ccc_event_t_bit;
-  bit                       ccc_target_nack;
+  ccc_form_e                      ccc_form;
+  bit                       [7:0] ccc_opcode;
+  bit                             ccc_header_nack;
+  bit                             ccc_opcode_t_bit;
+  bit                             ccc_event_t_bit_valid;
+  bit                             ccc_event_t_bit;
+  bit                             ccc_target_nack;
 
-  int unsigned              daa_joined_count;
-  daa_round_outcome_e       daa_terminal_outcome;
-  daa_round_outcome_e       daa_round_outcome;
-  bit                       daa_identity_valid;
-  identity_pattern_e        daa_identity_pattern;
-  daa_assigned_addr_class_e daa_assigned_addr_class;
-  bit                       daa_assigned_addr_parity;
+  int unsigned                    daa_joined_count;
+  daa_round_outcome_e             daa_terminal_outcome;
+  daa_round_outcome_e             daa_round_outcome;
+  bit                             daa_identity_valid;
+  data_pattern_e                  daa_identity_pattern;
+  daa_assigned_addr_class_e       daa_assigned_addr_class;
+  bit                             daa_assigned_addr_parity;
 
   covergroup cg_address_phase;
     option.per_instance = 1;
@@ -119,7 +111,9 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
       bins low = {[7'h08 : 7'h1f]}; bins mid = {[7'h20 : 7'h5f]}; bins high = {[7'h60 : 7'h77]};
     }
 
-    cx_addr_class_nack: cross cp_addr_class, cp_addr_nack;
+    cx_addr_class_nack: cross cp_addr_class, cp_addr_nack{
+      ignore_bins reserved_other = binsof (cp_addr_class.reserved_other);
+    }
   endgroup
 
   covergroup cg_bus_transfer;
@@ -176,15 +170,11 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     option.per_instance = 1;
 
     cp_final_t_bit: coverpoint i3c_final_t_bit iff (i3c_read_has_data) {
-      bins target_end = {0}; bins controller_continue = {1};
+      bins target_end = {0}; bins target_has_more = {1};
     }
-
-    cp_interrupted: coverpoint interrupted {bins normal = {0}; bins interrupted = {1};}
-
-    cx_t_bit_interrupted: cross cp_final_t_bit, cp_interrupted;
   endgroup
 
-  covergroup cg_private_transition;
+  covergroup cg_private_rstart_transition;
     option.per_instance = 1;
 
     cp_previous_op: coverpoint previous_op {bins write = {BusOpWrite}; bins read = {BusOpRead};}
@@ -202,13 +192,12 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     cp_i2c_ack_profile: coverpoint i2c_ack_profile {
       bins no_data = {ACK_NO_DATA};
       bins all_ack = {ACK_ALL};
-      bins write_nack_first = {WRITE_NACK_FIRST};
-      bins write_nack_after_progress = {WRITE_NACK_AFTER_PROGRESS};
+      bins write_nack_first = {NACK_FIRST};
+      bins write_nack_after_progress = {NACK_AFTER_PROGRESS};
       bins read_nack = {READ_NACK};
-      bins other = {ACK_PROFILE_OTHER};
     }
 
-    cx_i2c_op_ack: cross cp_i2c_op, cp_i2c_ack_profile {
+    cx_i2c_op_ack: cross cp_i2c_op, cp_i2c_ack_profile{
       ignore_bins read_with_write_nack_first = binsof(cp_i2c_op.read) &&
                                                binsof(cp_i2c_ack_profile.write_nack_first);
       ignore_bins read_with_write_nack_after_progress =
@@ -216,12 +205,8 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
           binsof(cp_i2c_ack_profile.write_nack_after_progress);
       ignore_bins read_without_final_nack = binsof(cp_i2c_op.read) &&
                                             binsof(cp_i2c_ack_profile.all_ack);
-      ignore_bins read_with_nonfinal_nack = binsof(cp_i2c_op.read) &&
-                                            binsof(cp_i2c_ack_profile.other);
       ignore_bins write_with_read_nack = binsof(cp_i2c_op.write) &&
                                          binsof(cp_i2c_ack_profile.read_nack);
-      ignore_bins write_with_other = binsof(cp_i2c_op.write) &&
-                                     binsof(cp_i2c_ack_profile.other);
     }
   endgroup
 
@@ -283,11 +268,11 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     }
 
     cp_terminal_outcome: coverpoint daa_terminal_outcome {
-      bins accepted = {DAA_ROUND_ACCEPTED};
-      bins address_rejected = {DAA_ROUND_ADDR_REJECTED};
-      bins no_device = {DAA_ROUND_NO_DEVICE};
-      bins id_interrupted = {DAA_ROUND_ID_INTERRUPTED};
-      bins other = {DAA_ROUND_OTHER};
+      bins accepted = {ACCEPTED};
+      bins address_rejected = {ADDR_REJECTED};
+      bins no_device = {NO_DEVICE};
+      bins id_interrupted = {ID_INTERRUPTED};
+      bins other = {OTHER};
     }
   endgroup
 
@@ -295,18 +280,18 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     option.per_instance = 1;
 
     cp_round_outcome: coverpoint daa_round_outcome {
-      bins accepted = {DAA_ROUND_ACCEPTED};
-      bins address_rejected = {DAA_ROUND_ADDR_REJECTED};
-      bins no_device = {DAA_ROUND_NO_DEVICE};
-      bins id_interrupted = {DAA_ROUND_ID_INTERRUPTED};
-      bins other = {DAA_ROUND_OTHER};
+      bins accepted = {ACCEPTED};
+      bins address_rejected = {ADDR_REJECTED};
+      bins no_device = {NO_DEVICE};
+      bins id_interrupted = {ID_INTERRUPTED};
+      bins other = {OTHER};
     }
 
     cp_identity_pattern: coverpoint daa_identity_pattern iff (daa_identity_valid) {
-      bins zero = {IDENTITY_ZERO};
-      bins ones = {IDENTITY_ONES};
-      bins alternating = {IDENTITY_ALTERNATING};
-      bins other = {IDENTITY_OTHER};
+      bins zero = {DATA_PATTERN_ZERO};
+      bins ones = {DATA_PATTERN_ONES};
+      bins alternating = {DATA_PATTERN_ALTERNATING};
+      bins other = {DATA_PATTERN_OTHER};
     }
   endgroup
 
@@ -314,16 +299,13 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     option.per_instance = 1;
 
     cp_address_class: coverpoint daa_assigned_addr_class {
-      bins low_valid = {DAA_ADDR_LOW_VALID};
-      bins middle_valid = {DAA_ADDR_MIDDLE_VALID};
-      bins high_valid = {DAA_ADDR_HIGH_VALID};
-      bins reserved = {DAA_ADDR_RESERVED};
+      bins low_valid = {ADDR_LOW_VALID};
+      bins middle_valid = {ADDR_MIDDLE_VALID};
+      bins high_valid = {ADDR_HIGH_VALID};
+      bins reserved = {ADDR_RESERVED};
     }
 
-    cp_parity: coverpoint daa_assigned_addr_parity {
-      bins zero = {1'b0};
-      bins one = {1'b1};
-    }
+    cp_parity: coverpoint daa_assigned_addr_parity {bins zero = {1'b0}; bins one = {1'b1};}
 
     cx_address_class_parity: cross cp_address_class, cp_parity;
   endgroup
@@ -334,7 +316,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     cg_bus_transfer = new();
     cg_payload_byte = new();
     cg_i3c_read_end = new();
-    cg_private_transition = new();
+    cg_private_rstart_transition = new();
     cg_i2c_ack = new();
     cg_ccc = new();
     cg_ccc_target = new();
@@ -361,9 +343,10 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     return END_INCOMPLETE;
   endfunction
 
-  function i2c_ack_profile_e classify_i2c_ack(i3c_item t);
+  function i2c_ack_profile_e classify_i2c_ack(i3c_item t, output bit profile_valid);
     int first_nack;
 
+    profile_valid = 1'b1;
     if (t.data_nack_q.size() == 0) return ACK_NO_DATA;
 
     first_nack = -1;
@@ -374,24 +357,28 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
       end
     end
 
-    if (first_nack < 0) return ACK_ALL;
+    if (first_nack < 0) begin
+      profile_valid = t.bus_op == BusOpWrite;
+      return ACK_ALL;
+    end
     if (t.bus_op == BusOpWrite) begin
-      return (first_nack == 0) ? WRITE_NACK_FIRST : WRITE_NACK_AFTER_PROGRESS;
+      return (first_nack == 0) ? NACK_FIRST : NACK_AFTER_PROGRESS;
     end
     if (first_nack == (t.data_nack_q.size() - 1)) return READ_NACK;
-    return ACK_PROFILE_OTHER;
+    profile_valid = 1'b0;
+    return READ_NACK;
   endfunction
 
   function daa_round_outcome_e classify_daa_round(i3c_item round);
-    if (round.addr_nack) return DAA_ROUND_NO_DEVICE;
-    if ((round.num_data == 8) && round.interrupted) return DAA_ROUND_ID_INTERRUPTED;
+    if (round.addr_nack) return NO_DEVICE;
+    if ((round.num_data == 8) && round.interrupted) return ID_INTERRUPTED;
     if ((round.num_data >= 9) && (round.data_nack_q.size() > 0)) begin
-      return round.data_nack_q[0] ? DAA_ROUND_ADDR_REJECTED : DAA_ROUND_ACCEPTED;
+      return round.data_nack_q[0] ? ADDR_REJECTED : ACCEPTED;
     end
-    return DAA_ROUND_OTHER;
+    return OTHER;
   endfunction
 
-  function identity_pattern_e classify_identity(i3c_item round);
+  function data_pattern_e classify_identity_pattern(i3c_item round);
     bit all_zero;
     bit all_one;
     bit all_alternating;
@@ -405,17 +392,17 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
       all_alternating &= (round.data_q[i] inside {8'haa, 8'h55});
     end
 
-    if (all_zero) return IDENTITY_ZERO;
-    if (all_one) return IDENTITY_ONES;
-    if (all_alternating) return IDENTITY_ALTERNATING;
-    return IDENTITY_OTHER;
+    if (all_zero) return DATA_PATTERN_ZERO;
+    if (all_one) return DATA_PATTERN_ONES;
+    if (all_alternating) return DATA_PATTERN_ALTERNATING;
+    return DATA_PATTERN_OTHER;
   endfunction
 
   function daa_assigned_addr_class_e classify_daa_assigned_address(bit [6:0] assigned_addr);
-    if (assigned_addr inside {[7'h08 : 7'h1f]}) return DAA_ADDR_LOW_VALID;
-    if (assigned_addr inside {[7'h20 : 7'h5f]}) return DAA_ADDR_MIDDLE_VALID;
-    if (assigned_addr inside {[7'h60 : 7'h77]}) return DAA_ADDR_HIGH_VALID;
-    return DAA_ADDR_RESERVED;
+    if (assigned_addr inside {[7'h08 : 7'h1f]}) return ADDR_LOW_VALID;
+    if (assigned_addr inside {[7'h20 : 7'h5f]}) return ADDR_MIDDLE_VALID;
+    if (assigned_addr inside {[7'h60 : 7'h77]}) return ADDR_HIGH_VALID;
+    return ADDR_RESERVED;
   endfunction
 
   function void sample_address_phase(bit protocol, bus_op_e bus_op, bit [6:0] addr,
@@ -430,6 +417,8 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
   endfunction
 
   function void sample_transfer(i3c_item t);
+    bit i2c_ack_profile_valid;
+
     protocol = t.i3c;
     bus_op = t.bus_op;
     actual_len = t.num_data;
@@ -451,8 +440,8 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     end
 
     if (!t.i3c) begin
-      i2c_ack_profile = classify_i2c_ack(t);
-      cg_i2c_ack.sample();
+      i2c_ack_profile = classify_i2c_ack(t, i2c_ack_profile_valid);
+      if (i2c_ack_profile_valid) cg_i2c_ack.sample();
     end
   endfunction
 
@@ -493,22 +482,21 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
 
   function void sample_daa(i3c_item t);
     daa_joined_count = 0;
-    daa_terminal_outcome = DAA_ROUND_OTHER;
+    daa_terminal_outcome = OTHER;
 
     foreach (t.CCC_direct_q[i]) begin
       daa_round_outcome = classify_daa_round(t.CCC_direct_q[i]);
       daa_terminal_outcome = daa_round_outcome;
       daa_identity_valid = t.CCC_direct_q[i].data_q.size() >= 8;
-      daa_identity_pattern = daa_identity_valid ? classify_identity(t.CCC_direct_q[i]) :
-          IDENTITY_OTHER;
-      if (daa_round_outcome == DAA_ROUND_ACCEPTED) daa_joined_count++;
+      daa_identity_pattern = daa_identity_valid ? classify_identity_pattern(t.CCC_direct_q[i]) :
+                                                  DATA_PATTERN_OTHER;
+      if (daa_round_outcome == ACCEPTED) daa_joined_count++;
       cg_daa_round.sample();
 
       // data_q[8] is present only after the complete assigned-address byte was
       // observed. Bits [7:1] carry the address and bit [0] carries its parity.
       if ((t.CCC_direct_q[i].num_data >= 9) && (t.CCC_direct_q[i].data_q.size() >= 9)) begin
-        daa_assigned_addr_class =
-            classify_daa_assigned_address(t.CCC_direct_q[i].data_q[8][7:1]);
+        daa_assigned_addr_class  = classify_daa_assigned_address(t.CCC_direct_q[i].data_q[8][7:1]);
         daa_assigned_addr_parity = t.CCC_direct_q[i].data_q[8][0];
         cg_daa_assigned_address.sample();
       end
@@ -538,7 +526,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
 
       if (t.i3c) begin
         current_op = t.bus_op;
-        if (previous_private_valid) cg_private_transition.sample();
+        if (previous_private_valid && t.start_from_rstart) cg_private_rstart_transition.sample();
         previous_op = t.bus_op;
         previous_private_valid = 1'b1;
       end else begin
@@ -569,7 +557,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
               {
                 "cg_address_phase=%0.2f%% cg_bus_transfer=%0.2f%% ",
                 "cg_payload_byte=%0.2f%% cg_i3c_read_end=%0.2f%% ",
-                "cg_private_transition=%0.2f%% ",
+                "cg_private_rstart_transition=%0.2f%% ",
                 "cg_i2c_ack=%0.2f%% cg_ccc=%0.2f%% cg_ccc_target=%0.2f%% ",
                 "cg_daa_transaction=%0.2f%% cg_daa_round=%0.2f%% ",
                 "cg_daa_assigned_address=%0.2f%%"
@@ -578,7 +566,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
               cg_bus_transfer.get_inst_coverage(),
               cg_payload_byte.get_inst_coverage(),
               cg_i3c_read_end.get_inst_coverage(),
-              cg_private_transition.get_inst_coverage(),
+              cg_private_rstart_transition.get_inst_coverage(),
               cg_i2c_ack.get_inst_coverage(),
               cg_ccc.get_inst_coverage(),
               cg_ccc_target.get_inst_coverage(),

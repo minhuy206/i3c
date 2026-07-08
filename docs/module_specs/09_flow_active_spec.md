@@ -471,6 +471,7 @@ stateDiagram-v2
   - Wait for `ccc_done_i`; deassert `ccc_valid_o` (the `daa_restart_pending_q` latch in `controller_active` routes each restart pulse from `entdaa_controller` to `scl_generator` automatically — `flow_active` does not service restart requests)
   - On each `daa_address_valid_i` pulse: forward the DAA result to RX FIFO for SW readback as three DWORDs:
     `PID[47:16]`, `{PID[15:0], BCR[7:0], DCR[7:0]}`, and `{25'h0, DA[6:0]}`
+  - If `entdaa_controller` reports that the next DAT dynamic address is reserved, wait for the normal DAA STOP completion and report `NotSupported` with `data_length` equal to the already committed DAA result bytes
   - If RX FIFO cannot accept a DAA result DWORD, latch `rx_overflow`, request STOP, and report `Ovl` with `data_length` equal to the number of DAA result bytes actually committed
   - Generate STOP; → `WriteResp`
 - **OD/PP switching:**
@@ -529,6 +530,7 @@ Before DAT access, `invalid_cmd_desc()` applies the implemented-subset policy:
 - `dev_count` in bits [29:26] → drives `ccc_dev_count_o`
 - `dev_idx` in bits [20:16] → drives `daa_dev_idx_o` (starting DAT index; entdaa_controller reads DAT entries `[dev_idx .. dev_idx + dev_count - 1]`)
 - Triggers ENTDAA via entdaa_controller module; `flow_active` sends the opening broadcast header via `I3CBcastHeader`, then sends ENTDAA code before activating `ccc_valid_o`
+- The assigned dynamic address selected from DAT for each ENTDAA round must be non-reserved. A reserved DAT dynamic address is rejected by the DAA engine before that round starts and is surfaced as `NotSupported`, not as `Nack`.
 
 ### 5.4. Error Accumulation
 
@@ -622,6 +624,7 @@ end
 | Address NACK     | ACK bit = 1 after address byte (I2C or I3C)             | `AddrHeader`     |
 | I2C data NACK    | ACK bit = 1 after an I2C data byte (`data_nack_q`)      | `I2cDataNackOrI3cBusAborted` |
 | DAA address-assignment reject | ENTDAA device address attempt NACKed after retry (`daa_nack_error_i`/`daa_nack_error_q`) | `Nack` |
+| DAA reserved assigned address | DAT dynamic address selected for the next ENTDAA round is reserved by `is_i3c_rsvd_addr()` | `NotSupported` |
 | TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
 | RX overflow      | RX FIFO cannot accept received data or DAA result data | `Ovl`            |
 | Short read       | Target drives T-bit=0 before all requested bytes sent and descriptor `sre=1` | `I3cShortReadErr`|
@@ -641,6 +644,7 @@ end
 6. **I2C Write (regular):** Regular write via TX FIFO to I2C device
 7. **I2C Read:** Read from I2C device; verify data in RX FIFO
 8. **ENTDAA:** Execute ENTDAA via valid AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx
+8a. **ENTDAA reserved assigned address:** Program a reserved DAT dynamic address and verify ENTDAA uses the normal STOP path before issuing that DAA round, then writes `NotSupported`
 9. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, legal dtt<=4; verify [S][0x7E+W][ACK][0x00][T][TargetEvents][T][P] frame
 10. **CCC ENEC dtt>4 rejection:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5..7; verify no DAT read, no bus frame, and response `NotSupported` with length 0
 11. **Invalid descriptor rejection:** Sweep unsupported attributes/modes, Immediate `rnw=1`/`dtt>4`, unsupported immediate CCC opcodes, Regular `cp=1`, and AddressAssignment with a non-ENTDAA opcode; separately cover AddressAssignment `toc=0`, `wroc=0`, `dev_count=0`, and a DAT span beyond `DatDepth`; verify no DAT read or bus frame, exact `NotSupported` response, and successful recovery without reset

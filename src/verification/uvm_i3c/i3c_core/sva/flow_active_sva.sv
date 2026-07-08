@@ -60,6 +60,7 @@ module flow_active_sva
     input logic                                              addr_nack_q,
     input logic                                              data_nack_q,
     input logic                                              daa_nack_error_q,
+    input logic                                              daa_invalid_addr_i,
     input logic                                              not_supported_q,
     input logic                                              addr_after_rstart_q,
     input logic                                              next_start_is_rstart_q,
@@ -3228,6 +3229,46 @@ module flow_active_sva
                                             invalid_addr_assign_desc() &&
                                             not_supported_resp_matches_current_len());
 
+  ap_addr_assign_reserved_addr_not_supported_resp :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            daa_invalid_addr_i
+                                            |->
+                                            not_supported_resp_matches_current_len())
+  else $error("flow_active_sva: AddressAssignment reserved DAT address response must be NotSupported with current length in %m");
+
+  cp_addr_assign_reserved_addr_not_supported_resp :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == WriteResp &&
+                                            cmd_attr == AddressAssignment &&
+                                            daa_invalid_addr_i &&
+                                            not_supported_resp_matches_current_len());
+
+  ap_addr_assign_reserved_addr_uses_common_stop_path :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            cmd_attr == AddressAssignment &&
+                                            issue_phase_q > 8'd4 &&
+                                            daa_invalid_addr_i &&
+                                            !entdaa_stop_req_q &&
+                                            !daa_wr_busy_q
+                                            |->
+                                            (gen_stop_o &&
+                                             !resp_queue_wvalid))
+  else $error("flow_active_sva: AddressAssignment reserved DAT address must request STOP before response in %m");
+
+  cp_addr_assign_reserved_addr_uses_common_stop_path :
+  cover property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == IssueCmd &&
+                                            cmd_attr == AddressAssignment &&
+                                            issue_phase_q > 8'd4 &&
+                                            daa_invalid_addr_i &&
+                                            !entdaa_stop_req_q &&
+                                            !daa_wr_busy_q &&
+                                            gen_stop_o &&
+                                            !resp_queue_wvalid);
+
   // ERR_001 / DAA_001: successful ENTDAA responses use the common Success/TID/length
   // encoding. The length is the number of committed DAA result bytes.
   ap_daa_success_resp :
@@ -4077,6 +4118,7 @@ bind flow_active flow_active_sva #(
     .addr_nack_q,
     .data_nack_q,
     .daa_nack_error_q,
+    .daa_invalid_addr_i,
     .not_supported_q,
     .addr_after_rstart_q,
     .next_start_is_rstart_q,

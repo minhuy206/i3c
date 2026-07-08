@@ -15,27 +15,32 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
 
     foreach (broadcast_modes[mode_idx]) begin
       run_read_abort_case(broadcast_modes[mode_idx]);
+      run_read_abort_case(broadcast_modes[mode_idx], 1, "target_end_abort");
       run_read_abort_deep_case(broadcast_modes[mode_idx]);
       run_read_abort_toc_zero_case(broadcast_modes[mode_idx]);
     end
 
   endtask
 
-  virtual task run_read_abort_case(bit broadcast_header_enable);
+  virtual task run_read_abort_case(bit broadcast_header_enable,
+                                   int unsigned data_length = DATA_LENGTH,
+                                   string case_name = "early_abort");
     transfer_stimulus_cfg_t        cfg;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
     word_queue_t                   rx_words;
 
     byte_queue_t                   read_data;
-    build_random_payload(DATA_LENGTH, read_data);
+    build_random_payload(data_length, read_data);
 
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
     cfg = make_transfer_cfg(
-        .ctxt($sformatf("ERR_009 %s read_abort", private_addr_mode_name(broadcast_header_enable))),
-        .seq_name($sformatf("sdrr009_%s_dev_seq", private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf("ERR_009 %s read_%s",
+                        private_addr_mode_name(broadcast_header_enable), case_name)),
+        .seq_name($sformatf("sdrr009_%s_%s_dev_seq",
+                            private_addr_mode_name(broadcast_header_enable), case_name)),
         .tid(4'd9),
         .dev_idx(5'd0),
         .target_addr(7'h08),
@@ -45,7 +50,7 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
-        .data_length(DATA_LENGTH),
+        .data_length(data_length),
         .settle_before_cmd(0),
         .timeout_cycles(0)
     );
@@ -67,12 +72,12 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
     reg_write(ADDR_HC_CONTROL, hc_control_value(
               .bus_enable(1'b1), .iba_include(broadcast_header_enable)));
     check_all_queues_empty($sformatf(
-                           "ERR_009 %s early: before recovery transfer",
+                           "ERR_009 %s %s: before recovery transfer",
                            private_addr_mode_name(
                                broadcast_header_enable
-                           )
+                           ), case_name
                            ));
-    run_read_recovery_case(broadcast_header_enable, "early_abort");
+    run_read_recovery_case(broadcast_header_enable, case_name);
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
         $sformatf(

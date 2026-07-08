@@ -20,6 +20,7 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
 
     backdoor_load_resp_queue(32'h0123_0004, 32'h0456_0008);
     check_port_depth(resp_paths, 2, "after RESP backdoor load");
+    check_resp_write_ignored(32'h0123_0004, 32'h0456_0008);
     drain_two_entries(resp_paths, ADDR_RESP, 32'h0123_0004, 32'h0456_0008);
     exercise_empty_reads(resp_paths, ADDR_RESP);
 
@@ -40,6 +41,42 @@ class csr_rx_resp_read_pop_vseq extends csr_base_vseq;
                                        paths.name))
     settle_cycles();
     check_port_depth(paths, 0, "after second read pop");
+  endtask
+
+  task check_resp_write_ignored(bit [31:0] exp0, bit [31:0] exp1);
+    bit [31:0] rptr_before;
+    bit [31:0] wptr_before;
+    int unsigned depth_before;
+
+    rptr_before  = hdl_read_word(resp_paths.rptr_path);
+    wptr_before  = hdl_read_word(resp_paths.wptr_path);
+    depth_before = hdl_read_fifo_depth(resp_paths.depth_path);
+
+    reg_write(ADDR_RESP, 32'hFFFF_FFFF);
+    settle_cycles();
+    check_resp_write_no_side_effect(rptr_before, wptr_before, depth_before, exp0, exp1,
+                                    "after all-ones write");
+
+    reg_write(ADDR_RESP, 32'h0000_0000);
+    settle_cycles();
+    check_resp_write_no_side_effect(rptr_before, wptr_before, depth_before, exp0, exp1,
+                                    "after all-zeroes write");
+  endtask
+
+  task check_resp_write_no_side_effect(bit [31:0] exp_rptr, bit [31:0] exp_wptr,
+                                       int unsigned exp_depth, bit [31:0] exp0,
+                                       bit [31:0] exp1, string ctxt);
+    `DV_CHECK_EQ(hdl_read_word(resp_paths.rptr_path), exp_rptr, $sformatf(
+                 "csr_rx_resp_read_pop_vseq: RESP rptr changed on write %s", ctxt))
+    `DV_CHECK_EQ(hdl_read_word(resp_paths.wptr_path), exp_wptr, $sformatf(
+                 "csr_rx_resp_read_pop_vseq: RESP wptr changed on write %s", ctxt))
+    `DV_CHECK_EQ(hdl_read_fifo_depth(resp_paths.depth_path), exp_depth, $sformatf(
+                 "csr_rx_resp_read_pop_vseq: RESP depth changed on write %s", ctxt))
+    `DV_CHECK_EQ(hdl_read_word(fifo_mem_path(resp_paths, 0)), exp0, $sformatf(
+                 "csr_rx_resp_read_pop_vseq: RESP first entry changed on write %s", ctxt))
+    `DV_CHECK_EQ(hdl_read_word(fifo_mem_path(resp_paths, 1)), exp1, $sformatf(
+                 "csr_rx_resp_read_pop_vseq: RESP second entry changed on write %s", ctxt))
+    check_port_depth(resp_paths, exp_depth, ctxt);
   endtask
 
   task exercise_empty_reads(queue_hdl_paths_t paths, bit [11:0] port_addr);
