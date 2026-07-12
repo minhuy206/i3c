@@ -33,25 +33,76 @@ class bus_base_vseq extends i3c_base_vseq;
   endfunction
 
   virtual function void init_bus_hdl_paths();
-    bus_paths.rst_n_path          = "tb_i3c_top.rst_n";
-    bus_paths.scl_i_path          = "tb_i3c_top.scl_i";
-    bus_paths.sda_i_path          = "tb_i3c_top.sda_i";
-    bus_paths.scl_sync_path       = "tb_i3c_top.dut.ctrl_scl_from_phy";
-    bus_paths.sda_sync_path       = "tb_i3c_top.dut.ctrl_sda_from_phy";
-    bus_paths.scl_pos_edge_path   = "tb_i3c_top.dut.u_ctrl.bus_state.scl.pos_edge";
-    bus_paths.scl_neg_edge_path   = "tb_i3c_top.dut.u_ctrl.bus_state.scl.neg_edge";
-    bus_paths.sda_pos_edge_path   = "tb_i3c_top.dut.u_ctrl.bus_state.sda.pos_edge";
-    bus_paths.sda_neg_edge_path   = "tb_i3c_top.dut.u_ctrl.bus_state.sda.neg_edge";
-    bus_paths.start_det_path      = "tb_i3c_top.dut.u_ctrl.bus_state.start_det";
-    bus_paths.rstart_det_path     = "tb_i3c_top.dut.u_ctrl.bus_state.rstart_det";
-    bus_paths.stop_det_path       = "tb_i3c_top.dut.u_ctrl.bus_state.stop_det";
-    bus_paths.scl_gen_start_path  = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_start_i";
-    bus_paths.scl_gen_rstart_path = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_rstart_i";
-    bus_paths.scl_gen_stop_path   = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_stop_i";
-    bus_paths.scl_gen_clock_path  = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_clock_i";
-    bus_paths.scl_gen_idle_path   = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_idle_i";
-    bus_paths.scl_gen_scl_i_path  = "tb_i3c_top.dut.u_ctrl.u_scl_gen.scl_i";
+    bus_paths.rst_n_path              = "tb_i3c_top.rst_n";
+    bus_paths.scl_i_path              = "tb_i3c_top.scl_i";
+    bus_paths.sda_i_path              = "tb_i3c_top.sda_i";
+    bus_paths.scl_sync_path           = "tb_i3c_top.dut.ctrl_scl_from_phy";
+    bus_paths.sda_sync_path           = "tb_i3c_top.dut.ctrl_sda_from_phy";
+    bus_paths.scl_pos_edge_path       = "tb_i3c_top.dut.u_ctrl.bus_state.scl.pos_edge";
+    bus_paths.scl_neg_edge_path       = "tb_i3c_top.dut.u_ctrl.bus_state.scl.neg_edge";
+    bus_paths.sda_pos_edge_path       = "tb_i3c_top.dut.u_ctrl.bus_state.sda.pos_edge";
+    bus_paths.sda_neg_edge_path       = "tb_i3c_top.dut.u_ctrl.bus_state.sda.neg_edge";
+    bus_paths.start_det_path          = "tb_i3c_top.dut.u_ctrl.bus_state.start_det";
+    bus_paths.rstart_det_path         = "tb_i3c_top.dut.u_ctrl.bus_state.rstart_det";
+    bus_paths.stop_det_path           = "tb_i3c_top.dut.u_ctrl.bus_state.stop_det";
+    bus_paths.scl_gen_start_path      = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_start_i";
+    bus_paths.scl_gen_rstart_path     = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_rstart_i";
+    bus_paths.scl_gen_stop_path       = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_stop_i";
+    bus_paths.scl_gen_clock_path      = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_clock_i";
+    bus_paths.scl_gen_idle_path       = "tb_i3c_top.dut.u_ctrl.u_scl_gen.gen_idle_i";
+    bus_paths.scl_gen_scl_i_path      = "tb_i3c_top.dut.u_ctrl.u_scl_gen.scl_i";
     bus_paths.scl_gen_use_od_low_path = "tb_i3c_top.dut.u_ctrl.u_scl_gen.scl_use_od_low_i";
+  endfunction
+
+  virtual function void build_sdr_data_pattern_payload(int unsigned pattern_idx,
+                                                       ref byte_queue_t data);
+    bit [7:0] fixed_random[16] = '{
+        8'h3C,
+        8'hA7,
+        8'h19,
+        8'hE2,
+        8'h5D,
+        8'h80,
+        8'h0F,
+        8'hB4,
+        8'hC1,
+        8'h26,
+        8'h7A,
+        8'h93,
+        8'h48,
+        8'hDE,
+        8'h04,
+        8'hF0
+    };
+
+    data.delete();
+
+    case (pattern_idx)
+      0: begin
+        repeat (8) data.push_back(8'h00);
+      end
+      1: begin
+        repeat (8) data.push_back(8'hFF);
+      end
+      2: begin
+        for (int unsigned i = 0; i < 8; i++) begin
+          data.push_back(8'(8'h01 << i));
+        end
+      end
+      3: begin
+        for (int unsigned i = 0; i < 8; i++) begin
+          data.push_back(i[0] ? 8'h55 : 8'hAA);
+        end
+      end
+      4: begin
+        foreach (fixed_random[i]) begin
+          data.push_back(fixed_random[i]);
+        end
+      end
+      default: begin
+        `uvm_fatal(`gfn, $sformatf("Unsupported SDR data pattern index %0d", pattern_idx))
+      end
+    endcase
   endfunction
 
   virtual task wait_sync_cycles(int unsigned cycles);
@@ -139,12 +190,11 @@ class bus_base_vseq extends i3c_base_vseq;
     #1;
   endtask
 
-  virtual task program_timing_registers(int unsigned t_r, int unsigned t_f, int unsigned t_low,
-                                        int unsigned t_high, int unsigned t_su_sta,
-                                        int unsigned t_hd_sta, int unsigned t_su_sto,
-                                        int unsigned t_su_dat, int unsigned t_hd_dat,
-                                        int unsigned t_bus_free = RST_T_BUS_FREE,
-                                        int unsigned t_low_od = RST_T_LOW_OD);
+  virtual task program_timing_registers(
+      int unsigned t_r, int unsigned t_f, int unsigned t_low, int unsigned t_high,
+      int unsigned t_su_sta, int unsigned t_hd_sta, int unsigned t_su_sto, int unsigned t_su_dat,
+      int unsigned t_hd_dat, int unsigned t_bus_free = RST_T_BUS_FREE,
+      int unsigned t_low_od = RST_T_LOW_OD);
     reg_write(ADDR_T_R, t_r);
     reg_write(ADDR_T_F, t_f);
     reg_write(ADDR_T_LOW, t_low);
@@ -165,12 +215,11 @@ class bus_base_vseq extends i3c_base_vseq;
     wait_sync_cycles(2);
   endtask
 
-  virtual task reset_and_program_timing(int unsigned t_r, int unsigned t_f, int unsigned t_low,
-                                        int unsigned t_high, int unsigned t_su_sta,
-                                        int unsigned t_hd_sta, int unsigned t_su_sto,
-                                        int unsigned t_su_dat, int unsigned t_hd_dat,
-                                        int unsigned t_bus_free = RST_T_BUS_FREE,
-                                        int unsigned t_low_od = RST_T_LOW_OD);
+  virtual task reset_and_program_timing(
+      int unsigned t_r, int unsigned t_f, int unsigned t_low, int unsigned t_high,
+      int unsigned t_su_sta, int unsigned t_hd_sta, int unsigned t_su_sto, int unsigned t_su_dat,
+      int unsigned t_hd_dat, int unsigned t_bus_free = RST_T_BUS_FREE,
+      int unsigned t_low_od = RST_T_LOW_OD);
     force_scl_generator_controls(1'b0, 1'b0, 1'b0, 1'b0, 1'b1);
     force_hard_reset();
     wait_sync_cycles(2);

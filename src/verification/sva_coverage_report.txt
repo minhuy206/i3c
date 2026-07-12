@@ -1,0 +1,1593 @@
+I3C SVA Coverage Report
+Tests analysed   : 240
+Assertions       : 411
+  PASS           : 403
+  VACUOUS        : 0
+  FAIL           : 0
+  MISS           : 8
+  Closure        : 98.1%
+Cover properties : 590
+  HIT            : 577
+  MISS           : 13
+  Closure        : 97.8%
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva
+====================================================================================================
+[PASS   ] ASSERT ap_broadcast_header_enable_does_not_enable_hc        pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_busy_reset_control_write_ignored                  pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_cmd_first_write_stages_dword0                     pass=1279   fail=0      vacuous=0      attempts=0      tests=189
+[PASS   ] ASSERT ap_cmd_non_cmd_write_preserves_staging               pass=57     fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_cmd_second_write_emits_command                    pass=1273   fail=0      vacuous=0      attempts=0      tests=186
+[MISS   ] ASSERT ap_cmd_wdata_stable_until_ready                      pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_dat_hw_read_latency                               pass=10118  fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_dat_readback                                      pass=6438   fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_dat_write_updates_selected_entry                  pass=1108   fail=0      vacuous=0      attempts=0      tests=189
+[PASS   ] ASSERT ap_hc_abort_only_write_keeps_disabled                pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_hc_abort_persists_until_sw_clear                  pass=161751 fail=0      vacuous=0      attempts=0      tests=24
+[PASS   ] ASSERT ap_hc_control_readback                               pass=300    fail=0      vacuous=0      attempts=0      tests=54
+[PASS   ] ASSERT ap_hc_control_reset_defaults                         pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_hc_control_write_updates_bits                     pass=1021   fail=0      vacuous=0      attempts=0      tests=213
+[PASS   ] ASSERT ap_hc_status_mirror                                  pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_idle_reset_control_write_pulses_soft_reset        pass=120    fail=0      vacuous=0      attempts=0      tests=42
+[PASS   ] ASSERT ap_invalid_reg_read_zero                             pass=72     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_invalid_reg_write_no_cmd_tx_side_effects          pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_invalid_reg_write_no_control_timing_side_effects  pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_queue_reset_defaults                              pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_queue_status_mirror                               pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_ready_backpressure_only                           pass=279    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_reset_control_readback_zero                       pass=132    fail=0      vacuous=0      attempts=0      tests=54
+[PASS   ] ASSERT ap_reset_default_readback                            pass=246    fail=0      vacuous=0      attempts=0      tests=21
+[PASS   ] ASSERT ap_resp_empty_read_returns_zero                      pass=33     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_resp_read_returns_fifo_data                       pass=1432   fail=0      vacuous=0      attempts=0      tests=201
+[PASS   ] ASSERT ap_resp_rready_only_resp_read                        pass=279    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_rx_empty_read_returns_zero                        pass=36     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_rx_read_returns_fifo_data                         pass=1026   fail=0      vacuous=0      attempts=0      tests=84
+[PASS   ] ASSERT ap_rx_rready_only_rx_read                            pass=279    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_status_reset_defaults                             pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_sw_reset_clears_cmd_staging                       pass=120    fail=0      vacuous=0      attempts=0      tests=42
+[PASS   ] ASSERT ap_sw_reset_clears_tx_pending                        pass=120    fail=0      vacuous=0      attempts=0      tests=42
+[PASS   ] ASSERT ap_sw_reset_self_clear                               pass=120    fail=0      vacuous=0      attempts=0      tests=42
+[PASS   ] ASSERT ap_timing_readback                                   pass=6108   fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_timing_reset_defaults                             pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_timing_write_updates_selected_reg                 pass=663    fail=0      vacuous=0      attempts=0      tests=33
+[PASS   ] ASSERT ap_tx_data_write_captures_data                       pass=1042   fail=0      vacuous=0      attempts=0      tests=78
+[PASS   ] ASSERT ap_tx_valid_clears_on_ready                          pass=1039   fail=0      vacuous=0      attempts=0      tests=78
+[PASS   ] ASSERT ap_tx_wdata_stable_until_ready                       pass=507399 fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_unmapped_020_read_zero                            pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_broadcast_header_enable_does_not_enable_hc        hits=9      tests=9
+[HIT    ] COVER  cp_busy_reset_control_write_ignored                  hits=3      tests=3
+[HIT    ] COVER  cp_cmd_first_write_stages_dword0                     hits=189    tests=189
+[HIT    ] COVER  cp_cmd_non_cmd_write_preserves_staging               hits=9      tests=9
+[HIT    ] COVER  cp_cmd_second_write_emits_command                    hits=186    tests=186
+[MISS   ] COVER  cp_cmd_wdata_stable_until_ready                      hits=0      tests=0
+[HIT    ] COVER  cp_dat_device_i2c_write                              hits=45     tests=45
+[HIT    ] COVER  cp_dat_device_i3c_write                              hits=168    tests=168
+[HIT    ] COVER  cp_dat_hw_read_latency                               hits=177    tests=177
+[HIT    ] COVER  cp_dat_readback                                      hits=15     tests=15
+[HIT    ] COVER  cp_dat_write_updates_selected_entry                  hits=189    tests=189
+[HIT    ] COVER  cp_hc_abort                                          hits=6      tests=6
+[HIT    ] COVER  cp_hc_abort_persists_through_read                    hits=3      tests=3
+[HIT    ] COVER  cp_hc_control_readback                               hits=54     tests=54
+[HIT    ] COVER  cp_hc_control_reset_defaults                         hits=240    tests=240
+[HIT    ] COVER  cp_hc_control_write_updates_bits                     hits=213    tests=213
+[HIT    ] COVER  cp_idle_reset_control_write_pulses_soft_reset        hits=42     tests=42
+[HIT    ] COVER  cp_invalid_reg_addr                                  hits=3      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_no_cmd_tx_side_effects          hits=3      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_no_control_timing_side_effects  hits=3      tests=3
+[HIT    ] COVER  cp_queue_reset_defaults                              hits=240    tests=240
+[HIT    ] COVER  cp_queue_status_cmd_empty_read                       hits=192    tests=192
+[HIT    ] COVER  cp_queue_status_cmd_full_read                        hits=12     tests=12
+[HIT    ] COVER  cp_queue_status_cmd_middle_read                      hits=33     tests=33
+[HIT    ] COVER  cp_queue_status_resp_empty_read                      hits=192    tests=192
+[HIT    ] COVER  cp_queue_status_resp_full_read                       hits=18     tests=18
+[HIT    ] COVER  cp_queue_status_resp_middle_read                     hits=24     tests=24
+[HIT    ] COVER  cp_queue_status_rx_empty_read                        hits=192    tests=192
+[HIT    ] COVER  cp_queue_status_rx_full_read                         hits=18     tests=18
+[HIT    ] COVER  cp_queue_status_rx_middle_read                       hits=30     tests=30
+[HIT    ] COVER  cp_queue_status_tx_empty_read                        hits=195    tests=195
+[HIT    ] COVER  cp_queue_status_tx_full_read                         hits=15     tests=15
+[HIT    ] COVER  cp_queue_status_tx_middle_read                       hits=30     tests=30
+[MISS   ] COVER  cp_ready_cmd_backpressure                            hits=0      tests=0
+[HIT    ] COVER  cp_ready_tx_backpressure                             hits=3      tests=3
+[HIT    ] COVER  cp_reset_control_readback_zero                       hits=54     tests=54
+[HIT    ] COVER  cp_reset_default_readback                            hits=21     tests=21
+[HIT    ] COVER  cp_reset_readback_hc_control                         hits=15     tests=15
+[HIT    ] COVER  cp_reset_readback_hc_status                          hits=9      tests=9
+[HIT    ] COVER  cp_reset_readback_i2c_t_buf                          hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_i2c_t_hd_sta                       hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_i2c_t_high                         hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_i2c_t_low                          hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_i2c_t_su_dat                       hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_i2c_t_su_sta                       hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_i2c_t_su_sto                       hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_queue_status                       hits=30     tests=30
+[HIT    ] COVER  cp_reset_readback_reset_control                      hits=9      tests=9
+[HIT    ] COVER  cp_reset_readback_t_bus_free                         hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_f                                hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_hd_dat                           hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_hd_sta                           hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_high                             hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_low                              hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_low_od                           hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_r                                hits=9      tests=9
+[HIT    ] COVER  cp_reset_readback_t_su_dat                           hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_su_sta                           hits=6      tests=6
+[HIT    ] COVER  cp_reset_readback_t_su_sto                           hits=6      tests=6
+[MISS   ] COVER  cp_reset_readback_unmapped_020                       hits=0      tests=0
+[HIT    ] COVER  cp_resp_empty_read_returns_zero                      hits=15     tests=15
+[HIT    ] COVER  cp_resp_read_returns_fifo_data                       hits=201    tests=201
+[HIT    ] COVER  cp_rx_empty_read_returns_zero                        hits=18     tests=18
+[HIT    ] COVER  cp_rx_read_returns_fifo_data                         hits=84     tests=84
+[HIT    ] COVER  cp_status_reset_defaults                             hits=240    tests=240
+[HIT    ] COVER  cp_sw_reset_clears_cmd_staging                       hits=42     tests=42
+[HIT    ] COVER  cp_sw_reset_clears_tx_pending                        hits=42     tests=42
+[HIT    ] COVER  cp_sw_reset_self_clear                               hits=42     tests=42
+[HIT    ] COVER  cp_timing_readback                                   hits=15     tests=15
+[HIT    ] COVER  cp_timing_reset_defaults                             hits=240    tests=240
+[HIT    ] COVER  cp_timing_write_updates_selected_reg                 hits=33     tests=33
+[HIT    ] COVER  cp_tx_data_write_captures_data                       hits=78     tests=78
+[HIT    ] COVER  cp_tx_valid_clears_on_ready                          hits=78     tests=78
+[HIT    ] COVER  cp_tx_wdata_stable_until_ready                       hits=6      tests=6
+[HIT    ] COVER  cp_unmapped_020_read_zero                            hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[0]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[10]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[11]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[12]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[13]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[14]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[15]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[16]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[17]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[18]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[19]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[1]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[20]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[21]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[22]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[23]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[24]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[25]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[26]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[27]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[28]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[29]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[2]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[30]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[31]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[3]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[4]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[5]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[6]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[7]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[8]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reserved_zero[9]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reserved_fields_zero                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[0]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=12     tests=12
+[HIT    ] COVER  cp_dat_idx_write                                     hits=183    tests=183
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[10]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[11]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[12]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[13]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[14]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=11     tests=11
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[15]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=11     tests=11
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[16]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=11     tests=11
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[17]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[18]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[19]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[1]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=18     tests=18
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[20]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[21]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[22]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[23]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[24]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[25]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[26]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[27]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[28]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[29]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[2]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=14     tests=14
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[30]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[31]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=17     tests=17
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[3]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=12     tests=12
+[HIT    ] COVER  cp_dat_idx_write                                     hits=17     tests=17
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=6      tests=6
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[4]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=11     tests=11
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[5]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[6]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[7]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=11     tests=11
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[8]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_default_readback[9]
+====================================================================================================
+[HIT    ] COVER  cp_dat_idx_readback                                  hits=9      tests=9
+[HIT    ] COVER  cp_dat_idx_write                                     hits=8      tests=8
+[HIT    ] COVER  cp_dat_reset_default_readback                        hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[0]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[10]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[11]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[12]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[13]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[14]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[15]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[16]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[17]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[18]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[19]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[1]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[20]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[21]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[22]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[23]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[24]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[25]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[26]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[27]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[28]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[29]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[2]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[30]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[31]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[3]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[4]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[5]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[6]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[7]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[8]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_dat_reset_defaults[9]
+====================================================================================================
+[PASS   ] ASSERT ap_dat_reset_default                                 pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_dat_reset_default                                 hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[0]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[10]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[11]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[12]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[13]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[14]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[15]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[16]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[17]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[18]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[19]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[1]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[20]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[21]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[22]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[23]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[24]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[25]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[26]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[27]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[28]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[29]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[2]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[30]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[31]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[3]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[4]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[5]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[6]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[7]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[8]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_csr/u_csr_registers_sva/gen_invalid_write_preserves_dat[9]
+====================================================================================================
+[PASS   ] ASSERT ap_invalid_reg_write_preserves_dat_entry             pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_invalid_reg_write_preserves_dat_entry             hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_ctrl/u_bus_mon/u_bus_monitor_sva
+====================================================================================================
+[PASS   ] ASSERT ap_bus002_valid_start_reports_start                  pass=1132   fail=0      vacuous=0      attempts=0      tests=198
+[PASS   ] ASSERT ap_bus002_valid_stop_reports_stop                    pass=1105   fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus003_first_start_classified_as_start            pass=216    fail=0      vacuous=0      attempts=0      tests=198
+[PASS   ] ASSERT ap_bus003_first_start_enables_rstart_detection       pass=1132   fail=0      vacuous=0      attempts=0      tests=198
+[PASS   ] ASSERT ap_bus003_repeated_start_classified_as_rstart        pass=120    fail=0      vacuous=0      attempts=0      tests=120
+[PASS   ] ASSERT ap_bus003_stop_clears_rstart_detection               pass=1102   fail=0      vacuous=0      attempts=0      tests=183
+[PASS   ] ASSERT ap_bus004_rejected_sda_falling_edge_no_start_trigger pass=210    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus004_rejected_sda_rising_edge_no_stop_trigger   pass=228    fail=0      vacuous=0      attempts=0      tests=198
+[PASS   ] ASSERT ap_bus004_simultaneous_falling_edges_no_start_candidate pass=3908   fail=0      vacuous=0      attempts=0      tests=113
+[PASS   ] ASSERT ap_bus004_simultaneous_rising_edges_no_stop_candidate pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_bus004_start_candidate_requires_filtered_sda_high pass=12878  fail=0      vacuous=0      attempts=0      tests=159
+[PASS   ] ASSERT ap_bus004_start_candidate_requires_scl_stable_high   pass=28962  fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus004_stop_candidate_requires_filtered_sda_low   pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_bus004_stop_candidate_requires_scl_stable_high    pass=29391  fail=0      vacuous=0      attempts=0      tests=198
+[HIT    ] COVER  cp_bus002_valid_start_reports_start                  hits=198    tests=198
+[HIT    ] COVER  cp_bus002_valid_stop_reports_stop                    hits=186    tests=186
+[HIT    ] COVER  cp_bus003_first_start_classified_as_start            hits=198    tests=198
+[HIT    ] COVER  cp_bus003_first_start_enables_rstart_detection       hits=198    tests=198
+[HIT    ] COVER  cp_bus003_repeated_start_classified_as_rstart        hits=120    tests=120
+[HIT    ] COVER  cp_bus003_start_rstart_stop_sequence                 hits=6      tests=6
+[HIT    ] COVER  cp_bus003_stop_clears_rstart_detection               hits=183    tests=183
+[HIT    ] COVER  cp_bus004_rejected_sda_falling_edge_no_start_trigger hits=186    tests=186
+[HIT    ] COVER  cp_bus004_rejected_sda_rising_edge_no_stop_trigger   hits=198    tests=198
+[HIT    ] COVER  cp_bus004_short_sda_high_glitch_rejected             hits=159    tests=159
+[HIT    ] COVER  cp_bus004_short_sda_low_glitch_rejected              hits=3      tests=3
+[HIT    ] COVER  cp_bus004_simultaneous_falling_edges_no_start_candidate hits=113    tests=113
+[HIT    ] COVER  cp_bus004_simultaneous_rising_edges_no_stop_candidate hits=3      tests=3
+[HIT    ] COVER  cp_bus004_start_candidate_requires_filtered_sda_high hits=159    tests=159
+[HIT    ] COVER  cp_bus004_start_candidate_requires_scl_stable_high   hits=186    tests=186
+[HIT    ] COVER  cp_bus004_stop_candidate_requires_filtered_sda_low   hits=3      tests=3
+[HIT    ] COVER  cp_bus004_stop_candidate_requires_scl_stable_high    hits=198    tests=198
+[HIT    ] COVER  cp_bus004_valid_start_trigger                        hits=195    tests=195
+[HIT    ] COVER  cp_bus004_valid_stop_trigger                         hits=183    tests=183
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_ctrl/u_daa_ctrl/u_entdaa_controller_sva
+====================================================================================================
+[PASS   ] ASSERT ap_entdaa_controller_no_device_exits                 pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_entdaa_dat_read_index                             pass=69     fail=0      vacuous=0      attempts=0      tests=30
+[PASS   ] ASSERT ap_entdaa_no_device_no_assignment_result             pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_entdaa_read_dat_latches_dynamic_addr              pass=69     fail=0      vacuous=0      attempts=0      tests=30
+[PASS   ] ASSERT ap_entdaa_start_requests_rstart                      pass=69     fail=0      vacuous=0      attempts=0      tests=30
+[PASS   ] ASSERT ap_entdaa_stopped_assignment_exits_after_commit      pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_entdaa_success_advances_round                     pass=42     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_entdaa_success_outputs_assignment                 pass=45     fail=0      vacuous=0      attempts=0      tests=18
+[HIT    ] COVER  cp_entdaa_controller_no_device_exits                 hits=9      tests=9
+[HIT    ] COVER  cp_entdaa_dat_read_index                             hits=30     tests=30
+[HIT    ] COVER  cp_entdaa_no_device_no_assignment_result             hits=9      tests=9
+[HIT    ] COVER  cp_entdaa_read_dat_latches_dynamic_addr              hits=30     tests=30
+[HIT    ] COVER  cp_entdaa_start_requests_rstart                      hits=30     tests=30
+[HIT    ] COVER  cp_entdaa_stopped_assignment_exits_after_commit      hits=3      tests=3
+[HIT    ] COVER  cp_entdaa_success_advances_round                     hits=18     tests=18
+[HIT    ] COVER  cp_entdaa_success_outputs_assignment                 hits=18     tests=18
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_ctrl/u_daa_ctrl/u_entdaa_fsm/u_entdaa_fsm_sva
+====================================================================================================
+[PASS   ] ASSERT ap_entdaa_ack_enters_receive_id                      pass=60     fail=0      vacuous=0      attempts=0      tests=24
+[PASS   ] ASSERT ap_entdaa_addr_ack_sets_done_valid                   pass=42     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_entdaa_addr_ack_with_stop_waits_stop              pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_entdaa_done_outputs_id_fields                     pass=66     fail=0      vacuous=0      attempts=0      tests=27
+[PASS   ] ASSERT ap_entdaa_done_returns_idle                          pass=66     fail=0      vacuous=0      attempts=0      tests=27
+[PASS   ] ASSERT ap_entdaa_id_complete_sends_addr                     pass=51     fail=0      vacuous=0      attempts=0      tests=21
+[PASS   ] ASSERT ap_entdaa_id_complete_with_stop_waits_stop           pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_entdaa_nack_enters_no_device                      pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_entdaa_observed_stop_completes_stopped            pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_entdaa_send_addr_value                            pass=51     fail=0      vacuous=0      attempts=0      tests=21
+[PASS   ] ASSERT ap_entdaa_stop_after_addr_ack_preserves_assignment   pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_entdaa_wait_stop_requests_stop                    pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[HIT    ] COVER  cp_entdaa_ack_enters_receive_id                      hits=24     tests=24
+[HIT    ] COVER  cp_entdaa_addr_ack_sets_done_valid                   hits=18     tests=18
+[HIT    ] COVER  cp_entdaa_addr_ack_with_stop_waits_stop              hits=3      tests=3
+[HIT    ] COVER  cp_entdaa_done_outputs_id_fields                     hits=27     tests=27
+[HIT    ] COVER  cp_entdaa_done_returns_idle                          hits=27     tests=27
+[HIT    ] COVER  cp_entdaa_id_complete_sends_addr                     hits=21     tests=21
+[HIT    ] COVER  cp_entdaa_id_complete_with_stop_waits_stop           hits=3      tests=3
+[HIT    ] COVER  cp_entdaa_nack_enters_no_device                      hits=9      tests=9
+[HIT    ] COVER  cp_entdaa_observed_stop_completes_stopped            hits=3      tests=3
+[HIT    ] COVER  cp_entdaa_send_addr_value                            hits=21     tests=21
+[HIT    ] COVER  cp_entdaa_stop_after_addr_ack_preserves_assignment   hits=3      tests=3
+[HIT    ] COVER  cp_entdaa_wait_stop_requests_stop                    hits=3      tests=3
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_ctrl/u_flow_fsm/u_flow_active_sva
+====================================================================================================
+[PASS   ] ASSERT ap_abort_error_priority_resp                         pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_abort_idle_blocks_command                         pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_addr_assign_invalid_not_supported_resp            pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_addr_assign_invalid_rejected_before_access        pass=18     fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_addr_nack_resp                                    pass=15     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_bcast_header_drives_7e                            pass=120    fail=0      vacuous=0      attempts=0      tests=114
+[PASS   ] ASSERT ap_bcast_header_nack_eventually_resp                 pass=1650   fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_bcast_header_nack_sample_no_followup              pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_bcast_header_nack_stops_no_followup               pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_bus014_i2c_regular_xfer_never_push_pull           pass=27     fail=0      vacuous=0      attempts=0      tests=27
+[PASS   ] ASSERT ap_ccc_broadcast_frame                               pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_ccc_broadcast_no_rstart                           pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_ccc_direct_frame                                  pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_ccc_supported_success_resp                        pass=36     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_daa_success_resp                                  pass=21     fail=0      vacuous=0      attempts=0      tests=21
+[PASS   ] ASSERT ap_data_nack_resp                                    pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_entdaa_commit_reject_latches_overflow_and_stops   pass=12     fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_entdaa_overflow_blocks_result_write               pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_fetch_tx_empty_latches_underflow                  pass=81     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_fetch_tx_underflow_no_tx_pop                      pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_fetch_tx_valid_enters_issue                       pass=919    fail=0      vacuous=0      attempts=0      tests=69
+[PASS   ] ASSERT ap_hc_abort_resp                                     pass=18     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_i2c_imm_addr_uses_static_address                  pass=15     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_i2c_imm_data_byte_matches_desc                    pass=75     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_i2c_imm_data_nack_latches                         pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_imm_data_nack_stops_no_more_data              pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[MISS   ] ASSERT ap_i2c_never_enters_broadcast_header                 pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_i2c_read_abort_defers_during_data                 pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_read_abort_nack_sets_abort_term               pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_read_abort_nacks_boundary                     pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_read_abort_resp                               pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_read_abort_term_stops                         pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_read_addr_uses_static_address                 pass=15     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_i2c_read_byte_pack                                pass=198    fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_i2c_read_commits_final_word                       pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_i2c_read_full_commit_boundary_nacks               pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_read_master_ack_intermediate                  pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_i2c_read_master_nack_final                        pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_i2c_read_skips_broadcast_header                   pass=66     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_i2c_read_success_resp                             pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_i2c_timing_only_for_i2c_device                    pass=39     fail=0      vacuous=0      attempts=0      tests=39
+[PASS   ] ASSERT ap_i2c_write_acks_data_byte                          pass=15     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_i2c_write_addr_uses_static_address                pass=21     fail=0      vacuous=0      attempts=0      tests=21
+[PASS   ] ASSERT ap_i2c_write_data_byte_matches_tx                    pass=74     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_i2c_write_data_nack_latches                       pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_write_data_nack_stops_no_more_data            pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_i2c_write_skips_broadcast_header                  pass=87     fail=0      vacuous=0      attempts=0      tests=21
+[PASS   ] ASSERT ap_i2c_write_success_resp                            pass=15     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_i3c_imm_data_byte_matches_desc                    pass=288    fail=0      vacuous=0      attempts=0      tests=33
+[PASS   ] ASSERT ap_i3c_imm_tbit_parity                               pass=279    fail=0      vacuous=0      attempts=0      tests=33
+[PASS   ] ASSERT ap_imm_abort_sets_hc_aborted                         pass=21     fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_imm_abort_stops_no_continuation                   pass=21     fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_imm_dtt_gt4_not_supported_resp                    pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_imm_no_continuation_rstart                        pass=15     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_imm_success_resp                                  pass=54     fail=0      vacuous=0      attempts=0      tests=39
+[PASS   ] ASSERT ap_imm_toc0_not_supported_resp                       pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_init_i3c_read_addr_ack_to_issue_cmd               pass=252    fail=0      vacuous=0      attempts=0      tests=36
+[PASS   ] ASSERT ap_init_i3c_read_no_rx_data_req                      pass=255    fail=0      vacuous=0      attempts=0      tests=39
+[PASS   ] ASSERT ap_init_i3c_write_no_tx_pop                          pass=299    fail=0      vacuous=0      attempts=0      tests=63
+[PASS   ] ASSERT ap_invalid_cmd_not_supported_resp                    pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_invalid_cmd_rejected_before_access                pass=108    fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_ovl_resp_matches_current_len                      pass=21     fail=0      vacuous=0      attempts=0      tests=21
+[PASS   ] ASSERT ap_read_rx_overflow_blocks_data_and_continuation     pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_read_rx_overflow_requests_stop                    pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_regular_dat_read_uses_cmd_dev_idx                 pass=188    fail=0      vacuous=0      attempts=0      tests=99
+[PASS   ] ASSERT ap_resp_backpressure_release_writes_once             pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_resp_full_error_holds_pending_write               pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_resp_full_keeps_descriptor_stable                 pass=60     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_resp_full_success_holds_pending_write             pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_rstart_instead_of_start                           pass=33     fail=0      vacuous=0      attempts=0      tests=33
+[PASS   ] ASSERT ap_rx_commit_reject_latches_overflow                 pass=36     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_scl_use_od_low_matches_expected                   pass=486    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_sdr_read_abort_resp                               pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_abort_sets_hc_aborted                    pass=18     fail=0      vacuous=0      attempts=0      tests=3
+[MISS   ] ASSERT ap_sdr_read_abort_tbit_stop_on_t0                    pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_sdr_read_abort_tbit_takeover_rstart               pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[MISS   ] ASSERT ap_sdr_read_abort_toc0_blocks_continuation           pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_sdr_read_addr_nack_eventually_resp                pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_addr_nack_no_data_phase                  pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_addr_nack_sample_no_data_phase           pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_addr_uses_dynamic_address                pass=39     fail=0      vacuous=0      attempts=0      tests=39
+[PASS   ] ASSERT ap_sdr_read_byte_pack                                pass=1023   fail=0      vacuous=0      attempts=0      tests=33
+[PASS   ] ASSERT ap_sdr_read_rstart_instead_of_start                  pass=30     fail=0      vacuous=0      attempts=0      tests=30
+[PASS   ] ASSERT ap_sdr_read_short_blocks_more_data_and_continuation  pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_short_commits_received_word_and_stops    pass=39     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_short_resp_len                           pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_sre0_wroc0_suppresses_resp               pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_success_resp_len                         pass=30     fail=0      vacuous=0      attempts=0      tests=30
+[PASS   ] ASSERT ap_sdr_read_target_continue_at_requested_len         pass=27     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_target_end_at_requested_len              pass=156    fail=0      vacuous=0      attempts=0      tests=27
+[PASS   ] ASSERT ap_sdr_read_target_tbit_end_sets_short               pass=42     fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_read_tbit_updates_count                       pass=1005   fail=0      vacuous=0      attempts=0      tests=33
+[PASS   ] ASSERT ap_sdr_read_toc0_accept_continuation                 pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_sdr_read_toc1_requests_stop                       pass=27     fail=0      vacuous=0      attempts=0      tests=27
+[PASS   ] ASSERT ap_sdr_write_addr_nack_eventually_resp               pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_write_addr_nack_no_data_phase                 pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_write_addr_nack_sample_no_data_phase          pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_sdr_write_addr_uses_dynamic_address               pass=63     fail=0      vacuous=0      attempts=0      tests=63
+[MISS   ] ASSERT ap_sdr_write_no_cmd_pop_except_continuation          pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_sdr_write_tbit_parity                             pass=63     fail=0      vacuous=0      attempts=0      tests=54
+[PASS   ] ASSERT ap_sdr_write_toc1_success_resp                       pass=54     fail=0      vacuous=0      attempts=0      tests=54
+[PASS   ] ASSERT ap_sdr_write_zero_len_no_data_phase                  pass=57     fail=0      vacuous=0      attempts=0      tests=57
+[PASS   ] ASSERT ap_sel_od_pp_matches_expected                        pass=486    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_toc0_accept_continuation                          pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_toc0_missing_continuation_not_supported_resp      pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_toc0_missing_continuation_requests_stop           pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_toc0_private_read_continuation_skips_bcast_header pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_toc0_private_write_continuation_skips_bcast_header pass=12     fail=0      vacuous=0      attempts=0      tests=6
+[MISS   ] ASSERT ap_toc0_unsupported_continuation_not_supported_resp  pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_toc1_requests_stop                                pass=54     fail=0      vacuous=0      attempts=0      tests=54
+[PASS   ] ASSERT ap_tx_underflow_requests_stop                        pass=12     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_tx_underflow_stop_to_resp                         pass=81     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_wroc0_continuation_ignores_resp_ready             pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_wroc0_error_override_writes_resp                  pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_wroc0_success_suppresses_resp                     pass=6      fail=0      vacuous=0      attempts=0      tests=6
+[MISS   ] ASSERT ap_wroc1_continuation_waits_for_resp_ready           pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_wroc1_success_enters_write_resp                   pass=739    fail=0      vacuous=0      attempts=0      tests=159
+[HIT    ] COVER  cp_abort_error_priority_resp                         hits=3      tests=3
+[HIT    ] COVER  cp_abort_idle_blocks_command                         hits=3      tests=3
+[HIT    ] COVER  cp_addr_assign_invalid_not_supported_resp            hits=9      tests=9
+[HIT    ] COVER  cp_addr_assign_invalid_rejected_before_access        hits=9      tests=9
+[HIT    ] COVER  cp_addr_nack_resp                                    hits=15     tests=15
+[HIT    ] COVER  cp_bcast_header_drives_7e                            hits=114    tests=114
+[HIT    ] COVER  cp_bcast_header_nack_resp                            hits=6      tests=6
+[HIT    ] COVER  cp_bcast_header_nack_sample_no_followup              hits=6      tests=6
+[HIT    ] COVER  cp_bcast_header_nack_stops_no_followup               hits=6      tests=6
+[HIT    ] COVER  cp_bus014_i2c_regular_xfer_never_push_pull           hits=27     tests=27
+[HIT    ] COVER  cp_ccc002_enec_event_byte                            hits=9      tests=9
+[HIT    ] COVER  cp_ccc002_enec_event_tbit                            hits=9      tests=9
+[HIT    ] COVER  cp_ccc002_enec_no_rstart                             hits=9      tests=9
+[HIT    ] COVER  cp_ccc002_enec_opcode                                hits=9      tests=9
+[HIT    ] COVER  cp_ccc002_enec_opcode_tbit                           hits=9      tests=9
+[HIT    ] COVER  cp_ccc002_enec_success_resp                          hits=9      tests=9
+[HIT    ] COVER  cp_ccc003_disec_event_byte                           hits=6      tests=6
+[HIT    ] COVER  cp_ccc003_disec_event_tbit                           hits=6      tests=6
+[HIT    ] COVER  cp_ccc003_disec_no_rstart                            hits=6      tests=6
+[HIT    ] COVER  cp_ccc003_disec_opcode                               hits=6      tests=6
+[HIT    ] COVER  cp_ccc003_disec_opcode_tbit                          hits=6      tests=6
+[HIT    ] COVER  cp_ccc003_disec_success_resp                         hits=6      tests=6
+[HIT    ] COVER  cp_ccc004_direct_enec_event_byte                     hits=6      tests=6
+[HIT    ] COVER  cp_ccc004_direct_enec_event_tbit                     hits=6      tests=6
+[HIT    ] COVER  cp_ccc004_direct_enec_opcode                         hits=9      tests=9
+[HIT    ] COVER  cp_ccc004_direct_enec_opcode_tbit                    hits=9      tests=9
+[HIT    ] COVER  cp_ccc004_direct_enec_rstart                         hits=9      tests=9
+[HIT    ] COVER  cp_ccc004_direct_enec_stop                           hits=6      tests=6
+[HIT    ] COVER  cp_ccc004_direct_enec_success_resp                   hits=6      tests=6
+[HIT    ] COVER  cp_ccc004_direct_enec_target_ack_sample              hits=9      tests=9
+[HIT    ] COVER  cp_ccc004_direct_enec_target_addr                    hits=9      tests=9
+[HIT    ] COVER  cp_ccc005_direct_disec_event_byte                    hits=6      tests=6
+[HIT    ] COVER  cp_ccc005_direct_disec_event_tbit                    hits=6      tests=6
+[HIT    ] COVER  cp_ccc005_direct_disec_opcode                        hits=9      tests=9
+[HIT    ] COVER  cp_ccc005_direct_disec_opcode_tbit                   hits=9      tests=9
+[HIT    ] COVER  cp_ccc005_direct_disec_rstart                        hits=9      tests=9
+[HIT    ] COVER  cp_ccc005_direct_disec_stop                          hits=6      tests=6
+[HIT    ] COVER  cp_ccc005_direct_disec_success_resp                  hits=6      tests=6
+[HIT    ] COVER  cp_ccc005_direct_disec_target_ack_sample             hits=9      tests=9
+[HIT    ] COVER  cp_ccc005_direct_disec_target_addr                   hits=9      tests=9
+[HIT    ] COVER  cp_ccc_abort_resp                                    hits=3      tests=3
+[HIT    ] COVER  cp_daa_abort_resp                                    hits=3      tests=3
+[HIT    ] COVER  cp_daa_success_resp                                  hits=21     tests=21
+[HIT    ] COVER  cp_data_nack_resp                                    hits=6      tests=6
+[HIT    ] COVER  cp_direct_ccc_target_addr_nack_resp                  hits=3      tests=3
+[HIT    ] COVER  cp_entdaa_commit_reject_latches_overflow_and_stops   hits=6      tests=6
+[HIT    ] COVER  cp_entdaa_overflow_blocks_result_write               hits=6      tests=6
+[HIT    ] COVER  cp_entdaa_rx_overflow_resp_ovl                       hits=6      tests=6
+[HIT    ] COVER  cp_fetch_tx_empty_latches_underflow                  hits=12     tests=12
+[HIT    ] COVER  cp_fetch_tx_underflow_no_tx_pop                      hits=12     tests=12
+[HIT    ] COVER  cp_fetch_tx_valid_enters_issue                       hits=69     tests=69
+[HIT    ] COVER  cp_i2c_imm_addr_nack_resp                            hits=3      tests=3
+[HIT    ] COVER  cp_i2c_imm_addr_uses_static_address                  hits=15     tests=15
+[HIT    ] COVER  cp_i2c_imm_data_byte_matches_desc                    hits=12     tests=12
+[HIT    ] COVER  cp_i2c_imm_data_nack_latches                         hits=3      tests=3
+[HIT    ] COVER  cp_i2c_imm_data_nack_resp                            hits=3      tests=3
+[HIT    ] COVER  cp_i2c_imm_data_nack_stops_no_more_data              hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_abort_defers_during_data                 hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_abort_nack_sets_abort_term               hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_abort_nacks_boundary                     hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_abort_resp                               hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_abort_term_stops                         hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_addr_nack_resp                           hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_addr_uses_static_address                 hits=15     tests=15
+[HIT    ] COVER  cp_i2c_read_byte_pack                                hits=12     tests=12
+[HIT    ] COVER  cp_i2c_read_dword_boundary_commit                    hits=9      tests=9
+[HIT    ] COVER  cp_i2c_read_full_commit_boundary_nacks               hits=3      tests=3
+[HIT    ] COVER  cp_i2c_read_full_final_dword                         hits=9      tests=9
+[HIT    ] COVER  cp_i2c_read_master_ack_intermediate                  hits=12     tests=12
+[HIT    ] COVER  cp_i2c_read_master_nack_final                        hits=12     tests=12
+[HIT    ] COVER  cp_i2c_read_partial_final_dword                      hits=12     tests=12
+[HIT    ] COVER  cp_i2c_read_rx_overflow_resp_ovl                     hits=3      tests=3
+[MISS   ] COVER  cp_i2c_read_skips_broadcast_header                   hits=0      tests=0
+[HIT    ] COVER  cp_i2c_read_success_resp                             hits=12     tests=12
+[HIT    ] COVER  cp_i2c_tx_underflow_resp_ovl                         hits=3      tests=3
+[HIT    ] COVER  cp_i2c_write_acks_data_byte                          hits=15     tests=15
+[HIT    ] COVER  cp_i2c_write_addr_nack_resp                          hits=3      tests=3
+[HIT    ] COVER  cp_i2c_write_addr_uses_static_address                hits=21     tests=21
+[HIT    ] COVER  cp_i2c_write_data_byte_matches_tx                    hits=18     tests=18
+[HIT    ] COVER  cp_i2c_write_data_nack_latches                       hits=3      tests=3
+[HIT    ] COVER  cp_i2c_write_data_nack_resp                          hits=3      tests=3
+[HIT    ] COVER  cp_i2c_write_data_nack_stops_no_more_data            hits=3      tests=3
+[MISS   ] COVER  cp_i2c_write_skips_broadcast_header                  hits=0      tests=0
+[HIT    ] COVER  cp_i2c_write_success_resp                            hits=15     tests=15
+[HIT    ] COVER  cp_i3c_imm_addr_nack_resp                            hits=9      tests=9
+[HIT    ] COVER  cp_i3c_imm_data_byte_matches_desc                    hits=33     tests=33
+[HIT    ] COVER  cp_i3c_imm_tbit_parity                               hits=33     tests=33
+[HIT    ] COVER  cp_i3c_read_rx_overflow_resp_ovl                     hits=3      tests=3
+[HIT    ] COVER  cp_i3c_tx_underflow_resp_ovl                         hits=12     tests=12
+[HIT    ] COVER  cp_imm_abort_reaches_writeresp                       hits=6      tests=6
+[HIT    ] COVER  cp_imm_abort_sets_hc_aborted                         hits=6      tests=6
+[HIT    ] COVER  cp_imm_abort_stops_no_continuation                   hits=6      tests=6
+[HIT    ] COVER  cp_imm_bcast_header_path                             hits=15     tests=15
+[HIT    ] COVER  cp_imm_dtt_gt4_not_supported_resp                    hits=6      tests=6
+[HIT    ] COVER  cp_imm_no_continuation_rstart                        hits=15     tests=15
+[HIT    ] COVER  cp_imm_private_no_bcast                              hits=39     tests=39
+[HIT    ] COVER  cp_imm_success_resp                                  hits=39     tests=39
+[HIT    ] COVER  cp_imm_toc0_not_supported_resp                       hits=3      tests=3
+[HIT    ] COVER  cp_immediate_abort_resp                              hits=3      tests=3
+[HIT    ] COVER  cp_init_i3c_read_addr_ack_to_issue_cmd               hits=36     tests=36
+[HIT    ] COVER  cp_init_i3c_read_no_rx_data_req                      hits=39     tests=39
+[HIT    ] COVER  cp_init_i3c_write_addr_ack_to_fetch_tx               hits=57     tests=57
+[HIT    ] COVER  cp_invalid_cmd_not_supported_resp                    hits=12     tests=12
+[HIT    ] COVER  cp_invalid_cmd_rejected_before_access                hits=12     tests=12
+[HIT    ] COVER  cp_ovl_resp_matches_current_len                      hits=21     tests=21
+[HIT    ] COVER  cp_read_rx_overflow_blocks_data_and_continuation     hits=3      tests=3
+[HIT    ] COVER  cp_read_rx_overflow_requests_stop                    hits=3      tests=3
+[HIT    ] COVER  cp_regular_write_abort_resp                          hits=6      tests=6
+[HIT    ] COVER  cp_resp_backpressure_release_writes_once             hits=3      tests=3
+[HIT    ] COVER  cp_resp_full_error_holds_pending_write               hits=3      tests=3
+[HIT    ] COVER  cp_resp_full_keeps_descriptor_stable                 hits=3      tests=3
+[HIT    ] COVER  cp_resp_full_success_holds_pending_write             hits=6      tests=6
+[HIT    ] COVER  cp_rx_commit_reject_latches_overflow                 hits=3      tests=3
+[HIT    ] COVER  cp_rx_partial_dword_commit_overflow                  hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_abort_first_word_then_takeover           hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_abort_resp                               hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_addr_nack_no_data_phase                  hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_addr_nack_resp                           hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_addr_nack_sample_no_data_phase           hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_addr_uses_dynamic_address                hits=39     tests=39
+[HIT    ] COVER  cp_sdr_read_byte_pack                                hits=33     tests=33
+[HIT    ] COVER  cp_sdr_read_dat0_read                                hits=42     tests=42
+[HIT    ] COVER  cp_sdr_read_dat7_read                                hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_end_policy                               hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_final_tbit_end_policy                    hits=24     tests=24
+[HIT    ] COVER  cp_sdr_read_one_byte_short                           hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_short_blocks_more_data_and_continuation  hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_short_commits_received_word_and_stops    hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_short_dword_boundary                     hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_short_resp_len                           hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_sre0_wroc0_suppresses_resp               hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_sre0_wroc1_success_resp                  hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_sre1_wroc0_error_resp                    hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_success_resp_len                         hits=30     tests=30
+[HIT    ] COVER  cp_sdr_read_target_continue_at_requested_len         hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_target_end_at_requested_len              hits=27     tests=27
+[HIT    ] COVER  cp_sdr_read_target_tbit_end_sets_short               hits=3      tests=3
+[HIT    ] COVER  cp_sdr_read_tbit_updates_count                       hits=33     tests=33
+[HIT    ] COVER  cp_sdr_read_toc0_accept_continuation                 hits=9      tests=9
+[HIT    ] COVER  cp_sdr_read_toc1_requests_stop                       hits=27     tests=27
+[HIT    ] COVER  cp_sdr_write_addr_nack_no_data_phase                 hits=3      tests=3
+[HIT    ] COVER  cp_sdr_write_addr_nack_resp                          hits=3      tests=3
+[HIT    ] COVER  cp_sdr_write_addr_nack_sample_no_data_phase          hits=3      tests=3
+[HIT    ] COVER  cp_sdr_write_addr_uses_dynamic_address               hits=63     tests=63
+[HIT    ] COVER  cp_sdr_write_dat0_read                               hits=75     tests=75
+[HIT    ] COVER  cp_sdr_write_dat1_read                               hits=6      tests=6
+[MISS   ] COVER  cp_sdr_write_no_cmd_pop_except_continuation          hits=0      tests=0
+[HIT    ] COVER  cp_sdr_write_tbit_parity                             hits=54     tests=54
+[HIT    ] COVER  cp_sdr_write_tbit_parity_one                         hits=49     tests=49
+[HIT    ] COVER  cp_sdr_write_tbit_parity_zero                        hits=49     tests=49
+[HIT    ] COVER  cp_sdr_write_toc1_success_resp                       hits=54     tests=54
+[HIT    ] COVER  cp_sdr_write_zero_len_no_data_phase                  hits=9      tests=9
+[HIT    ] COVER  cp_timing_mode_i2c                                   hits=27     tests=27
+[HIT    ] COVER  cp_timing_mode_i3c                                   hits=84     tests=84
+[HIT    ] COVER  cp_toc0_accept_continuation                          hits=9      tests=9
+[MISS   ] COVER  cp_toc0_accept_then_rstart_then_toc1_stop            hits=0      tests=0
+[MISS   ] COVER  cp_toc0_accept_then_rstart_then_toc1_stop_read       hits=0      tests=0
+[MISS   ] COVER  cp_toc0_bcast_header_once_write                      hits=0      tests=0
+[HIT    ] COVER  cp_toc0_missing_continuation_not_supported_resp      hits=3      tests=3
+[HIT    ] COVER  cp_toc0_missing_continuation_requests_stop           hits=3      tests=3
+[HIT    ] COVER  cp_toc0_private_read_continuation_skips_bcast_header hits=3      tests=3
+[HIT    ] COVER  cp_toc0_private_write_continuation_skips_bcast_header hits=6      tests=6
+[MISS   ] COVER  cp_toc0_unsupported_continuation_not_supported_resp  hits=0      tests=0
+[HIT    ] COVER  cp_tx_underflow_requests_stop                        hits=12     tests=12
+[HIT    ] COVER  cp_tx_underflow_stop_to_resp                         hits=12     tests=12
+[HIT    ] COVER  cp_wroc0_continuation_ignores_resp_ready             hits=3      tests=3
+[HIT    ] COVER  cp_wroc0_error_override_writes_resp                  hits=9      tests=9
+[HIT    ] COVER  cp_wroc0_success_suppresses_resp                     hits=6      tests=6
+[MISS   ] COVER  cp_wroc1_continuation_waits_for_resp_ready           hits=0      tests=0
+[HIT    ] COVER  cp_wroc1_success_enters_write_resp                   hits=159    tests=159
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_ctrl/u_scl_gen/u_scl_generator_sva
+====================================================================================================
+[PASS   ] ASSERT ap_bus006_bus_free_expires_to_idle                   pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus006_generate_start_expires_to_sda_fall         pass=204    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_generate_start_releases_scl_sda            pass=207    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_generate_stop_holds_sda_low                pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus006_generate_stop_scl_high_loads_setup_stop    pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus006_hold_start_drives_start_hold               pass=204    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_hold_start_expires_to_drivelow             pass=524    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_scl_high_for_stop_expires_to_sda_rise      pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus006_scl_high_for_stop_holds_stop_setup         pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus006_sda_fall_drives_start                      pass=204    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_sda_fall_loads_hold_start                  pass=1126   fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_sda_rise_drives_stop                       pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus006_start_req_enters_generate_start            pass=207    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_start_req_loads_setup_start                pass=207    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_bus006_stop_req_enters_generate_stop              pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus006_stop_req_loads_low_delay                   pass=192    fail=0      vacuous=0      attempts=0      tests=177
+[PASS   ] ASSERT ap_bus007_drivehigh_clock_enters_drivelow            pass=201    fail=0      vacuous=0      attempts=0      tests=183
+[PASS   ] ASSERT ap_bus007_drivehigh_clock_loads_low_delay            pass=201    fail=0      vacuous=0      attempts=0      tests=183
+[PASS   ] ASSERT ap_bus007_drivelow_clock_enters_drivehigh            pass=201    fail=0      vacuous=0      attempts=0      tests=183
+[PASS   ] ASSERT ap_bus007_drivelow_clock_loads_high_delay            pass=201    fail=0      vacuous=0      attempts=0      tests=183
+[PASS   ] ASSERT ap_bus007_od_low_selects_t_low_od                    pass=177    fail=0      vacuous=0      attempts=0      tests=159
+[PASS   ] ASSERT ap_bus007_pp_low_selects_t_low                       pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_bus008_waitcmd_clock_resume_enters_drivelow       pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_bus008_waitcmd_clock_resume_loads_low_delay       pass=6      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_bus008_waitcmd_no_cmd_holds_scl_low               pass=15     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_bus008_waitcmd_no_cmd_stays_waitcmd               pass=15     fail=0      vacuous=0      attempts=0      tests=12
+[PASS   ] ASSERT ap_bus009_generate_rstart_holds_scl_low              pass=117    fail=0      vacuous=0      attempts=0      tests=111
+[PASS   ] ASSERT ap_bus009_rstart_sda_fall_drives_sr                  pass=117    fail=0      vacuous=0      attempts=0      tests=111
+[PASS   ] ASSERT ap_bus009_scl_high_for_rstart_releases_scl           pass=117    fail=0      vacuous=0      attempts=0      tests=111
+[PASS   ] ASSERT ap_bus009_waitcmd_rstart_enters_generate_rstart      pass=15     fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_bus009_waitcmd_rstart_loads_low_delay             pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_rstart_state_done_only_after_hold_start           pass=63154  fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_rstart_state_sequence                             pass=111    fail=0      vacuous=0      attempts=0      tests=111
+[HIT    ] COVER  cp_bus006_bus_free_expires_to_idle                   hits=177    tests=177
+[HIT    ] COVER  cp_bus006_generate_start_expires_to_sda_fall         hits=186    tests=186
+[HIT    ] COVER  cp_bus006_generate_start_releases_scl_sda            hits=186    tests=186
+[HIT    ] COVER  cp_bus006_generate_stop_holds_sda_low                hits=177    tests=177
+[HIT    ] COVER  cp_bus006_generate_stop_scl_high_loads_setup_stop    hits=177    tests=177
+[HIT    ] COVER  cp_bus006_hold_start_drives_start_hold               hits=186    tests=186
+[HIT    ] COVER  cp_bus006_hold_start_expires_to_drivelow             hits=186    tests=186
+[HIT    ] COVER  cp_bus006_scl_high_for_stop_expires_to_sda_rise      hits=177    tests=177
+[HIT    ] COVER  cp_bus006_scl_high_for_stop_holds_stop_setup         hits=177    tests=177
+[HIT    ] COVER  cp_bus006_sda_fall_drives_start                      hits=186    tests=186
+[HIT    ] COVER  cp_bus006_sda_fall_loads_hold_start                  hits=186    tests=186
+[HIT    ] COVER  cp_bus006_sda_rise_drives_stop                       hits=177    tests=177
+[HIT    ] COVER  cp_bus006_start_req_enters_generate_start            hits=186    tests=186
+[HIT    ] COVER  cp_bus006_start_req_loads_setup_start                hits=186    tests=186
+[HIT    ] COVER  cp_bus006_stop_req_enters_generate_stop              hits=177    tests=177
+[HIT    ] COVER  cp_bus006_stop_req_loads_low_delay                   hits=177    tests=177
+[HIT    ] COVER  cp_bus007_drivehigh_clock_enters_drivelow            hits=183    tests=183
+[HIT    ] COVER  cp_bus007_drivehigh_clock_loads_od_low_delay         hits=159    tests=159
+[HIT    ] COVER  cp_bus007_drivehigh_clock_loads_pp_low_delay         hits=180    tests=180
+[HIT    ] COVER  cp_bus007_drivelow_clock_enters_drivehigh            hits=183    tests=183
+[HIT    ] COVER  cp_bus007_drivelow_clock_loads_high_delay            hits=183    tests=183
+[HIT    ] COVER  cp_bus007_od_low_selects_t_low_od                    hits=159    tests=159
+[HIT    ] COVER  cp_bus007_pp_low_selects_t_low                       hits=240    tests=240
+[HIT    ] COVER  cp_bus008_waitcmd_clock_resume_enters_drivelow       hits=3      tests=3
+[HIT    ] COVER  cp_bus008_waitcmd_clock_resume_loads_low_delay       hits=3      tests=3
+[HIT    ] COVER  cp_bus008_waitcmd_no_cmd_holds_scl_low               hits=12     tests=12
+[HIT    ] COVER  cp_bus008_waitcmd_no_cmd_stays_waitcmd               hits=12     tests=12
+[HIT    ] COVER  cp_bus009_generate_rstart_holds_scl_low              hits=111    tests=111
+[HIT    ] COVER  cp_bus009_rstart_sda_fall_drives_sr                  hits=111    tests=111
+[HIT    ] COVER  cp_bus009_scl_high_for_rstart_releases_scl           hits=111    tests=111
+[HIT    ] COVER  cp_bus009_waitcmd_rstart_loads_low_delay             hits=9      tests=9
+[HIT    ] COVER  cp_bus009_waitcmd_to_rstart                          hits=9      tests=9
+[HIT    ] COVER  cp_rstart_state_done_only_after_hold_start           hits=111    tests=111
+[HIT    ] COVER  cp_rstart_state_sequence                             hits=111    tests=111
+[HIT    ] COVER  cp_rstart_waits_for_scl_high                         hits=111    tests=111
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_i3c_controller_top_sva
+====================================================================================================
+[PASS   ] ASSERT ap_broadcast_only_write_keeps_disabled               pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_bus014_i2c_timing_forces_top_open_drain           pass=39     fail=0      vacuous=0      attempts=0      tests=39
+[PASS   ] ASSERT ap_bus014_i2c_timing_never_drives_sda_high           pass=39     fail=0      vacuous=0      attempts=0      tests=39
+[PASS   ] ASSERT ap_disabled_no_bus_activity                          pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_disabled_no_cmd_pop                               pass=54     fail=0      vacuous=0      attempts=0      tests=54
+[PASS   ] ASSERT ap_disabled_queue_status_has_pending_cmd_no_resp     pass=108    fail=0      vacuous=0      attempts=0      tests=33
+[PASS   ] ASSERT ap_enable_with_pending_cmd_pops_cmd                  pass=39     fail=0      vacuous=0      attempts=0      tests=27
+[PASS   ] ASSERT ap_hard_reset_forces_idle_and_releases_bus           pass=240    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_hard_reset_release_has_no_queue_activity          pass=240    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_hc_control_broadcast_header_readback              pass=300    fail=0      vacuous=0      attempts=0      tests=54
+[PASS   ] ASSERT ap_hc_control_enable_readback                        pass=300    fail=0      vacuous=0      attempts=0      tests=54
+[HIT    ] COVER  cp_broadcast_only_write_keeps_disabled               hits=9      tests=9
+[HIT    ] COVER  cp_bus014_i2c_timing_forces_top_open_drain           hits=39     tests=39
+[HIT    ] COVER  cp_bus014_i2c_timing_never_drives_sda_high           hits=39     tests=39
+[HIT    ] COVER  cp_cmd_start_after_enable                            hits=177    tests=177
+[HIT    ] COVER  cp_disabled_no_bus_activity                          hits=240    tests=240
+[HIT    ] COVER  cp_disabled_no_cmd_pop                               hits=54     tests=54
+[HIT    ] COVER  cp_disabled_queue_status_has_pending_cmd_no_resp     hits=33     tests=33
+[HIT    ] COVER  cp_enable_with_pending_cmd_pops_cmd                  hits=27     tests=27
+[HIT    ] COVER  cp_hard_reset_forces_idle_and_releases_bus           hits=240    tests=240
+[HIT    ] COVER  cp_hard_reset_release_has_no_queue_activity          hits=240    tests=240
+[HIT    ] COVER  cp_hc_control_broadcast_header_readback              hits=54     tests=54
+[HIT    ] COVER  cp_hc_control_enable_readback                        hits=54     tests=54
+[HIT    ] COVER  cp_reset_point_idle                                  hits=18     tests=18
+[HIT    ] COVER  cp_status_returns_idle_after_enable                  hits=198    tests=198
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_phy/u_i3c_phy_sva
+====================================================================================================
+[PASS   ] ASSERT ap_bus001_reset_sets_sync_idle                       pass=240    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_bus001_scl_ff1_matches_shadow                     pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_bus001_scl_two_cycle_settle                       pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_bus001_sda_ff1_matches_shadow                     pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_bus001_sda_two_cycle_settle                       pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[HIT    ] COVER  cp_bus001_reset_sets_sync_idle                       hits=240    tests=240
+[HIT    ] COVER  cp_bus001_sync_pattern_00                            hits=192    tests=192
+[HIT    ] COVER  cp_bus001_sync_pattern_01                            hits=198    tests=198
+[HIT    ] COVER  cp_bus001_sync_pattern_10                            hits=201    tests=201
+[HIT    ] COVER  cp_bus001_sync_pattern_11                            hits=240    tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/cmd_fifo
+====================================================================================================
+[PASS   ] ASSERT __assert_1                                           pass=240    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/cmd_fifo/u_sync_fifo_sva
+====================================================================================================
+[PASS   ] ASSERT ap_empty_read_does_not_advance_rptr                  pass=18     fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_empty_read_only_preserves_state                   pass=18     fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_flush_clears_fifo_state                           pass=132    fail=0      vacuous=0      attempts=0      tests=45
+[PASS   ] ASSERT ap_full_write_does_not_advance_wptr                  pass=3      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_hard_reset_clears_fifo_state                      pass=240    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_read_only_decrements_depth                        pass=1378   fail=0      vacuous=0      attempts=0      tests=192
+[PASS   ] ASSERT ap_read_pointer_wrap_reuses_zero                     pass=25     fail=0      vacuous=0      attempts=0      tests=17
+[PASS   ] ASSERT ap_read_pointer_wrap_toggles_extra_msb               pass=64     fail=0      vacuous=0      attempts=0      tests=53
+[PASS   ] ASSERT ap_read_pop_advances_rptr                            pass=1387   fail=0      vacuous=0      attempts=0      tests=192
+[PASS   ] ASSERT ap_simultaneous_read_write_preserves_depth           pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_status_matches_depth                              pass=423    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_write_only_increments_depth                       pass=1417   fail=0      vacuous=0      attempts=0      tests=201
+[PASS   ] ASSERT ap_write_pointer_wrap_reuses_zero                    pass=25     fail=0      vacuous=0      attempts=0      tests=17
+[PASS   ] ASSERT ap_write_pointer_wrap_toggles_extra_msb              pass=67     fail=0      vacuous=0      attempts=0      tests=56
+[PASS   ] ASSERT ap_write_push_advances_wptr                          pass=1426   fail=0      vacuous=0      attempts=0      tests=201
+[HIT    ] COVER  cp_empty_read_does_not_advance_rptr                  hits=9      tests=9
+[HIT    ] COVER  cp_empty_read_only_preserves_state                   hits=9      tests=9
+[HIT    ] COVER  cp_flush_clears_fifo_state                           hits=45     tests=45
+[HIT    ] COVER  cp_flush_with_read_request                           hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_read_write_requests                    hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_write_request                          hits=3      tests=3
+[HIT    ] COVER  cp_full_write_does_not_advance_wptr                  hits=3      tests=3
+[HIT    ] COVER  cp_hard_reset_clears_fifo_state                      hits=240    tests=240
+[HIT    ] COVER  cp_read_only_decrements_depth                        hits=192    tests=192
+[HIT    ] COVER  cp_read_pointer_wrap_reuses_zero                     hits=17     tests=17
+[HIT    ] COVER  cp_read_pointer_wrap_toggles_extra_msb               hits=53     tests=53
+[HIT    ] COVER  cp_read_pop_advances_rptr                            hits=192    tests=192
+[HIT    ] COVER  cp_simultaneous_read_write_mid_depth                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_empty                hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_full                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_preserves_depth           hits=3      tests=3
+[HIT    ] COVER  cp_write_only_increments_depth                       hits=201    tests=201
+[HIT    ] COVER  cp_write_pointer_wrap_reuses_zero                    hits=17     tests=17
+[HIT    ] COVER  cp_write_pointer_wrap_toggles_extra_msb              hits=56     tests=56
+[HIT    ] COVER  cp_write_push_advances_wptr                          hits=201    tests=201
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/resp_fifo
+====================================================================================================
+[PASS   ] ASSERT __assert_1                                           pass=240    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/resp_fifo/u_sync_fifo_sva
+====================================================================================================
+[PASS   ] ASSERT ap_empty_read_does_not_advance_rptr                  pass=33     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_empty_read_only_preserves_state                   pass=33     fail=0      vacuous=0      attempts=0      tests=15
+[PASS   ] ASSERT ap_flush_clears_fifo_state                           pass=132    fail=0      vacuous=0      attempts=0      tests=45
+[PASS   ] ASSERT ap_full_write_does_not_advance_wptr                  pass=63     fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_hard_reset_clears_fifo_state                      pass=240    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_read_only_decrements_depth                        pass=1420   fail=0      vacuous=0      attempts=0      tests=201
+[PASS   ] ASSERT ap_read_pointer_wrap_reuses_zero                     pass=25     fail=0      vacuous=0      attempts=0      tests=17
+[PASS   ] ASSERT ap_read_pointer_wrap_toggles_extra_msb               pass=70     fail=0      vacuous=0      attempts=0      tests=56
+[PASS   ] ASSERT ap_read_pop_advances_rptr                            pass=1429   fail=0      vacuous=0      attempts=0      tests=201
+[PASS   ] ASSERT ap_simultaneous_read_write_preserves_depth           pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_status_matches_depth                              pass=423    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_write_only_increments_depth                       pass=1348   fail=0      vacuous=0      attempts=0      tests=192
+[PASS   ] ASSERT ap_write_pointer_wrap_reuses_zero                    pass=25     fail=0      vacuous=0      attempts=0      tests=17
+[PASS   ] ASSERT ap_write_pointer_wrap_toggles_extra_msb              pass=61     fail=0      vacuous=0      attempts=0      tests=50
+[PASS   ] ASSERT ap_write_push_advances_wptr                          pass=1357   fail=0      vacuous=0      attempts=0      tests=192
+[HIT    ] COVER  cp_empty_read_does_not_advance_rptr                  hits=15     tests=15
+[HIT    ] COVER  cp_empty_read_only_preserves_state                   hits=15     tests=15
+[HIT    ] COVER  cp_flush_clears_fifo_state                           hits=45     tests=45
+[HIT    ] COVER  cp_flush_with_read_request                           hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_read_write_requests                    hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_write_request                          hits=3      tests=3
+[HIT    ] COVER  cp_full_write_does_not_advance_wptr                  hits=6      tests=6
+[HIT    ] COVER  cp_hard_reset_clears_fifo_state                      hits=240    tests=240
+[HIT    ] COVER  cp_read_only_decrements_depth                        hits=201    tests=201
+[HIT    ] COVER  cp_read_pointer_wrap_reuses_zero                     hits=17     tests=17
+[HIT    ] COVER  cp_read_pointer_wrap_toggles_extra_msb               hits=56     tests=56
+[HIT    ] COVER  cp_read_pop_advances_rptr                            hits=201    tests=201
+[HIT    ] COVER  cp_simultaneous_read_write_mid_depth                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_empty                hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_full                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_preserves_depth           hits=3      tests=3
+[HIT    ] COVER  cp_write_only_increments_depth                       hits=192    tests=192
+[HIT    ] COVER  cp_write_pointer_wrap_reuses_zero                    hits=17     tests=17
+[HIT    ] COVER  cp_write_pointer_wrap_toggles_extra_msb              hits=50     tests=50
+[HIT    ] COVER  cp_write_push_advances_wptr                          hits=192    tests=192
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/rx_fifo
+====================================================================================================
+[PASS   ] ASSERT __assert_1                                           pass=240    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/rx_fifo/u_sync_fifo_sva
+====================================================================================================
+[PASS   ] ASSERT ap_empty_read_does_not_advance_rptr                  pass=36     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_empty_read_only_preserves_state                   pass=36     fail=0      vacuous=0      attempts=0      tests=18
+[PASS   ] ASSERT ap_flush_clears_fifo_state                           pass=132    fail=0      vacuous=0      attempts=0      tests=45
+[PASS   ] ASSERT ap_full_write_does_not_advance_wptr                  pass=39     fail=0      vacuous=0      attempts=0      tests=6
+[PASS   ] ASSERT ap_hard_reset_clears_fifo_state                      pass=240    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_read_only_decrements_depth                        pass=1014   fail=0      vacuous=0      attempts=0      tests=84
+[PASS   ] ASSERT ap_read_pointer_wrap_reuses_zero                     pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_read_pointer_wrap_toggles_extra_msb               pass=90     fail=0      vacuous=0      attempts=0      tests=48
+[PASS   ] ASSERT ap_read_pop_advances_rptr                            pass=1023   fail=0      vacuous=0      attempts=0      tests=84
+[PASS   ] ASSERT ap_simultaneous_read_write_preserves_depth           pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_status_matches_depth                              pass=423    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_write_only_increments_depth                       pass=648    fail=0      vacuous=0      attempts=0      tests=75
+[PASS   ] ASSERT ap_write_pointer_wrap_reuses_zero                    pass=9      fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_write_pointer_wrap_toggles_extra_msb              pass=57     fail=0      vacuous=0      attempts=0      tests=45
+[PASS   ] ASSERT ap_write_push_advances_wptr                          pass=657    fail=0      vacuous=0      attempts=0      tests=75
+[HIT    ] COVER  cp_empty_read_does_not_advance_rptr                  hits=18     tests=18
+[HIT    ] COVER  cp_empty_read_only_preserves_state                   hits=18     tests=18
+[HIT    ] COVER  cp_flush_clears_fifo_state                           hits=45     tests=45
+[HIT    ] COVER  cp_flush_with_read_request                           hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_read_write_requests                    hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_write_request                          hits=3      tests=3
+[HIT    ] COVER  cp_full_write_does_not_advance_wptr                  hits=6      tests=6
+[HIT    ] COVER  cp_hard_reset_clears_fifo_state                      hits=240    tests=240
+[HIT    ] COVER  cp_read_only_decrements_depth                        hits=84     tests=84
+[HIT    ] COVER  cp_read_pointer_wrap_reuses_zero                     hits=9      tests=9
+[HIT    ] COVER  cp_read_pointer_wrap_toggles_extra_msb               hits=48     tests=48
+[HIT    ] COVER  cp_read_pop_advances_rptr                            hits=84     tests=84
+[HIT    ] COVER  cp_simultaneous_read_write_mid_depth                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_empty                hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_full                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_preserves_depth           hits=3      tests=3
+[HIT    ] COVER  cp_write_only_increments_depth                       hits=75     tests=75
+[HIT    ] COVER  cp_write_pointer_wrap_reuses_zero                    hits=9      tests=9
+[HIT    ] COVER  cp_write_pointer_wrap_toggles_extra_msb              hits=45     tests=45
+[HIT    ] COVER  cp_write_push_advances_wptr                          hits=75     tests=75
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/tx_fifo
+====================================================================================================
+[PASS   ] ASSERT __assert_1                                           pass=240    fail=0      vacuous=0      attempts=0      tests=240
+
+====================================================================================================
+Instance: tb_i3c_top/dut/u_queues/tx_fifo/u_sync_fifo_sva
+====================================================================================================
+[PASS   ] ASSERT ap_empty_read_does_not_advance_rptr                  pass=18     fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_empty_read_only_preserves_state                   pass=18     fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_flush_clears_fifo_state                           pass=132    fail=0      vacuous=0      attempts=0      tests=45
+[PASS   ] ASSERT ap_full_write_does_not_advance_wptr                  pass=507402 fail=0      vacuous=0      attempts=0      tests=9
+[PASS   ] ASSERT ap_hard_reset_clears_fifo_state                      pass=240    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_read_only_decrements_depth                        pass=1054   fail=0      vacuous=0      attempts=0      tests=84
+[PASS   ] ASSERT ap_read_pointer_wrap_reuses_zero                     pass=40     fail=0      vacuous=0      attempts=0      tests=8
+[PASS   ] ASSERT ap_read_pointer_wrap_toggles_extra_msb               pass=58     fail=0      vacuous=0      attempts=0      tests=23
+[PASS   ] ASSERT ap_read_pop_advances_rptr                            pass=1063   fail=0      vacuous=0      attempts=0      tests=84
+[PASS   ] ASSERT ap_simultaneous_read_write_preserves_depth           pass=9      fail=0      vacuous=0      attempts=0      tests=3
+[PASS   ] ASSERT ap_status_matches_depth                              pass=423    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_write_only_increments_depth                       pass=1183   fail=0      vacuous=0      attempts=0      tests=93
+[PASS   ] ASSERT ap_write_pointer_wrap_reuses_zero                    pass=40     fail=0      vacuous=0      attempts=0      tests=8
+[PASS   ] ASSERT ap_write_pointer_wrap_toggles_extra_msb              pass=64     fail=0      vacuous=0      attempts=0      tests=29
+[PASS   ] ASSERT ap_write_push_advances_wptr                          pass=1192   fail=0      vacuous=0      attempts=0      tests=93
+[HIT    ] COVER  cp_empty_read_does_not_advance_rptr                  hits=9      tests=9
+[HIT    ] COVER  cp_empty_read_only_preserves_state                   hits=9      tests=9
+[HIT    ] COVER  cp_flush_clears_fifo_state                           hits=45     tests=45
+[HIT    ] COVER  cp_flush_with_read_request                           hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_read_write_requests                    hits=3      tests=3
+[HIT    ] COVER  cp_flush_with_write_request                          hits=6      tests=6
+[HIT    ] COVER  cp_full_write_does_not_advance_wptr                  hits=9      tests=9
+[HIT    ] COVER  cp_hard_reset_clears_fifo_state                      hits=240    tests=240
+[HIT    ] COVER  cp_read_only_decrements_depth                        hits=84     tests=84
+[HIT    ] COVER  cp_read_pointer_wrap_reuses_zero                     hits=8      tests=8
+[HIT    ] COVER  cp_read_pointer_wrap_toggles_extra_msb               hits=23     tests=23
+[HIT    ] COVER  cp_read_pop_advances_rptr                            hits=84     tests=84
+[HIT    ] COVER  cp_simultaneous_read_write_mid_depth                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_empty                hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_near_full                 hits=3      tests=3
+[HIT    ] COVER  cp_simultaneous_read_write_preserves_depth           hits=3      tests=3
+[HIT    ] COVER  cp_write_only_increments_depth                       hits=93     tests=93
+[HIT    ] COVER  cp_write_pointer_wrap_reuses_zero                    hits=8      tests=8
+[HIT    ] COVER  cp_write_pointer_wrap_toggles_extra_msb              hits=29     tests=29
+[HIT    ] COVER  cp_write_push_advances_wptr                          hits=93     tests=93
+
+====================================================================================================
+Instance: tb_i3c_top/u_tb_pad_model_sva
+====================================================================================================
+[PASS   ] ASSERT ap_bus013_if_exposes_dut_pad_signals                 pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_bus013_no_unsafe_sda_contention                   pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_dut_sda_high_drive_bus_high                       pass=165    fail=0      vacuous=0      attempts=0      tests=150
+[PASS   ] ASSERT ap_dut_sda_high_drive_only_pp                        pass=165    fail=0      vacuous=0      attempts=0      tests=150
+[PASS   ] ASSERT ap_dut_sda_low_drive_bus_low                         pass=204    fail=0      vacuous=0      attempts=0      tests=186
+[PASS   ] ASSERT ap_pad_model_signals_known                           pass=291    fail=0      vacuous=0      attempts=0      tests=240
+[MISS   ] ASSERT ap_pad_model_turnaround_overlap_one_cycle            pass=0      fail=0      vacuous=0      attempts=0      tests=0
+[PASS   ] ASSERT ap_released_sda_pullup_high                          pass=288    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_target_sda_high_drive_bus_high                    pass=276    fail=0      vacuous=0      attempts=0      tests=240
+[PASS   ] ASSERT ap_target_sda_low_drive_bus_low                      pass=189    fail=0      vacuous=0      attempts=0      tests=174
+[HIT    ] COVER  cp_bus013_dut_drive_high_pp                          hits=150    tests=150
+[HIT    ] COVER  cp_bus013_no_unsafe_sda_contention                   hits=240    tests=240
+[HIT    ] COVER  cp_dut_sda_high_drive_bus_high                       hits=150    tests=150
+[HIT    ] COVER  cp_dut_sda_high_drive_only_pp                        hits=150    tests=150
+[HIT    ] COVER  cp_dut_sda_low_drive_bus_low                         hits=186    tests=186
+[MISS   ] COVER  cp_hc_abort_read_contention                          hits=0      tests=0
+[MISS   ] COVER  cp_pad_model_turnaround_overlap_one_cycle            hits=0      tests=0
+[HIT    ] COVER  cp_released_sda_pullup_high                          hits=240    tests=240
+[HIT    ] COVER  cp_safe_od_low_overlap                               hits=171    tests=171
+[HIT    ] COVER  cp_safe_same_low_overlap                             hits=174    tests=174
+[HIT    ] COVER  cp_target_sda_high_drive_bus_high                    hits=240    tests=240
+[HIT    ] COVER  cp_target_sda_low_drive_bus_low                      hits=174    tests=174

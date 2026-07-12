@@ -22,12 +22,12 @@ class i3c_imm_data_nack_i2c_vseq extends i3c_base_vseq;
     i3c_device_response_seq            dev_seq;
     transfer_stimulus_cfg_t            cfg;
     byte_queue_t                       exp_data;
-    bit                                data_ack_pattern[$];
+    bit                                data_nack_pattern_q[$];
     bit                         [ 3:0] tid;
 
     tid                       = {1'b0, dtt};
     build_random_payload(dtt, exp_data);
-    build_data_ack_pattern(dtt, nack_byte_idx, data_ack_pattern);
+    build_data_nack_pattern(dtt, nack_byte_idx, data_nack_pattern_q);
 
     imm_cmd                   = '0;
     imm_cmd.attr              = ImmediateDataTransfer;
@@ -54,8 +54,8 @@ class i3c_imm_data_nack_i2c_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h50),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -64,34 +64,34 @@ class i3c_imm_data_nack_i2c_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    start_patterned_device_response(cfg, data_ack_pattern, dev_seq);
+    start_patterned_device_response(cfg, data_nack_pattern_q, dev_seq);
     write_cmd(imm_cmd[31:0], imm_cmd[63:32]);
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
 
     read_response(resp);
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), nack_byte_idx + 1,
+    `DV_CHECK_EQ(dev_seq.sampled_data_q.size(), nack_byte_idx + 1,
                  $sformatf("ERR_004 immediate %s sampled byte boundary", case_name))
     check_all_queues_empty($sformatf("ERR_004 after %s dtt=%0d", case_name, dtt));
 
   endtask
 
   virtual task start_patterned_device_response(transfer_stimulus_cfg_t cfg,
-                                               bit data_ack_pattern[$],
+                                               bit data_nack_pattern_q[$],
                                                output i3c_device_response_seq dev_seq);
     byte_queue_t no_read_data;
 
     dev_seq                             = i3c_device_response_seq::type_id::create(cfg.seq_name);
     dev_seq.target_addr                 = cfg.target_addr;
-    dev_seq.ack_address                 = cfg.ack_address;
-    dev_seq.ack_data                    = cfg.ack_data;
+    dev_seq.addr_nack                    = cfg.addr_nack;
+    dev_seq.data_nack                    = cfg.data_nack;
     dev_seq.is_i3c                      = cfg.is_i3c;
     dev_seq.dir                         = 1'b0;
     dev_seq.start_with_broadcast_header = cfg.start_with_broadcast_header;
     dev_seq.read_data_cnt               = cfg.data_length;
     dev_seq.read_data                   = no_read_data;
-    dev_seq.data_ack_pattern            = data_ack_pattern;
+    dev_seq.data_nack_pattern_q         = data_nack_pattern_q;
 
     fork
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -125,8 +125,8 @@ class i3c_imm_data_nack_i2c_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h50),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -144,13 +144,13 @@ class i3c_imm_data_nack_i2c_vseq extends i3c_base_vseq;
     check_all_queues_empty(cfg.ctxt);
   endtask
 
-  virtual function void build_data_ack_pattern(int unsigned data_length,
-                                               int unsigned nack_byte_idx,
-                                               ref bit data_ack_pattern[$]);
-    data_ack_pattern.delete();
+  virtual function void build_data_nack_pattern(int unsigned data_length,
+                                                int unsigned nack_byte_idx,
+                                                ref bit data_nack_pattern_q[$]);
+    data_nack_pattern_q.delete();
 
     for (int unsigned i = 0; i < data_length; i++) begin
-      data_ack_pattern.push_back(i != nack_byte_idx);
+      data_nack_pattern_q.push_back(i == nack_byte_idx);
     end
   endfunction
 

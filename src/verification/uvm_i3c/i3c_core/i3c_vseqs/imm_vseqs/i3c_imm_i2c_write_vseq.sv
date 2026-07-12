@@ -9,14 +9,10 @@ class i3c_imm_i2c_write_vseq extends i3c_base_vseq;
     enable_dut(1'b0);
     write_dat_entry(0, 7'h50, 7'h0, 1'b1);
 
-    for (int unsigned dtt = 1; dtt <= 4; dtt++) begin
+    for (int unsigned dtt = 0; dtt <= 4; dtt++) begin
       run_i2c_imm_case(3'(dtt));
     end
 
-    `uvm_info(
-        `gfn,
-        "IMM_004 conclusion: I2C immediate write with dtt=1..4 all produce Success with correct RESP length",
-        UVM_LOW)
   endtask
 
   virtual task run_i2c_imm_case(bit [2:0] dtt);
@@ -27,25 +23,14 @@ class i3c_imm_i2c_write_vseq extends i3c_base_vseq;
     byte_queue_t                       no_read_data;
     byte_queue_t                       exp_data;
 
-    exp_data.push_back(8'hD1);
-    exp_data.push_back(8'hD2);
-    exp_data.push_back(8'hD3);
-    exp_data.push_back(8'hD4);
-
-    imm_cmd                   = '0;
-    imm_cmd.attr              = ImmediateDataTransfer;
-    imm_cmd.tid               = {1'b0, dtt};
-    imm_cmd.mode              = sdr0;
-    imm_cmd.dtt               = dtt;
-    imm_cmd.rnw               = 1'b0;
-    imm_cmd.toc               = 1'b1;
-    imm_cmd.wroc              = 1'b1;
-    imm_cmd.def_or_data_byte1 = exp_data[0];
-    imm_cmd.data_byte2        = exp_data[1];
-    imm_cmd.data_byte3        = exp_data[2];
-    imm_cmd.data_byte4        = exp_data[3];
-
-    `uvm_info(`gfn, $sformatf("IMM_004 dtt=%0d: issuing I2C immediate write", dtt), UVM_MEDIUM)
+    imm_cmd = '0;
+    imm_cmd.attr = ImmediateDataTransfer;
+    imm_cmd.tid = {1'b0, dtt};
+    imm_cmd.mode = sdr0;
+    imm_cmd.rnw = 1'b0;
+    imm_cmd.toc = 1'b1;
+    imm_cmd.wroc = 1'b1;
+    randomize_immediate_write_data(dtt, imm_cmd, exp_data);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("IMM_004 dtt%0d", dtt)),
@@ -54,8 +39,8 @@ class i3c_imm_i2c_write_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h50),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -73,8 +58,6 @@ class i3c_imm_i2c_write_vseq extends i3c_base_vseq;
     read_response(resp);
     check_all_queues_empty($sformatf("IMM_004 after dtt=%0d", dtt));
 
-    `uvm_info(`gfn, $sformatf("IMM_004 result: dtt=%0d resp=0x%08h sampled_bytes=%0d", dtt, resp,
-                              dev_seq.sampled_data.size()), UVM_LOW)
   endtask
 
 endclass

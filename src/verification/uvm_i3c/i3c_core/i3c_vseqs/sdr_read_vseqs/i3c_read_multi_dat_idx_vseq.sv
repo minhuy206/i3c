@@ -49,8 +49,8 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h08),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -67,8 +67,8 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd7),
         .target_addr(7'h12),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -97,11 +97,6 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
     check_all_queues_empty(
         $sformatf("after SDRR_006 %s multi DAT", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_006 result: mode=%s case=multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} rx_words_drained={%0d,%0d}",
-                  private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
-                  cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr,
-                  rx_words0.size(), rx_words1.size()), UVM_LOW)
   endtask
 
   virtual task run_toc_zero_multi_dat_idx_case(bit broadcast_header_enable);
@@ -131,8 +126,8 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h08),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -151,8 +146,8 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
         .dev_idx(5'd7),
         .target_addr(7'h12),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -172,13 +167,5 @@ class i3c_read_multi_dat_idx_vseq extends i3c_base_vseq;
         $sformatf(
         "after SDRR_006 %s toc0 multi-DAT", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_006 result: mode=%s case=toc0_multi_dat target_addrs={0x%02h,0x%02h} sampled_addrs={0x%02h,0x%02h} rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b",
-                  private_addr_mode_name(broadcast_header_enable), cfg0.target_addr,
-                  cfg1.target_addr, dev_seq0.sampled_addr, dev_seq1.sampled_addr, rstart_count,
-                  dev_seq0.observed_rstart, dev_seq1.observed_rstart), UVM_LOW)
   endtask
-
-
-
 endclass

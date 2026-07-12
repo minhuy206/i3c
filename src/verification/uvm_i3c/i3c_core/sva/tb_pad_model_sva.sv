@@ -30,7 +30,7 @@ module tb_pad_model_sva (
       device_drives_high;
   wire unsafe_contention = dut_drives && device_drives && !safe_same_low_overlap &&
       !model_turnaround_overlap && !hc_abort_read_contention;
-  wire bus013_if_visible = (if_dut_sda_oe_i === dut_sda_oe_i) &&
+  wire pad_interface_signals_visible = (if_dut_sda_oe_i === dut_sda_oe_i) &&
       (if_dut_sda_o_i === dut_sda_o_i) &&
       (if_dut_sel_od_pp_i === dut_sel_od_pp_i);
 
@@ -49,55 +49,9 @@ module tb_pad_model_sva (
                    }) && (!$isunknown(sda_bus_i) || hc_abort_read_contention))
   else $error("tb_pad_model_sva: pad-model signals must not be X/Z");
 
-  cp_pad_model_signals_known:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !$isunknown({
-                      dut_sda_oe_i,
-                      dut_sda_o_i,
-                      dut_sel_od_pp_i,
-                      if_dut_sda_oe_i,
-                      if_dut_sda_o_i,
-                      if_dut_sel_od_pp_i,
-                      device_sda_o_i,
-                      device_sda_pp_en_i,
-                      hc_abort_i
-                  }) && (!$isunknown(sda_bus_i) || hc_abort_read_contention));
-
-  ap_sda_bus_known:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   !$isunknown(sda_bus_i) || hc_abort_read_contention)
-  else $error("tb_pad_model_sva: SDA bus must not resolve to X/Z");
-
-  cp_sda_bus_known:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !$isunknown(sda_bus_i) || hc_abort_read_contention);
-
-  ap_if_dut_sda_oe_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   if_dut_sda_oe_i === dut_sda_oe_i)
-  else $error("tb_pad_model_sva: i3c_if dut_sda_oe mirror mismatch");
-
-  cp_if_dut_sda_oe_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  if_dut_sda_oe_i === dut_sda_oe_i);
-
-  ap_if_dut_sda_o_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   if_dut_sda_o_i === dut_sda_o_i)
-  else $error("tb_pad_model_sva: i3c_if dut_sda_o mirror mismatch");
-
-  cp_if_dut_sda_o_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  if_dut_sda_o_i === dut_sda_o_i);
-
-  ap_if_dut_sel_od_pp_mirror:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   if_dut_sel_od_pp_i === dut_sel_od_pp_i)
-  else $error("tb_pad_model_sva: i3c_if dut_sel_od_pp mirror mismatch");
-
-  cp_if_dut_sel_od_pp_mirror:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  if_dut_sel_od_pp_i === dut_sel_od_pp_i);
+  // No matching cover for the known-signal invariant: it hits on the first
+  // enabled idle cycle. The electrical ownership covers below require actual
+  // controller/target drive activity. ap_sda_bus_known was subsumed here.
 
   // The behavioral target can release PP-high on a different scheduler point
   // than the DUT takes over with OD-low for read turnaround. Allow only a
@@ -113,45 +67,29 @@ module tb_pad_model_sva (
 
   // BUS_013 sign-off hooks: the detailed assertions below check each electrical
   // case; these labels keep the testplan mapping explicit.
-  ap_bus013_if_exposes_dut_pad_signals:
-  assert property (@(posedge clk_i) disable iff (!rst_ni) bus013_if_visible)
+  ap_pad_model_interface_signals_visible:
+  assert property (@(posedge clk_i) disable iff (!rst_ni) pad_interface_signals_visible)
   else $error("tb_pad_model_sva: BUS_013 i3c_if pad visibility mismatch");
 
-  cp_bus013_if_exposes_dut_pad_signals:
-  cover property (@(posedge clk_i) disable iff (!rst_ni) bus013_if_visible);
+  // No matching cover: interface visibility is a static wiring invariant and
+  // would hit while idle. Keep one combined assertion instead of three mirror
+  // assertions for the individual interface signals.
 
-  ap_bus013_no_unsafe_sda_contention:
+  ap_pad_model_no_unsafe_sda_contention:
   assert property (@(posedge clk_i) disable iff (!rst_ni) !unsafe_contention)
   else $error(
       "tb_pad_model_sva: BUS_013 unsafe SDA contention dut_oe=%0b dut_sda=%0b dut_pp=%0b dev_sda=%0b dev_pp=%0b sda_bus=%0b model_turnaround=%0b hc_abort=%0b",
       dut_sda_oe_i, dut_sda_o_i, dut_sel_od_pp_i, device_sda_o_i, device_sda_pp_en_i,
       sda_bus_i, model_turnaround_overlap, hc_abort_i);
 
-  cp_bus013_no_unsafe_sda_contention:
+  cp_pad_model_no_unsafe_sda_contention:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   !unsafe_contention && (dut_drives || device_drives));
 
-  cp_bus013_dut_drive_low:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  dut_drives && !dut_sda_o_i && !hc_abort_read_contention &&
-                  (sda_bus_i === 1'b0));
-
-  cp_bus013_dut_drive_high_pp:
+  cp_pad_model_dut_drive_high_pp:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   dut_drives && dut_sda_o_i && dut_sel_od_pp_i &&
                   (sda_bus_i === 1'b1));
-
-  cp_bus013_target_drive_low_when_dut_released:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !dut_drives && device_drives_low && (sda_bus_i === 1'b0));
-
-  cp_bus013_target_drive_high_when_dut_released:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !dut_drives && device_drives_high && (sda_bus_i === 1'b1));
-
-  cp_bus013_released_sda_pullup_high:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !dut_drives && device_released && (sda_bus_i === 1'b1));
 
   ap_dut_sda_low_drive_bus_low:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -208,17 +146,6 @@ module tb_pad_model_sva (
   cp_released_sda_pullup_high:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   !dut_drives && device_released && (sda_bus_i === 1'b1));
-
-  ap_no_unsafe_contention:
-  assert property (@(posedge clk_i) disable iff (!rst_ni) !unsafe_contention)
-  else $error(
-      "tb_pad_model_sva: DUT and target must not create unsafe SDA contention dut_oe=%0b dut_sda=%0b dut_pp=%0b dev_sda=%0b dev_pp=%0b sda_bus=%0b model_turnaround=%0b hc_abort=%0b",
-      dut_sda_oe_i, dut_sda_o_i, dut_sel_od_pp_i, device_sda_o_i, device_sda_pp_en_i,
-      sda_bus_i, model_turnaround_overlap, hc_abort_i);
-
-  cp_no_unsafe_contention:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !unsafe_contention && (dut_drives || device_drives));
 
   cp_safe_od_low_overlap:
   cover property (@(posedge clk_i) disable iff (!rst_ni)

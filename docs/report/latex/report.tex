@@ -1,44 +1,47 @@
 % =====================================================================
-%  Graduation Thesis — "Design of an I3C Communication Controller"
-%  Author : Vo Minh Huy (22207042)   Supervisor: ThS. Nguyen Duy Manh Thi
-%  HCMUS  · 10 credits
+%  KHÓA LUẬN TỐT NGHIỆP — "Thiết kế bộ điều khiển I3C"
+%  Tác giả : Võ Minh Huy (22207042)
+%  GVHD    : ThS. Nguyễn Duy Mạnh Thi
+%  Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM · Khoa Điện tử - Viễn thông
 %
-%  FORMAT migrated to match ~/Workspaces/Thesis_Template_latex (cover page, front-matter
-%  pages, TOC/index styling, fonts, headings, page numbering). The report's own structure
-%  is UNCHANGED: the six chapters in chapters/ and appendices/ are included exactly as before.
-%  Build: delete aux artifacts, then  pdfLaTeX > BibTeX > makeglossaries > pdfLaTeX > pdfLaTeX.
+%  Định dạng theo template KLTN HCMUS (extreport, pdfLaTeX, UVN Times/tgtermes).
+%  Build (release):  pdflatex -> bibtex -> makeglossaries -> pdflatex -> pdflatex
 % =====================================================================
 
-\documentclass[twoside,a4paper,14pt,openany]{extreport}
-% Font size
+\documentclass[twoside,a4paper,14pt,openright]{extreport}
+
+% ----- Cỡ chữ thân bài 13pt -----
 \usepackage[fontsize=13pt]{scrextend}
-% Vietnamese font support (needed for the VN cover headers and the VN tóm tắt; body/furniture is EN)
+
+% ----- Font tiếng Việt (T5) + Times New Roman qua tgtermes (an toàn dấu T5) -----
 \usepackage[T5]{fontenc}
 \usepackage[utf8]{inputenc}
+\usepackage{tgtermes}                 % TeX Gyre Termes ~ Times New Roman
+\renewcommand{\ttdefault}{cmtt}
 \DeclareTextSymbolDefault{\DH}{T1}
-% Allow literal _ in text/identifiers (chapters use \texttt{flow_active} etc.)
-\usepackage[strings]{underscore}
 
-% References (template engine: biblatex)
+% ----- Tài liệu tham khảo -----
 \usepackage[
 	sorting=nty,
-	backend=bibtex,
-	defernumbers=true]{biblatex}
-\usepackage[unicode]{hyperref} % Vietnamese bookmarks
-\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
-\addbibresource{references.bib}
-
+	backend=bibtex]{biblatex}
+\usepackage[unicode]{hyperref}
+\addbibresource{References/references.bib}
 \makeatletter
 \def\blx@maxline{77}
 \makeatother
 
-% Figures and tables
+% ----- Hình ảnh -----
 \usepackage{graphicx}
+\graphicspath{ {Images/} {figures/} }
 \usepackage{caption}
-\usepackage{subcaption}
 \usepackage[export]{adjustbox}
+\usepackage{float}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.8}
 
-% Code listings (template mystyle + SystemVerilog keywords)
+% ----- Mã nguồn -----
 \usepackage{listings}
 \usepackage{color}
 \definecolor{codegreen}{rgb}{0,0.6,0}
@@ -51,7 +54,7 @@
     keywordstyle=\color{magenta},
     numberstyle=\tiny\color{codegray},
     stringstyle=\color{codepurple},
-    basicstyle=\footnotesize,
+    basicstyle=\footnotesize\ttfamily,
     breakatwhitespace=false,
     breaklines=true,
     captionpos=b,
@@ -64,58 +67,46 @@
     tabsize=2,
     morekeywords={logic,always_ff,always_comb,typedef,struct,packed,enum,
                   interface,module,endmodule,package,endpackage,import,
-                  posedge,negedge,assign,wire,reg,parameter,localparam}
+                  localparam,parameter,unique,case,endcase,function,automatic,
+                  endfunction,begin,end}
 }
 \lstset{style=mystyle}
 
-% Pseudocode
+% ----- Mã giả -----
 \usepackage{amsmath}
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
 \makeatletter
 \def\BState{\State\hskip-\ALG@thistlm}
+\renewcommand{\ALG@name}{Thuật toán}
 \makeatother
-\makeatletter
-\renewcommand{\ALG@name}{Algorithm}
-\renewcommand{\algorithmicrequire}{\textbf{Input:}}
-\renewcommand{\algorithmicensure}{\textbf{Output:}}
-\makeatother
+\renewcommand{\algorithmicrequire}{\textbf{Đầu vào:}}
+\renewcommand{\algorithmicensure}{\textbf{Đầu ra:}}
 
-% Tables
+% ----- Bảng biểu -----
 \usepackage{multirow}
 \usepackage{array}
+\usepackage{longtable}
+\usepackage{booktabs}
 \newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
 \newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
 \newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
 \usepackage{diagbox}
 \usepackage[table,xcdraw]{xcolor}
 \usepackage{pmboxdraw}
-\def\SFii{\textcolor{black}{\textSFii\textSFx}} %└
-\def\SFviii{\textcolor{black}{\textSFviii\textSFx}} %├
-\def\SFx{\textcolor{black}{\textSFx}} %─
-\def\SFxi{\textcolor{black}{\textSFxi}} %|
-% Additive (kept from the prior preamble — long tables in chapters/appendices)
-\usepackage{booktabs}
-\usepackage{longtable}
+\usepackage{pdflscape}
 
-% Diagrams (FSM/block diagrams used in the chapters)
-\usepackage{tikz}
-\usetikzlibrary{automata,arrows.meta,positioning,shapes,chains,calc,fit}
-\usepackage{pdflscape} % flagship flow_active landscape figure
+% ----- Nhãn tiếng Việt -----
+\renewcommand{\chaptername}{CHƯƠNG}
+\renewcommand{\figurename}{Hình}
+\renewcommand{\tablename}{Bảng}
+\renewcommand{\contentsname}{MỤC LỤC}
+\renewcommand{\listfigurename}{DANH MỤC HÌNH}
+\renewcommand{\listtablename}{DANH MỤC BẢNG}
+\renewcommand{\appendixname}{PHỤ LỤC}
+\renewcommand{\bibname}{TÀI LIỆU THAM KHẢO}
 
-% Units
-\usepackage{siunitx}
-
-% Furniture labels in English (template layout, English thesis)
-\renewcommand{\chaptername}{CHAPTER}
-\renewcommand{\figurename}{Figure}
-\renewcommand{\tablename}{Table}
-\renewcommand{\contentsname}{TABLE OF CONTENTS}
-\renewcommand{\listfigurename}{LIST OF FIGURES}
-\renewcommand{\listtablename}{LIST OF TABLES}
-\renewcommand{\appendixname}{APPENDIX}
-
-% Chapter / section formatting (template titlesec — bold normalsize)
+% ----- Định dạng tiêu đề: Chapter 16pt / Section 14pt / Subsection 13pt -----
 \usepackage{titlesec}
 \setcounter{secnumdepth}{3}
 
@@ -126,296 +117,134 @@
 
 \titleformat{\section}
     {\normalfont\bfseries\normalsize}{\thesection}{1em}{}
-
 \titleformat{\subsection}
     {\normalfont\bfseries\normalsize}{\thesubsection}{1em}{}
-
 \titleformat{\subsubsection}
     {\normalfont\bfseries\normalsize}{\thesubsubsection}{1em}{}
 
-% Line spacing 1.5
+% ----- Giãn dòng 1.5 + thụt đầu dòng -----
 \usepackage{setspace}
 \onehalfspacing
-
-% First-line indent
 \usepackage{indentfirst}
 
-% Bottom-right page numbering
+% ----- Số trang góc dưới phải -----
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
 \fancyfoot[R]{\thepage}
-\renewcommand{\headrulewidth}{0pt}%
+\renewcommand{\headrulewidth}{0pt}
 \fancypagestyle{plain}{%
     \renewcommand{\headrulewidth}{0pt}%
     \fancyhf{}%
     \fancyfoot[R]{\thepage}%
 }
 
-% Margins
+% ----- Canh lề -----
 \usepackage[
   twoside,
   top=20mm,
   bottom=20mm,
   left=25mm,
   right=20mm,
-  footskip = 15mm,
+  footskip=15mm,
   includefoot]{geometry}
 
-% Title page bounding box
-\usetikzlibrary{calc}
+% ----- Trang bìa -----
+\usepackage{tikz}
+\usetikzlibrary{calc,automata,positioning,arrows.meta,shapes.geometric,chains,fit,backgrounds}
 \newcommand\HRule{\rule{\textwidth}{1pt}}
 
-% Abbreviations list
+% ----- Danh mục chữ viết tắt -----
 \usepackage{myacronyms}
+\usepackage{thesisterms}
 
 \usepackage{ifthen}
-
-% Cross-references (loaded after hyperref) — the chapters use \cref/\Cref.
-\usepackage[capitalise]{cleveref}
-
-\newcommand\myemptypage{
+\newcommand\myemptypage{%
 \newpage
 \thispagestyle{empty}
 \mbox{}
 \newpage
 }
 
-% Project shorthand
-\newcommand{\iic}{I\textsuperscript{2}C}
+% ----- Tham chiếu chéo tiếng Việt -----
+\usepackage[nameinlink]{cleveref}
+\crefname{chapter}{Chương}{Chương}
+\crefname{appendix}{Phụ lục}{Phụ lục}
+\crefname{section}{Mục}{Mục}
+\crefname{figure}{Hình}{Hình}
+\crefname{table}{Bảng}{Bảng}
+\crefname{equation}{Công thức}{Công thức}
+\crefname{algorithm}{Thuật toán}{Thuật toán}
+\Crefname{chapter}{Chương}{Chương}
+\Crefname{appendix}{Phụ lục}{Phụ lục}
+\Crefname{section}{Mục}{Mục}
+\Crefname{figure}{Hình}{Hình}
+\Crefname{table}{Bảng}{Bảng}
 
-% Design facts used in more than one chapter. Keep structural counts here so a
-% source-audit update cannot leave contradictory values across the thesis.
-\newcommand{\FlowStateCount}{13}
-\newcommand{\DriverPhaseCount}{14}
-\newcommand{\SvaCheckerCount}{10}
-\newcommand{\RunnableVseqCount}{75}
-
-% Figure placeholder: #1=caption #2=shows #3=source #4=render tool
-\newcommand{\figph}[4]{%
-  \begin{figure}[!htb]\centering
-    \setlength{\fboxsep}{10pt}%
-    \fbox{\begin{minipage}{0.86\textwidth}\centering
-        \textbf{[FIGURE --- NOT YET DRAWN]}\\[4pt]
-        \footnotesize\itshape Shows: #2\\[2pt] Source: #3\\[2pt] Render: #4
-    \end{minipage}}%
-    \caption{#1}
-  \end{figure}}
-
-% Table placeholder: #1=caption #2=source
-\newcommand{\tabph}[2]{%
-  \begin{table}[!htb]\centering
-    \setlength{\fboxsep}{10pt}%
-    \fbox{\begin{minipage}{0.72\textwidth}\centering
-        \textbf{[TABLE --- NOT YET FILLED]}\\[4pt]
-        \footnotesize\itshape Source: #2
-    \end{minipage}}%
-    \caption{#1}
-  \end{table}}
-
-% Label-bearing figure placeholder (cross-referenceable): #1=label #2=caption #3=shows #4=source #5=render
-\newcommand{\figphl}[5]{%
-  \begin{figure}[!htb]\centering
-    \setlength{\fboxsep}{10pt}%
-    \fbox{\begin{minipage}{0.86\textwidth}\centering
-        \textbf{[FIGURE --- NOT YET DRAWN]}\\[4pt]
-        \footnotesize\itshape Shows: #3\\[2pt] Source: #4\\[2pt] Render: #5
-    \end{minipage}}%
-    \caption{#2}\label{#1}
-  \end{figure}}
-
-% Drafting brief banner
-\definecolor{briefcolor}{gray}{0.15}
-\newcommand{\brief}[1]{\par\noindent\textit{\small\textcolor{briefcolor}{Brief: #1}}\par\medskip}
-
-% ========================================================================================= %
-% Thesis info — auto-updates the cover/front-matter pages                                   %
-% ========================================================================================= %
+% =========================================================================== %
+% Thông tin chung về KLTN
+% =========================================================================== %
 \newcommand{\tenSV}{Võ~Minh~Huy}
 \newcommand{\mssv}{22207042}
-\newcommand{\tenKL}{Design of an I3C Communication Controller}
+\newcommand{\tenKL}{THIẾT KẾ BỘ ĐIỀU KHIỂN I3C}
 \newcommand{\tenGVHD}{ThS. Nguyễn Duy Mạnh Thi}
+\newcommand{\tenBM}{Kỹ thuật Điện tử - Viễn thông}
 
 \begin{document}
 
-% ===================== COVER PAGE (template format) =====================
-\hypersetup{pageanchor=false}
-\begin{titlepage}
+\input{Title/title.tex}
 
-\begin{center}
-\textbf{ĐẠI HỌC QUỐC GIA THÀNH PHỐ HỒ CHÍ MINH\\
-TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN\\
-KHOA ĐIỆN TỬ - VIỄN THÔNG}\\[2cm]
+\pagenumbering{roman}
 
-{ \Large \bfseries \tenSV \\[2cm] }
+\include{Appendix/thanks}
+\include{Appendix/reassurances}
+\include{Appendix/tomtat}
 
-{ \Large \bfseries \tenKL \\[5cm]}
-
-\large KHÓA LUẬN TỐT NGHIỆP CỬ NHÂN\\
-\large NGÀNH KỸ THUẬT ĐIỆN TỬ - VIỄN THÔNG
-
-\begin{tikzpicture}[remember picture, overlay]
-  \draw[line width = 2pt] ($(current page.north west) + (2cm,-2cm)$) rectangle ($(current page.south east) + (-1.5cm,2cm)$);
-\end{tikzpicture}
-
-\vfill
-Tp. Hồ Chí Minh - Năm 2026
-
-\end{center}
-
-\pagebreak
-
-\myemptypage
-
-\begin{center}
-\textbf{ĐẠI HỌC QUỐC GIA THÀNH PHỐ HỒ CHÍ MINH\\
-TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN\\
-KHOA ĐIỆN TỬ - VIỄN THÔNG}\\[2cm]
-
-\large \textbf{KHÓA LUẬN TỐT NGHIỆP CỬ NHÂN}\\
-\large \textbf{NGÀNH KỸ THUẬT ĐIỆN TỬ - VIỄN THÔNG}\\[2cm]
-
-{ \Large \bfseries \tenKL \\[2cm] }
-
-{\bfseries Họ và tên sinh viên: \tenSV\\
-Mã số SV: \mssv\\[2cm]}
-
-NGƯỜI HƯỚNG DẪN KHOA HỌC\\
-\tenGVHD
-
-\vfill
-Tp. Hồ Chí Minh - Năm 2026
-
-\end{center}
-\thispagestyle{empty}
-
-\myemptypage
-
-\end{titlepage}
-\hypersetup{pageanchor=true}
-
-\pagenumbering{roman} % i, ii, iii, ...
-
-% ===================== FRONT MATTER (template layout, English furniture) =====================
-\chapter*{CONFIRMATION OF COMPLETED THESIS REVISIONS}
-
-{\textbf{THESIS TITLE: Design of an I3C Communication Controller.}}\\[.1 cm]
-
-Student name: \tenSV
-
-Student ID: \mssv \\[.1 cm]
-
-\textbf{The evaluation committee convened on ..... / ..... / .....}
-
-\begin{enumerate}
-	\item Chairperson:
-	\item Secretary:
-	\item Member:
-	\item Member:
-	\item Member:
-\end{enumerate}
-
-\vspace{.2 cm}
-Supervisor: \tenGVHD
-
-Supervisor's confirmation:
-
-\chapter*{ACKNOWLEDGEMENTS}
-\addcontentsline{toc}{chapter}{ACKNOWLEDGEMENTS}
-
-(Thanks to the supervisor.)
-
-(Thanks to family.)
-
-(Thanks to the faculty teachers.)
-
-(Thanks to friends and others.)
-
-\vspace{1cm}
-\begin{flushright}
-\begin{tabular}{c}
-Ho Chi Minh City, ..... / ..... / 2026\\[0.5cm]
-\textbf{Student}\\[2cm]
-\textbf{\tenSV}
-\end{tabular}
-\end{flushright}
-
-\chapter*{DECLARATION OF AUTHORSHIP}
-
-I hereby declare that the data and research results presented in this graduation thesis are truthful. I commit that I have not copied the content or results of any other published work. All reference materials used in this report have been fully and clearly cited with their sources in accordance with the regulations.
-
-I take full responsibility for any violation of the commitments stated above.
-
-\begin{table}[h]
-\begin{tabular}{p{0.6\textwidth}p{0.3\textwidth}}
-    &
-    \begin{center}
-        Student\\
-        \vspace{2cm}
-        \tenSV
-    \end{center}
-\end{tabular}
-\end{table}
-
-\chapter*{ABSTRACT --- TÓM TẮT}
-\addcontentsline{toc}{chapter}{ABSTRACT --- TÓM TẮT}
-
-% English-written thesis: the EN abstract precedes the VN tóm tắt (template instruction).
-\begin{center}\textbf{ABSTRACT}\end{center}
-
-\brief{English abstract — Background / Purpose / Method / Results / Evaluation, under one
-page. Keywords line. (Content TBD per the writing plan.)}
-
-\begin{center}\textbf{TÓM TẮT}\end{center}
-
-\brief{Tóm tắt tiếng Việt — bản dịch của ABSTRACT ở trên. Dòng từ khóa. (Nội dung TBD.)}
-
-% ===================== TOC / index / lists (template format) =====================
-\cleardoublepage
+% Mục lục, danh mục hình, bảng, chữ viết tắt
+\clearpage
 \phantomsection
 \tableofcontents
 
+\glsaddall
 \printglossary[type=\acronymtype,
-                title=LIST OF ABBREVIATIONS,
-                toctitle=LIST OF ABBREVIATIONS,
-                nonumberlist]
+	title=DANH MỤC TỪ VIẾT TẮT,
+	toctitle=DANH MỤC TỪ VIẾT TẮT,
+	nonumberlist]
 
-\cleardoublepage
-\newpage
-\phantomsection
+\clearpage\phantomsection
 \addcontentsline{toc}{chapter}{\listfigurename}
 \listoffigures
 
-\cleardoublepage
-\newpage
-\phantomsection
+\clearpage\phantomsection
 \addcontentsline{toc}{chapter}{\listtablename}
 \listoftables
 
-\cleardoublepage
+\clearpage
+\pagenumbering{arabic}
 
-\pagenumbering{arabic} % 1, 2, 3, ...
+% ----- Các chương nội dung -----
+\include{chapters/01_introduction}
+\include{chapters/02_background_requirements}
+\include{chapters/03_architecture_rtl}
+\include{chapters/04_verification}
+\include{chapters/05_results}
+\include{chapters/06_conclusion}
 
-% ===================== BODY — unchanged report structure (chapters/) =====================
-\include{chapters/01_introduction_full}        % Ch.1 Introduction
-\include{chapters/02_background_requirements}   % Ch.2 = old Ch.2 + Ch.3
-\include{chapters/03_architecture_rtl}          % Ch.3 = old Ch.4 + Ch.5 (flagship)
-\include{chapters/04_verification}              % Ch.4 = old Ch.6 + Ch.7
-\include{chapters/05_results}                   % Ch.5 = old Ch.9 (Ch.8 FPGA omitted)
-\include{chapters/06_conclusion}                % Ch.6 = old Ch.10
-
-% ===================== REFERENCES (template format: biblatex, VN/EN split) ===========
-\cleardoublepage
-\newpage
-\phantomsection
-\addcontentsline{toc}{chapter}{REFERENCES}
-\printbibheading[title={REFERENCES}]
+% ----- Tài liệu tham khảo -----
+\clearpage\phantomsection
+\addcontentsline{toc}{chapter}{TÀI LIỆU THAM KHẢO}
 \DeclareNameAlias{sortname}{last-first}
 \DeclareNameAlias{default}{last-first}
-\printbibliography[heading=subbibliography, title={English}, notkeyword=Viet, resetnumbers=1]
+\printbibheading[title={TÀI LIỆU THAM KHẢO}]
+\printbibliography[heading=none]
 
-% ===================== APPENDICES — unchanged report structure =====================
+% ----- Phụ lục -----
 \appendix
-\include{appendices/appendices}
+\renewcommand{\chaptername}{\appendixname}
+\crefalias{chapter}{appendix}
+\include{Appendix/appendixA}
+\include{Appendix/appendixB}
+\include{Appendix/appendixC}
+\include{Appendix/appendixE}
 
 \end{document}

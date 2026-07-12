@@ -79,7 +79,6 @@ Sub-modules imported by this top level may also import `i3c_pkg`.
 | `scl_o`       | Output    | 1     | SCL bus output (to pad driver)    |
 | `sda_i`       | Input     | 1     | SDA bus input (from pad)          |
 | `sda_o`       | Output    | 1     | SDA bus output (to pad driver)    |
-| `sda_oe_o`    | Output    | 1     | SDA output-enable (to pad driver) |
 | `sel_od_pp_o` | Output    | 1     | OD/PP mode select (to pad driver) |
 
 ## 5. Functional Description
@@ -113,9 +112,9 @@ graph TB
     REG_BUS -->|timing, control| CTRL
     REG_BUS <-->|DAT| CTRL
     QUEUES <-->|cmd/data/resp| CTRL
-    CTRL <-->|ctrl_scl/sda, sda_oe, OD/PP| PHY_BLK
+    CTRL <-->|ctrl_scl/sda, OD/PP| PHY_BLK
 
-    PHY_BLK -->|scl_o, sda_o, sda_oe_o, sel_od_pp_o| PAD((Bus Pads))
+    PHY_BLK -->|scl_o, sda_o, sel_od_pp_o| PAD((Bus Pads))
     PAD -->|scl_i, sda_i| PHY_BLK
     SW((Software)) <-->|reg bus| REG_BUS
 ```
@@ -225,7 +224,6 @@ u_phy.ctrl_sda_o → u_ctrl.ctrl_sda_i
 // Drive outputs (Controller → PHY)
 u_ctrl.ctrl_scl_o    → u_phy.ctrl_scl_i
 u_ctrl.ctrl_sda_o    → u_phy.ctrl_sda_i
-u_ctrl.ctrl_sda_oe_o → u_phy.ctrl_sda_oe_i
 
 // OD/PP mode
 u_ctrl.sel_od_pp_o → u_phy.sel_od_pp_i
@@ -235,7 +233,6 @@ scl_i → u_phy.scl_i
 u_phy.scl_o → scl_o
 sda_i → u_phy.sda_i
 u_phy.sda_o → sda_o
-u_phy.sda_oe_o → sda_oe_o
 u_phy.sel_od_pp_o → sel_od_pp_o
 ```
 
@@ -301,7 +298,7 @@ The top level does not create new error policy. Protocol transaction outcomes ar
 7. **Software reset:** Assert SW_RESET → verify FIFOs and CSR CMD/TX staging state are cleared, controller continues
 8. **Multiple transactions:** Enqueue multiple commands → verify sequential execution
 9. **Pin-level verification:** Verify 2FF synchronization latency on input path
-10. **FPGA loopback:** Connect SCL/SDA through pad or loopback logic that honors `sda_oe_o` and pull-up behavior for self-test
+10. **FPGA loopback:** Connect SCL/SDA through pad or loopback logic that derives SDA OE as `sel_od_pp_o || !sda_o` and honors pull-up behavior for self-test
 
 ### UVM Test Structure
 
@@ -353,7 +350,7 @@ For system-level testing, behavioral models of I3C and I2C targets are instantia
 
 - This module is entirely structural — no logic beyond `assign` statements for signal routing. All behavioral logic lives in sub-modules.
 - The register bus is intentionally simple: `reg_ready_o` acknowledges accepted accesses and only stalls CMD/TX port writes while CSR staging holds an unaccepted FIFO push. For integration into an SoC with AXI or APB, a thin adapter can be placed outside this module.
-- The `sda_oe_o` output controls whether the external SDA pad drives or releases the bus. `sda_o` carries the drive value, and `sel_od_pp_o` exposes whether the active phase is open-drain or push-pull.
+- SDA output-enable is intentionally derived outside this core as `sel_od_pp_o || !sda_o`. `sda_o` carries the drive value, and `sel_od_pp_o` exposes whether the active drive is open-drain or push-pull.
 - The `sel_od_pp_o` output connects to the FPGA/ASIC pad driver configuration. On Xilinx FPGAs, this can be used by wrapper logic around an IOBUF to select open-drain or push-pull behavior.
 - For simulation, SCL and SDA are modeled as wired-AND buses (open-drain behavior): the simulated bus value is the AND of all drivers. A pull-up resistor holds the line HIGH when no driver is active.
 - The module has no `ifdef` blocks — all configuration is done through parameters and CSR registers at runtime.

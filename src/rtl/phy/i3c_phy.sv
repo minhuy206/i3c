@@ -14,11 +14,9 @@ module i3c_phy #(
     output logic ctrl_scl_o,
 
     input  logic ctrl_sda_i,
-    input  logic ctrl_sda_oe_i,
     output logic ctrl_sda_o,
 
     input  logic sel_od_pp_i,
-    output logic sda_oe_o,
     output logic sel_od_pp_o
 );
 
@@ -49,7 +47,6 @@ module i3c_phy #(
 
   assign scl_o = ctrl_scl_i;
   assign sda_o = ctrl_sda_i;
-  assign sda_oe_o = ctrl_sda_oe_i;
   assign sel_od_pp_o = sel_od_pp_i;
 
 endmodule

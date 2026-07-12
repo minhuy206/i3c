@@ -22,20 +22,16 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     run_i2c_read_abort_deep_case();
     run_i2c_read_abort_toc_zero_case();
 
-    `uvm_info(
-        `gfn,
-        "ERR_009 conclusion: legacy I2C RegularTransfer write/read abort preserves pre-abort data and SW reset flushes residual queues",
-        UVM_LOW)
   endtask
 
   virtual task run_i2c_write_abort_early_case();
-    transfer_stimulus_cfg_t cfg;
-    byte_queue_t            exp_data;
-    byte_queue_t            no_read_data;
-    word_queue_t            tx_words;
-    bit              [31:0] resp;
-    i3c_device_response_seq dev_seq;
-    int unsigned            tx_depth;
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   exp_data;
+    byte_queue_t                   no_read_data;
+    word_queue_t                   tx_words;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+    int unsigned                   tx_depth;
 
     build_payload_words(DATA_LENGTH, exp_data, tx_words);
     setup_i2c_target();
@@ -47,8 +43,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -65,25 +61,21 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     wait_for_flow_fsm_state(FSM_FETCH_TX_DATA, cfg.ctxt, device_done_timeout_cycles(cfg));
     tx_depth = hdl_read_fifo_depth(tx_paths.depth_path);
     `DV_CHECK_EQ(tx_depth, tx_words.size(),
-                 $sformatf("%s: early abort should fire before TX FIFO word consumption",
-                           cfg.ctxt))
+                 $sformatf("%s: early abort should fire before TX FIFO word consumption", cfg.ctxt))
     assert_hc_abort();
 
     finish_write_abort_case(cfg, exp_data, resp, dev_seq, "early_abort");
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 write result: case=early_abort resp=0x%08h sampled_bytes=%0d tx_depth_before_abort=%0d",
-                  resp, dev_seq.sampled_data.size(), tx_depth), UVM_LOW)
   endtask
 
   virtual task run_i2c_write_abort_deep_case();
-    transfer_stimulus_cfg_t cfg;
-    byte_queue_t            exp_data;
-    byte_queue_t            no_read_data;
-    word_queue_t            tx_words;
-    bit              [31:0] resp;
-    i3c_device_response_seq dev_seq;
-    int unsigned            tx_depth;
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   exp_data;
+    byte_queue_t                   no_read_data;
+    word_queue_t                   tx_words;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+    int unsigned                   tx_depth;
 
     build_payload_words(DATA_LENGTH_DEEP, exp_data, tx_words);
     setup_i2c_target();
@@ -95,8 +87,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -116,18 +108,15 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
 
     finish_write_abort_case(cfg, exp_data, resp, dev_seq, "deep_abort");
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 write result: case=deep_abort resp=0x%08h sampled_bytes=%0d tx_depth_before_abort=%0d",
-                  resp, dev_seq.sampled_data.size(), tx_depth), UVM_LOW)
   endtask
 
   virtual task run_i2c_write_abort_toc_zero_case();
-    transfer_stimulus_cfg_t cfg;
-    byte_queue_t            exp_data;
-    byte_queue_t            no_read_data;
-    word_queue_t            tx_words;
-    bit              [31:0] resp;
-    i3c_device_response_seq dev_seq;
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   exp_data;
+    byte_queue_t                   no_read_data;
+    word_queue_t                   tx_words;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
 
     build_payload_words(DATA_LENGTH, exp_data, tx_words);
     setup_i2c_target();
@@ -139,8 +128,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -161,17 +150,14 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b0,
                  "ERR_009 write toc0 abort must end with STOP, not continuation RSTART")
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 write result: case=toc0_abort resp=0x%08h sampled_bytes=%0d observed_rstart=%0b",
-                  resp, dev_seq.sampled_data.size(), dev_seq.observed_rstart), UVM_LOW)
   endtask
 
   virtual task run_i2c_read_abort_early_case();
-    transfer_stimulus_cfg_t cfg;
-    byte_queue_t            read_data;
-    bit              [31:0] resp;
-    i3c_device_response_seq dev_seq;
-    int unsigned            rx_depth;
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   read_data;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+    int unsigned                   rx_depth;
 
     build_payload(DATA_LENGTH, read_data);
     setup_i2c_target();
@@ -183,8 +169,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -199,23 +185,20 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
 
     wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
     rx_depth = hdl_read_fifo_depth(rx_paths.depth_path);
-    `DV_CHECK_EQ(rx_depth, 0, $sformatf(
-                 "%s: early abort should fire before RX FIFO commit", cfg.ctxt))
+    `DV_CHECK_EQ(rx_depth, 0, $sformatf("%s: early abort should fire before RX FIFO commit",
+                                        cfg.ctxt))
     assert_hc_abort();
 
     finish_read_abort_case(cfg, read_data, resp, dev_seq, "early_abort");
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 read result: case=early_abort resp=0x%08h resp_len=%0d rx_depth_before_abort=%0d observed_rstart=%0b",
-                  resp, resp[15:0], rx_depth, dev_seq.observed_rstart), UVM_LOW)
   endtask
 
   virtual task run_i2c_read_abort_deep_case();
-    transfer_stimulus_cfg_t cfg;
-    byte_queue_t            read_data;
-    bit              [31:0] resp;
-    i3c_device_response_seq dev_seq;
-    int unsigned            rx_depth;
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   read_data;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+    int unsigned                   rx_depth;
 
     build_payload(DATA_LENGTH_DEEP, read_data);
     setup_i2c_target();
@@ -227,8 +210,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -246,16 +229,13 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
 
     finish_read_abort_case(cfg, read_data, resp, dev_seq, "deep_abort");
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 read result: case=deep_abort resp=0x%08h resp_len=%0d rx_depth_before_abort=%0d observed_rstart=%0b",
-                  resp, resp[15:0], rx_depth, dev_seq.observed_rstart), UVM_LOW)
   endtask
 
   virtual task run_i2c_read_abort_toc_zero_case();
-    transfer_stimulus_cfg_t cfg;
-    byte_queue_t            read_data;
-    bit              [31:0] resp;
-    i3c_device_response_seq dev_seq;
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   read_data;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
 
     build_payload(DATA_LENGTH, read_data);
     setup_i2c_target();
@@ -267,8 +247,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -286,15 +266,11 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
 
     finish_read_abort_case(cfg, read_data, resp, dev_seq, "toc0_abort");
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 read result: case=toc0_abort resp=0x%08h resp_len=%0d observed_rstart=%0b",
-                  resp, resp[15:0], dev_seq.observed_rstart), UVM_LOW)
   endtask
 
   virtual task finish_write_abort_case(transfer_stimulus_cfg_t cfg, byte_queue_t exp_data,
                                        output bit [31:0] resp,
-                                       input i3c_device_response_seq dev_seq,
-                                       string case_name);
+                                       input i3c_device_response_seq dev_seq, string case_name);
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
@@ -305,8 +281,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task finish_read_abort_case(transfer_stimulus_cfg_t cfg, byte_queue_t read_data,
-                                      output bit [31:0] resp,
-                                      input i3c_device_response_seq dev_seq,
+                                      output bit [31:0] resp, input i3c_device_response_seq dev_seq,
                                       string case_name);
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
@@ -322,11 +297,11 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_read_recovery_case(string case_name);
-    transfer_stimulus_cfg_t cfg;
-    byte_queue_t            read_data;
-    word_queue_t            rx_words;
-    bit              [31:0] resp;
-    i3c_device_response_seq dev_seq;
+    transfer_stimulus_cfg_t        cfg;
+    byte_queue_t                   read_data;
+    word_queue_t                   rx_words;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
 
     build_random_payload(1, read_data);
 
@@ -337,8 +312,8 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -347,7 +322,7 @@ class i2c_regular_abort_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_read_stimulus_words(cfg, read_data, rx_words, resp, dev_seq);
+    run_read_stimulus_words(cfg, read_data, cfg.data_length, rx_words, resp, dev_seq);
 
     check_all_queues_empty(cfg.ctxt);
   endtask

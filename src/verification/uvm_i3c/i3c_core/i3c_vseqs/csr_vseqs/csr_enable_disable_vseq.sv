@@ -10,6 +10,7 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     i3c_device_response_seq            dev_seq;
     bit                         [31:0] data;
     bit                         [31:0] resp;
+    byte_queue_t                       random_data;
     event                              disabled_window_done;
     event                              disabled_window_done_after_disable;
 
@@ -23,13 +24,11 @@ class csr_enable_disable_vseq extends csr_base_vseq;
     imm_cmd.attr              = ImmediateDataTransfer;
     imm_cmd.tid               = 4'd2;
     imm_cmd.mode              = sdr0;
-    imm_cmd.dtt               = 3'd2;
     imm_cmd.rnw               = 1'b0;
     imm_cmd.toc               = 1'b1;
     imm_cmd.wroc              = 1'b1;
     imm_cmd.dev_idx           = 5'd0;
-    imm_cmd.def_or_data_byte1 = 8'hAA;
-    imm_cmd.data_byte2        = 8'hBB;
+    randomize_immediate_write_data(2, imm_cmd, random_data);
 
     fork
       check_no_host_start_until_event(disabled_window_done, "csr_enable_disable_vseq");
@@ -44,7 +43,7 @@ class csr_enable_disable_vseq extends csr_base_vseq;
 
         dev_seq               = i3c_device_response_seq::type_id::create("dev_seq");
         dev_seq.target_addr   = 7'h08;
-        dev_seq.ack_address   = 1'b1;
+        dev_seq.addr_nack   = 1'b0;
         dev_seq.is_i3c        = 1'b1;
         dev_seq.dir           = 1'b0;
         dev_seq.read_data_cnt = 2;
@@ -86,7 +85,7 @@ class csr_enable_disable_vseq extends csr_base_vseq;
 
         dev_seq               = i3c_device_response_seq::type_id::create("dev_seq_after_disable");
         dev_seq.target_addr   = 7'h08;
-        dev_seq.ack_address   = 1'b1;
+        dev_seq.addr_nack   = 1'b0;
         dev_seq.is_i3c        = 1'b1;
         dev_seq.dir           = 1'b0;
         dev_seq.read_data_cnt = 2;

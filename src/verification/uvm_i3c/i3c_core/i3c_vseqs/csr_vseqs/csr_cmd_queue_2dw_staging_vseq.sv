@@ -15,6 +15,7 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     bit                         [63:0] cmd_wdata;
     uvm_hdl_data_t                     raw_hdl;
     int unsigned                       exp_data_bytes;
+    byte_queue_t                       random_data;
 
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
@@ -22,13 +23,11 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
     imm_cmd.attr              = ImmediateDataTransfer;
     imm_cmd.tid               = 4'd5;
     imm_cmd.mode              = sdr0;
-    imm_cmd.dtt               = 3'd2;
     imm_cmd.rnw               = 1'b0;
     imm_cmd.toc               = 1'b1;
     imm_cmd.wroc              = 1'b1;
     imm_cmd.dev_idx           = 5'd0;
-    imm_cmd.def_or_data_byte1 = 8'hA5;
-    imm_cmd.data_byte2        = 8'h3C;
+    randomize_immediate_write_data(2, imm_cmd, random_data);
     exp_data_bytes            = int'(imm_cmd.dtt);
 
     dword0                    = imm_cmd[31:0];
@@ -58,7 +57,7 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
 
     dev_seq             = i3c_device_response_seq::type_id::create("dev_seq");
     dev_seq.target_addr   = 7'h08;
-    dev_seq.ack_address   = 1'b1;
+    dev_seq.addr_nack   = 1'b0;
     dev_seq.is_i3c        = 1'b1;
     dev_seq.dir           = 1'b0;
     dev_seq.read_data_cnt = exp_data_bytes;
@@ -70,12 +69,12 @@ class csr_cmd_queue_2dw_staging_vseq extends csr_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, "csr_cmd_queue_2dw_staging_vseq");
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), exp_data_bytes,
+    `DV_CHECK_EQ(dev_seq.sampled_data_q.size(), exp_data_bytes,
                  "csr_cmd_queue_2dw_staging_vseq: immediate payload byte count mismatch")
-    if (dev_seq.sampled_data.size() >= exp_data_bytes) begin
-      `DV_CHECK_EQ(dev_seq.sampled_data[0], imm_cmd.def_or_data_byte1,
+    if (dev_seq.sampled_data_q.size() >= exp_data_bytes) begin
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[0], imm_cmd.def_or_data_byte1,
                    "csr_cmd_queue_2dw_staging_vseq: immediate byte1 mismatch")
-      `DV_CHECK_EQ(dev_seq.sampled_data[1], imm_cmd.data_byte2,
+      `DV_CHECK_EQ(dev_seq.sampled_data_q[1], imm_cmd.data_byte2,
                    "csr_cmd_queue_2dw_staging_vseq: immediate byte2 mismatch")
     end
 

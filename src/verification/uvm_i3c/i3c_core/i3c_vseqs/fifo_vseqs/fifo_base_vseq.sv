@@ -81,6 +81,22 @@ class fifo_base_vseq extends i3c_base_vseq;
     csr_read_queue_data(paths, unused);
   endtask
 
+  virtual task sync_synthetic_resp_model(queue_hdl_paths_t paths);
+    uvm_component  comp;
+    i3c_scoreboard scb;
+    int unsigned  depth;
+
+    if (paths.name != "RESP") return;
+
+    comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
+    if (!$cast(scb, comp)) begin
+      `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", get_type_name()))
+    end
+
+    depth = hdl_read_fifo_depth(paths.depth_path);
+    scb.set_resp_fifo_level_unknown(depth, get_type_name());
+  endtask
+
   virtual task csr_read_queue_data(queue_hdl_paths_t paths, output uvm_hdl_data_t data);
     bit [31:0] csr_data;
 
@@ -88,6 +104,7 @@ class fifo_base_vseq extends i3c_base_vseq;
     if (paths.name == "RX") begin
       read_rx_data(csr_data);
     end else if (paths.name == "RESP") begin
+      sync_synthetic_resp_model(paths);
       read_response(csr_data);
     end else begin
       `uvm_fatal(`gfn, $sformatf("%s: %s does not use CSR read path", get_type_name(),

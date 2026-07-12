@@ -1,6 +1,11 @@
 package i3c_agent_pkg;
   import i3c_pkg::I3C_RSVD_ADDR;
-  import i3c_daa_arb_pkg::*;
+  import i3c_pkg::i3c_ccc_e;
+  import i3c_pkg::ENEC;
+  import i3c_pkg::DISEC;
+  import i3c_pkg::ENTDAA;
+  import i3c_pkg::DIR_ENEC;
+  import i3c_pkg::DIR_DISEC;
   import uvm_pkg::*;
 
   `include "uvm_macros.svh"
@@ -16,15 +21,14 @@ package i3c_agent_pkg;
     BusOpRead  = 1'b1
   } bus_op_e;
 
-  // Semantic ACK/NACK value stored in i3c_seq_item.T_bit for legacy I2C reads.
+  // Raw ACK/NACK bit stored in i3c_seq_item.data_nack_q for legacy I2C reads.
   typedef enum bit {
-    SampledNack = 1'b0,
-    SampledAck  = 1'b1
+    SampledAck  = 1'b0,
+    SampledNack = 1'b1
   } sampled_ack_nack_e;
 
   typedef enum int {
     DrvIdle,
-    DrvAddr,
     DrvAddrArbit,
     DrvAddrPushPull,
     DrvAck,
@@ -33,21 +37,18 @@ package i3c_agent_pkg;
     DrvWrPushPull,
     DrvRd,
     DrvRdPushPull,
+    DrvEntdaa,
     DrvStop,
-    DrvWaitStopOrRStart,
     DrvBcastDispatch,
-    DrvDAA
+    DrvCccPayload
   } i3c_drv_phase_e;
 
-  typedef enum logic [7:0] {
-    // Broadcast CCCs (Phase 1 scope)
-    ENEC      = 8'h00,
-    DISEC     = 8'h01,
-    ENTDAA    = 8'h07,
-    // Direct CCCs (Phase 1 scope)
-    DIR_ENEC  = 8'h80,
-    DIR_DISEC = 8'h81
-  } i3c_ccc_e;
+  typedef enum int {
+    ProtoCtxNone,
+    ProtoCtxEntdaa,
+    ProtoCtxDirectCcc,
+    ProtoCtxBroadcastCcc
+  } i3c_proto_ctx_e;
 
   typedef uvm_enum_wrapper#(i3c_ccc_e) i3c_ccc_wrapper;
 
@@ -62,7 +63,8 @@ package i3c_agent_pkg;
 
   bit [1:0] defining_byte_for_CCC[logic [7:0]] = '{
       // {optional defining byte, required defining byte}
-      ENEC : 2'b00,
+      ENEC :
+      2'b00,
       DISEC : 2'b00,
       ENTDAA : 2'b00,
       DIR_ENEC : 2'b00,
@@ -71,7 +73,8 @@ package i3c_agent_pkg;
 
   bit [1:0] data_for_CCC[logic [7:0]] = '{
       // {optional data, required data}
-      ENEC : 2'b01,
+      ENEC :
+      2'b01,
       DISEC : 2'b01,
       ENTDAA : 2'b00,
       DIR_ENEC : 2'b01,
@@ -80,7 +83,8 @@ package i3c_agent_pkg;
 
   bit [1:0] subcmd_byte_for_CCC[logic [7:0]] = '{
       // {optional sub-command, required sub-command}
-      ENEC : 2'b00,
+      ENEC :
+      2'b00,
       DISEC : 2'b00,
       ENTDAA : 2'b00,
       DIR_ENEC : 2'b00,
@@ -89,7 +93,8 @@ package i3c_agent_pkg;
 
   bit data_direction_for_CCC[logic [7:0]] = '{
       // 0 - host to device, 1 - device to host
-      ENEC : 1'b0,
+      ENEC :
+      1'b0,
       DISEC : 1'b0,
       ENTDAA : 1'b0,
       DIR_ENEC : 1'b0,

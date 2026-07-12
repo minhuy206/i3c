@@ -26,11 +26,7 @@ module csr_registers_sva
     input logic [DataWidth-1:0] hc_status_i,
     input logic [DataWidth-1:0] queue_status_i,
 
-    input logic                    cmd_wvalid_o,
-    input logic [CmdDataWidth-1:0] cmd_wdata_o,
     input logic                    cmd_wready_i,
-    input logic                    tx_wvalid_o,
-    input logic [   DataWidth-1:0] tx_wdata_o,
     input logic                    tx_wready_i,
     input logic                    rx_rvalid_i,
     input logic [   DataWidth-1:0] rx_rdata_i,
@@ -369,11 +365,6 @@ module csr_registers_sva
                                    i3c_fsm_idle_i})
   else $error("csr_registers_sva: HC_STATUS mirror mismatch");
 
-  cp_hc_status_mirror :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  hc_status_i == {29'b0, resp_status_i.empty, cmd_status_i.full,
-                                  i3c_fsm_idle_i});
-
   ap_queue_status_mirror :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    queue_status_i == {24'b0, resp_status_i.empty, resp_status_i.full,
@@ -381,11 +372,9 @@ module csr_registers_sva
                                       tx_status_i.full, cmd_status_i.empty, cmd_status_i.full})
   else $error("csr_registers_sva: QUEUE_STATUS mirror mismatch");
 
-  cp_queue_status_mirror :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  queue_status_i == {24'b0, resp_status_i.empty, resp_status_i.full,
-                                     rx_status_i.empty, rx_status_i.full, tx_status_i.empty,
-                                     tx_status_i.full, cmd_status_i.empty, cmd_status_i.full});
+  // No matching covers for the two mirror invariants: both are true in the
+  // reset-default idle state. Queue-state read covers below provide meaningful
+  // empty/middle/full activation instead.
 
   cp_queue_status_cmd_empty_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
@@ -515,11 +504,6 @@ module csr_registers_sva
   else $error("csr_registers_sva: busy RESET_CONTROL.SOFT_RST write must not pulse sw_reset");
 
   cp_busy_reset_control_write_ignored :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
-                  ##1 !hc_control_cfg_i.sw_reset);
-
-  cp_sw_reset_busy :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
                   ##1 !hc_control_cfg_i.sw_reset);
@@ -690,39 +674,9 @@ module csr_registers_sva
                   hc_control_cfg_i.sw_reset && !repeated_sw_reset_write
                   ##1 !hc_control_cfg_i.sw_reset);
 
-  cp_sw_reset :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  hc_control_cfg_i.sw_reset && !repeated_sw_reset_write
-                  ##1 !hc_control_cfg_i.sw_reset);
-
-  ap_cmd_wvalid_output_mirror :
-  assert property (@(posedge clk_i) disable iff (!rst_ni) cmd_wvalid_o == cmd_wvalid_int_i)
-  else $error("csr_registers_sva: cmd_wvalid_o must mirror internal cmd_wvalid");
-
-  cp_cmd_wvalid_output_mirror :
-  cover property (@(posedge clk_i) disable iff (!rst_ni) cmd_wvalid_o == cmd_wvalid_int_i);
-
-  ap_cmd_wdata_output_mirror :
-  assert property (@(posedge clk_i) disable iff (!rst_ni) cmd_wdata_o == cmd_wdata_int_i)
-  else $error("csr_registers_sva: cmd_wdata_o must mirror internal cmd_wdata");
-
-  cp_cmd_wdata_output_mirror :
-  cover property (@(posedge clk_i) disable iff (!rst_ni) cmd_wdata_o == cmd_wdata_int_i);
-
-  ap_tx_wvalid_output_mirror :
-  assert property (@(posedge clk_i) disable iff (!rst_ni) tx_wvalid_o == tx_wvalid_int_i)
-  else $error("csr_registers_sva: tx_wvalid_o must mirror internal tx_wvalid");
-
-  cp_tx_wvalid_output_mirror :
-  cover property (@(posedge clk_i) disable iff (!rst_ni) tx_wvalid_o == tx_wvalid_int_i);
-
-  ap_tx_wdata_output_mirror :
-  assert property (@(posedge clk_i) disable iff (!rst_ni) tx_wdata_o == tx_wdata_int_i)
-  else $error("csr_registers_sva: tx_wdata_o must mirror internal tx_wdata");
-
-  cp_tx_wdata_output_mirror :
-  cover property (@(posedge clk_i) disable iff (!rst_ni) tx_wdata_o == tx_wdata_int_i);
-
+  // cmd/tx output-mirror assertions were removed: they repeated direct
+  // continuous assignments inside csr_registers. The staging, stability and
+  // ready/valid properties below check the observable handshake behavior.
   ap_cmd_first_write_stages_dword0 :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    !hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
@@ -764,17 +718,6 @@ module csr_registers_sva
   ), $past(
       cmd_dword0_i
   )})));
-
-  cp_cmd_staging :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  ((!hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
-                    !cmd_staging_valid_i)
-                   ##1 (cmd_staging_valid_i && !cmd_wvalid_int_i &&
-                        (cmd_dword0_i == $past(wdata_i)))) or
-                  ((!hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
-                    cmd_staging_valid_i)
-                   ##1 (!cmd_staging_valid_i && cmd_wvalid_int_i &&
-                        (cmd_wdata_int_i == {$past(wdata_i), $past(cmd_dword0_i)}))));
 
   ap_cmd_non_cmd_write_preserves_staging :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
@@ -874,18 +817,13 @@ module csr_registers_sva
                    rx_rready_o == rx_data_read)
   else $error("csr_registers_sva: rx_rready_o must pulse only for RX_DATA reads");
 
-  cp_rx_rready_only_rx_read :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  rx_rready_o == rx_data_read);
-
   ap_resp_rready_only_resp_read :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    resp_rready_o == resp_read)
   else $error("csr_registers_sva: resp_rready_o must pulse only for RESP reads");
 
-  cp_resp_rready_only_resp_read :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  resp_rready_o == resp_read);
+  // No equality-only covers here: both expressions hit trivially while idle.
+  // cp_rx/resp_read_returns_fifo_data exercise the actual read handshakes.
 
   ap_rx_read_returns_fifo_data :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
@@ -930,16 +868,6 @@ module csr_registers_sva
   cp_resp_empty_read_returns_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   resp_read && !resp_rvalid_i ##1 (rdata_o == '0));
-
-  cp_port_pop :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  ((rx_data_read && rx_rvalid_i) ##1 (rdata_o == $past(rx_rdata_i))) or
-                  ((resp_read && resp_rvalid_i) ##1 (rdata_o == $past(resp_rdata_i))));
-
-  cp_empty_read :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  ((rx_data_read && !rx_rvalid_i) ##1 (rdata_o == '0)) or
-                  ((resp_read && !resp_rvalid_i) ##1 (rdata_o == '0)));
 
   ap_timing_reset_defaults :
   assert property (@(posedge clk_i) disable iff (!rst_ni) $rose(
@@ -1190,11 +1118,8 @@ module csr_registers_sva
                      (dat_mem_i[i].reserved_15_7 == '0) &&
                      (dat_mem_i[i].reserved_30_23 == '0))
     else $error("csr_registers_sva: DAT[%0d] reserved fields are not zero", i);
-
-    cp_dat_reserved_fields_zero :
-    cover property (@(posedge clk_i) disable iff (!rst_ni)
-                    (dat_mem_i[i].reserved_15_7 == '0) &&
-                    (dat_mem_i[i].reserved_30_23 == '0));
+    // No matching cover: zero reserved fields are an invariant and hit
+    // immediately after reset. DAT write/index covers own scenario closure.
   end
 
   for (genvar i = 0; i < DatDepth; i++) begin : gen_dat_reset_defaults
@@ -1250,11 +1175,7 @@ bind csr_registers csr_registers_sva #(
     .hc_control_i(hc_control),
     .hc_status_i(hc_status),
     .queue_status_i(queue_status),
-    .cmd_wvalid_o,
-    .cmd_wdata_o,
     .cmd_wready_i,
-    .tx_wvalid_o,
-    .tx_wdata_o,
     .tx_wready_i,
     .rx_rvalid_i,
     .rx_rdata_i,

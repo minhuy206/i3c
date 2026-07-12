@@ -1,0 +1,63 @@
+\begin{tikzpicture}[
+		font=\scriptsize,
+		state/.style={ellipse, draw=black!70, fill=blue!4, align=center,
+			minimum width=2.25cm, minimum height=0.86cm, inner sep=1.5pt,
+			font=\scriptsize},
+		idle/.style={state, fill=black!8},
+		stop/.style={state, draw=orange!80!black, fill=orange!10},
+		done/.style={state, draw=green!45!black, fill=green!10, line width=0.9pt},
+		edge/.style={-{Latex[length=1.7mm]}, semithick, draw=black!80},
+		abort/.style={edge, dashed, draw=orange!85!black},
+		label/.style={font=\scriptsize, inner sep=1.2pt, fill=white,
+			align=center, text=black!85},
+		note/.style={font=\scriptsize\itshape, text=black!65, align=left},
+	]
+	% Main protocol path follows the ordering in compute_next_state.
+	\node[idle]  (idle)  at (-8.0, 2.0) {\texttt{Idle}};
+	\node[state] (sendr) at (-4.7, 2.0) {\texttt{SendRsvdByte}};
+	\node[state] (rack)  at (-1.2, 2.0) {\texttt{ReadRsvdAck}};
+	\node[state] (recv)  at ( 2.7, 2.0) {\texttt{ReceiveIDBit}};
+	\node[state] (senda) at ( 6.8, 2.0) {\texttt{SendAddr}};
+	\node[state] (aack)  at ( 6.8,-1.2) {\texttt{ReadAddrAck}};
+	\node[stop]  (wstop) at ( 2.7,-1.2) {\texttt{WaitStop}};
+	\node[done]  (done)  at (-1.2,-1.2) {\texttt{Done}};
+
+	\begin{scope}[on background layer]
+		% Reset and normal forward progress.
+		\draw[edge] (-8.0,3.2) node[label, above] {reset} -- (idle);
+		\draw[edge] (idle) -- node[label, above] {\texttt{start\_i}} (sendr);
+		\draw[edge] (sendr) -- node[label, above] {\texttt{bus\_tx}\\\texttt{done\_i}} (rack);
+		\draw[edge] (rack) -- node[label, above] {\texttt{bus\_rx\_done\_i}\\ACK} (recv);
+
+		% Identity arbitration: remain until all 64 bits have been sampled.
+		\draw[edge] (recv.north) to[out=70,in=110,looseness=4.4]
+			node[label, above] {\texttt{bus\_rx\_done\_i}\\$\mathtt{bit\_cnt\_q>0}$} (recv.north);
+		\draw[edge] (recv) -- node[label, below] {\texttt{bus\_rx\_done\_i}\\$\mathtt{bit\_cnt\_q=0}$\\$\mathtt{!stop\_pending\_i}$} (senda);
+
+		% Address assignment and completion.
+		\draw[edge] (senda) -- node[label, right] {\texttt{bus\_tx\_done\_i}} (aack);
+		\draw[edge] (aack) to[out=-145,in=-35]
+			node[label, pos=0.52, below] {\texttt{bus\_rx\_done\_i}\\$\mathtt{!stop\_pending\_i}$\\ACK/NACK chốt \texttt{addr\_valid}} (done);
+
+		% No Target responded to the reserved address byte.
+		\draw[edge] (rack) -- node[label, right] {\texttt{bus\_rx\_done\_i}, NACK\\\texttt{no\_device}=1} (done);
+
+		% A pending external STOP is honored at either protocol boundary.
+		\draw[edge] (recv) to[out=-90,in=90]
+			node[label, right] {\texttt{bus\_rx\_done\_i}\\$\mathtt{bit\_cnt\_q=0}$, \texttt{stop\_pending\_i}} (wstop);
+		\draw[edge] (aack) -- node[label, above] {\texttt{bus\_rx\_done\_i}\\\texttt{stop\_pending\_i}} (wstop);
+		\draw[edge] (wstop) -- node[label, above] {\texttt{bus\_stop}\\\texttt{det\_i}} (done);
+
+		% Done is a one-cycle reporting state.
+		\draw[edge] (done.west) to[out=190,in=-100,looseness=1.15]
+			node[label, pos=0.48, below left] {không điều kiện} (idle.south);
+	\end{scope}
+
+	% Global override in compute_next_state; one annotation avoids seven stacked edges.
+	\node[note, anchor=north west, text width=9.2cm] (override) at (-8.8,-3.7)
+		{\texttt{bus\_stop\_det\_i}: từ mọi trạng thái đang hoạt động
+		đến \texttt{Done}; đặt \texttt{stopped}=1.};
+	\draw[abort] (override.north east) to[out=35,in=-110] (done.south);
+	\node[note, anchor=north east, text width=5.7cm, align=right] at (8.1,-3.7)
+		{Trong \texttt{WaitStop}: \texttt{req\_stop\_o}=1.};
+\end{tikzpicture}

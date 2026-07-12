@@ -1,7 +1,7 @@
 class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
   `uvm_object_utils(csr_unmapped_addr_no_side_effect_vseq)
 
-  bit [11:0] unmapped_addr[9] = '{
+  bit [11:0] unmapped_addr[12] = '{
       12'h008,
       12'h00C,
       12'h020,
@@ -10,7 +10,10 @@ class csr_unmapped_addr_no_side_effect_vseq extends csr_base_vseq;
       12'h114,
       12'h1FC,
       ADDR_DAT_END,
-      12'h3FC
+      12'h3FC,
+      12'h005,
+      12'h081,
+      12'h089
   };
   bit [11:0] timing_addr[18] = '{
       ADDR_T_R,

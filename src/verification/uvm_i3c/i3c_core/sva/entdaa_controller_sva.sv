@@ -14,7 +14,6 @@ module entdaa_controller_sva
     input logic bus_stop_det_i,
 
     input logic req_rstart_o,
-    input logic bus_rstart_det_i,
 
     input logic dat_read_valid_o,
     input logic [DatAw-1:0] dat_index_o,
@@ -178,7 +177,6 @@ bind entdaa_controller entdaa_controller_sva #(
     .dev_count_i,
     .bus_stop_det_i,
     .req_rstart_o,
-    .bus_rstart_det_i,
     .dat_read_valid_o,
     .dat_index_o,
     .dat_rdata_i,

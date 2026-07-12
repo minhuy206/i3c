@@ -28,8 +28,8 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     byte_queue_t                   no_read_data;
     byte_queue_t                   exp_data;
     bit                     [31:0] resp;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     word_queue_t                   tx_words;
@@ -39,16 +39,14 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
-        .ctxt($sformatf(
-            "ERR_009 %s write_abort", private_addr_mode_name(broadcast_header_enable)
-        )),
+        .ctxt($sformatf("ERR_009 %s write_abort", private_addr_mode_name(broadcast_header_enable))),
         .seq_name($sformatf("err009_%s_dev_seq", private_addr_mode_name(broadcast_header_enable))),
         .tid(4'd9),
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -64,27 +62,20 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
 
     wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
 
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
-                                                .iba_include(broadcast_header_enable),
-                                                .abort(1'b1)));
-    `uvm_info(`gfn, $sformatf("ERR_009 result: mode=%s abort_asserted=1 source=HC_CONTROL[29]",
-                              private_addr_mode_name(broadcast_header_enable)), UVM_LOW)
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
-                                                .iba_include(broadcast_header_enable)));
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(1'b1), .iba_include(broadcast_header_enable)));
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
         $sformatf(
         "ERR_009 %s: after recovery SW reset", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 result: mode=%s case=early_abort sampled_bytes=%0d requested_len=%0d sw_reset_flushed_queues=1",
-                  private_addr_mode_name(broadcast_header_enable), dev_seq.sampled_data.size(),
-                  DATA_LENGTH), UVM_LOW)
   endtask
 
   // Deep-abort case: waits until at least one TX word is consumed (>=4 bytes sent) before
@@ -96,8 +87,8 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
     int unsigned                   tx_depth;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
 
     word_queue_t                   tx_words;
     build_random_tx_words(DATA_LENGTH_DEEP, exp_data, tx_words);
@@ -106,16 +97,18 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
-        .ctxt($sformatf("ERR_009 %s write_abort_deep",
-                        private_addr_mode_name(broadcast_header_enable))),
-        .seq_name($sformatf("err009_%s_deep_dev_seq",
-                            private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf(
+            "ERR_009 %s write_abort_deep", private_addr_mode_name(broadcast_header_enable)
+        )),
+        .seq_name($sformatf(
+            "err009_%s_deep_dev_seq", private_addr_mode_name(broadcast_header_enable)
+        )),
         .tid(4'd9),
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -142,28 +135,20 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
         `uvm_error(`gfn, "ERR_009 deep: TX FIFO never consumed a word before timeout")
     end
 
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
-                                                .iba_include(broadcast_header_enable),
-                                                .abort(1'b1)));
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 result: mode=%s case=deep_abort abort_asserted=1 tx_depth_before_abort=%0d",
-                  private_addr_mode_name(broadcast_header_enable), tx_depth), UVM_LOW)
-
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
-                                                .iba_include(broadcast_header_enable)));
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(1'b1), .iba_include(broadcast_header_enable)));
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
-        $sformatf("ERR_009 %s deep: after recovery SW reset",
-                  private_addr_mode_name(broadcast_header_enable)));
+        $sformatf(
+        "ERR_009 %s deep: after recovery SW reset", private_addr_mode_name(broadcast_header_enable)
+        ));
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 result: mode=%s case=deep_abort sampled_bytes=%0d requested_len=%0d sw_reset_flushed_queues=1",
-                  private_addr_mode_name(broadcast_header_enable), dev_seq.sampled_data.size(),
-                  DATA_LENGTH_DEEP), UVM_LOW)
   endtask
 
   // toc=0 abort: the write is programmed with toc=0 (continuation requested), but HC abort during
@@ -174,8 +159,8 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     byte_queue_t                   no_read_data;
     byte_queue_t                   exp_bytes;
     bit                     [31:0] resp;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     word_queue_t                   tx_words;
@@ -185,16 +170,18 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     randomize_i3c_dat_target(0, static_addr, dynamic_addr);
 
     cfg = make_transfer_cfg(
-        .ctxt($sformatf("ERR_009 %s write_abort_toc0",
-                        private_addr_mode_name(broadcast_header_enable))),
-        .seq_name($sformatf("err009_%s_toc0_dev_seq",
-                            private_addr_mode_name(broadcast_header_enable))),
+        .ctxt($sformatf(
+            "ERR_009 %s write_abort_toc0", private_addr_mode_name(broadcast_header_enable)
+        )),
+        .seq_name($sformatf(
+            "err009_%s_toc0_dev_seq", private_addr_mode_name(broadcast_header_enable)
+        )),
         .tid(4'd9),
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -210,25 +197,21 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
 
     wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
 
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
-                                                .iba_include(broadcast_header_enable),
-                                                .abort(1'b1)));
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));
 
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
 
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(1'b1),
-                                                .iba_include(broadcast_header_enable)));
+    reg_write(ADDR_HC_CONTROL, hc_control_value(
+              .bus_enable(1'b1), .iba_include(broadcast_header_enable)));
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
-        $sformatf("ERR_009 %s toc0: after recovery SW reset",
-                  private_addr_mode_name(broadcast_header_enable)));
+        $sformatf(
+        "ERR_009 %s toc0: after recovery SW reset", private_addr_mode_name(broadcast_header_enable)
+        ));
 
-    `uvm_info(`gfn, $sformatf(
-                  "ERR_009 result: mode=%s case=toc0_abort sampled_bytes=%0d observed_rstart=%0b resp_status=0x%0h sw_reset_flushed_queues=1",
-                  private_addr_mode_name(broadcast_header_enable), dev_seq.sampled_data.size(),
-                  dev_seq.observed_rstart, resp[31:28]), UVM_LOW)
   endtask
 
 endclass

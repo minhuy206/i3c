@@ -3,12 +3,10 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
 
   localparam logic [2:0] ENTDAA_RECEIVE_ID_BIT = 3'd3;
   localparam logic [2:0] ENTDAA_SEND_ADDR = 3'd4;
-  localparam string ENTDAA_FSM_STATE_PATH =
-      "tb_i3c_top.dut.u_ctrl.u_daa_ctrl.u_entdaa_fsm.state_q";
+  localparam string ENTDAA_FSM_STATE_PATH = "tb_i3c_top.dut.u_ctrl.u_daa_ctrl.u_entdaa_fsm.state_q";
   localparam string ENTDAA_BIT_COUNT_PATH =
       "tb_i3c_top.dut.u_ctrl.u_daa_ctrl.u_entdaa_fsm.bit_cnt_q";
-  localparam string ENTDAA_DEV_ROUND_PATH =
-      "tb_i3c_top.dut.u_ctrl.u_daa_ctrl.dev_round_q";
+  localparam string ENTDAA_DEV_ROUND_PATH = "tb_i3c_top.dut.u_ctrl.u_daa_ctrl.dev_round_q";
 
   function new(string name = "i3c_daa_hc_abort_vseq");
     super.new(name);
@@ -27,22 +25,21 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
 
   virtual function void configure_joining_device(i3c_device_response_seq dev_seq,
                                                  i3c_daa_stimulus stimulus);
-    dev_seq.target_addr     = 7'h7e;
-    dev_seq.ack_address     = 1'b1;
-    dev_seq.is_i3c          = 1'b1;
-    dev_seq.is_daa          = 1'b1;
-    dev_seq.dir             = 1'b0;
-    dev_seq.entdaa_join     = 1'b1;
+    dev_seq.target_addr = 7'h7e;
+    dev_seq.addr_nack = 1'b0;
+    dev_seq.is_i3c = 1'b1;
+    dev_seq.dir = 1'b0;
+    dev_seq.entdaa_join = 1'b1;
     dev_seq.daa_accept_addr = 1'b1;
-    dev_seq.daa_id_bytes    = '{
-      stimulus.pid[47:40],
-      stimulus.pid[39:32],
-      stimulus.pid[31:24],
-      stimulus.pid[23:16],
-      stimulus.pid[15:8],
-      stimulus.pid[7:0],
-      stimulus.bcr,
-      stimulus.dcr
+    dev_seq.daa_id_bytes = '{
+        stimulus.pid[47:40],
+        stimulus.pid[39:32],
+        stimulus.pid[31:24],
+        stimulus.pid[23:16],
+        stimulus.pid[15:8],
+        stimulus.pid[7:0],
+        stimulus.bcr,
+        stimulus.dcr
     };
   endfunction
 
@@ -62,11 +59,11 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
   endfunction
 
   virtual task run_mid_identity_abort();
-    addr_assign_desc_t      daa_cmd;
-    bit [31:0]              resp;
-    i3c_device_response_seq dev_seq;
-    i3c_daa_stimulus        stimulus;
-    string                  ctxt;
+    addr_assign_desc_t             daa_cmd;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+    i3c_daa_stimulus               stimulus;
+    string                         ctxt;
 
     ctxt = "ERR_009 HC abort during ENTDAA identity";
     stimulus = i3c_daa_stimulus::type_id::create("err009_mid_id_stimulus");
@@ -96,11 +93,11 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_recovery_after_abort();
-    addr_assign_desc_t      daa_cmd;
-    bit [31:0]              resp;
-    i3c_device_response_seq dev_seq;
-    i3c_daa_stimulus        stimulus;
-    string                  ctxt;
+    addr_assign_desc_t             daa_cmd;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+    i3c_daa_stimulus               stimulus;
+    string                         ctxt;
 
     ctxt = "ERR_009 recovery ENTDAA after HC abort";
     stimulus = i3c_daa_stimulus::type_id::create("err009_recovery_stimulus");
@@ -127,11 +124,11 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_address_phase_abort();
-    addr_assign_desc_t      daa_cmd;
-    bit [31:0]              resp;
-    i3c_device_response_seq dev_seq;
-    i3c_daa_stimulus        stimulus;
-    string                  ctxt;
+    addr_assign_desc_t             daa_cmd;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq;
+    i3c_daa_stimulus               stimulus;
+    string                         ctxt;
 
     ctxt = "ERR_009 HC abort during assigned-address phase";
     stimulus = i3c_daa_stimulus::type_id::create("err009_addr_phase_stimulus");
@@ -162,27 +159,24 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_after_completed_round_abort();
-    addr_assign_desc_t      daa_cmd;
-    bit [31:0]              resp;
-    i3c_device_response_seq dev_seq[2];
-    i3c_daa_stimulus        stimulus[2];
-    string                  ctxt;
+    addr_assign_desc_t             daa_cmd;
+    bit                     [31:0] resp;
+    i3c_device_response_seq        dev_seq [2];
+    i3c_daa_stimulus               stimulus[2];
+    string                         ctxt;
 
     ctxt = "ERR_009 HC abort after one completed ENTDAA round";
     stimulus[0] = i3c_daa_stimulus::type_id::create("err009_round0_stimulus");
     stimulus[1] = i3c_daa_stimulus::type_id::create("err009_round1_stimulus");
     `DV_CHECK_RANDOMIZE_FATAL(stimulus[0], "ERR_009 round[0] stimulus randomization failed")
-    if (!stimulus[1].randomize() with {
-          assigned_addr != local::stimulus[0].assigned_addr;
-        }) begin
+    if (!stimulus[1].randomize() with {assigned_addr != local:: stimulus[0].assigned_addr;}) begin
       `uvm_fatal(`gfn, "ERR_009 round[1] stimulus randomization failed")
     end
 
     for (int unsigned i = 0; i < 2; i++) begin
       write_dat_entry(2 + i, 7'h50, stimulus[i].assigned_addr, 1'b0);
-      dev_seq[i] = i3c_device_response_seq::type_id::create(
-          $sformatf("err009_round%0d_dev_seq", i)
-      );
+      dev_seq[i] =
+          i3c_device_response_seq::type_id::create($sformatf("err009_round%0d_dev_seq", i));
       configure_joining_device(dev_seq[i], stimulus[i]);
     end
     daa_cmd = make_daa_cmd(4'd11, 5'd2, 4'd2);
@@ -253,8 +247,7 @@ class i3c_daa_hc_abort_vseq extends i3c_base_vseq;
       end
       if (!new_command_seen) begin
         new_command_seen = (dev_round_val[3:0] == 4'd0);
-      end else if (state_val[2:0] == 3'd0 &&
-                   dev_round_val[3:0] == completed_rounds) begin
+      end else if (state_val[2:0] == 3'd0 && dev_round_val[3:0] == completed_rounds) begin
         return;
       end
     end

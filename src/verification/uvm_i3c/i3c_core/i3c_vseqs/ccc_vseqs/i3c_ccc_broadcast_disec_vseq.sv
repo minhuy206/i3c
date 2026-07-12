@@ -9,7 +9,7 @@ class i3c_ccc_broadcast_disec_vseq extends i3c_base_vseq;
     immediate_data_trans_desc_t        ccc_cmd;
     bit                         [31:0] resp;
     i3c_device_response_seq            dev_seq;
-    bit                          [7:0] event_byte;
+    bit                         [ 7:0] event_byte;
 
     event_byte = 8'h02;
 
@@ -31,7 +31,7 @@ class i3c_ccc_broadcast_disec_vseq extends i3c_base_vseq;
 
     dev_seq                   = i3c_device_response_seq::type_id::create("ccc003_dev_seq");
     dev_seq.target_addr       = 7'h7e;
-    dev_seq.ack_address       = 1'b1;
+    dev_seq.addr_nack       = 1'b0;
     dev_seq.is_i3c            = 1'b1;
     dev_seq.dir               = 1'b0;
 
@@ -43,18 +43,9 @@ class i3c_ccc_broadcast_disec_vseq extends i3c_base_vseq;
 
     poll_idle();
     wait_for_device_done(dev_seq, "CCC_003 broadcast DISEC frame", 2000);
-
-
-
-
     read_response(resp);
 
     check_all_queues_empty("after CCC_003 broadcast DISEC frame");
-    `uvm_info(`gfn, $sformatf("CCC_003 result: resp=0x%08h opcode=0x%02h event=0x%02h",
-                              resp,
-                              (dev_seq.sampled_data.size() >= 1) ? dev_seq.sampled_data[0] : 8'h00,
-                              (dev_seq.sampled_data.size() >= 2) ? dev_seq.sampled_data[1] : 8'h00),
-              UVM_LOW)
 
     disable device_response;
   endtask

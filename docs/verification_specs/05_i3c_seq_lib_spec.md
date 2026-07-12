@@ -34,10 +34,9 @@ Include file that aggregates all sequence source files.
 
 ```systemverilog
 `include "i3c_device_response_seq.sv"
-// Phase 2:
-// `include "i3c_device_daa_response_seq.sv"
-// `include "i3c_device_ccc_response_seq.sv"
 ```
+
+CCC/ENTDAA responses are handled by `i3c_device_response_seq` itself (§4.7), not by separate sequence files.
 
 ---
 
@@ -49,7 +48,7 @@ A device-mode sequence that responds to a single I3C/I2C transaction initiated b
 
 1. Waits for the DUT to issue a START and drive address bits
 2. ACKs the address if it matches the configured target address
-3. For **write transfers**: receives data bytes from host, ACKs each byte
+3. For **write transfers**: receives data bytes from the host; for I2C it drives the configured per-byte ACK/NACK, while for I3C it samples the controller-driven T-bit
 4. For **read transfers**: sends data bytes to host
 5. Handles STOP or RSTART to end the transaction
 
@@ -59,86 +58,110 @@ A device-mode sequence that responds to a single I3C/I2C transaction initiated b
 uvm_sequence#(i3c_seq_item) → i3c_device_response_seq
 ```
 
-### 4.3. Configurable Fields
+### 4.3. Configurable Fields (inputs, set before `start()`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `target_addr` | `bit [6:0]` | `7'h08` | Address to match and ACK |
+| `target_addr` | `bit [6:0]` | `7'h08` | Address to match and ACK (`req.addr`) |
 | `is_i3c` | `bit` | `1` | I3C (1) or I2C (0) mode |
-| `read_data` | `bit [7:0] [$]` | `{}` | Data to return on reads |
-| `ack_address` | `bit` | `1` | Whether to ACK matched address |
-| `ack_data` | `bit` | `1` | Whether to ACK received data bytes |
-| `read_data_cnt` | `int` | `4` | Number of bytes to return on read |
+| `dir` | `bit` | `0` | Direction control (`req.dir`): `i3c_driver::next_state_after_ack()` uses it directly to pick the post-ACK FSM state (`DrvRdPushPull`/`DrvRd` vs `DrvWrPushPull`/`DrvWr`), so it must be set to match the direction the host will actually drive on the bus, not left as a hint |
+| `read_data` | `bit [7:0] [$]` | `{}` | Explicit data to return on reads; when empty, `read_data_cnt` random bytes are generated instead via `req.payload_constraint_en`/`payload_len` |
+| `addr_nack` | `bit` | `0` | NACK the matched private address (`req.addr_nack`). It does not NACK an expected `0x7E` broadcast header, which `get_addr_ack()` always ACKs |
+| `data_nack` | `bit` | `0` | Default per-byte I2C NACK value when `data_nack_pattern_q` doesn't cover an index |
+| `data_nack_pattern_q` | `bit [$]` | `{}` | Explicit per-byte I2C NACK pattern (I2C write only) |
+| `start_with_broadcast_header` | `bit` | `0` | Sequence expects/handles a `0x7E` broadcast-header frame (`req.start_with_broadcast_header`) |
+| `entdaa_join` | `bit` | `0` | This device joins the current ENTDAA round (`req.entdaa_join`) |
+| `daa_id_bytes` | `bit [7:0] [$]` | `{}` | 8-byte PID/BCR/DCR identity for ENTDAA (`req.daa_id_bytes`) |
+| `daa_accept_addr` | `bit` | `1` | ACK (1) or NACK (0) the controller-assigned dynamic address during ENTDAA |
+| `ccc_target_addr` | `bit [6:0]` | `0` | Expected target address for a direct CCC (`req.ccc_target_addr`) |
+| `ccc_target_addr_valid` | `bit` | `0` | Whether `ccc_target_addr` should be matched (`req.ccc_target_addr_valid`) |
+| `read_data_cnt` | `int` | `4` | Random-payload length when `read_data` is empty |
 
 ### 4.4. Sequence Body
 
 ```systemverilog
 task body();
   i3c_seq_item req;
+  i3c_seq_item rsp_item;
   req = i3c_seq_item::type_id::create("req");
 
-  // Configure the seq_item for device response
-  req.i3c        = is_i3c;
-  req.addr       = target_addr;
-  req.dir        = 0;           // Will be overwritten by driver sampling
-  req.dev_ack    = ack_address;
-  req.is_daa     = 0;
-  req.end_with_rstart = 0;
-
-  // For write transfers: device just ACKs each byte
-  // For read transfers: populate data to send to host
   if (read_data.size() > 0) begin
-    req.data     = read_data;
-    req.data_cnt = read_data.size();
+    req.data = read_data;
   end else begin
-    // Generate default read data
-    for (int i = 0; i < read_data_cnt; i++) begin
-      req.data.push_back(8'hA0 + i);
-    end
-    req.data_cnt = read_data_cnt;
+    req.payload_constraint_en = 1'b1;
+    req.payload_len = read_data_cnt;
+    `DV_CHECK_RANDOMIZE_FATAL(req, "Device-response payload randomization failed")
   end
 
-  // Set T-bits: ACK all bytes for write; continue for read
-  req.T_bit.delete();
-  for (int i = 0; i < req.data_cnt; i++) begin
-    if (i < req.data_cnt - 1)
-      req.T_bit.push_back(ack_data);  // ACK or continue
-    else
-      req.T_bit.push_back(1'b0);       // Last byte: end
+  // Protocol controls applied after payload randomization so only data is random.
+  req.i3c                         = is_i3c;
+  req.addr                        = target_addr;
+  req.dir                         = dir;
+  req.addr_nack                   = addr_nack;
+  req.entdaa_join                 = entdaa_join;
+  req.daa_id_bytes                = daa_id_bytes;
+  req.daa_accept_addr             = daa_accept_addr;
+  req.ccc_target_addr             = ccc_target_addr;
+  req.ccc_target_addr_valid       = ccc_target_addr_valid;
+  req.end_with_rstart             = 0;
+  req.start_with_broadcast_header = start_with_broadcast_header;
+
+  // I2C write: per-byte NACK pattern (data_nack_pattern_q, else data_nack).
+  // I3C read: T-bit continues (1) on every byte but the last (0 = end).
+  req.data_nack_q.delete();
+  req.t_bit_q.delete();
+  if (!is_i3c && !dir) begin
+    for (int i = 0; i < req.data.size(); i++) begin
+      req.data_nack_q.push_back(
+          i < data_nack_pattern_q.size() ? data_nack_pattern_q[i] : data_nack);
+    end
+  end else if (is_i3c && dir) begin
+    for (int i = 0; i < req.data.size(); i++) begin
+      req.t_bit_q.push_back(i < req.data.size() - 1);
+    end
   end
 
   start_item(req);
+  request_issued = 1'b1;
   finish_item(req);
 
-  // Get response from driver
-  get_response(rsp);
+  get_response(rsp_item);
+  if (rsp_item != null) begin
+    observed_rstart           = rsp_item.end_with_rstart;
+    observed_broadcast_header = rsp_item.start_with_broadcast_header;
+    observed_broadcast_rstart = rsp_item.observed_broadcast_rstart;
+    sampled_addr              = rsp_item.addr;
+    sampled_data_q             = rsp_item.data;
+    sampled_data_nack_q        = rsp_item.data_nack_q;
+  end
+  done = 1'b1;
 endtask
 ```
 
-### 4.4.1. Driver → Sequence Handshake (`rsp` fields)
+### 4.4.1. Driver → Sequence Handshake (`rsp_item` fields, exposed via `sampled_*`/`observed_*`)
 
-When the driver finishes the transaction it calls `seq_item_port.item_done(rsp)` (ref `../i3c-core/verification/uvm_i3c/dv_i3c/i3c_driver.sv:96`), and the sequence consumes it via `get_response(rsp)`. The driver populates the following fields in `rsp` based on bus observation — the sequence MUST treat them as outputs, not inputs:
+When the driver finishes the transaction it calls `seq_item_port.item_done(rsp)` (`i3c_driver::get_and_drive()`, `04_i3c_agent_spec.md` §8.6), and the sequence consumes it via `get_response(rsp_item)`. `body()` copies the following observed fields out to sequence-level state so a caller can read them after `start()` returns:
 
-| `rsp` field | Driver source line(s) | Meaning |
+| `rsp_item` field | Copied to (sequence field) | Meaning |
 |-------------|-----------------------|---------|
-| `rsp.addr[i]` | 471 / 507 / 518 (device mode) | Sampled host address bits |
-| `rsp.dir` | 489 (device mode) | Sampled R/W direction |
-| `rsp.dev_ack` | populated by `DrvAck` (525) using `req.dev_ack` | Driven ACK/NACK echoed back |
-| `rsp.data[]` | 603 (`DrvWr`) / 619 (`DrvWrPushPull`) | Bytes captured during host→device write |
-| `rsp.T_bit[]` | 621 (`DrvWrPushPull`) | Per-byte T-bit observed on PP write |
-| `rsp.end_with_rstart` | 87 / 91 (`get_and_drive`) | `0` if frame ended with STOP, `1` if RSTART |
+| `rsp_item.addr` | `sampled_addr` | Address actually sampled off the bus |
+| `rsp_item.data` | `sampled_data_q` | Bytes the driver *sampled* during a write (`do_i2c_write`/`do_i3c_write` push into `rsp.data`). **Not populated for a private I3C read** (`do_i3c_read()` drives `req.data[]` onto SDA but never writes `rsp.data`); for a private I2C read it stays empty too — only the write-direction tasks populate it |
+| `rsp_item.data_nack_q` | `sampled_data_nack_q` | For an I2C **write**, per-byte host ACK/NACK as driven by the device (mirrors `req.data_nack_q`/`data_nack_pattern_q`). For an I2C **read**, the *controller's* ACK/NACK of each byte the device sent (`do_i2c_read()`: `rsp.data_nack_q.push_back(!ack)` where `ack` is the sampled host ACK) — i.e. on a read this field reports what the host did, not a device-side NACK pattern |
+| `rsp_item.t_bit_q` | *(not copied by `body()`; read `rsp_item` directly)* | For a private I3C **write**, the T-bits the driver observed on the bus (`do_i3c_write()`: `rsp.t_bit_q.push_back(t_bit)`) |
+| `rsp_item.end_with_rstart` | `observed_rstart` | `0` if the frame ended with STOP, `1` if RSTART |
+| `rsp_item.start_with_broadcast_header` | `observed_broadcast_header` | Whether the driver recognized this as a broadcast-header frame |
+| `rsp_item.observed_broadcast_rstart` | `observed_broadcast_rstart` | Set when a broadcast-header/CCC frame was followed by Sr into a private/direct sub-frame (`i3c_driver::handle_broadcast_dispatch()`) |
 
-Consequently, the sequence body should NOT pre-set these fields except as initial values that the driver may overwrite.
+There is no `rsp_item.dev_ack` — that field does not exist on `i3c_seq_item` (`04_i3c_agent_spec.md` §6.2); address/data ACK behavior is driven from `req.addr_nack`/`req.data_nack_q` and, for reads, echoed back via `rsp_item.data_nack_q` as described above.
 
 ### 4.5. Usage in Virtual Sequences
 
 ```systemverilog
-// In i3c_write_vseq:
+// In a write vseq:
 i3c_device_response_seq dev_seq;
 dev_seq = i3c_device_response_seq::type_id::create("dev_seq");
 dev_seq.target_addr = 7'h08;
 dev_seq.is_i3c = 1;
-dev_seq.ack_address = 1;
 fork
   dev_seq.start(p_sequencer.m_i3c_sequencer);
 join_none
@@ -147,54 +170,35 @@ join_none
 ### 4.6. Write vs Read Behavior
 
 **Write transfer (DUT writes to device):**
-- Driver is in Device mode, `DrvWrPushPull` or `DrvWr` state
+- Driver is in Device mode, `DrvWrPushPull` or `DrvWr` state (`04_i3c_agent_spec.md` §8.5)
 - Driver samples 8 bits from bus per byte
-- Driver sends ACK/NACK per `T_bit[]` settings
-- After transfer, driver waits for STOP
+- For I2C, ACK/NACK is driven per `req.data_nack_q` (`data_nack_pattern_q`/`data_nack`); for I3C PP, the host drives its own T-bit which the driver only observes
+- After transfer, driver waits for STOP/RSTART
 
 **Read transfer (DUT reads from device):**
 - Driver is in Device mode, `DrvRdPushPull` or `DrvRd` state
-- Driver drives `req.data[]` bits onto SDA
-- For I3C PP: drives T-bit after each byte
-- For I2C: waits for host ACK/NACK
-- After transfer, driver waits for STOP
+- Driver drives `req.data[]` bits onto SDA (`rsp.data` is left empty — the driver does not echo the driven bytes back)
+- For I3C PP: drives `req.t_bit_q[i]` as the T-bit after each byte (not echoed to `rsp.t_bit_q`)
+- For I2C: waits for host ACK/NACK, recording each into `rsp.data_nack_q` (the *controller's* ACK/NACK of the byte, not a device-side pattern)
+- After transfer, driver waits for STOP/RSTART
 
-### 4.7. Error Injection (Phase 2)
+### 4.7. CCC / ENTDAA Response
 
-Future sequences will extend this to support:
-- NACK on specific bytes
-- Data corruption
-- Unexpected STOP
+`i3c_device_response_seq` already covers broadcast-header, direct-CCC, and ENTDAA responses through `start_with_broadcast_header`, `ccc_target_addr[_valid]`, and `entdaa_join`/`daa_id_bytes`/`daa_accept_addr` (§4.3) — this is not deferred future work. See `i3c_driver::handle_broadcast_dispatch()`/`do_entdaa_round()`/`do_ccc_payload()` (`04_i3c_agent_spec.md` §8.5) for how the driver interprets these fields. Not yet supported: per-byte data corruption and unexpected/injected STOP mid-transfer.
 
 ---
 
-## 5. Phase 2 Sequences (Future)
+## 5. Related Sequences
 
 | Sequence | Description |
 |----------|-------------|
-| `i3c_device_daa_response_seq` | Respond to ENTDAA with PID+BCR+DCR, accept assigned address |
-| `i3c_device_ccc_response_seq` | Respond to specific CCCs (GETPID, GETBCR, etc.) |
-| `i3c_device_nack_seq` | NACK address for error testing |
+| `i3c_device_response_seq` | Generic device responder: address ACK/NACK, I2C/I3C read/write, broadcast-header/direct-CCC/ENTDAA response (§4) |
 
-## 5.1. Mapping from Reference seq_lib
-
-The reference at `../i3c-core/verification/uvm_i3c/dv_i3c/seq_lib/` ships 9 sequences that collectively cover what this spec collapses into one `i3c_device_response_seq`. When porting, treat the reference sequences as templates for individual *transaction shapes* and merge them under our parameterized device-response seq:
-
-| Reference sequence | Maps to | Notes |
-|---|---|---|
-| `i3c_direct_data_seq.sv` (192 LoC) | `i3c_device_response_seq` with `is_i3c=1`, single-frame | Closest analogue; use as primary template for `body()` |
-| `i3c_direct_data_with_rstart_seq.sv` (30 LoC) | Same, with `req.end_with_rstart=1` and a follow-up `start_item` | Phase 2 |
-| `i2c_direct_data_seq.sv` (182 LoC) | `i3c_device_response_seq` with `is_i3c=0` | Reuse byte/T-bit handling |
-| `i2c_direct_data_with_rstart_seq.sv` (22 LoC) | Same, with RSTART | Phase 2 |
-| `i3c_broadcast_followed_by_data_seq.sv` (90 LoC) | Phase 2 (CCC handling) | `addr=7'h7E`, then re-issued |
-| `i3c_broadcast_followed_by_data_with_rstart_seq.sv` (68 LoC) | Phase 2 | — |
-| `i3c_broadcast_followed_by_i2c_data_seq.sv` (88 LoC) | Phase 2 | — |
-| `i3c_broadcast_followed_by_i2c_data_with_rstart_seq.sv` (51 LoC) | Phase 2 | — |
-| `i3c_seq_list.sv` (8 LoC) | Replaced by our `i3c_seq_lib.sv` | Different include set |
+A dedicated NACK-only or corruption-injection sequence has not been split out; `addr_nack`/`data_nack`/`data_nack_pattern_q` on `i3c_device_response_seq` already cover the common NACK-injection cases (§4.3). The reference `i3c_seq_list.sv` is not used — our include set is `i3c_seq_lib.sv` (§3).
 
 ## 6. Implementation Notes
 
 - The sequence runs once per bus transaction — the virtual sequence is responsible for starting it repeatedly if multiple transactions are expected
-- The `req.end_with_rstart` field is filled by the driver based on bus observation (STOP vs RSTART detection), not by the sequence
+- The `rsp.end_with_rstart` field is filled by the driver based on bus observation (STOP vs RSTART detection), not by the sequence (`i3c_driver::get_and_drive()` sets `rsp.end_with_rstart` after the fork-based STOP/RSTART wait; §4.4.1)
 - The sequence must be started BEFORE the DUT initiates the bus transaction (it waits for START condition)
 - For back-to-back transactions, the virtual sequence should start a new `i3c_device_response_seq` in a loop

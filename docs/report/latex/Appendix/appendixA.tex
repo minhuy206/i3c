@@ -1,0 +1,42 @@
+\chapter{Bản đồ thanh ghi CSR}
+\label{app:csr}
+
+Phụ lục này liệt kê đầy đủ bản đồ thanh ghi của khối \CsrRegisters{} (\CsrRegisterCount{} thanh ghi cùng vùng bảng
+DAT \DatEntryCount{} mục), bổ trợ cho \cref{sec:rtl-csr}. Địa chỉ tính theo byte, độ rộng mỗi thanh ghi là \RegisterDataWidth{}-bit.
+
+\begin{longtable}{L{4.6cm} C{2.0cm} L{6.4cm}}
+  \toprule
+  \textbf{Thanh ghi} & \textbf{Địa chỉ} & \textbf{Chức năng} \\
+  \midrule
+  \endhead
+  \texttt{HC\_CONTROL}    & 0x004 & Điều khiển bộ điều khiển (enable, i3c\_fsm\_en, sw\_reset, phát \IThreeCBroadcastAddress{}, abort). \\
+  \texttt{RESET\_CONTROL} & 0x010 & Điều khiển reset mềm các khối và hàng đợi. \\
+  \texttt{HC\_STATUS}     & 0x014 & Trạng thái của bộ điều khiển. \\
+  \texttt{CMD\_QUEUE}     & 0x080 & Cổng ghi \CommandDescriptor{} vào \CommandFifo{}. \\
+  \texttt{RESP}           & 0x084 & Cổng đọc \ResponseDescriptor{} từ \ResponseFifo{}. \\
+  \texttt{PIO\_DATA\_PORT} & 0x088 & Cổng ghi TX / đọc \RxFifo{}. \\
+  \texttt{QUEUE\_STATUS}  & 0x0B4 & Cờ đầy/rỗng của các hàng đợi. \\
+  \texttt{T\_R}           & 0x32C & Thời gian cạnh lên SCL (I3C). \\
+  \texttt{T\_F}           & 0x330 & Thời gian cạnh xuống SCL (I3C). \\
+  \texttt{T\_SU\_DAT}     & 0x334 & Thời gian setup dữ liệu (I3C). \\
+  \texttt{I2C\_T\_SU\_DAT} & 0x338 & Thời gian setup dữ liệu (\iic{}). \\
+  \texttt{T\_HD\_DAT}     & 0x33C & Thời gian hold dữ liệu (I3C). \\
+  \texttt{T\_HIGH}        & 0x340 & Thời gian SCL mức cao (I3C). \\
+  \texttt{I2C\_T\_HIGH}   & 0x34C & Thời gian SCL mức cao (\iic{}). \\
+  \texttt{T\_LOW}         & 0x350 & Thời gian SCL mức thấp (I3C). \\
+  \texttt{T\_LOW\_OD}     & 0x354 & Thời gian SCL mức thấp ở \OpenDrain{}. \\
+  \texttt{I2C\_T\_LOW}    & 0x358 & Thời gian SCL mức thấp (\iic{}). \\
+  \texttt{T\_HD\_STA}     & 0x35C & Thời gian hold của START (I3C). \\
+  \texttt{I2C\_T\_HD\_STA} & 0x360 & Thời gian hold của START (\iic{}). \\
+  \texttt{T\_SU\_STA}     & 0x368 & Thời gian setup của \RepeatedSTART{} (I3C). \\
+  \texttt{I2C\_T\_SU\_STA} & 0x36C & Thời gian setup của \RepeatedSTART{} (\iic{}). \\
+  \texttt{T\_SU\_STO}     & 0x370 & Thời gian setup của STOP (I3C). \\
+  \texttt{I2C\_T\_SU\_STO} & 0x374 & Thời gian setup của STOP (\iic{}). \\
+  \texttt{T\_BUS\_FREE}   & 0x37C & Thời gian cho \BusFreeCondition{} (I3C). \\
+  \texttt{I2C\_T\_BUF}    & 0x380 & Thời gian cho \BusFreeCondition{} (\iic{}). \\
+  \texttt{DAT\_BASE}      & 0x400 & Địa chỉ nền của bảng DAT \DatEntryCount{} mục (mỗi mục \DatEntryWidth{}-bit). \\
+  \bottomrule
+\end{longtable}
+
+Mỗi mục DAT (\texttt{dat\_entry\_t}) rộng \DatEntryWidth{}-bit gồm: cờ \texttt{device} ở bit [31] (1 = thiết bị
+\iic{} legacy), \DynamicAddress{} ở [22:16], và \StaticAddress{} ở [6:0]; các bit còn lại dự trữ.

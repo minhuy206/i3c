@@ -1,59 +1,347 @@
-\chapter{Results and Evaluation}
+\chapter{Kết quả và Đánh giá}
 \label{ch:results}
 
-% DRAFT BRIEF: BLOCKED --- write after green regressions (make regression + category
-% regressions; optional COV=1). Format = tables + annotated waveforms; avoid prose padding.
-% Do not present results before fixing outstanding critical issues and re-running.
-% Sources: sim logs/coverage, improvements.md.
+% NGUỒN SỐ LIỆU (không đưa vào bản in):
+%   - Regression: src/verification/logs/regression_summary.txt + regression_results.tsv (SEED=1, 80/80 PASS).
+%   - Functional coverage: src/verification/coverage_report.txt (80 test, 1324/1639 bin = 80,8%).
+%   - SVA: src/verification/sva_coverage_report.txt (411 assertion / 404 PASS / 7 MISS; 590 cover / 577 HIT).
+%   - LoC: wc -l trên src/rtl/**/*.sv và src/verification/uvm_i3c/** (xem quy tắc đếm ở §5.1).
+%   - Tham chiếu: clone chipsalliance/i3c-core @ f8ea634 (2026-06-08), loại 3 file sinh tự động phía kiểm chứng.
+% TODO TRƯỚC KHI NỘP: chạy lại toàn bộ regression + COV=1 tại commit đóng băng của khóa luận
+%   và cập nhật mọi con số trong các bảng của chương này cùng Phụ lục E trên cùng một lần chạy.
 
-\section{Verified baseline and measurement method}
-\brief{Record the branch, commit, simulator/tool versions, regression seed policy, and exact file-selection
-rules used for every count in this chapter. Distinguish runnable scenario vseqs from the base vseq and
-generated or third-party source from authored RTL. This is the canonical snapshot for all volatile facts.}
+Chương này trình bày kết quả thu được khi áp dụng môi trường kiểm chứng ở \cref{ch:verification} lên
+thiết kế ở \cref{ch:architecture}. Nội dung đi theo trình tự bằng chứng: baseline và phương pháp đo,
+kết quả regression, bằng chứng waveform, kết quả Functional Coverage và SVA, quy mô hiện thực so với
+thiết kế tham chiếu, và cuối cùng là đối chiếu với các yêu cầu đã phát biểu tại \cref{sec:req}.
 
-\section{Quantitative implementation metrics}
-\brief{Report reproducible line counts per subsystem for this design and the pinned CHIPS Alliance
-reference, plus the reuse/adapt/new breakdown. Derive any percentage only from those disclosed counts and
-pair it with the scope caveat: excluding IBI, HDR, Secondary Controller, and Target mode measures a
-different design boundary, not automatically denser code. This section owns the two metrics tables moved
-from Chapter~3.}
+\section{Baseline và phương pháp đo}
+\label{sec:res-baseline}
 
-\tabph{Per-subsystem implementation metrics}{count script/output + pinned source revisions}
-\tabph{Module line-count summary}{count script/output}
+Mọi số liệu trong chương được đo trên cùng một trạng thái mã nguồn của cả RTL lẫn môi trường kiểm
+chứng, với quy tắc đo được phát biểu tường minh để kết quả có thể tái lập. Simulation dùng Cadence
+Xcelium với UVM~1.2; mỗi test là một lần gọi \texttt{make sim} với một Virtual Sequence và
+\texttt{SEED=1}, theo đúng quy trình tại \cref{sec:ver-run}. Việc cố định seed làm cho bộ kết quả có
+thể lặp lại chính xác; tính ngẫu nhiên của stimulus vẫn được giữ bên trong từng kịch bản vì
+constrained-random hoạt động trên seed đó. Một test được tính là PASS khi simulation chạy đến
+\texttt{\$finish} và phần tổng kết UVM có zero \texttt{UVM\_ERROR} và zero \texttt{UVM\_FATAL}.
 
-\figph{Implementation-size comparison}{per-subsystem line counts for this design and the pinned reference}
-  {reproducible count output}{TikZ/pgfplots}
+Số liệu quy mô mã nguồn được đếm bằng số dòng vật lý (\texttt{wc -l}), bao gồm chú thích và dòng
+trắng, trên các file \texttt{.sv}/\texttt{.svh}. Quy tắc thô này được chọn thay cho các thước đo
+``dòng lệnh hiệu dụng'' vì nó không phụ thuộc công cụ và áp dụng được như nhau cho thiết kế của khóa
+luận lẫn thiết kế tham chiếu. Coverage được thu khi chạy với \texttt{COV=1}, merge qua toàn bộ 80
+test của thư viện Virtual Sequence, và trích xuất từ coverage database qua giao diện UCIS thành
+report dạng văn bản qua các target \texttt{cov\_report} và \texttt{sva\_cov\_report} của Makefile.
+\Cref{tab:res-baseline} tóm tắt baseline.
 
-\section{Regression results}
-\brief{AFTER SIMS. Pass/fail matrix across the current \RunnableVseqCount{} runnable scenarios,
-with seeds and the exact baseline above. Quote trimmed \texttt{sim.log} excerpts (Appendix E).}
+\begin{table}[!htbp]
+  \centering
+  \caption{Baseline đo kết quả và quy tắc đếm.}
+  \label{tab:res-baseline}
+  \begin{tabular}{L{4.6cm} L{8.7cm}}
+    \toprule
+    \textbf{Hạng mục} & \textbf{Giá trị / quy tắc} \\
+    \midrule
+    Simulator & Cadence Xcelium, UVM~1.2 \\
+    Seed & \texttt{SEED=1} cho mọi test \\
+    Bộ test & 80 Virtual Sequence (\cref{tab:vseq-cat}), một test class duy nhất \\
+    Tiêu chí PASS & Simulation hoàn tất, zero \texttt{UVM\_ERROR}/\texttt{UVM\_FATAL} \\
+    Quy mô RTL & 18 file, 5.121 dòng (\texttt{src/rtl}) \\
+    Quy mô môi trường UVM & 136 file, 29.017 dòng (\texttt{src/verification/uvm\_i3c}) \\
+    Quy tắc đếm dòng & \texttt{wc -l}, gồm chú thích và dòng trắng \\
+    Coverage & \texttt{COV=1}, merge 80 test, trích xuất qua UCIS \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-\tabph{Regression pass/fail matrix}{sim logs --- AFTER SIMS}
+Trong 29.017 dòng của môi trường kiểm chứng, thư viện Virtual Sequence chiếm 11.971 dòng và các
+checker SVA chiếm 7.287 dòng. Môi trường lớn gấp khoảng năm lần rưỡi RTL --- một tỷ lệ phản ánh đúng
+trọng tâm của khóa luận: phần lớn công sức nằm ở việc chứng minh thiết kế đúng, không chỉ ở việc làm
+cho thiết kế chạy.
 
-\section{Waveform evidence}
-\brief{AFTER SIMS. Annotated waveforms for write, read, immediate, and CCC, cropped
-$\le \SI{5}{\micro\second}$ with TikZ overlay arrows on START/ACK/T-Bit/OD-to-PP/STOP.}
+\section{Kết quả regression}
+\label{sec:res-regression}
 
-\figph{Annotated waveforms (write + read)}{canonical SDR transactions, annotated}
-  {SimVision --- AFTER SIMS}{SimVision PDF/PNG}
+Toàn bộ 80 Virtual Sequence PASS với \texttt{SEED=1}: không có \texttt{UVM\_ERROR},
+\texttt{UVM\_FATAL} hay assertion fail nào trong mọi log. \Cref{tab:res-regression} phân rã kết quả
+theo mười nhóm kịch bản của \cref{tab:vseq-cat}; trích đoạn log và bảng tổng kết regression được đặt
+tại \cref{app:regression}.
 
-\section{Functional coverage}
-\brief{Report the implemented functional coverage: run \texttt{COV=1} and present the covergroup results
-(per-coverpoint + cross hit percentages) with the Xcelium IMC screenshot. State that this is the implemented
-subset and that full-protocol coverage closure is the planned extension (\cref{ch:conclusion}).}
+\begin{table}[!htbp]
+  \centering
+  \caption{Kết quả regression theo nhóm kịch bản (\texttt{SEED=1}).}
+  \label{tab:res-regression}
+  \begin{tabular}{L{3.4cm} C{2.2cm} C{2.2cm} L{5.2cm}}
+    \toprule
+    \textbf{Nhóm} & \textbf{Số test} & \textbf{PASS} & \textbf{Phạm vi chính} \\
+    \midrule
+    Bus            & 11 & 11 & PHY, START/Sr/STOP, timing SCL \\
+    CSR            & 14 & 14 & Default, DAT, staging, reset \\
+    FIFO           & 5  & 5  & Biên full/empty, thứ tự, wrap \\
+    SDR write      & 5  & 5  & Nominal, độ dài, back-to-back \\
+    SDR read       & 6  & 6  & Nominal, độ dài, kết thúc sớm \\
+    Immediate Data & 4  & 4  & DTT, payload trong Descriptor \\
+    CCC            & 5  & 5  & ENEC/DISEC, frame mở đầu ENTDAA \\
+    DAA            & 6  & 6  & Vòng ENTDAA, reject, biên DAT \\
+    I\textsuperscript{2}C & 3 & 3 & Read/write Fast Mode \\
+    Response/error & 21 & 21 & NACK, overflow, abort, reset \\
+    \midrule
+    \textbf{Tổng} & \textbf{80} & \textbf{80} & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-\figph{Coverage screenshot}{covergroup/functional coverage summary}
-  {Xcelium IMC --- AFTER COV RUN}{screenshot}
+Ngoài 80 test trên, ràng buộc độ sâu của \texttt{sync\_fifo} được bảo đảm bằng một assertion tại
+thời điểm elaboration trong chính RTL: cấu hình độ sâu không phải lũy thừa của 2 làm elaboration
+dừng với thông báo fatal định trước, nên mọi lần compile thành công của regression đồng thời là
+bằng chứng cho hợp đồng tham số này.
 
-\section{Comparison with CHIPS Alliance reference}
-\brief{Evaluate the qualitative design decisions introduced in Chapter~3 using the quantitative metrics
-and verified feature evidence from this chapter. State that all \FlowStateCount{} \texttt{flow_active}
-states are implemented and attribute the exact reference commit.}
+Kết quả 80/80 cần được đọc kèm hai lưu ý. Thứ nhất, mỗi kịch bản có đúng một mục tiêu và phần kiểm
+tra nằm ở Scoreboard và SVA dùng chung, nên một lần PASS là kết luận đồng thời của cả ba cơ chế kiểm
+tra chứ không phải của điều kiện tự viết trong test. Thứ hai, PASS với một seed cố định chỉ chứng
+minh các hành vi đã được kích hoạt là đúng; mức độ đầy đủ của việc kích hoạt được đo riêng bằng
+Functional Coverage ở \cref{sec:res-coverage}.
 
-\tabph{Reference comparison}{pinned source revisions + verified results}
+\section{Bằng chứng waveform}
+\label{sec:res-waveform}
 
-\section{Evaluation against requirements}
-\brief{Close the loop against the functional, performance, and verification requirements defined in
-Chapter~2. Mark each requirement met, partially met, or not demonstrated, and cite the regression,
-waveform, coverage, or implementation evidence in this chapter. Defer the interpretation of remaining
-limitations and the roadmap to \cref{ch:conclusion}.}
+Các giao dịch tiêu biểu được kiểm tra trực quan bằng SimVision trên waveform dump của những lần chạy
+với \texttt{DUMP\_WAVES=1}, nhằm xác nhận rằng chuỗi sự kiện trên SDA/SCL khớp với mô tả giao thức ở
+\cref{ch:background-requirements}: START và Address Header phát ở pha Open Drain, payload SDR truyền
+ở pha Push-Pull, T-Bit kết thúc mỗi byte, và STOP trả bus về trạng thái nghỉ.
+\Cref{fig:res-wave-write} và \cref{fig:res-wave-read} minh họa hai giao dịch private transfer;
+\cref{fig:res-wave-write} đồng thời cho thấy điểm chuyển Open Drain sang Push-Pull mà
+\cref{sec:rtl-controller-active} mô tả ở mức RTL.
+
+% PLACEHOLDER — ảnh chụp SimVision từ waves/wave_i3c_write_vseq (SHM có sẵn dưới src/verification/waves/).
+\begin{figure}[!htbp]
+  \centering
+  \fbox{\parbox[c][5.2cm][c]{0.92\textwidth}{\centering\itshape
+    [Hình chờ bổ sung]\\
+    Waveform SimVision: giao dịch SDR private write\\
+    (START, Address Header + ACK ở pha Open Drain; payload + T-Bit ở pha Push-Pull; STOP;\\
+    kèm chú thích \texttt{sel\_od\_pp} và thời điểm ghi Response Descriptor).}}
+  \caption{Waveform giao dịch SDR private write.}
+  \label{fig:res-wave-write}
+\end{figure}
+
+% PLACEHOLDER — ảnh chụp SimVision từ waves/wave_i3c_read_vseq.
+\begin{figure}[!htbp]
+  \centering
+  \fbox{\parbox[c][5.2cm][c]{0.92\textwidth}{\centering\itshape
+    [Hình chờ bổ sung]\\
+    Waveform SimVision: giao dịch SDR private read\\
+    (Target phát dữ liệu, Controller kết thúc theo độ dài yêu cầu qua T-Bit;\\
+    kèm chú thích dữ liệu ghi vào RX Data Buffer).}}
+  \caption{Waveform giao dịch SDR private read.}
+  \label{fig:res-wave-read}
+\end{figure}
+
+Bằng chứng waveform mang tính minh họa và phục vụ debug; nó không thay thế cơ chế kiểm tra tự động.
+Mọi thuộc tính quan sát được trên các hình này --- thứ tự pha, ACK/NACK, T-Bit, nội dung payload ---
+đều đã được Scoreboard hoặc SVA kiểm tra trong mọi lần chạy, kể cả khi không dump waveform.
+
+\section{Kết quả Functional Coverage và SVA}
+\label{sec:res-coverage}
+
+\subsection{Functional Coverage}
+
+Sau khi merge 80 test, mô hình coverage ba lớp ghi nhận 1.324 trên 1.639 bin, đạt 80,8\% tổng thể.
+\Cref{tab:res-cov} phân rã theo ba coverage component của \cref{sec:ver-cov}; trong 42 covergroup
+của toàn mô hình, 19 covergroup đạt 100\%.
+
+\begin{table}[!htbp]
+  \centering
+  \caption{Kết quả Functional Coverage theo component (merge 80 test).}
+  \label{tab:res-cov}
+  \begin{tabular}{L{5.2cm} C{2.6cm} C{2.6cm} C{2.4cm}}
+    \toprule
+    \textbf{Component} & \textbf{Bin covered} & \textbf{Tổng bin} & \textbf{Tỷ lệ} \\
+    \midrule
+    \texttt{reg\_coverage}            & 622   & 710   & 87,6\% \\
+    \texttt{i3c\_coverage}            & 147   & 169   & 87,0\% \\
+    \texttt{i3c\_correlated\_coverage} & 555   & 760   & 73,0\% \\
+    \midrule
+    \textbf{Tổng} & \textbf{1.324} & \textbf{1.639} & \textbf{80,8\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% PLACEHOLDER — ảnh chụp phần đầu coverage_report.txt hoặc giao diện IMC trên cov_work.
+\begin{figure}[!htbp]
+  \centering
+  \fbox{\parbox[c][4.6cm][c]{0.92\textwidth}{\centering\itshape
+    [Hình chờ bổ sung]\\
+    Ảnh chụp tổng kết Functional Coverage sau khi merge 80 test\\
+    (tỷ lệ theo covergroup của ba coverage component).}}
+  \caption{Tổng kết Functional Coverage sau khi merge regression.}
+  \label{fig:res-cov}
+\end{figure}
+
+Đúng như nguyên tắc đã nêu ở \cref{sec:ver-cov}, con số tổng chỉ có ý nghĩa khi đi kèm phân tích
+uncovered bin. Phân bố cho thấy phần thiếu hụt tập trung vào các cross lớn của lớp correlated, trong
+khi các coverpoint thành phần của chính những covergroup đó đã đạt 100\%. Ba ví dụ tiêu biểu:
+
+\begin{itemize}
+  \item \texttt{cg\_command\_boundary} đạt 30,1\%: các coverpoint về lớp lệnh trước, lệnh sau và
+  loại điểm biên đều đạt 100\%, nhưng cross 80 bin giữa ba chiều này mới ghi nhận 15 tổ hợp ---
+  phần lớn tổ hợp đòi hỏi hai lệnh thuộc hai lớp cụ thể nối tiếp nhau tại một điểm biên cụ thể,
+  điều mà thư viện kịch bản hiện tại chưa dàn dựng đủ;
+  \item \texttt{cg\_recovery} đạt 38,2\%: cross 60 bin giữa nguồn gây gián đoạn, lớp lệnh bị gián
+  đoạn và lớp lệnh phục hồi mới đạt 13 tổ hợp, vì mỗi tổ hợp cần một kịch bản lỗi--phục hồi riêng;
+  \item \texttt{cg\_short\_read\_boundary} đạt 55,9\%: cross giữa cờ \texttt{sre}, \texttt{wroc}
+  và vị trí biên short read còn thiếu các tổ hợp hiếm của hai cờ này.
+\end{itemize}
+
+Cách đọc này cho một kết luận cân bằng: các luồng nominal và các quan hệ hai chiều đã được bao phủ
+gần đủ (hai lớp coverage quan sát trực tiếp đều đạt xấp xỉ 87\%), phần còn thiếu chủ yếu là tổ hợp
+bậc ba của những tình huống lỗi chồng lỗi. Đóng phần coverage này đòi hỏi bổ sung kịch bản có chủ
+đích, và một phần tổ hợp cần được rà soát khả năng xảy ra để loại trừ có căn cứ thay vì cố kích
+hoạt; cả hai việc được xếp vào hướng phát triển ở \cref{ch:conclusion}.
+
+\subsection{Kết quả SVA}
+
+Trên toàn bộ regression, 145 instance checker SVA (chín checker gắn bằng \texttt{bind} nhân bản
+theo số instance của module đích, cùng checker pad model trong Testbench) ghi nhận 411 assertion và
+590 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
+
+\begin{table}[!htbp]
+  \centering
+  \caption{Kết quả SVA trên toàn bộ regression (merge 80 test).}
+  \label{tab:res-sva}
+  \begin{tabular}{L{5.2cm} C{2.6cm} C{2.6cm} C{2.4cm}}
+    \toprule
+    \textbf{Hạng mục} & \textbf{Đạt} & \textbf{Tổng} & \textbf{Tỷ lệ} \\
+    \midrule
+    Assertion pass (đã kích hoạt) & 404 & 411 & 98,3\% \\
+    Assertion fail                & 0   & 411 & 0\% \\
+    Cover property hit            & 577 & 590 & 97,8\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Không assertion nào fail và không assertion nào chỉ pass rỗng (vacuous). Bảy assertion cùng 13 cover
+property chưa từng được kích hoạt; nhờ quy ước mỗi assertion có cover property đối ứng
+(\cref{sec:ver-sva}), các trường hợp này được phát hiện tường minh thay vì bị đếm nhầm thành pass.
+Phân tích cho thấy chúng rơi vào ba nhóm tình huống mà thư viện stimulus hiện chưa tạo ra: chuỗi
+lệnh continuation với \texttt{toc=0} nối nhiều Command Descriptor trong một khung bus duy nhất;
+backpressure giữ nguyên dữ liệu ghi trên cổng Command Queue khi queue đầy; và tổ hợp thời điểm
+chuyển quyền lái SDA trùng đúng một chu kỳ trên pad model. Đây là gap về stimulus, không phải bằng
+chứng lỗi thiết kế, nhưng chúng đánh dấu chính xác các hành vi chưa được chứng minh và được ghi
+nhận vào danh sách hạn chế ở \cref{ch:conclusion}.
+
+\section{Quy mô hiện thực và so sánh với thiết kế tham chiếu}
+\label{sec:res-size}
+
+RTL của khóa luận gồm 18 file với tổng cộng 5.121 dòng, phân bố theo phân hệ như
+\cref{tab:res-loc}. Khối điều khiển giao thức chiếm ba phần tư quy mô, trong đó riêng
+\texttt{flow\_active} --- FSM trung tâm ở \cref{sec:rtl-flow-active} --- chiếm 1.794 dòng, phản ánh
+đúng vị trí hội tụ độ phức tạp mà \cref{ch:architecture} đã phân tích.
+
+\begin{table}[!htbp]
+  \centering
+  \caption{Quy mô RTL theo phân hệ.}
+  \label{tab:res-loc}
+  \begin{tabular}{L{5.0cm} C{2.0cm} C{2.4cm} L{3.8cm}}
+    \toprule
+    \textbf{Phân hệ} & \textbf{Số file} & \textbf{Số dòng} & \textbf{Thành phần chính} \\
+    \midrule
+    Điều khiển giao thức (\texttt{ctrl}) & 12 & 3.997 & \texttt{flow\_active} (1.794) \\
+    Top-level và package               & 2  & 460   & \texttt{i3c\_controller\_top} \\
+    CSR                                & 1  & 368   & \texttt{csr\_registers} \\
+    Queue (\texttt{hci})               & 2  & 241   & \texttt{sync\_fifo} \\
+    PHY                                & 1  & 55    & \texttt{i3c\_phy} \\
+    \midrule
+    \textbf{Tổng} & \textbf{18} & \textbf{5.121} & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Để định lượng nhận định ``đường điều khiển gọn hơn'' ở \cref{sec:arch-reference}, cùng quy tắc đếm
+được áp dụng cho thiết kế tham chiếu CHIPS Alliance \texttt{i3c-core}~\cite{chipsalliance_i3c} tại
+một commit cố định (\texttt{f8ea634}, 2026-06-08): đếm mọi file \texttt{.sv}/\texttt{.svh} dưới
+\texttt{src/}, loại ba file mô hình UVM và covergroup sinh tự động vì chúng thuộc phía kiểm chứng.
+\Cref{tab:res-compare} đối chiếu theo phân hệ.
+
+\begin{table}[!htbp]
+  \centering
+  \caption{So sánh quy mô RTL với thiết kế tham chiếu (số dòng, cùng quy tắc đếm).}
+  \label{tab:res-compare}
+  \begin{tabular}{L{5.6cm} C{3.2cm} C{2.6cm}}
+    \toprule
+    \textbf{Phân hệ} & \textbf{\texttt{i3c-core}} & \textbf{Khóa luận} \\
+    \midrule
+    CSR / register file              & 14.297 & 368 \\
+    Điều khiển giao thức             & 13.842 & 3.997 \\
+    HCI / queue / bus adapter        & 2.674  & 241 \\
+    Top-level, package, wrapper      & 2.304  & 460 \\
+    PHY                              & 119    & 55 \\
+    Recovery và thư viện primitives  & 4.961  & --- \\
+    \midrule
+    \textbf{Tổng} & \textbf{38.197} & \textbf{5.121} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% PLACEHOLDER — biểu đồ cột so sánh số dòng theo phân hệ, vẽ từ số liệu tab:res-compare.
+\begin{figure}[!htbp]
+  \centering
+  \fbox{\parbox[c][4.6cm][c]{0.92\textwidth}{\centering\itshape
+    [Hình chờ bổ sung]\\
+    Biểu đồ so sánh quy mô RTL theo phân hệ giữa \texttt{i3c-core} và thiết kế của khóa luận\\
+    (dựng từ số liệu \cref{tab:res-compare}).}}
+  \caption{So sánh quy mô hiện thực với thiết kế tham chiếu.}
+  \label{fig:res-compare}
+\end{figure}
+
+Thiết kế của khóa luận bằng khoảng 13,4\% quy mô thiết kế tham chiếu, tương ứng mức giảm xấp xỉ
+86,6\%. Con số này cần được diễn giải thận trọng: hai thiết kế không cùng phạm vi chức năng.
+\texttt{i3c-core} hỗ trợ thêm Target mode, In-Band Interrupt, luồng recovery và các adapter
+AXI/AHB, nên phần giảm trước hết đến từ việc thu hẹp phạm vi có chủ đích ở \cref{sec:req-oos}.
+Phần còn lại đến từ hai quyết định hiện thực: register file viết tay 368 dòng thay cho khối CSR
+sinh tự động hơn 14 nghìn dòng, và giao diện thanh ghi 32-bit trực tiếp thay cho các adapter bus
+hệ thống. Vì vậy, bảng so sánh là bằng chứng cho luận điểm về tính đọc được và chi phí duy trì của
+một IP phạm vi hẹp, không phải một tuyên bố về chất lượng tương đối giữa hai thiết kế.
+
+\section{Đánh giá theo yêu cầu}
+\label{sec:res-eval}
+
+Khép lại chương, \cref{tab:res-req} đối chiếu từng yêu cầu chức năng F1--F10 ở \cref{tab:req-func}
+với bằng chứng kiểm chứng tương ứng, theo khung ánh xạ đã lập ở \cref{tab:req-ver-map}. Mọi yêu cầu
+chức năng đều có nhóm test PASS và coverage tương ứng; các phần coverage chưa đóng đã được định
+danh cụ thể ở \cref{sec:res-coverage}.
+
+\begin{table}[!htbp]
+  \centering
+  \caption{Đối chiếu yêu cầu chức năng với bằng chứng kiểm chứng.}
+  \label{tab:res-req}
+  \begin{tabular}{C{1.4cm} L{5.4cm} L{6.5cm}}
+    \toprule
+    \textbf{Yêu cầu} & \textbf{Bằng chứng regression} & \textbf{Bằng chứng coverage} \\
+    \midrule
+    F1--F2 & 11 test SDR write/read PASS & Private transfer correlation 95,2\%; T-Bit và read-end 100\% \\
+    F3 & 4 test Immediate Data PASS & Immediate transfer 100\% \\
+    F4 & 5 test CCC PASS & CCC response 100\%; CCC opcode/frame 88,9\% \\
+    F5 & 6 test DAA PASS & DAA result response và biên DAT; vòng lặp còn tổ hợp chưa đóng \\
+    F6 & 3 test I\textsuperscript{2}C PASS & I\textsuperscript{2}C ACK 100\%; vị trí NACK 80,6\% \\
+    F7 & 14 test CSR + 5 test FIFO PASS & Register access 99,5\%; timing CSR 100\% \\
+    F8 & Kiểm tra Response trong mọi test & Response status cross 100\%; Response Descriptor 100\% \\
+    F9 & 21 test response/error PASS & Abort/recovery: nominal đủ, cross bậc ba chưa đóng \\
+    F10 & Test timing CSR và bus timing PASS & Timing CSR 100\%; cover property timing HIT \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Về các chỉ tiêu P1--P5 ở \cref{tab:req-perf}: Testbench vận hành DUT với clock chu kỳ 3~ns tương
+ứng 333~MHz (P1); tần số SCL cấu hình qua timing CSR được kiểm tra bằng nhóm test bus timing đo
+trực tiếp độ rộng pha thấp/cao của SCL trên waveform (P2, P3); biên DAT 32 mục được kiểm tra bằng
+kịch bản DAA chạm biên bảng (P4); và toàn bộ truy cập phần mềm trong mọi test đi qua giao diện
+thanh ghi dữ liệu 32-bit (P5). Cần lưu ý ranh giới của các bằng chứng này: chúng là kết quả
+simulation ở mức RTL, xác nhận tính đúng chức năng và quan hệ timing theo chu kỳ clock; khóa luận
+không có dữ liệu synthesis hay timing closure vật lý, đúng như phạm vi tại \cref{tab:req-oos}.
+
+Tổng hợp lại, thiết kế đáp ứng đầy đủ mười yêu cầu chức năng và năm chỉ tiêu cấu hình trong phạm vi
+bằng chứng simulation: 80/80 test PASS, không assertion nào fail trên 411 assertion, và mô hình
+coverage ba lớp đạt 80,8\% với phần chưa đóng đã được định danh và phân loại. Những giới hạn còn
+lại của bộ bằng chứng --- coverage chưa closure, bảy assertion chưa kích hoạt, và việc thiếu dữ
+liệu hậu synthesis --- được tổng kết thành hạn chế và hướng phát triển ở \cref{ch:conclusion}.

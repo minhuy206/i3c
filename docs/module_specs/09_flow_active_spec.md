@@ -441,7 +441,7 @@ stateDiagram-v2
     accept, drive NACK in that byte's controller-owned ACK/NACK slot, then STOP.
     The rejected DWORD is not stored, while response `data_length` includes all bytes
     received through that rejected commit boundary.
-  - When `data_length` is reached successfully: → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`; target early termination (T-bit=0 before the requested length) always → `WriteResp` with `I3cShortReadErr`
+  - When `data_length` is reached successfully: → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`. Target early termination (T-bit=0 before the requested length, latched as `short_read_q`) always forces STOP and ends the transfer — no `toc=0` continuation is taken regardless of the next command, even when `sre=0`. Whether the termination is *reported* as an error is a separate, `sre`-gated decision (`short_read_error = short_read_q && reg_desc.sre`, §5.4): with `sre=1` → `WriteResp` with `I3cShortReadErr`; with `sre=0` the same termination is not an error — → `WriteResp` with `Success` if `wroc=1`, or → `Idle` with no response at all if `wroc=0`
   - **Controller read takeover / abort (MIPI I3C Basic v1.1.1 §5.1.2.3.4):** once the
     target has ACKed a read address it drives SDA push-pull, so the controller may only
     retake the bus at a **T-Bit** (9th bit), where the target parks SDA to High-Z. The
@@ -546,7 +546,7 @@ function automatic i3c_resp_err_status_e map_resp_err_status();
     return Nack;
   end else if (rx_overflow_q || tx_underflow_q) begin
     return Ovl;
-  end else if (short_read_q) begin
+  end else if (short_read_error) begin
     return I3cShortReadErr;
   end else if (not_supported_q) begin
     return NotSupported;
@@ -562,7 +562,7 @@ endfunction
 - `data_nack_q` — an I2C data byte was NACKed (set only on I2C regular-write/immediate data-byte NACK) → `I2cDataNackOrI3cBusAborted` (4'b1001), **not** `Nack`
 - `daa_nack_error_q` — ENTDAA address-assignment attempt was rejected after retry (from `daa_nack_error_i`) → `Nack` (4'b0101); this is the only path that emits `Nack`
 - `rx_overflow_q` / `tx_underflow_q` → `Ovl`
-- `short_read_q` → `I3cShortReadErr`
+- `short_read_error` (= `short_read_q && reg_desc.sre`) — target early termination (T-bit=0) is reported as an error only when `sre=1` → `I3cShortReadErr`; `short_read_q` alone always ends the transfer (STOP, no continuation), but with `sre=0` it is not an error — completion is `Success` (or no response at all if `wroc=0`)
 - `not_supported_q` → `NotSupported`
 - `hc_aborted_q` → `HcAborted`
 - none of the above → `Success`
@@ -624,7 +624,7 @@ end
 | DAA address-assignment reject | ENTDAA device address attempt NACKed after retry (`daa_nack_error_i`/`daa_nack_error_q`) | `Nack` |
 | TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
 | RX overflow      | RX FIFO cannot accept received data or DAA result data | `Ovl`            |
-| Short read       | Target drives T-bit=0 before all requested bytes sent  | `I3cShortReadErr`|
+| Short read       | Target drives T-bit=0 before all requested bytes sent and descriptor `sre=1` | `I3cShortReadErr`|
 | HC abort (I3C read) | `abort_i` during an I3C read; terminate at next T-Bit via Repeated START (T=1) or STOP (T=0) | `HcAborted` |
 | HC abort (I2C read) | `abort_i` during an I2C read; finish current byte, drive controller NACK on the ACK/NACK bit, then STOP | `HcAborted` |
 | ENTDAA no device | `ccc_done_i` with zero `daa_address_valid_i` pulses    | `Success`, length 0 |
@@ -649,7 +649,7 @@ end
 14. **RX FIFO overflow:** Large read with full RX FIFO; verify response `Ovl`
 15. **ENTDAA RX FIFO overflow:** One target joins ENTDAA while RX FIFO has only 0, 1, or 2 free DWORD entries for the 3-DWORD DAA result; verify committed DAA result words are preserved, the first uncommitted word is dropped only at the overflow boundary, response is `Ovl`, and length reflects committed DAA result bytes
 16. **Address NACK:** Target NACKs address; verify `AddrHeader` error in response
-17. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` in response
+17. **Short read:** Target terminates early (T-bit=0); verify `I3cShortReadErr` when `sre=1`, and normal WROC policy when `sre=0`
 18. **OD/PP switching:** Verify Open-Drain for address/ACK, Push-Pull for I3C data
 19. **RESP FIFO backpressure:** Fill RESP, complete both a successful `wroc=1` command and an error-producing `wroc=0` command, then release one slot; verify `WriteResp` and descriptor stability while blocked, preserved FIFO contents, and exactly one appended response after release
 20. **WROC policy:** For regular, immediate, and immediate-CCC commands, verify successful `wroc=0` completion suppresses RESP, `wroc=1` writes RESP, errors override `wroc=0`, and a `wroc=0` continuation runs while RESP is full

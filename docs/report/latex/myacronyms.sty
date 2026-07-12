@@ -1,32 +1,45 @@
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{myacronyms}[2026/06/25 I3C thesis acronyms]
+\ProvidesPackage{myacronyms}[2026/07/04 I3C thesis acronyms]
 
 \RequirePackage[acronym,toc]{glossaries}
 \makeglossaries
 
-% Populated from docs/report/thesis_writing_plan.md §10 / Appendix H glossary.
-\newacronym{daa}{DAA}{Dynamic Address Assignment}
-\newacronym{entdaa}{ENTDAA}{Enter Dynamic Address Assignment (CCC 0x07)}
-\newacronym{ccc}{CCC}{Common Command Code}
-\newacronym{sdr}{SDR}{Single Data Rate Mode}
-\newacronym{hdr}{HDR}{High Data Rate Mode}
+% ---- Protocol / bus terms (MIPI I3C Basic v1.1.1) ----
+\DeclareRobustCommand{\iic}{I\textsuperscript{2}C}
+\newacronym{soc}{SoC}{System-on-Chip}
+\newacronym{iot}{IoT}{Internet of Things}
+\newacronym{iic}{\iic{}}{Inter-Integrated Circuit}
+\newacronym{i3c}{I3C}{Improved Inter-Integrated Circuit}
+\newacronym{sdr}{SDR}{Single Data Rate}
+\newacronym{hdr}{HDR}{High Data Rate}
 \newacronym{od}{OD}{Open Drain}
 \newacronym{pp}{PP}{Push-Pull}
-\newacronym{tbit}{T-Bit}{Transition Bit}
-\newacronym{ack}{ACK}{Acknowledge}
-\newacronym{nack}{NACK}{Not-Acknowledge}
-\newacronym{rnw}{RnW}{Read/Write bit}
+\newacronym{ccc}{CCC}{Common Command Code}
+\newacronym{daa}{DAA}{Dynamic Address Assignment}
+\newacronym{entdaa}{ENTDAA}{Enter Dynamic Address Assignment}
+\newacronym{sr}{Sr}{Repeated START}
+\newacronym{rnw}{RnW}{Read-not-Write}
 \newacronym{ibi}{IBI}{In-Band Interrupt}
 \newacronym{pid}{PID}{Provisioned ID}
 \newacronym{bcr}{BCR}{Bus Characteristics Register}
 \newacronym{dcr}{DCR}{Device Characteristics Register}
+\newacronym{tbit}{T-Bit}{Transition Bit}
+\newacronym{ack}{ACK/NACK}{Acknowledge / Not-Acknowledge}
+
+% ---- HCI / interface terms ----
+\newacronym{hci}{HCI}{Host Controller Interface}
 \newacronym{dat}{DAT}{Device Address Table}
 \newacronym{dct}{DCT}{Device Characteristics Table}
-\newacronym{hci}{HCI}{Host Controller Interface}
-\newacronym{uvm}{UVM}{Universal Verification Methodology}
-\newacronym{tlm}{TLM}{Transaction-Level Modelling}
-\newacronym{sva}{SVA}{SystemVerilog Assertions}
-\newacronym{fsm}{FSM}{Finite-State Machine}
-\newacronym{csr}{CSR}{Control/Status Register}
-\newacronym{soc}{SoC}{System-on-Chip}
+\newacronym{csr}{CSR}{Control and Status Register}
+\newacronym{fifo}{FIFO}{First-In First-Out}
+
+% ---- Design / verification terms ----
 \newacronym{rtl}{RTL}{Register-Transfer Level}
+\newacronym{fsm}{FSM}{Finite-State Machine}
+\newacronym{hdl}{HDL}{Hardware Description Language}
+\newacronym{uvm}{UVM}{Universal Verification Methodology}
+\newacronym{tlm}{TLM}{Transaction-Level Modeling}
+\newacronym{sva}{SVA}{SystemVerilog Assertions}
+\newacronym{phy}{PHY}{Physical Layer}
+\newacronym{fm}{FM}{Fast Mode}
+\newacronym{fpga}{FPGA}{Field-Programmable Gate Array}

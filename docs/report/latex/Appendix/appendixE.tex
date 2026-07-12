@@ -1,0 +1,95 @@
+\chapter{Trích đoạn kết quả regression và coverage}
+\label{app:regression}
+
+% Nguồn: src/verification/logs/regression_summary.txt, logs/regression_results.tsv,
+%        coverage_report.txt, sva_coverage_report.txt.
+% TODO TRƯỚC KHI NỘP: thay các trích đoạn bằng kết quả của lần chạy cuối tại commit đóng băng.
+
+Phụ lục này trích các phần tổng kết từ những file kết quả gốc làm bằng chứng cho
+\cref{ch:results}. Các file đầy đủ được sinh trong \texttt{src/verification/} theo quy trình trong
+Makefile của thư mục này.
+
+\section*{Tổng kết regression}
+
+Bảng tổng kết và các dòng đầu của bảng kết quả theo từng test (\texttt{SEED=1}):
+
+\begin{lstlisting}
+Regression summary  (SEED=1)
+total=80  pass=80  fail=0  error=0
+
+seq                                 status  uvm_err  uvm_fatal
+csr_reset_defaults_vseq             PASS    0        0
+csr_enable_disable_vseq             PASS    0        0
+csr_broadcast_header_control_vseq   PASS    0        0
+csr_timing_rw_vseq                  PASS    0        0
+...                                 (76 test tiep theo deu PASS)
+\end{lstlisting}
+
+Phần tổng kết UVM ở cuối log của một test đạt có dạng:
+
+\begin{lstlisting}
+--- UVM Report Summary ---
+** Report counts by severity
+UVM_INFO    :   56
+UVM_WARNING :    0
+UVM_ERROR   :    0
+UVM_FATAL   :    0
+\end{lstlisting}
+
+\section*{Tổng kết Functional Coverage}
+
+Phần đầu của report trích xuất từ coverage database qua UCIS sau khi merge 80 test:
+
+\begin{lstlisting}
+I3C Functional Coverage Report
+Tests analysed : 80
+Total bins     : 1639
+Covered bins   : 1324
+Overall        : 80.8%
+\end{lstlisting}
+
+Với mỗi coverpoint và cross, report liệt kê từng bin kèm số lần hit và số test kích hoạt, ví dụ:
+
+\begin{lstlisting}
+Covergroup : i3c_correlated_coverage::cg_abort_response
+Coverpoint : cp_response
+Coverage   : 6/6  (100.0%)
+  [HIT ] hc_aborted           count=  30  in 6 test(s)
+  [HIT ] nack                 count=  17  in 6 test(s)
+  [HIT ] not_supported        count=   5  in 2 test(s)
+  [HIT ] overflow             count=   1  in 1 test(s)
+  [HIT ] short_or_bus_abort   count=  17  in 3 test(s)
+  [HIT ] success              count=   2  in 1 test(s)
+\end{lstlisting}
+
+\section*{Tổng kết SVA}
+
+Phần đầu của report SVA tổng hợp trên cùng coverage database:
+
+\begin{lstlisting}
+I3C SVA Coverage Report
+Tests analysed   : 80
+Assertions       : 411
+  PASS           : 404
+  VACUOUS        : 0
+  FAIL           : 0
+  MISS           : 7
+  Closure        : 98.3%
+Cover properties : 590
+  HIT            : 577
+  MISS           : 13
+  Closure        : 97.8%
+\end{lstlisting}
+
+Bảy assertion trạng thái \texttt{MISS} (chưa từng được kích hoạt) được phân tích tại
+\cref{sec:res-coverage}:
+
+\begin{lstlisting}
+ap_cmd_wdata_stable_until_ready
+ap_sdr_write_no_cmd_pop_except_continuation
+ap_sdr_read_abort_toc0_blocks_continuation
+ap_toc0_unsupported_continuation_not_supported_resp
+ap_wroc1_continuation_waits_for_resp_ready
+ap_i2c_never_enters_broadcast_header
+ap_pad_model_turnaround_overlap_one_cycle
+\end{lstlisting}

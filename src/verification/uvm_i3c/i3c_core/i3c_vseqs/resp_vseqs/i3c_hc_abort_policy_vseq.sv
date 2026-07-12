@@ -13,19 +13,24 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
 
   virtual task body();
     run_idle_prebus_holdoff_case();
-    run_ccc_abort_case(1'b0);
-    run_ccc_abort_case(1'b1);
-    run_addr_nack_priority_case();
+    run_ccc_abort_case(1'b0, ENEC, 4'h2);
+    run_ccc_abort_case(1'b1, ENEC, 4'h3);
+    run_ccc_abort_case(1'b0, DISEC, 4'h5);
+    run_ccc_abort_case(1'b1, DISEC, 4'h6);
+    run_addr_nack_priority_case(ENEC, 4'h4);
+    run_addr_nack_priority_case(DISEC, 4'h7);
   endtask
 
-  virtual function immediate_data_trans_desc_t make_ccc_cmd(bit direct, bit [3:0] tid);
+  virtual function immediate_data_trans_desc_t make_ccc_cmd(bit direct, bit [3:0] tid,
+                                                            i3c_ccc_e operation = ENEC);
     immediate_data_trans_desc_t ccc_cmd;
 
     ccc_cmd                   = '0;
     ccc_cmd.attr              = ImmediateDataTransfer;
     ccc_cmd.tid               = tid;
     ccc_cmd.cp                = 1'b1;
-    ccc_cmd.cmd               = direct ? DIR_ENEC : ENEC;
+    ccc_cmd.cmd               = (operation == DISEC) ? (direct ? DIR_DISEC : DISEC) :
+                                                       (direct ? DIR_ENEC : ENEC);
     ccc_cmd.mode              = sdr0;
     ccc_cmd.dtt               = 3'd4;
     ccc_cmd.rnw               = 1'b0;
@@ -37,12 +42,12 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
   endfunction
 
   virtual function i3c_device_response_seq make_ccc_device(string name, bit direct,
-                                                           bit ack_broadcast_header = 1'b1);
+                                                           bit broadcast_header_nack = 1'b0);
     i3c_device_response_seq dev_seq;
 
     dev_seq             = i3c_device_response_seq::type_id::create(name);
     dev_seq.target_addr = 7'h7e;
-    dev_seq.ack_address = ack_broadcast_header;
+    dev_seq.addr_nack = broadcast_header_nack;
     dev_seq.is_i3c      = 1'b1;
     dev_seq.dir         = 1'b0;
     if (direct) begin
@@ -53,10 +58,10 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
   endfunction
 
   virtual task run_idle_prebus_holdoff_case();
-    immediate_data_trans_desc_t ccc_cmd;
-    i3c_device_response_seq     dev_seq;
-    bit                  [31:0] resp;
-    bit                         hold_window_done;
+    immediate_data_trans_desc_t        ccc_cmd;
+    i3c_device_response_seq            dev_seq;
+    bit                         [31:0] resp;
+    bit                                hold_window_done;
 
     enable_dut();
     write_dat_entry(0, 7'h50, TARGET_ADDR, 1'b0);
@@ -82,9 +87,9 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
     disable no_start_while_abort_held;
 
     `DV_CHECK_EQ(hdl_read_fifo_depth(cmd_paths.depth_path), 1,
-                 "ERR_009 idle/pre-bus: queued command must remain pending while abort is held")
+                     "ERR_009 idle/pre-bus: queued command must remain pending while abort is held")
     `DV_CHECK_EQ(hdl_read_fifo_depth(resp_paths.depth_path), 0,
-                 "ERR_009 idle/pre-bus: held command must not create a response")
+                     "ERR_009 idle/pre-bus: held command must not create a response")
 
     dev_seq = make_ccc_device("err009_idle_release_dev_seq", 1'b0);
     fork : idle_release_device
@@ -100,24 +105,23 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
     disable idle_release_device;
   endtask
 
-  virtual task run_ccc_abort_case(bit direct);
-    immediate_data_trans_desc_t ccc_cmd;
-    i3c_device_response_seq     dev_seq;
-    bit                  [31:0] resp;
-    bit                   [7:0] abort_phase;
-    string                      ctxt;
+  virtual task run_ccc_abort_case(bit direct, i3c_ccc_e operation, bit [3:0] tid);
+    immediate_data_trans_desc_t        ccc_cmd;
+    i3c_device_response_seq            dev_seq;
+    bit                         [31:0] resp;
+    bit                         [ 7:0] abort_phase;
+    string                             ctxt;
 
-    ctxt = $sformatf("ERR_009 %s CCC execution abort", direct ? "direct" : "broadcast");
-    // Assert during the controller's STOP phase, after the final event-byte T-bit has
-    // completed. This keeps the monitored CCC transaction structurally complete while
-    // still exercising the active IssueImmediateCcc abort path.
+    ctxt = $sformatf("ERR_009 %s %s CCC execution abort", operation.name(),
+                     direct ? "direct" : "broadcast");
     abort_phase = direct ? 8'd10 : 8'd7;
 
     enable_dut();
     write_dat_entry(0, 7'h50, TARGET_ADDR, 1'b0);
-    ccc_cmd = make_ccc_cmd(direct, direct ? 4'h3 : 4'h2);
-    dev_seq = make_ccc_device($sformatf("err009_%s_ccc_abort_dev_seq",
-                                       direct ? "direct" : "broadcast"), direct);
+    ccc_cmd = make_ccc_cmd(direct, tid, operation);
+    dev_seq = make_ccc_device(
+        $sformatf("err009_%s_%s_ccc_abort_dev_seq", operation.name(),
+                  direct ? "direct" : "broadcast"), direct);
 
     fork : ccc_abort_device
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -136,20 +140,21 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
     check_all_queues_empty(ctxt);
     disable ccc_abort_device;
 
-    run_ccc_recovery_case(direct);
+    run_ccc_recovery_case(direct, operation);
   endtask
 
-  virtual task run_addr_nack_priority_case();
-    immediate_data_trans_desc_t ccc_cmd;
-    i3c_device_response_seq     dev_seq;
-    bit                  [31:0] resp;
-    string                      ctxt;
+  virtual task run_addr_nack_priority_case(i3c_ccc_e operation, bit [3:0] tid);
+    immediate_data_trans_desc_t        ccc_cmd;
+    i3c_device_response_seq            dev_seq;
+    bit                         [31:0] resp;
+    string                             ctxt;
 
-    ctxt = "ERR_009 AddrHeader priority over HC abort";
+    ctxt = $sformatf("ERR_009 %s AddrHeader priority over HC abort", operation.name());
     enable_dut();
     write_dat_entry(0, 7'h50, TARGET_ADDR, 1'b0);
-    ccc_cmd = make_ccc_cmd(1'b0, 4'h4);
-    dev_seq = make_ccc_device("err009_addr_nack_priority_dev_seq", 1'b0, 1'b0);
+    ccc_cmd = make_ccc_cmd(1'b0, tid, operation);
+    dev_seq = make_ccc_device(
+        $sformatf("err009_%s_addr_nack_priority_dev_seq", operation.name()), 1'b0, 1'b1);
 
     fork : priority_device
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -172,20 +177,21 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
     check_all_queues_empty(ctxt);
     disable priority_device;
 
-    run_ccc_recovery_case(1'b0);
+    run_ccc_recovery_case(1'b0, operation);
   endtask
 
-  virtual task run_ccc_recovery_case(bit direct);
-    immediate_data_trans_desc_t ccc_cmd;
-    i3c_device_response_seq     dev_seq;
-    bit                  [31:0] resp;
-    string                      ctxt;
+  virtual task run_ccc_recovery_case(bit direct, i3c_ccc_e operation = ENEC);
+    immediate_data_trans_desc_t        ccc_cmd;
+    i3c_device_response_seq            dev_seq;
+    bit                         [31:0] resp;
+    string                             ctxt;
 
-    ctxt = $sformatf("ERR_009 %s CCC recovery without SW reset",
+    ctxt = $sformatf("ERR_009 %s %s CCC recovery without SW reset", operation.name(),
                      direct ? "direct" : "broadcast");
-    ccc_cmd = make_ccc_cmd(direct, direct ? 4'hD : 4'hC);
-    dev_seq = make_ccc_device($sformatf("err009_%s_ccc_recovery_dev_seq",
-                                       direct ? "direct" : "broadcast"), direct);
+    ccc_cmd = make_ccc_cmd(direct, direct ? 4'hD : 4'hC, operation);
+    dev_seq = make_ccc_device(
+        $sformatf("err009_%s_%s_ccc_recovery_dev_seq", operation.name(),
+                  direct ? "direct" : "broadcast"), direct);
 
     fork : ccc_recovery_device
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -200,8 +206,7 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
     disable ccc_recovery_device;
   endtask
 
-  virtual task wait_for_ccc_phase(bit [7:0] target_phase, string ctxt,
-                                  int unsigned timeout_cycles);
+  virtual task wait_for_ccc_phase(bit [7:0] target_phase, string ctxt, int unsigned timeout_cycles);
     uvm_hdl_data_t state_val;
     uvm_hdl_data_t phase_val;
 
@@ -213,8 +218,7 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
       if (!uvm_hdl_read(ISSUE_PHASE_PATH, phase_val)) begin
         `uvm_fatal(`gfn, $sformatf("%s: failed to read %s", ctxt, ISSUE_PHASE_PATH))
       end
-      if ((state_val[3:0] == FSM_ISSUE_IMMEDIATE_CCC) &&
-          (phase_val[7:0] == target_phase)) return;
+      if ((state_val[3:0] == FSM_ISSUE_IMMEDIATE_CCC) && (phase_val[7:0] == target_phase)) return;
     end
     `uvm_fatal(`gfn, $sformatf("%s: CCC phase %0d was not reached", ctxt, target_phase))
   endtask
@@ -244,8 +248,8 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
     `DV_CHECK_EQ(resp[15:0], data_length, $sformatf("%s: data length mismatch", ctxt))
   endfunction
 
-  virtual function void check_success_resp(bit [31:0] resp, bit [3:0] tid,
-                                           bit [15:0] data_length, string ctxt);
+  virtual function void check_success_resp(bit [31:0] resp, bit [3:0] tid, bit [15:0] data_length,
+                                           string ctxt);
     `DV_CHECK_EQ(resp[31:28], Success, $sformatf("%s: status mismatch", ctxt))
     `DV_CHECK_EQ(resp[27:24], tid, $sformatf("%s: TID mismatch", ctxt))
     `DV_CHECK_EQ(resp[23:16], 8'h00, $sformatf("%s: reserved bits must be zero", ctxt))

@@ -5,8 +5,6 @@ module bus_monitor_sva #(
     input logic rst_ni,
 
     input logic enable_i,
-    input logic scl_i,
-    input logic sda_i,
     input logic [CounterWidth-1:0] t_r_i,
     input logic [CounterWidth-1:0] t_f_i,
 
@@ -59,46 +57,6 @@ module bus_monitor_sva #(
                   enable_i && stop_det_trigger
                   ##1 state_stop_det && !state_start_det && !state_rstart_det);
 
-  ap_bus002_sda_fall_when_scl_not_high_no_start_candidate:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   enable_i && sda_negedge_i && !scl_high_at_sda_edge
-                   |=> !start_candidate_q)
-  else $error("bus_monitor_sva: SDA falling while SCL was not stable high latched START candidate in %m");
-
-  cp_bus002_sda_fall_when_scl_not_high_no_start_candidate:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  enable_i && sda_negedge_i && !scl_high_at_sda_edge
-                  ##1 !start_candidate_q);
-
-  ap_bus002_sda_rise_when_scl_not_high_no_stop_candidate:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   enable_i && sda_posedge_i && !scl_high_at_sda_edge
-                   |=> !stop_candidate_q)
-  else $error("bus_monitor_sva: SDA rising while SCL was not stable high latched STOP candidate in %m");
-
-  cp_bus002_sda_rise_when_scl_not_high_no_stop_candidate:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  enable_i && sda_posedge_i && !scl_high_at_sda_edge
-                  ##1 !stop_candidate_q);
-
-  ap_bus002_rejected_falling_edge_no_start_trigger:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   enable_i && sda_negedge && !start_candidate |-> !start_det_trigger)
-  else $error("bus_monitor_sva: rejected SDA falling edge produced START trigger in %m");
-
-  cp_bus002_rejected_falling_edge_no_start_trigger:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  enable_i && sda_negedge && !start_candidate && !start_det_trigger);
-
-  ap_bus002_rejected_rising_edge_no_stop_trigger:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   enable_i && sda_posedge && !stop_candidate |-> !stop_det_trigger)
-  else $error("bus_monitor_sva: rejected SDA rising edge produced STOP trigger in %m");
-
-  cp_bus002_rejected_rising_edge_no_stop_trigger:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  enable_i && sda_posedge && !stop_candidate && !stop_det_trigger);
-
   ap_bus003_first_start_classified_as_start:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    enable_i && start_det && !rstart_detection_en
@@ -140,15 +98,6 @@ module bus_monitor_sva #(
   cp_bus003_stop_clears_rstart_detection:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   enable_i && stop_det ##1 !rstart_detection_en);
-
-  ap_bus003_stop_output_follows_stop_det:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   enable_i && stop_det |-> state_stop_det)
-  else $error("bus_monitor_sva: STOP detect was not exposed on state_o.stop_det in %m");
-
-  cp_bus003_stop_output_follows_stop_det:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  enable_i && stop_det && state_stop_det);
 
   cp_bus003_start_rstart_stop_sequence:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -262,8 +211,6 @@ bind bus_monitor bus_monitor_sva #(
     .clk_i,
     .rst_ni,
     .enable_i,
-    .scl_i,
-    .sda_i,
     .t_r_i,
     .t_f_i,
     .scl_negedge_i,

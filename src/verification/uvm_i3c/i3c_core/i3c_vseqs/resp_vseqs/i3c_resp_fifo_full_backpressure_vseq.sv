@@ -18,7 +18,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
 
   virtual function transfer_stimulus_cfg_t make_write_cfg(string ctxt, string seq_name,
                                                            bit [3:0] tid,
-                                                           bit ack_address = 1'b1);
+                                                           bit addr_nack = 1'b0);
     return make_transfer_cfg(
         .ctxt(ctxt),
         .seq_name(seq_name),
@@ -26,8 +26,8 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(I3cAddr),
         .is_i3c(1'b1),
-        .ack_address(ack_address),
-        .ack_data(1'b1),
+        .addr_nack(addr_nack),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -136,6 +136,8 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     regular_trans_desc_t    cmd;
     i3c_response_desc_t     expected_desc;
     byte_queue_t            no_read_data;
+    byte_queue_t            exp_data;
+    word_queue_t            tx_words;
     i3c_device_response_seq dev_seq;
 
     configure_target();
@@ -151,7 +153,8 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     expected_desc.data_length = cmd.data_length;
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
-    write_tx_data(32'h0000_5AA5);
+    build_random_tx_words(cfg.data_length, exp_data, tx_words);
+    write_tx_words(tx_words);
     write_cmd(cmd[31:0], cmd[63:32]);
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     wait_for_flow_fsm_state(FSM_WRITE_RESP, cfg.ctxt, device_done_timeout_cycles(cfg));
@@ -166,23 +169,22 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     immediate_data_trans_desc_t cmd;
     i3c_response_desc_t         expected_desc;
     byte_queue_t                no_read_data;
+    byte_queue_t                random_data;
     i3c_device_response_seq     dev_seq;
 
     configure_target();
     prefill_resp_fifo(8'h82, "ERR_008 wroc=0 error override");
 
     cfg                   = make_write_cfg("ERR_008 wroc=0 error override",
-                                           "err008_error_dev_seq", 4'h9, 1'b0);
+                                           "err008_error_dev_seq", 4'h9, 1'b1);
     cmd                   = '0;
     cmd.attr              = ImmediateDataTransfer;
     cmd.tid               = cfg.tid;
     cmd.mode              = sdr0;
-    cmd.dtt               = 3'd2;
     cmd.dev_idx           = 5'd0;
     cmd.toc               = 1'b1;
     cmd.wroc              = 1'b0;
-    cmd.def_or_data_byte1 = 8'hC3;
-    cmd.data_byte2        = 8'h3C;
+    randomize_immediate_write_data(cfg.data_length, cmd, random_data);
 
     expected_desc             = '0;
     expected_desc.err_status  = AddrHeader;

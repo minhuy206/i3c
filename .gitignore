@@ -68,3 +68,12 @@ docs/ccc_enec_disec_fix_plan.md
 /docs/report/latex/chapters_vi
 /docs/report/latex/progress_status.tex
 /docs/report/latex/report_vi.tex
+/src/verification/reg_cov_work/scope
+
+# Locally built UCIS coverage converters
+/src/verification/tools/ucd2json
+/src/verification/tools/ucd2sva
+/src/verification/logs
+/src/verification/coverage_report.txt
+/src/verification/coverage_report.txt
+/src/verification/coverage_report.txt

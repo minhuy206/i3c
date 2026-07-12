@@ -6,6 +6,9 @@ class i3c_env extends uvm_env;
   reg_agent m_reg_agent;
   i3c_virtual_sequencer m_vsequencer;
   i3c_scoreboard m_scoreboard;
+  i3c_coverage m_i3c_coverage;
+  reg_coverage m_reg_coverage;
+  i3c_correlated_coverage m_correlated_coverage;
 
   function new(string name = "", uvm_component parent);
     super.new(name, parent);
@@ -29,9 +32,15 @@ class i3c_env extends uvm_env;
     uvm_config_db#(i3c_agent_cfg)::set(this, "m_i3c_agent", "cfg", cfg.m_i3c_agent_cfg);
     cfg.m_i3c_agent_cfg.en_monitor = 1'b1;
 
+    m_i3c_coverage = i3c_coverage::type_id::create("m_i3c_coverage", this);
+    m_reg_coverage = reg_coverage::type_id::create("m_reg_coverage", this);
+
     if (cfg.en_scb) begin
       m_scoreboard = i3c_scoreboard::type_id::create("m_scoreboard", this);
       m_scoreboard.cfg = cfg;
+      m_correlated_coverage = i3c_correlated_coverage::type_id::create(
+          "m_correlated_coverage", this
+      );
     end
   endfunction
 
@@ -44,6 +53,10 @@ class i3c_env extends uvm_env;
     if (cfg.en_scb) begin
       m_reg_agent.monitor.analysis_port.connect(m_scoreboard.reg_fifo.analysis_export);
       m_i3c_agent.monitor.analysis_port.connect(m_scoreboard.i3c_fifo.analysis_export);
+      m_scoreboard.correlated_ap.connect(m_correlated_coverage.analysis_export);
     end
+
+    m_i3c_agent.monitor.analysis_port.connect(m_i3c_coverage.analysis_export);
+    m_reg_agent.monitor.analysis_port.connect(m_reg_coverage.analysis_export);
   endfunction
 endclass

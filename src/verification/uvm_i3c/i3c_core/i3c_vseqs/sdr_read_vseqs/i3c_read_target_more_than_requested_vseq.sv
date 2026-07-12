@@ -1,8 +1,6 @@
 class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_read_target_more_than_requested_vseq)
 
-  // Cases include the tightest over-run boundary (target = requested + 1) to confirm the controller
-  // stops at exactly the requested count and stores no extra byte.
   localparam int unsigned NUM_CASES = 4;
 
   function new(string name = "i3c_read_target_more_than_requested_vseq");
@@ -28,22 +26,18 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
 
   endtask
 
-  // Continuation contrast: an over-length read is NOT an error, so a toc=0 over-length read must
-  // continue legitimately into the next queued command with exactly one Repeated START (the read
-  // takeover Sr becomes the continuation). This proves the controller does not misclassify normal
-  // over-length termination as an error that would suppress the continuation.
   virtual task run_more_than_requested_toc_zero_case();
-    transfer_stimulus_cfg_t rd_cfg;
-    transfer_stimulus_cfg_t wr_cfg;
-    byte_queue_t            read_data;   // 6 bytes offered vs 4 requested -> over-length
-    byte_queue_t            exp_data;
-    word_queue_t            tx_words;
-    bit [31:0]              rx;
-    bit [31:0]              resp0;
-    bit [31:0]              resp1;
-    int                     rstart_count;
-    i3c_device_response_seq dev_seq0;
-    i3c_device_response_seq dev_seq1;
+    transfer_stimulus_cfg_t        rd_cfg;
+    transfer_stimulus_cfg_t        wr_cfg;
+    byte_queue_t                   read_data;  // 6 bytes offered vs 4 requested -> over-length
+    byte_queue_t                   exp_data;
+    word_queue_t                   tx_words;
+    bit                     [31:0] rx;
+    bit                     [31:0] resp0;
+    bit                     [31:0] resp1;
+    int                            rstart_count;
+    i3c_device_response_seq        dev_seq0;
+    i3c_device_response_seq        dev_seq1;
 
     enable_dut(1'b0);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
@@ -51,17 +45,35 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
     rd_cfg = make_transfer_cfg(
         .ctxt("SDRR_003 toc0 over_length_first"),
         .seq_name("sdrr003_toc0_rd_dev_seq"),
-        .tid(4'd12), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
-        .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
-        .start_with_broadcast_header(1'b0), .data_length(4), .settle_before_cmd(5),
-        .timeout_cycles(0));
+        .tid(4'd12),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(4),
+        .settle_before_cmd(5),
+        .timeout_cycles(0)
+    );
     wr_cfg = make_transfer_cfg(
         .ctxt("SDRR_003 toc0 write_second"),
         .seq_name("sdrr003_toc0_wr_dev_seq"),
-        .tid(4'd13), .dev_idx(5'd0), .target_addr(7'h08), .is_i3c(1'b1),
-        .ack_address(1'b1), .ack_data(1'b1), .tx_before_cmd(1'b1), .wait_device_done(1'b1),
-        .start_with_broadcast_header(1'b0), .data_length(2), .settle_before_cmd(0),
-        .timeout_cycles(0));
+        .tid(4'd13),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
+        .tx_before_cmd(1'b1),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(1'b0),
+        .data_length(2),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
 
     build_random_payload(6, read_data);  // target offers 6, only 4 read
     build_random_tx_words(wr_cfg.data_length, exp_data, tx_words);
@@ -79,9 +91,6 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
 
     check_all_queues_empty("after SDRR_003 toc0 over-length continuation");
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_003 result: case=toc0_over_length rstart_count=%0d resp0_status=0x%0h resp0_len=%0d resp1_status=0x%0h",
-                  rstart_count, resp0[31:28], resp0[15:0], resp1[31:28]), UVM_LOW)
   endtask
 
   virtual task run_more_than_requested_case(int unsigned case_idx, int unsigned requested_length,
@@ -120,8 +129,8 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(7'h08),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -130,8 +139,7 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_read_stimulus_words_with_actual_len(cfg, read_data, requested_length, rx_words, resp,
-                                            dev_seq, 1'b1);
+    run_read_stimulus_words(cfg, read_data, requested_length, rx_words, resp, dev_seq, 1'b1);
 
     `DV_CHECK_EQ(dev_seq.observed_rstart, 1'b1,
                  $sformatf(
@@ -141,10 +149,6 @@ class i3c_read_target_more_than_requested_vseq extends i3c_base_vseq;
     check_all_queues_empty($sformatf(
                            "after SDRR_003 req %0d target %0d", requested_length, target_length));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_003 result: mode=%s requested_len=%0d target_len=%0d rx_words_drained=%0d observed_rstart=%0b",
-                  private_addr_mode_name(broadcast_header_enable), requested_length, target_length,
-                  rx_words.size(), dev_seq.observed_rstart), UVM_LOW)
   endtask
 
   virtual function void build_payload(int unsigned target_length, ref byte_queue_t read_data);

@@ -213,7 +213,7 @@ typedef struct packed {
 
 Offset `0x020` is not implemented. Reads return `0`, writes are ignored, and there are no side effects.
 
-#### Timing Registers (0x010–0x064)
+#### Timing Registers (0x32C–0x380)
 
 | Bits             | Field    | Description                         |
 | ---------------- | -------- | ----------------------------------- |

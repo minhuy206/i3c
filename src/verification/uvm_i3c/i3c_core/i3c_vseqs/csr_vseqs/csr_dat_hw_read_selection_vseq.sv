@@ -56,7 +56,7 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
     for (int unsigned i = 0; i < NUM_CASES; i++) begin
       run_dat_index_write_case(i, dev_idx[i],
                                is_i2c[i] ? static_addr[i] : dynamic_addr[i],
-                               !is_i2c[i], 8'(8'hA0 + i));
+                               !is_i2c[i]);
     end
 
     check_all_queues_empty("after CSR DAT hardware read selection");
@@ -64,9 +64,9 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
   endtask
 
   virtual task run_dat_index_write_case(int unsigned case_idx, bit [4:0] dev_idx,
-                                        bit [6:0] exp_addr, bit is_i3c,
-                                        bit [7:0] payload);
+                                        bit [6:0] exp_addr, bit is_i3c);
     transfer_stimulus_cfg_t cfg;
+    byte_queue_t            exp_data;
     word_queue_t            tx_words;
     bit              [31:0] resp;
     i3c_device_response_seq dev_seq;
@@ -78,8 +78,8 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
         .dev_idx(dev_idx),
         .target_addr(exp_addr),
         .is_i3c(is_i3c),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -88,7 +88,7 @@ class csr_dat_hw_read_selection_vseq extends csr_base_vseq;
         .timeout_cycles(0)
     );
 
-    tx_words.push_back({24'h0, payload});
+    build_random_tx_words(DATA_LENGTH, exp_data, tx_words);
 
     run_write_stimulus(cfg, tx_words, resp, dev_seq);
     settle_cycles();

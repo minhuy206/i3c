@@ -144,6 +144,7 @@ class i3c_reset_during_idle_vseq extends bus_base_vseq;
     immediate_data_trans_desc_t    cmd;
     i3c_device_response_seq        dev_seq;
     byte_queue_t                   no_read_data;
+    byte_queue_t                   random_data;
     bit [31:0]                     resp;
 
     enable_dut(1'b0);
@@ -156,8 +157,8 @@ class i3c_reset_during_idle_vseq extends bus_base_vseq;
         .dev_idx(5'd0),
         .target_addr(RecoveryDynamicAddr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b0),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -170,13 +171,11 @@ class i3c_reset_during_idle_vseq extends bus_base_vseq;
     cmd.attr              = ImmediateDataTransfer;
     cmd.tid               = RecoveryTid;
     cmd.mode              = sdr0;
-    cmd.dtt               = 3'd2;
     cmd.rnw               = 1'b0;
     cmd.toc               = 1'b1;
     cmd.wroc              = 1'b1;
     cmd.dev_idx           = 5'd0;
-    cmd.def_or_data_byte1 = 8'hA5;
-    cmd.data_byte2        = 8'h5A;
+    randomize_immediate_write_data(cfg.data_length, cmd, random_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(cmd[31:0], cmd[63:32]);

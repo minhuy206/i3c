@@ -23,8 +23,8 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
     int                            rstart_count;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
 
@@ -38,8 +38,8 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -54,8 +54,8 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -86,12 +86,6 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
         $sformatf(
         "after toc0_vseq %s valid continuation", private_addr_mode_name(broadcast_header_enable)));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRW_003 result: mode=%s case=valid_continuation rstart_count=%0d first_observed_rstart=%0b second_observed_rstart=%0b first_broadcast_header=%0b second_broadcast_header=%0b",
-                  private_addr_mode_name(broadcast_header_enable), rstart_count,
-                  dev_seq0.observed_rstart, dev_seq1.observed_rstart,
-                  dev_seq0.observed_broadcast_header, dev_seq1.observed_broadcast_header),
-              UVM_LOW)
   endtask
 
   virtual task run_toc_zero_missing_next_cmd_case(bit broadcast_header_enable);
@@ -100,8 +94,8 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     bit                     [31:0] resp;
     byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq;
 
     enable_dut(broadcast_header_enable);
@@ -118,8 +112,8 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -156,9 +150,5 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
                            )
                            ));
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRW_003 result: mode=%s case=missing_continuation observed_rstart=%0b",
-                  private_addr_mode_name(broadcast_header_enable), dev_seq.observed_rstart),
-              UVM_LOW)
   endtask
 endclass

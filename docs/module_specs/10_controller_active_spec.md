@@ -60,7 +60,6 @@ The `controller_active` module is the structural wrapper that instantiates and i
 | `ctrl_sda_i`  | Input     | 1     | Synchronized SDA from PHY |
 | `ctrl_scl_o`  | Output    | 1     | SCL drive to PHY          |
 | `ctrl_sda_o`  | Output    | 1     | SDA drive to PHY          |
-| `ctrl_sda_oe_o` | Output | 1     | SDA output-enable to PHY  |
 | `sel_od_pp_o` | Output    | 1     | OD/PP mode select to PHY  |
 
 ### HCI Queue Interfaces
@@ -241,18 +240,16 @@ assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda :
 
 Where `scl_gen_driving_sda` is `u_scl_gen.sda_ctrl_active_o`. Priority order is: (1) `scl_generator` wins outright during START/STOP/Sr; (2) if the master has taken over low-bit arbitration (`handoff_takeover_q`), it drives SDA low; (3) otherwise `bus_tx_flow` drives its bit value only while actively driving (`tx_flow_sda_drive`); (4) idle default is `1'b1` (released/high). The reference design had a race condition where `scl_generator` and `bus_tx_flow` could simultaneously drive SDA at START/STOP boundaries — this priority chain resolves it.
 
-`ctrl_sda_oe_o` (output-enable) follows the same three-way priority, but expresses *whether* to drive rather than *what value* to drive:
+`sel_od_pp_o` is also qualified by drive ownership so external pad logic can derive OE from `sel_od_pp_o || !ctrl_sda_o` without driving SDA high while the controller has released the bus:
 
 ```systemverilog
-assign ctrl_sda_oe_o = scl_gen_driving_sda ? ~scl_gen_sda
-    : handoff_takeover_q ? 1'b1
-    : tx_flow_sda_drive ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
+assign sel_od_pp_o = (scl_gen_driving_sda || handoff_takeover_q) ? 1'b0 :
+    tx_flow_sda_drive ? tx_flow_sel_od_pp : 1'b0;
 ```
 
-- While `scl_generator` drives SDA, output-enable is asserted only when `scl_gen_sda` is low (open-drain semantics: only the low level is actively driven, high is released).
-- During low-bit takeover, output-enable is forced high (actively driving low, per `ctrl_sda_o` above).
-- While `bus_tx_flow` is driving, output-enable is asserted either unconditionally in push-pull mode (`tx_flow_sel_od_pp`) or only when the bit value is low in open-drain mode (`~tx_flow_sda`) — matching open-drain semantics for the OD case while always enabling in PP mode.
-- Otherwise (idle), output-enable is deasserted (`1'b0`), releasing the bus.
+- START/STOP/Sr and low-bit takeover force open-drain mode.
+- While `bus_tx_flow` is actively driving, the selected OD/PP mode is passed through.
+- Otherwise the mode output returns to open-drain so the external derived OE releases SDA when `ctrl_sda_o` idles high.
 
 ### 5.6. OD/PP Assignment (M-4 Fix)
 
@@ -360,7 +357,7 @@ end
 Behavior:
 
 - **Sampling.** On the SCL rising edge (`scl_tx_posedge`) of a handoff-marked bit period, if the bit has not already been sampled this period, `handoff_sampled_q` latches high and `handoff_takeover_q` captures the inverted current bus value (`~ctrl_sda_i`) — i.e. takeover is armed exactly when the wired-AND result on the bus is `0`.
-- **Takeover drive.** While `handoff_takeover_q` is set, the master actively drives SDA low and open-drain (see §5.5/§5.6 `ctrl_sda_o`/`ctrl_sda_oe_o`/`sel_od_pp_o` equations), reinforcing the bus-low result for any remaining bit time regardless of what the contending targets are doing.
+- **Takeover drive.** While `handoff_takeover_q` is set, the master actively drives SDA low and open-drain (see §5.5/§5.6 `ctrl_sda_o`/`sel_od_pp_o` equations), reinforcing the bus-low result for any remaining bit time regardless of what the contending targets are doing.
 - **Release.** `handoff_takeover_q` clears on the next SCL falling edge (`scl_tx_negedge`) or as soon as `scl_generator` takes over SDA (`scl_gen_driving_sda`) — whichever comes first ends the master's forced-low drive for that bit.
 - **Re-arming.** `handoff_sampled_q` clears whenever the handoff request is not asserted (`!mux_rx_req_bit_handoff`), so the next handoff-marked bit period can sample and arm takeover again.
 
@@ -378,9 +375,9 @@ No additional timing constraints beyond those of sub-modules. Behavioral sequent
 | Bus instances              | Dual bus (`ctrl_bus_i[2]`, `ctrl_scl_o[2]`)                         | Single bus                                                                      |
 | I2C controller FSM         | Full `i2c_controller_fsm` instance                                  | Removed (flow_active drives bus directly)                                       |
 | I3C controller FSM         | Stub (`i3c_controller_fsm`, drives '1)                              | Replaced by `scl_generator`                                                     |
-| OD/PP switching            | Hardcoded to `'0` (TODO)                                            | Phase-based, with handoff override: `(scl_gen_driving_sda \|\| handoff_takeover_q) ? 1'b0 : tx_flow_sel_od_pp` (M-4) |
+| OD/PP switching            | Hardcoded to `'0` (TODO)                                            | Phase-based and drive-qualified, with handoff override: `(scl_gen_driving_sda \|\| handoff_takeover_q) ? 1'b0 : tx_flow_sda_drive ? tx_flow_sel_od_pp : 1'b0` (M-4) |
 | SDA MUX                    | Not present                                                         | Priority MUX: scl_gen > handoff takeover > tx_flow > idle (M-2)                |
-| `ctrl_sda_oe_o`            | Not present                                                         | Added — explicit output-enable derivation mirroring the SDA priority MUX        |
+| SDA output-enable          | Wrapper-derived                                                     | Wrapper/testbench-derived as `sel_od_pp_o \|\| !sda_o`                         |
 | DAT read port              | Single read port                                                    | Single muxed port shared between `flow_active` and `entdaa_controller`          |
 | `daa_rstart_pending_q`     | Not present                                                         | Added to extend 1-cycle pulse from `entdaa_controller` for `scl_generator` (M-7)|
 | Low-bit handoff/takeover   | Not present                                                         | Added — master drives SDA low during ENTDAA address-bit arbitration when it observes the bus already pulled low |

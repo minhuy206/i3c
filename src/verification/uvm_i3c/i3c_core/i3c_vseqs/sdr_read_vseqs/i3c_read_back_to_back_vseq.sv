@@ -27,8 +27,8 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
     bit                     [31:0] resp0;
     bit                     [31:0] resp1;
     bit                     [31:0] resp2;
-    bit                      [6:0] static_addr;
-    bit                      [6:0] dynamic_addr;
+    bit                     [ 6:0] static_addr;
+    bit                     [ 6:0] dynamic_addr;
     i3c_device_response_seq        dev_seq0;
     i3c_device_response_seq        dev_seq1;
     i3c_device_response_seq        dev_seq2;
@@ -47,8 +47,8 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -67,8 +67,8 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -87,8 +87,8 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(dynamic_addr),
         .is_i3c(1'b1),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(broadcast_header_enable),
@@ -124,11 +124,6 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
     check_all_queues_empty("after SDRR_005 back_to_back");
     disable_dut();
 
-    `uvm_info(`gfn, $sformatf(
-                  "SDRR_005 result: mode=%s queued_cmds=3 target_addr=0x%02h rx_words_drained={%0d,%0d,%0d} observed_rstart={%0b,%0b,%0b}",
-                  private_addr_mode_name(broadcast_header_enable), dynamic_addr, rx_words0.size(),
-                  rx_words1.size(), rx_words2.size(), dev_seq0.observed_rstart,
-                  dev_seq1.observed_rstart, dev_seq2.observed_rstart), UVM_LOW)
   endtask
 
   virtual task start_back_to_back_device_responses(
@@ -145,7 +140,4 @@ class i3c_read_back_to_back_vseq extends i3c_base_vseq;
     start_device_response(cfg2, 1'b1, read_data2, dev_seq2);
     settle_cycles(1);
   endtask
-
-
-
 endclass

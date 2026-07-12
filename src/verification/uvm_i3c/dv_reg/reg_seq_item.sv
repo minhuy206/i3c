@@ -3,12 +3,15 @@ class reg_seq_item extends uvm_sequence_item;
   rand bit [31:0] wdata;
   rand bit is_write;
   bit [31:0] rdata;
+  // Qualifies a RESP_PORT read; it is not itself a functional coverage item.
+  bit resp_valid;
 
   `uvm_object_utils_begin(reg_seq_item)
     `uvm_field_int(addr, UVM_DEFAULT)
     `uvm_field_int(wdata, UVM_DEFAULT)
     `uvm_field_int(is_write, UVM_DEFAULT)
     `uvm_field_int(rdata, UVM_DEFAULT | UVM_NOCOMPARE)
+    `uvm_field_int(resp_valid, UVM_DEFAULT | UVM_NOCOMPARE)
   `uvm_object_utils_end
 
   function new(string name = "");

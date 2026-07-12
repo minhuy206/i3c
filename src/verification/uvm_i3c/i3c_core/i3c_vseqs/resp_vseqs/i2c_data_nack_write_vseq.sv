@@ -26,22 +26,18 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
 
     run_recovery_write_case();
 
-    `uvm_info(
-        `gfn,
-        "ERR_004 conclusion: legacy I2C write stops on first/middle data-byte NACK, reports final-byte data NACK, and accepts a following legal write",
-        UVM_LOW)
   endtask
 
   virtual task run_data_nack_case(int unsigned nack_byte_idx, bit [3:0] tid, string case_name);
     transfer_stimulus_cfg_t        cfg;
     byte_queue_t                   exp_data;
     word_queue_t                   tx_words;
-    bit                            data_ack_pattern[$];
+    bit                            data_nack_pattern_q[$];
     bit                     [31:0] resp;
     i3c_device_response_seq        dev_seq;
 
     build_payload(DATA_LENGTH, exp_data, tx_words);
-    build_data_ack_pattern(DATA_LENGTH, nack_byte_idx, data_ack_pattern);
+    build_data_nack_pattern(DATA_LENGTH, nack_byte_idx, data_nack_pattern_q);
 
     cfg = make_transfer_cfg(
         .ctxt($sformatf("ERR_004 %s data NACK byte %0d", case_name, nack_byte_idx)),
@@ -50,8 +46,8 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -60,24 +56,24 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
         .timeout_cycles(0)
     );
 
-    run_patterned_write_stimulus(cfg, tx_words, data_ack_pattern, resp, dev_seq);
-    `DV_CHECK_EQ(dev_seq.sampled_data.size(), nack_byte_idx + 1,
+    run_patterned_write_stimulus(cfg, tx_words, data_nack_pattern_q, resp, dev_seq);
+    `DV_CHECK_EQ(dev_seq.sampled_data_q.size(), nack_byte_idx + 1,
                  $sformatf("ERR_004 %s data NACK sampled byte boundary", case_name))
 
     `uvm_info(`gfn,
               $sformatf(
                   "ERR_004 %s data NACK result: resp=0x%08h sampled_addr=0x%02h sampled_bytes=%0d",
-                  case_name, resp, dev_seq.sampled_addr, dev_seq.sampled_data.size()), UVM_LOW)
+                  case_name, resp, dev_seq.sampled_addr, dev_seq.sampled_data_q.size()), UVM_LOW)
   endtask
 
   virtual task reset_after_data_nack(int unsigned nack_byte_idx);
     if ((nack_byte_idx + 1) < DATA_LENGTH) begin
       `DV_CHECK_GT(hdl_read_fifo_depth(tx_paths.depth_path), 0,
-                   "ERR_004 non-final data NACK should preserve unfetched TX FIFO data")
+                       "ERR_004 non-final data NACK should preserve unfetched TX FIFO data")
     end
     request_sw_reset(.keep_enabled(1'b1));
-    check_all_queues_empty($sformatf("after ERR_004 data NACK byte %0d recovery SW reset",
-                                     nack_byte_idx));
+    check_all_queues_empty($sformatf(
+                           "after ERR_004 data NACK byte %0d recovery SW reset", nack_byte_idx));
   endtask
 
   virtual task run_recovery_write_case();
@@ -96,8 +92,8 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
         .dev_idx(I2C_DEV_IDX[4:0]),
         .target_addr(I2C_STATIC_ADDR),
         .is_i3c(1'b0),
-        .ack_address(1'b1),
-        .ack_data(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -110,14 +106,12 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
 
     check_all_queues_empty("after ERR_004 recovery write");
 
-    `uvm_info(`gfn, $sformatf("ERR_004 recovery result: resp=0x%08h sampled_bytes=%0d", resp,
-                              dev_seq.sampled_data.size()), UVM_LOW)
   endtask
 
   virtual task run_patterned_write_stimulus(transfer_stimulus_cfg_t cfg, word_queue_t tx_words,
-                                            bit data_ack_pattern[$], output bit [31:0] resp,
+                                            bit data_nack_pattern_q[$], output bit [31:0] resp,
                                             output i3c_device_response_seq dev_seq);
-    start_patterned_device_response(cfg, data_ack_pattern, dev_seq);
+    start_patterned_device_response(cfg, data_nack_pattern_q, dev_seq);
     if (cfg.settle_before_cmd != 0) settle_cycles(cfg.settle_before_cmd);
 
     if (cfg.tx_before_cmd) begin
@@ -135,20 +129,20 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
     read_response(resp);
   endtask
 
-  virtual task start_patterned_device_response(transfer_stimulus_cfg_t cfg, bit data_ack_pattern[$],
+  virtual task start_patterned_device_response(transfer_stimulus_cfg_t cfg, bit data_nack_pattern_q[$],
                                                output i3c_device_response_seq dev_seq);
     byte_queue_t no_read_data;
 
     dev_seq                             = i3c_device_response_seq::type_id::create(cfg.seq_name);
     dev_seq.target_addr                 = cfg.target_addr;
-    dev_seq.ack_address                 = cfg.ack_address;
-    dev_seq.ack_data                    = cfg.ack_data;
+    dev_seq.addr_nack                    = cfg.addr_nack;
+    dev_seq.data_nack                    = cfg.data_nack;
     dev_seq.is_i3c                      = cfg.is_i3c;
     dev_seq.dir                         = 1'b0;
     dev_seq.start_with_broadcast_header = cfg.start_with_broadcast_header;
     dev_seq.read_data_cnt               = cfg.data_length;
     dev_seq.read_data                   = no_read_data;
-    dev_seq.data_ack_pattern            = data_ack_pattern;
+    dev_seq.data_nack_pattern_q         = data_nack_pattern_q;
 
     fork
       dev_seq.start(p_sequencer.m_i3c_sequencer);
@@ -160,13 +154,13 @@ class i2c_data_nack_write_vseq extends i3c_base_vseq;
     build_random_tx_words(data_length, exp_data, tx_words);
   endfunction
 
-  virtual function void build_data_ack_pattern(int unsigned data_length,
-                                               int unsigned nack_byte_idx,
-                                               ref bit data_ack_pattern[$]);
-    data_ack_pattern.delete();
+  virtual function void build_data_nack_pattern(int unsigned data_length,
+                                                int unsigned nack_byte_idx,
+                                                ref bit data_nack_pattern_q[$]);
+    data_nack_pattern_q.delete();
 
     for (int unsigned i = 0; i < data_length; i++) begin
-      data_ack_pattern.push_back(i != nack_byte_idx);
+      data_nack_pattern_q.push_back(i == nack_byte_idx);
     end
   endfunction
 

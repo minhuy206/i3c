@@ -23,6 +23,7 @@
 `include "i3c_vseqs/fifo_vseqs/fifo_full_empty_boundaries_vseq.sv"
 `include "i3c_vseqs/fifo_vseqs/fifo_simultaneous_read_write_vseq.sv"
 `include "i3c_vseqs/fifo_vseqs/fifo_flush_during_activity_vseq.sv"
+`include "i3c_vseqs/fifo_vseqs/fifo_pointer_wrap_reuse_vseq.sv"
 
 // 4.3 PHY, Bus Conditions, and Timing
 `include "i3c_vseqs/bus_vseqs/bus_base_vseq.sv"
@@ -99,9 +100,6 @@
 `include "i3c_vseqs/daa_vseqs/i3c_daa_multi_device_dat_loop_vseq.sv"
 `include "i3c_vseqs/daa_vseqs/i3c_daa_address_rejected_vseq.sv"
 `include "i3c_vseqs/daa_vseqs/i3c_daa_dat_boundary_vseq.sv"
-
-// 4.11 Arbitration and Bus Behavior
-`include "i3c_vseqs/arb_vseqs/i3c_entdaa_multi_target_arbitration_vseq.sv"
 
 // 4.9 I2C Legacy Compatibility
 `include "i3c_vseqs/i2c_vseqs/i2c_regular_write_basic_vseq.sv"

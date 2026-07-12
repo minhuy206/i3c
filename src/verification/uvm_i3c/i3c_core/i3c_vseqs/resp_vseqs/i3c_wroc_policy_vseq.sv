@@ -23,7 +23,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
   virtual function transfer_stimulus_cfg_t make_write_cfg(string ctxt, string seq_name,
                                                            bit [3:0] tid,
                                                            int unsigned data_length = 2,
-                                                           bit ack_address = 1'b1);
+                                                           bit addr_nack = 1'b0);
     return make_transfer_cfg(
         .ctxt(ctxt),
         .seq_name(seq_name),
@@ -31,8 +31,8 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
         .dev_idx(5'd0),
         .target_addr(I3cAddr),
         .is_i3c(1'b1),
-        .ack_address(ack_address),
-        .ack_data(1'b1),
+        .addr_nack(addr_nack),
+        .data_nack(1'b0),
         .tx_before_cmd(1'b1),
         .wait_device_done(1'b1),
         .start_with_broadcast_header(1'b0),
@@ -56,6 +56,8 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t cfg;
     regular_trans_desc_t    cmd;
     byte_queue_t            no_read_data;
+    byte_queue_t            exp_data;
+    word_queue_t            tx_words;
     i3c_device_response_seq dev_seq;
     bit [31:0]              resp;
 
@@ -66,7 +68,8 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     cmd.wroc = wroc;
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
-    write_tx_data(32'h0000_BBAA);
+    build_random_tx_words(cfg.data_length, exp_data, tx_words);
+    write_tx_words(tx_words);
     write_cmd(cmd[31:0], cmd[63:32]);
     poll_idle();
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
@@ -83,6 +86,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t     cfg;
     immediate_data_trans_desc_t cmd;
     byte_queue_t                no_read_data;
+    byte_queue_t                random_data;
     i3c_device_response_seq     dev_seq;
     bit [31:0]                  resp;
 
@@ -93,12 +97,10 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     cmd.attr              = ImmediateDataTransfer;
     cmd.tid               = tid;
     cmd.mode              = sdr0;
-    cmd.dtt               = 3'd2;
     cmd.dev_idx           = 5'd0;
     cmd.toc               = 1'b1;
     cmd.wroc              = wroc;
-    cmd.def_or_data_byte1 = 8'hA5;
-    cmd.data_byte2        = 8'h5A;
+    randomize_immediate_write_data(cfg.data_length, cmd, random_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(cmd[31:0], cmd[63:32]);
@@ -134,7 +136,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     dev_seq             = i3c_device_response_seq::type_id::create(
         $sformatf("err012_ccc_wroc%0b_dev_seq", wroc));
     dev_seq.target_addr = 7'h7e;
-    dev_seq.ack_address = 1'b1;
+    dev_seq.addr_nack = 1'b0;
     dev_seq.is_i3c      = 1'b1;
     dev_seq.dir         = 1'b0;
     fork
@@ -166,6 +168,10 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     regular_trans_desc_t    cmd0;
     regular_trans_desc_t    cmd1;
     byte_queue_t            no_read_data;
+    byte_queue_t            exp_data0;
+    byte_queue_t            exp_data1;
+    word_queue_t            tx_words0;
+    word_queue_t            tx_words1;
     i3c_device_response_seq dev_seq0;
     i3c_device_response_seq dev_seq1;
     i3c_response_desc_t     resp_desc;
@@ -181,8 +187,10 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
 
     start_ordered_device_responses(cfg0, 1'b0, no_read_data, dev_seq0,
                                    cfg1, 1'b0, no_read_data, dev_seq1);
-    write_tx_data(32'h0000_2211);
-    write_tx_data(32'h0000_4433);
+    build_random_tx_words(cfg0.data_length, exp_data0, tx_words0);
+    build_random_tx_words(cfg1.data_length, exp_data1, tx_words1);
+    write_tx_words(tx_words0);
+    write_tx_words(tx_words1);
     write_cmd(cmd0[31:0], cmd0[63:32]);
     write_cmd(cmd1[31:0], cmd1[63:32]);
     poll_idle();
@@ -201,6 +209,10 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     regular_trans_desc_t    cmd0;
     regular_trans_desc_t    cmd1;
     byte_queue_t            no_read_data;
+    byte_queue_t            exp_data0;
+    byte_queue_t            exp_data1;
+    word_queue_t            tx_words0;
+    word_queue_t            tx_words1;
     i3c_device_response_seq dev_seq0;
     i3c_device_response_seq dev_seq1;
 
@@ -223,8 +235,10 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
 
     start_ordered_device_responses(cfg0, 1'b0, no_read_data, dev_seq0,
                                    cfg1, 1'b0, no_read_data, dev_seq1);
-    write_tx_data(32'h0000_6655);
-    write_tx_data(32'h0000_8877);
+    build_random_tx_words(cfg0.data_length, exp_data0, tx_words0);
+    build_random_tx_words(cfg1.data_length, exp_data1, tx_words1);
+    write_tx_words(tx_words0);
+    write_tx_words(tx_words1);
     write_cmd(cmd0[31:0], cmd0[63:32]);
     write_cmd(cmd1[31:0], cmd1[63:32]);
     poll_idle();
@@ -243,23 +257,22 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     transfer_stimulus_cfg_t     cfg;
     immediate_data_trans_desc_t cmd;
     byte_queue_t                no_read_data;
+    byte_queue_t                random_data;
     i3c_device_response_seq     dev_seq;
     i3c_response_desc_t         resp_desc;
     bit [31:0]                  resp;
 
     configure_target();
     cfg = make_write_cfg("ERR_012 wroc=0 address NACK override",
-                         "err012_error_override_dev_seq", 4'hB, 2, 1'b0);
+                         "err012_error_override_dev_seq", 4'hB, 2, 1'b1);
     cmd                   = '0;
     cmd.attr              = ImmediateDataTransfer;
     cmd.tid               = cfg.tid;
     cmd.mode              = sdr0;
-    cmd.dtt               = 3'd2;
     cmd.dev_idx           = 5'd0;
     cmd.toc               = 1'b1;
     cmd.wroc              = 1'b0;
-    cmd.def_or_data_byte1 = 8'hC3;
-    cmd.data_byte2        = 8'h3C;
+    randomize_immediate_write_data(cfg.data_length, cmd, random_data);
 
     start_device_response(cfg, 1'b0, no_read_data, dev_seq);
     write_cmd(cmd[31:0], cmd[63:32]);

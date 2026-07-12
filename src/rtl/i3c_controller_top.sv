@@ -24,7 +24,6 @@ module i3c_controller_top
     output logic scl_o,
     input  logic sda_i,
     output logic sda_o,
-    output logic sda_oe_o,
     output logic sel_od_pp_o
 );
 
@@ -90,7 +89,7 @@ module i3c_controller_top
 
   // Controller ↔ PHY
   logic ctrl_scl_from_phy, ctrl_sda_from_phy;
-  logic ctrl_scl_to_phy, ctrl_sda_to_phy, ctrl_sda_oe_to_phy;
+  logic ctrl_scl_to_phy, ctrl_sda_to_phy;
   logic ctrl_sel_od_pp;
 
   // Status
@@ -223,7 +222,6 @@ module i3c_controller_top
       .ctrl_sda_i                    (ctrl_sda_from_phy),
       .ctrl_scl_o                    (ctrl_scl_to_phy),
       .ctrl_sda_o                    (ctrl_sda_to_phy),
-      .ctrl_sda_oe_o                 (ctrl_sda_oe_to_phy),
       .sel_od_pp_o                   (ctrl_sel_od_pp),
       .cmd_queue_empty_i             (cmd_empty),
       .cmd_queue_rvalid_i            (cmd_hw_rvalid),
@@ -280,10 +278,8 @@ module i3c_controller_top
       .ctrl_scl_i   (ctrl_scl_to_phy),
       .ctrl_scl_o   (ctrl_scl_from_phy),
       .ctrl_sda_i   (ctrl_sda_to_phy),
-      .ctrl_sda_oe_i(ctrl_sda_oe_to_phy),
       .ctrl_sda_o   (ctrl_sda_from_phy),
       .sel_od_pp_i  (ctrl_sel_od_pp),
-      .sda_oe_o,
       .sel_od_pp_o
   );
 endmodule

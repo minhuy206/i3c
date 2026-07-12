@@ -1,1232 +1,352 @@
-% =====================================================================
-%  Chapter 3 — Architecture and RTL Design  (FULL PROSE) ★ flagship
-%  Submission-ready written form of the section-level scaffold previously in
-%  this file and ../draft/ch03_architecture_rtl.md.
-%  Ground truth = current RTL (src/rtl/**) + module specs (docs/module_specs/**);
-%  code wins over stale planning docs. Protocol facts cross-checked against the
-%  official MIPI I3C Basic v1.1.1 spec (MIPI gate: Ch.3 PASS 2026-06-28).
-%  Page-budget policy (thesis_writing_plan.md §2.4/§3): inline = architecture
-%  narrative + flagship flow_active FSM + key diagrams + <=30-line snippets +
-%  one representative state table; full CSR map -> App. A, full descriptor/port
-%  lists -> App. B, full state tables -> App. C. No LoC/result tables here.
-% =====================================================================
-\chapter{Architecture and RTL Design}
-\label{ch:architecture-rtl}
+\chapter{Kiến trúc và thiết kế RTL}
+\label{ch:architecture}
 
-This chapter presents the implemented controller, the flagship contribution of the thesis. It is
-organised in two parts. \emph{Part~A} builds a system-level mental model: the three-layer
-architecture, the top-level module hierarchy, the end-to-end transaction dataflow, the clock and
-reset conventions, the design boundary derived qualitatively from the CHIPS Alliance
-\texttt{i3c-core} reference~\cite{chipsalliance_i3c}, the queue and descriptor formats, and the
-error-handling model. \emph{Part~B} then walks through the register-transfer-level (RTL) design of
-each subsystem in turn, culminating in the central \FlowStateCount-state \texttt{flow_active} command
-finite-state machine (FSM). Throughout, the protocol facts follow the MIPI I3C Basic
-v1.1.1 specification~\cite{mipi_i3c_basic}; quantitative size and result metrics are deferred to
-\cref{ch:results} so that this chapter stays focused on structure and behaviour. To keep the chapter
-within budget, the largest reference tables --- the complete register map, the full descriptor
-bit-field layouts, the full per-module port lists, and the exhaustive state-transition tables --- are
-relocated to the appendices and cited inline with a representative excerpt.
+Chương này trình bày cách các yêu cầu tại \cref{sec:req} được cụ thể hóa thành kiến trúc RTL. Nội dung được triển khai từ tổng thể đến chi tiết: kiến trúc phân lớp, kết nối giữa các khối chính, luồng xử lý transaction, sau đó phân tích sâu từng khối chức năng cụ thể với trọng tâm là FSM điều khiển  \FlowActive{} Các bảng chi tiết như bản đồ CSR, cấu trúc Descriptor và bảng chuyển trạng thái đầy đủ được đặt trong \cref{app:csr,app:desc,app:fsm}, giúp phần thân chương tập trung vào các quyết định thiết kế.
 
-% ---------------------------------------------------------------------------
-% PART A --- Overall Architecture Design
-% ---------------------------------------------------------------------------
+\section{Kiến trúc phân lớp}
+\label{sec:arch-layers}
 
-\section{Three-layer architecture}
-\label{sec:arch-three-layer}
+Thiết kế được tổ chức thành ba lớp chính. Lớp giao diện thanh ghi gồm khối CSR, bảng DAT, \CommandResponseFifo{} và \TxRxFifo{}; lớp này tiếp nhận truy cập thanh ghi, lưu \CommandDescriptor{} cùng dữ liệu truyền, và trả dữ liệu cũng như \ResponseDescriptor{} cho \Host{}. Lớp \ActiveController{} là khối xử lý giao thức chính: giải mã lệnh, tra cứu \Target{} trong DAT, tạo chuỗi START/địa chỉ/dữ liệu/STOP và tổng hợp trạng thái lỗi. Lớp PHY nằm ở ranh giới bus, đồng bộ tín hiệu SDA/SCL đi vào và chuyển tiếp các tín hiệu điều khiển từ controller ra các cổng output của top-level.
 
-The controller is organised as three concentric layers, each with a single responsibility, so that
-the protocol path can be studied without the distractions of bus-interconnect adapters or
-technology-specific pad cells. \Cref{fig:arch-three-layer} shows the layering.
+Interface giữa các lớp được chọn theo nguyên tắc seperation of concerns: lớp giao diện thanh ghi không xử lý protocol semantics, lớp giao thức không biết cách phần mềm cấp lệnh, và lớp PHY không tự quyết định pha \OpenDrain{} hay \PushPull{}. Mô hình phân tầng này cho phép kiểm chứng từng lớp bằng cơ chế phù hợp --- CSR và Queue bằng truy cập thanh ghi, khối xử lý giao thức được kiểm chứng ở mức transaction trên bus --- và giảm ảnh hưởng khi một lớp thay đổi.
 
-\begin{enumerate}
-  \item \textbf{Host/register layer.} The hand-written control and status register (CSR) file
-  (\texttt{csr_registers}) exposes a simple 32-bit register interface to software, and the four
-  Host-Controller-Interface (HCI) queues (\texttt{hci_queues}) buffer commands, transmit data,
-  receive data, and responses. This layer turns asynchronous software activity into the steady stream
-  of descriptors and data words that the protocol engine consumes.
-  \item \textbf{Controller/protocol layer.} The protocol engine (\texttt{controller_active}) wraps the
-  command FSM (\texttt{flow_active}), the clock generator (\texttt{scl_generator}), the byte/bit
-  serialisers (\texttt{bus_tx_flow}, \texttt{bus_tx}, \texttt{bus_rx_flow}), the bus-condition monitor
-  (\texttt{bus_monitor}), and the dynamic-address-assignment subsystem
-  (\texttt{entdaa_controller}, \texttt{entdaa_fsm}). It is the only layer that understands the I3C and
-  \iic{} frame structure.
-  \item \textbf{PHY layer.} The physical-interface shim (\texttt{i3c_phy}) provides two-flip-flop
-  metastability synchronisation on the incoming \texttt{scl}/\texttt{sda} lines and the open-drain (OD)
-  / push-pull (PP) output drivers. It contains no pad primitives, so the design remains technology
-  independent and simulatable without a foundry library.
-\end{enumerate}
+Toàn bộ thiết kế hoạt động trong một miền clock duy nhất với reset bất đồng bộ active-low. SCL không tạo thành clock domain nội bộ: nó được sinh bằng counter từ các giá trị timing trong CSR, nên mọi FSM, Queue và thanh ghi cùng lấy mẫu theo clock hệ thống. SDA/SCL từ pad là tín hiệu bất đồng bộ và phải qua chuỗi 2-FF synchronizer trước khi được phân tích.
 
-The guiding philosophy is deliberate simplicity: a \emph{single clock domain}, a \emph{single command
-authority} (the \texttt{flow_active} FSM, which is the sole originator of bus activity for ordinary
-transfers), and a clean separation between the software-visible contract and the protocol timing. This
-philosophy is what makes the design tractable as a study vehicle, and it motivates most of the
-reference-derived decisions discussed in \cref{sec:arch-boundary}.
+\section{Top-level module và kết nối giữa các khối}
+\label{sec:arch-block}
 
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    layer/.style={draw, rounded corners=4pt, minimum width=4.1cm, minimum height=4.0cm,
-                  very thick},
-    host/.style={layer, fill=blue!8},
-    ctrl/.style={layer, fill=orange!12},
-    phy/.style={layer, fill=green!12},
-    mod/.style={draw, fill=white, rounded corners=1.5pt, font=\scriptsize, align=center,
-                text width=3.1cm, minimum height=6mm, inner sep=3pt},
-    lyrlbl/.style={font=\footnotesize\bfseries, align=center},
-    io/.style={font=\scriptsize\itshape, text=black!65, align=center},
-    flow/.style={<->, >={Stealth[length=5pt]}, thick, black!60},
-  ]
-  % three layer panels left to right (drawn first, modules placed on top)
-  \node[host] (host) at (0,0)   {};
-  \node[ctrl] (ctrl) at (6.6,0) {};
-  \node[phy]  (phy)  at (13.2,0){};
+Module \texttt{i3c\_controller\_top} đóng vai trò là top-level module của IP. Về phía \Host{} là bus thanh ghi với địa chỉ \RegisterAddressWidth{}-bit và
+dữ liệu \RegisterDataWidth{}-bit; còn phía bus là \texttt{scl\_i/o}, \texttt{sda\_i/o} và tín hiệu
+chọn chế độ lái \texttt{sel\_od\_pp\_o}. Bên trong khởi tạo bốn khối chính, mỗi khối đảm nhiệm một vai trò: \CsrRegisters{}
+(CSR và DAT), \HciQueues{} (bốn FIFO đồng bộ), \ControllerActive{} (khối xử lý giao thức chính) và
+\texttt{i3c\_phy} (đồng bộ và điều khiển pad).
 
-  % layer titles
-  \node[lyrlbl, above=2mm of host] {Host / register layer};
-  \node[lyrlbl, above=2mm of ctrl] {Controller / protocol\\layer};
-  \node[lyrlbl, above=2mm of phy]  {PHY layer};
+Các kết nối chính giữa bốn khối tạo thành hai luồng chính. Luồng dữ liệu chạy từ \Host{} qua
+\CsrRegisters{} vào \HciQueues{}, tiếp tục đến \ControllerActive{} và quay về
+theo chiều ngược lại: \CommandFifo{} và \TxFifo{} chuyển lệnh và dữ liệu truyền xuống khối xử lý giao thức, \RxFifo{} và
+\ResponseFifo{} mang chuyển dữ liệu nhận và response về phía \Host{} . Luồng cấu hình đi thẳng từ \CsrRegisters{} đến
+\ControllerActive{}, cung cấp các giá trị timing, bit enable/abort và dữ liệu DAT. DAT có một
+cổng ghi phần mềm và một cổng đọc phần cứng; cổng đọc được chọn giữa \FlowActive{} và
+\EntdaaController{} theo pha hoạt động, nhờ đó giúp dùng chung một bộ nhớ DAT, đồng thời xác định rõ khối
+nào được quyền truy cập ở từng thời điểm.
 
-  % host modules
-  \node[mod] (csr) at ([yshift=9mm]host.center) {\texttt{csr\_registers}\\(CSR + DAT)};
-  \node[mod, below=5mm of csr] (q) {\texttt{hci\_queues}\\(CMD/TX/RX/RESP)};
 
-  % controller modules
-  \node[mod] (flow) at ([yshift=12mm]ctrl.center) {\texttt{flow\_active} FSM};
-  \node[mod, below=3mm of flow] (ser) {\texttt{scl\_generator}\\\texttt{bus\_tx} · \texttt{bus\_rx}};
-  \node[mod, below=3mm of ser] (ent) {\texttt{entdaa\_*}\\\texttt{bus\_monitor}};
-  \node[font=\tiny\itshape, below=2mm of ent, text=black!60] {(\texttt{controller\_active} wrapper)};
+\section{Luồng transaction}
+\label{sec:arch-flow}
 
-  % phy module
-  \node[mod] (sync) at ([yshift=9mm]phy.center) {2-FF input sync};
-  \node[mod, below=5mm of sync] (drv) {OD / PP\\output drivers};
+Luồng hoạt động của một transaction gồm năm bước chính. Trước hết \Host{} cấu hình DAT và ghi \CommandDescriptor{} bằng hai lần ghi \RegisterDataWidth{}-bit; \CsrRegisters{} ghép hai DWORD thành lệnh \CommandDescriptorWidth{}-bit rồi đẩy vào \CommandFifo{}. Khi \Controller{} được enable, \FlowActive{} lấy lệnh khỏi FIFO, phát yêu cầu đọc DAT và chọn nhánh xử lý I3C, \iic{}, CCC hoặc ENTDAA tương ứng. Trong pha thực thi, dữ liệu truyền được đọc theo từng DWORD từ \TxFifo{}, còn dữ liệu đọc được đóng gói theo từng DWORD vào \RxFifo{}. Cuối cùng, \FlowActive{} tạo \ResponseDescriptor{} chứa error status, transaction ID và số byte đã xử lý, rồi ghi vào \ResponseFifo{} để \Host{} đọc qua CSR.
 
-  % external connections
-  \node[io, left=9mm of host] (sw) {32-bit\\register bus\\(software)};
-  \node[io, right=9mm of phy] (pads) {\texttt{scl}/\texttt{sda}\\pads};
+Thiết kế sử dụng handshake valid/ready để giao tiếp với các Queue. Theo quy tắc này, bên phát đưa \texttt{valid} lên mức 1 khi có dữ liệu hợp lệ và giữ dữ liệu ổn định cho đến khi bên nhận đưa \texttt{ready} lên mức 1. Dữ liệu chỉ được đọc hoặc ghi khi \texttt{valid} và \texttt{ready} cùng bằng 1. Cơ chế này xác định hành vi khi có backpressure: \ResponseFifo{} đầy hoặc \RxFifo{} không còn chỗ trống chỉ làm giao dịch tạm dừng, không làm mất hoặc ghi đè dữ liệu. Khi trường \texttt{toc} trong \CommandDescriptor{} bằng 0, \FlowActive{} có thể nhận \CommandDescriptor{} kế tiếp để nối chuỗi giao dịch qua \RepeatedSTART{}; nếu lệnh kế tiếp không tồn tại hoặc không hợp lệ để nối tiếp, FSM chủ động kết thúc giao dịch và trả response.
 
-  \draw[flow] (sw) -- (host);
-  \draw[flow] (host) -- (ctrl);
-  \draw[flow] (ctrl) -- (phy);
-  \draw[flow] (phy) -- (pads);
-\end{tikzpicture}}
-\caption[Three-layer architecture of the I3C Active Controller]{Three-layer architecture. The
-  host/register layer turns software activity into descriptors and data; the controller/protocol
-  layer (the only layer that understands I3C/\iic{} framing) runs the transfer; and the PHY layer
-  synchronises the inputs and drives the open-drain/push-pull outputs. The register bus enters on
-  one side and the \texttt{scl}/\texttt{sda} pads exit on the other.}
-\label{fig:arch-three-layer}
-\end{figure}
+\section{Clock, reset và đồng bộ tín hiệu}
+\label{sec:arch-clk}
 
-\section{Top module and block diagram}
-\label{sec:arch-top-block}
+Clock hệ thống có chu kỳ 3~ns, tương ứng 333,333~MHz. Mọi tham số timing của bus được lưu
+trong CSR theo đơn vị chu kỳ clock, nhờ đó cùng một bộ counter tạo được timing cho I3C SDR và
+\iic{} Fast Mode chỉ bằng cách nạp giá trị khác nhau. Tín hiệu reset ngoài \texttt{rst\_ni} đưa
+toàn bộ FSM về Idle và đưa Queue về trạng thái rỗng. Software reset được tạo từ CSR và chỉ tác động lên các
+trạng thái điều khiển cùng Queue được quy định; yêu cầu reset khi \Controller{} đang bận được xử lý theo
+policy ở mức CSR thay vì cắt ngang giao dịch đang diễn ra trên bus.
 
-The synthesis top, \texttt{i3c_controller_top}, instantiates exactly four children, mirroring the three
-layers: \texttt{u_csr} (\texttt{csr_registers}), \texttt{u_queues} (\texttt{hci_queues}),
-\texttt{u_ctrl} (\texttt{controller_active}, which in turn instantiates the protocol children), and
-\texttt{u_phy} (\texttt{i3c_phy}). \Cref{fig:arch-top-block} shows the full instance hierarchy and the
-top-level port groups.
+\texttt{i3c\_phy} sử dụng 2-FF synchronizer trên mỗi đường tín hiệu vào để hạn chế metastability. Giá
+trị đã đồng bộ được cấp cho \texttt{bus\_monitor}, \BusRxFlow{} và các FSM; độ trễ hai chu kỳ không ảnh hưởng
+vì clock hệ thống có tần số cao hơn SCL đáng kể. Việc mọi khối cùng quan sát một phiên bản tín
+hiệu đã đồng bộ bảo đảm các quyết định trong cùng chu kỳ nhất quán với nhau.
 
-At the boundary, the top module presents three port groups. The \emph{register bus} carries
-\texttt{reg_addr_i[11:0]}, \texttt{reg_wdata_i[31:0]}, \texttt{reg_wen_i}, \texttt{reg_ren_i},
-\texttt{reg_rdata_o[31:0]}, and \texttt{reg_ready_o}. The \emph{bus pads} carry the synchronised inputs
-\texttt{scl_i}/\texttt{sda_i} and the active-low open-drain outputs
-\texttt{scl_o}/\texttt{sda_o}/\texttt{sda_oe_o} together with \texttt{sel_od_pp_o}. The remaining ports
-are the system \texttt{clk_i} and the active-low asynchronous reset \texttt{rst_ni}. Internally, the
-top wires the CSR to the queues on the software side (command and transmit are written by software and
-read by hardware; receive and response are written by hardware and read by software), the queues to the
-protocol engine on the hardware side, the shared 1-cycle-latency Device Address Table (DAT) read port
-to \texttt{controller_active}, and the eighteen timing-parameter buses (nine I3C and nine \iic{} values)
-from the CSR to the protocol engine.
+\section{Khác biệt so với thiết kế tham chiếu}
+\label{sec:arch-reference}
 
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    blk/.style={draw, rounded corners=2pt, align=center, minimum height=8mm, very thick},
-    csr/.style={blk, fill=blue!8},
-    q/.style={blk, fill=blue!8},
-    ctrl/.style={blk, fill=orange!12},
-    phy/.style={blk, fill=green!12},
-    child/.style={draw, fill=white, rounded corners=1.5pt, font=\scriptsize,
-                  minimum height=6mm, align=center},
-    port/.style={font=\scriptsize\itshape, text=black!65, align=center},
-    sig/.style={-{Stealth[length=4pt]}, thick, black!60},
-    bus/.style={<->, thick, black!60, >={Stealth[length=4pt]}},
-  ]
-  % top boundary
-  \node[draw, dashed, rounded corners=4pt, minimum width=15.6cm, minimum height=6.4cm] (top) at (0.2,0) {};
-  \node[font=\footnotesize\bfseries, anchor=north west] at (top.north west) {\ \texttt{i3c\_controller\_top}};
+\CHIPSAlliance{} \IThreeCCore{} hướng đến phạm vi tích hợp rộng hơn, gồm các adapter bus hệ thống, cấu trúc
+HCI đầy đủ và những nhánh chức năng ngoài phạm vi khóa luận~\cite{chipsalliance_i3c}. Thiết kế trong
+khóa luận không nhằm thay thế một bản triển khai đầy đủ như vậy. Các ý tưởng được tham khảo gồm cách tách
+lớp PHY/\Controller{}, mô hình \CommandResponseDescriptor{} và cấu trúc của các FSM truyền nhận. Các thành phần được thu gọn và thiết kế lại
+gồm thu gọn phần tích hợp hệ thống bằng cách sử dụng giao diện thanh ghi 32-bit đơn giản cho \Host{} thay cho adapter bus chuẩn công nghiệp, giới hạn DAT ở \DatEntryCount{} entry,
+bốn Queue đồng bộ một miền clock, và một \ActiveController{} chỉ hỗ trợ tập tính năng tại
+\cref{tab:req-func}. Thay đổi quan trọng nhất nằm ở luồng xử lý lệnh: FSM trung tâm được viết lại để xử lý trọn vẹn các loại
+\CommandDescriptor{} mục tiêu --- Regular Transfer, Immediate Data, CCC, ENTDAA, \iic{} ---
+cùng response và abort trong một máy trạng thái duy nhất.
 
-  % four children
-  \node[csr, text width=2.9cm] (csr) at (-5.4,1.3)
-        {\texttt{u\_csr}\\\texttt{csr\_registers}\\\scriptsize (CSR + 32-entry DAT)};
-  \node[q, text width=2.9cm] (queues) at (-5.4,-1.5)
-        {\texttt{u\_queues}\\\texttt{hci\_queues}\\\scriptsize CMD/TX/RX/RESP};
+\section{Queue, DAT và Descriptor}
+\label{sec:arch-desc}
 
-  \node[ctrl, minimum width=6.4cm, minimum height=4.9cm] (ctrl) at (1.3,0) {};
-  \node[font=\footnotesize\bfseries, anchor=north] at ([yshift=-1.5mm]ctrl.north)
-        {\texttt{u\_ctrl} (\texttt{controller\_active})};
-  \node[child, text width=5.6cm] (flow) at ([yshift=9mm]ctrl.center) {\texttt{flow\_active} FSM};
-  \node[child, text width=5.6cm, below=2.5mm of flow] (ser)
-        {\texttt{scl\_generator} · \texttt{bus\_tx} · \texttt{bus\_tx\_flow}};
-  \node[child, text width=5.6cm, below=2.5mm of ser] (rxmon)
-        {\texttt{bus\_rx\_flow} · \texttt{bus\_monitor}};
-  \node[child, text width=5.6cm, below=2.5mm of rxmon] (ent)
-        {\texttt{entdaa\_controller} + \texttt{entdaa\_fsm}};
+\HciQueues{} khởi tạo \QueueCount{} \texttt{sync\_fifo}. \CommandFifo{} rộng \CommandDescriptorWidth{} bit; \TxFifo{}, \RxFifo{} và \ResponseFifo{} rộng \DataBufferWordWidth{} bit. Số entry mặc định ở top-level là \DefaultQueueDepth{} và là tham số có thể cấu hình khi tích hợp IP; trong mô phỏng, \Testbench{} dùng \TestbenchQueueDepth{} entry để dễ kích hoạt các biên full/empty (\cref{sec:ver-scope}). Mỗi \texttt{sync\_fifo} dùng read pointer và write pointer có
+thêm một bit wrap để phân biệt đầy với rỗng; cấu hình độ sâu không phải lũy thừa hai bị phát hiện tại thời điểm
+elaborate bằng immediate assertion.
 
-  \node[phy, minimum height=4.9cm, text width=1.7cm] (phy) at (6.4,0)
-        {\texttt{u\_phy}\\\texttt{i3c\_phy}\\[2pt]\scriptsize 2-FF sync\\OD/PP drivers};
+DAT gồm \DatEntryCount{} entry, mỗi entry cung cấp \DynamicAddress{} hoặc \StaticAddress{} cùng cờ phân loại \iic{} \Target{}
+. \FlowActive{} dùng trường \texttt{dev\_idx} trong Descriptor để chọn
+entry; ENTDAA dùng chỉ số bắt đầu và số \Target{} lấy từ Address Assignment Descriptor.
+\Cref{tab:desc-summary} tóm tắt vai trò của các cấu trúc giao tiếp; bitfield đầy đủ được liệt kê tại
+\cref{app:desc}.
 
-  % internal connections
-  \draw[bus] (csr.south) -- node[right, font=\tiny] {SW side} (queues.north);
-  \draw[bus] (queues.east) -- node[below, font=\tiny] {queue R/W} (queues.east-|ctrl.west);
-  \draw[sig] (csr.east) -- node[above, font=\tiny] {DAT rd · timing×18} (csr.east-|ctrl.west);
-  \draw[bus] (ctrl.east) -- (phy.west);
-
-  % external ports
-  \node[port, left=5mm of csr] (reg) {register\\bus\\\scriptsize\texttt{reg\_addr/}\\\texttt{wdata/wen/}\\\texttt{ren/rdata/}\\\texttt{ready}};
-  \node[port, right=5mm of phy] (pads) {\texttt{scl\_i/sda\_i}\\\texttt{scl\_o/sda\_o}\\\texttt{sda\_oe\_o}\\\texttt{sel\_od\_pp\_o}};
-  \node[port, below=2mm of top.south] (clk) {\texttt{clk\_i} \quad \texttt{rst\_ni} (async, active-low)};
-
-  \draw[bus] (reg) -- (csr);
-  \draw[bus] (phy.east) -- (pads);
-\end{tikzpicture}}
-\caption[Top-level block diagram of \texttt{i3c\_controller\_top}]{Top-level instance hierarchy.
-  The synthesis top instantiates exactly four children --- \texttt{u\_csr}, \texttt{u\_queues},
-  \texttt{u\_ctrl} (which contains the protocol children), and \texttt{u\_phy} --- and presents three
-  port groups: the register bus, the bus pads, and the system clock/reset.}
-\label{fig:arch-top-block}
-\end{figure}
-
-\section{Transaction dataflow}
-\label{sec:arch-dataflow}
-
-\Cref{fig:arch-dataflow} traces the canonical write and read paths end to end, which is the most useful
-way to understand how the layers cooperate.
-
-\paragraph{Write path.} Software assembles a 64-bit command descriptor by writing
-\texttt{CMD\_QUEUE\_PORT} twice: the first write stages the low DWORD, the second write supplies the
-high DWORD and pushes the combined 64-bit descriptor into the command queue. For data-bearing
-transfers, software also writes the payload words to \texttt{PIO\_DATA\_PORT}, which feeds the transmit
-queue. The \texttt{flow_active} FSM pops the descriptor, fetches the addressed DAT entry through the
-hardware read port, drives the address and data phases through \texttt{bus_tx_flow} and
-\texttt{scl_generator} (multiplexed by \texttt{controller_active}) out to \texttt{i3c_phy} and the pads,
-and finally writes a response descriptor into the response queue, which software reads back through
-\texttt{RESP\_PORT}.
-
-\paragraph{Read path.} The read path is identical up to the address phase; thereafter
-\texttt{flow_active} enables \texttt{bus_rx_flow}, which samples \texttt{sda} on each SCL rising edge,
-assembles bytes, and packs them into 32-bit words that are committed to the receive queue. Software
-drains the receive queue through \texttt{PIO\_DATA\_PORT} and reads the terminating response descriptor
-from \texttt{RESP\_PORT}.
-
-The dynamic-address-assignment (ENTDAA) flow is a third path: \texttt{flow_active} issues the broadcast
-header and the ENTDAA Common Command Code (CCC), then hands the bus to the ENTDAA subsystem, which runs
-the per-Target arbitration loop and streams each enumerated device's identification word back through
-the receive queue (\cref{sec:rtl-entdaa}).
-
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    node distance=6mm,
-    stage/.style={draw, rounded corners=2pt, minimum height=9mm, minimum width=1.9cm,
-                  align=center, thick, fill=blue!6},
-    eng/.style={stage, fill=orange!12},
-    phy/.style={stage, fill=green!12},
-    fwd/.style={-{Stealth[length=5pt]}, thick},
-    ret/.style={-{Stealth[length=5pt]}, thick, densely dashed, black!70},
-    pathlbl/.style={font=\scriptsize\itshape, text=black!70},
-  ]
-  % forward chain (left to right)
-  \node[stage] (host) {Software\\host};
-  \node[stage, right=of host] (cmd) {Command\\queue};
-  \node[eng, right=of cmd] (flow) {\texttt{flow\_active}\\FSM};
-  \node[stage, right=of flow, fill=blue!6] (dat) {DAT\\fetch};
-  \node[eng, right=of dat] (ser) {\texttt{bus\_tx\_flow}\\/\,\texttt{bus\_rx\_flow}};
-  \node[eng, right=of ser] (scl) {\texttt{bus\_tx} ·\\\texttt{scl\_generator}};
-  \node[phy, right=of scl] (phy) {\texttt{i3c\_phy}\\+ pads};
-
-  \draw[fwd] (host) -- (cmd);
-  \draw[fwd] (cmd) -- (flow);
-  \draw[fwd] (flow) -- (dat);
-  \draw[fwd] (dat) -- (ser);
-  \draw[fwd] (ser) -- (scl);
-  \draw[fwd] (scl) -- (phy);
-
-  % TX feed into serialiser (write path)
-  \node[stage, above=10mm of ser, fill=blue!6] (tx) {Transmit\\queue};
-  \draw[fwd] (tx) -- node[right, pathlbl] {write payload} (ser);
-  \draw[fwd] (host.north) |- node[pathlbl, above, pos=0.75] {\texttt{PIO\_DATA\_PORT}} (tx.west);
-
-  % return path: pads -> rx -> rx/resp queue -> host
-  \node[stage, below=10mm of dat, fill=blue!6] (rxq) {Receive /\\response queue};
-  \draw[ret] (phy.south) |- node[pathlbl, below, pos=0.25] {read data · response} (rxq.east);
-  \draw[ret] (rxq.west) -| node[pathlbl, below, pos=0.25] {\texttt{RESP\_PORT} / \texttt{PIO\_DATA\_PORT}} (host.south);
-
-  % legend
-  \node[pathlbl, anchor=west] at ([yshift=-3mm]rxq.south west)
-        {\textbf{---}\,forward (issue) \qquad \textbf{- - -}\,return (response / receive)};
-\end{tikzpicture}}
-\caption[End-to-end transaction dataflow]{End-to-end dataflow. The \emph{write} path pulls payload
-  from the transmit queue into the serialiser; the \emph{read} path enables \texttt{bus\_rx\_flow},
-  which samples \texttt{sda} and packs bytes into the receive queue. Both paths return a response
-  descriptor that software reads back, and ENTDAA is a third path that hands the bus to the DAA
-  subsystem after the broadcast header.}
-\label{fig:arch-dataflow}
-\end{figure}
-
-\section{Clock, reset, and signal conventions}
-\label{sec:arch-clk-reset}
-
-The entire controller runs in a \emph{single clock domain} on \texttt{clk_i}. Because all bus timing is
-counted in system-clock cycles (\cref{sec:rtl-csr}), the design needs a fast reference: the default
-timing values assume a system clock of \SI{333.333}{\mega\hertz}, which is the minimum that lets the
-single-counter generator resolve the SDR \SI{12.5}{\mega\hertz} push-pull period and the sub-cycle
-setup and hold windows with integer counts. Reset is the active-low, asynchronously asserted
-\texttt{rst_ni}; every sequential block follows the \texttt{always_ff~@(posedge~clk_i~or~negedge~rst_ni)}
-idiom so that reset takes effect immediately and release is synchronous.
-
-Two distinct reset mechanisms coexist. The hardware reset \texttt{rst_ni} returns all state to its
-initial value. A separate \emph{software reset} --- \texttt{RESET\_CONTROL[0]}, a self-clearing pulse
---- synchronously flushes the four HCI queues and the CSR command/transmit staging registers without
-disturbing the protocol FSM; software is expected to assert it only while the controller reports idle.
-
-Inputs from the bus are metastability-hardened before use. \Cref{fig:arch-clk-reset} shows the chain:
-\texttt{i3c_phy} provides a two-flip-flop synchroniser on each of \texttt{scl} and \texttt{sda}, and
-\texttt{bus_monitor} adds one further capture flop before its edge detectors, giving three flops of
-latency between a pad transition and the first combinational use of the synchronised value.
-
-The signal-naming conventions used throughout the RTL are: the suffix \texttt{\_i} for inputs and
-\texttt{\_o} for outputs; FIFO and serialiser handshakes as \texttt{*\_valid}/\texttt{*\_ready} pairs
-(an action occurs only when both are asserted); active-low open-drain bus outputs
-\texttt{scl_o}/\texttt{sda_o} with their output-enable \texttt{sda_oe_o}; and the phase selector
-\texttt{sel_od_pp_o}, where \texttt{1} selects push-pull signalling for the data phase and \texttt{0}
-selects open-drain signalling for the address and acknowledge phases.
-
-\begin{figure}[!htb]\centering
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    ff/.style={draw, thick, minimum width=1.1cm, minimum height=1.2cm, align=center,
-               font=\scriptsize, fill=green!10},
-    grp/.style={draw, dashed, rounded corners=3pt, inner sep=6pt},
-    sig/.style={-{Stealth[length=5pt]}, thick},
-    clk/.style={-{Stealth[length=4pt]}, thick, black!55},
-    lbl/.style={font=\scriptsize\itshape, text=black!70},
-  ]
-  % synchroniser chain
-  \node[lbl, align=center] (pad) {\texttt{scl\_i}/\texttt{sda\_i}\\(async pad)};
-  \node[ff, right=10mm of pad] (f1) {FF1};
-  \node[ff, right=6mm of f1] (f2) {FF2};
-  \node[ff, right=10mm of f2] (f3) {capture\\FF};
-  \node[lbl, align=center, right=10mm of f3] (use) {synchronised\\value\\(edge detect)};
-
-  \draw[sig] (pad) -- (f1);
-  \draw[sig] (f1) -- (f2);
-  \draw[sig] (f2) -- (f3);
-  \draw[sig] (f3) -- (use);
-
-  % grouping boxes
-  \node[grp, fit=(f1)(f2), label={[font=\scriptsize\bfseries]below:\texttt{i3c\_phy} (2-FF sync)}] (phybox) {};
-  \node[grp, fit=(f3), label={[font=\scriptsize\bfseries]below:\texttt{bus\_monitor}}] (monbox) {};
-  \node[lbl, above=7mm of f2, text=black!75] {3 flops of pad-to-logic latency = metastability budget};
-
-  % clock + reset rail
-  \node[lbl, anchor=east] at ([yshift=-20mm]pad.east|-pad) {};
-  \coordinate (rail) at ($(pad)+(0,-2.3)$);
-  \node[font=\footnotesize\bfseries, anchor=east] (clksrc) at ($(f1|-rail)+(-1.2,0)$) {\texttt{clk\_i}};
-  \draw[clk] (clksrc.east) -| (f1.south);
-  \draw[clk] (clksrc.east) -| (f2.south);
-  \draw[clk] (clksrc.east) -| (f3.south);
-  \node[lbl, right=2mm of f3.south, anchor=west, yshift=-7mm]
-        {single domain @ \SI{333.333}{\mega\hertz}; \texttt{rst\_ni} async, active-low};
-
-  % software reset note
-  \node[draw, rounded corners=2pt, fill=blue!6, font=\scriptsize, align=center, very thick,
-        below=12mm of f2] (sw)
-        {\textbf{Software reset} \texttt{RESET\_CONTROL[0]} (self-clearing):\\
-         synchronously flushes the four HCI queues + CMD/TX staging --- FSM state untouched};
-\end{tikzpicture}
-\caption[Clock, reset, and input synchroniser chain]{Single clock domain and the input
-  synchroniser chain. \texttt{i3c\_phy} provides two synchroniser flops on each bus line and
-  \texttt{bus\_monitor} adds one capture flop, giving three flops between a pad transition and its
-  first combinational use. Two resets coexist: the asynchronous active-low hardware reset
-  \texttt{rst\_ni}, and a self-clearing software reset that flushes only the queues and staging.}
-\label{fig:arch-clk-reset}
-\end{figure}
-
-\section{Reference-derived design boundary and decisions}
-\label{sec:arch-boundary}
-
-The design is not a clean-sheet effort but a deliberate simplification of the open-source CHIPS Alliance
-\texttt{i3c-core}~\cite{chipsalliance_i3c}, a full Host-Controller-Interface implementation integrated
-into a root-of-trust subsystem. \Cref{fig:arch-chips-ref} sketches the reference architecture and marks
-what this thesis retains, adapts, and excludes; the quantitative size comparison is reported once, in
-\cref{ch:results}.
-
-\emph{Retained}, because they are the essence of I3C as a study target: SDR private write, read, and
-Immediate Data Transfer; legacy \iic{} Fast-Mode traffic on the same two wires~\cite{nxp_i2c}; dynamic
-address assignment via ENTDAA; and the ENEC/DISEC broadcast and direct CCCs. \emph{Adapted}, to keep the
-software contract and the timing explicit: the auto-generated register file is replaced by a hand-written
-one with a simple address/data bus instead of AXI/AHB adapters; the DAT is narrowed to 32 bits and 32
-entries and the separate Device Characteristics Table is removed (software retains the Provisioned ID,
-Bus Characteristics Register, and Device Characteristics Register after enumeration); a single shared
-counter generates all bus timing instead of an array of parallel timers; the open-drain bus is modelled
-with an output-enable convention rather than instantiated pads; and ENTDAA is re-expressed entirely from
-the \emph{Controller's} perspective, completing command-issue paths that the reference leaves as
-unimplemented \texttt{TODO} stubs. \emph{Excluded}, as out of scope: In-Band Interrupts, the High-Data-Rate
-modes, multi-controller / secondary-controller operation, and Target mode. These cross-cutting decisions
-recur in the module walkthrough of Part~B and are not repeated there.
-
-\begin{figure}[!htb]\centering
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    col/.style={rounded corners=3pt, draw, very thick, minimum width=4.0cm, align=center,
-                text width=3.9cm},
-    keep/.style={col, fill=green!12},
-    adapt/.style={col, fill=orange!12},
-    excl/.style={col, fill=red!9},
-    hd/.style={font=\footnotesize\bfseries},
-    item/.style={font=\scriptsize, align=left, text width=3.7cm},
-  ]
-  \node[hd] (h1) {\textcolor{green!45!black}{Retained}};
-  \node[hd, right=8mm of h1] (h2) {\textcolor{orange!75!black}{Adapted}};
-  \node[hd, right=8mm of h2] (h3) {\textcolor{red!70!black}{Excluded}};
-
-  \node[keep, below=2mm of h1] (k) {%
-    \textbullet~SDR private write / read /\\\hspace*{1.5mm}immediate transfer\\[2pt]
-    \textbullet~legacy \iic{} Fast-Mode\\[2pt]
-    \textbullet~ENTDAA dynamic address\\[2pt]
-    \textbullet~ENEC / DISEC CCCs};
-  \node[adapt, below=2mm of h2] (a) at (h2|-k) {%
-    \textbullet~hand-written CSR + simple\\\hspace*{1.5mm}reg bus (not AXI/AHB)\\[2pt]
-    \textbullet~32-bit / 32-entry DAT, no DCT\\[2pt]
-    \textbullet~single shared timing counter\\[2pt]
-    \textbullet~OE-convention OD model,\\\hspace*{1.5mm}no pad cells\\[2pt]
-    \textbullet~Controller-side ENTDAA\\\hspace*{1.5mm}(completes \texttt{TODO} stubs)};
-  \node[excl, below=2mm of h3] (e) at (h3|-k) {%
-    \textbullet~In-Band Interrupts (IBI)\\[2pt]
-    \textbullet~High-Data-Rate (HDR) modes\\[2pt]
-    \textbullet~multi- / secondary-\\\hspace*{1.5mm}controller operation\\[2pt]
-    \textbullet~Target mode};
-
-  \node[draw, dashed, rounded corners=4pt, fit=(h1)(h3)(k)(a)(e),
-        inner sep=8pt] (box) {};
-  \node[font=\scriptsize\itshape, text=black!65, anchor=north west] at (box.north west)
-        {\ CHIPS Alliance \texttt{i3c-core} HCI reference};
-\end{tikzpicture}
-\caption[Reference-derived design boundary]{The simplified design boundary against the CHIPS
-  Alliance \texttt{i3c-core} reference: which capabilities are \emph{retained} as the essence of
-  I3C, which are \emph{adapted} to keep the software contract and timing explicit, and which are
-  \emph{excluded} as out of scope. The quantitative size comparison is reported in
-  \cref{ch:results}.}
-\label{fig:arch-chips-ref}
-\end{figure}
-
-\section{Queue, DAT, and descriptor formats}
-\label{sec:arch-formats}
-
-The software/hardware contract is carried by four queues, one address table, and a small set of
-descriptors. \Cref{tab:queue-dat-overview} summarises the formats at overview resolution; the complete
-bit-field layouts are tabulated in \cref{app:descriptors}.
-
-\begin{table}[!htb]\centering
-  \caption{Queue, DAT, and descriptor format overview. Full bit-field layouts appear in
-    \cref{app:descriptors}.}
-  \label{tab:queue-dat-overview}
-  \small
-  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.27\textwidth}
-                     c c
-                     >{\raggedright\arraybackslash}p{0.40\textwidth}@{}}
-    \toprule
-    \textbf{Structure} & \textbf{Width} & \textbf{Depth} & \textbf{Role} \\
-    \midrule
-    Command queue        & 64-bit & 64 & Command descriptors (two software DWORD writes per entry) \\
-    Transmit data buffer & 32-bit & 64 & Outgoing data words \\
-    Receive data buffer  & 32-bit & 64 & Incoming data words \\
-    Response queue       & 32-bit & 64 & Response descriptors (one per completed transfer) \\
-    Device Address Table & 32-bit & 32 & Maps a device index to its I3C dynamic and \iic{} static address \\
-    \bottomrule
-  \end{tabular}
+\begin{table}[!htbp]
+	\centering
+	\caption{Vai trò của các cấu trúc giao tiếp chính.}
+	\label{tab:desc-summary}
+	\begin{tabular}{L{3.8cm} C{2.0cm} L{7.3cm}}
+		\toprule
+		\textbf{Cấu trúc}     & \textbf{Độ rộng}               & \textbf{Vai trò}                                                                    \\
+		\midrule
+		\CommandDescriptor{}  & \CommandDescriptorWidth{} bit  & Loại lệnh, hướng, chế độ, \texttt{dev\_idx}, transaction ID, độ dài và cờ kết thúc. \\
+		\ResponseDescriptor{} & \ResponseDescriptorWidth{} bit & Error status, transaction ID và số byte đã xử lý.                                   \\
+		DAT entry             & \DatEntryWidth{} bit           & Static/\DynamicAddress{} và thông tin loại \Target{}.                               \\
+		\TxRxFifo{} word      & \DataBufferWordWidth{} bit     & Tối đa bốn byte dữ liệu truyền theo thứ tự little-endian trong word.                \\
+		\bottomrule
+	\end{tabular}
 \end{table}
 
-Each command descriptor's three least-significant bits select its \emph{attribute}: a regular transfer,
-an immediate data transfer (up to four in-line data bytes, no transmit-queue traffic), or an address
-assignment (ENTDAA). A fourth combo-transfer encoding exists in the type package but is rejected as
-unsupported by the FSM's descriptor validator. The DAT entry, shown below, is the narrowed 32-bit form:
-bit~31 marks an \iic{} legacy device, bits~22:16 hold the I3C dynamic address, and bits~6:0 hold the
-\iic{} static address.
+\CommandDescriptor{} chấp nhận ba loại: Regular Transfer, Immediate Data Transfer và Address Assignment.
+Combo Transfer và các mode khác \texttt{sdr0} bị từ chối với mã \texttt{NotSupported}. Immediate Data
+chỉ cho phép hướng ghi với tối đa bốn byte nằm ngay trong DWORD thứ hai của Descriptor. Address
+Assignment phải mang CCC ENTDAA, có \texttt{toc=1}, \texttt{wroc=1}, số \Target{} khác không và dải chỉ số
+không vượt quá biên DAT; vi phạm bất kỳ điều kiện nào cũng bị từ chối trước khi thiết kế phát tín hiệu lên bus.
 
-\begin{lstlisting}[language=Verilog,caption={Simplified 32-bit DAT entry (\texttt{controller\_pkg.sv}).},label={lst:dat-entry}]
-typedef struct packed {
-  logic       device;           // [31]    1 = I2C legacy device
-  logic [7:0] reserved_30_23;   // [30:23] Reserved
-  logic [6:0] dynamic_address;  // [22:16] I3C dynamic address
-  logic [8:0] reserved_15_7;    // [15:7]  Reserved
-  logic [6:0] static_address;   // [6:0]   I2C static address
-} dat_entry_t;
-\end{lstlisting}
+\section{Cơ chế xử lý lỗi}
+\label{sec:arch-err}
 
-The response descriptor is a single 32-bit word: a 4-bit error-status field in the most-significant
-nibble, the 4-bit transaction identifier copied from the command, and the 16-bit count of payload bytes
-actually transferred. Its error field is the subject of the next section.
+Lỗi không làm FSM thoát ngay giữa giao dịch: các lỗi được tích lũy trong những cờ
+riêng biệt trong suốt transaction, và chỉ được ánh xạ thành trường \texttt{ERR\_STATUS} tại thời điểm
+ghi \ResponseDescriptor{}. Bộ mã này là quy ước trong MIPI TCRI/HCI~\cite{mipi_i3c_tcri}, không phải
+mã lỗi do \MIPIIThreeCBasic{} định nghĩa. \Cref{tab:err-status} liệt kê các mã lỗi mà thiết kế sinh ra.
 
-\section{Error-handling model}
-\label{sec:arch-errors}
-
-Errors are detected at several points in the protocol path --- a NACKed address or data byte, a transmit
-underflow, a receive overflow, a short read, an unsupported descriptor, a repeatedly rejected dynamic
-address, or a host-requested abort --- but they are \emph{consolidated in one place}. The
-\texttt{flow_active} FSM latches each condition in a dedicated sticky flag during the transfer and, on
-entering the terminal \texttt{WriteResp} state, maps the highest-priority flag to the 4-bit
-\texttt{ERR\_STATUS} field of the response descriptor. The encoding follows the HCI/TCRI controller
-interface convention (Table~11 of that interface), not a MIPI protocol clause; \cref{tab:err-status}
-lists the full enumeration and marks the subset the controller actually generates, and
-\cref{lst:err-map} shows the priority-ordered mapping function.
-
-\begin{table}[!htb]\centering
-  \caption{Response-descriptor \texttt{ERR\_STATUS} encoding. ``Gen.'' marks the codes this controller
-    generates; the remaining codes are defined by the interface but not produced by the supported
-    feature set.}
-  \label{tab:err-status}
-  \small
-  \begin{tabular}{@{}c l c >{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
-    \toprule
-    \textbf{Code} & \textbf{Name} & \textbf{Gen.} & \textbf{Meaning} \\
-    \midrule
-    0x0 & \texttt{Success}                    & \textbullet & Transfer completed without error \\
-    0x1 & \texttt{Crc}                        &            & CRC error (HDR; not supported) \\
-    0x2 & \texttt{Parity}                     &            & Parity error (not generated) \\
-    0x3 & \texttt{Frame}                      &            & Framing error (not generated) \\
-    0x4 & \texttt{AddrHeader}                 & \textbullet & Address-header byte NACKed \\
-    0x5 & \texttt{Nack}                       & \textbullet & ENTDAA dynamic address repeatedly rejected \\
-    0x6 & \texttt{Ovl}                        & \textbullet & Receive overflow or transmit underflow \\
-    0x7 & \texttt{I3cShortReadErr}            & \textbullet & Target ended an I3C read early \\
-    0x8 & \texttt{HcAborted}                  & \textbullet & Transfer terminated by a host abort \\
-    0x9 & \texttt{I2cDataNackOrI3cBusAborted} & \textbullet & \iic{} data byte NACKed / I3C bus abort \\
-    0xA & \texttt{NotSupported}               & \textbullet & Descriptor invalid or feature unsupported \\
-    \bottomrule
-  \end{tabular}
+\begin{table}[!htbp]
+	\centering
+	\caption{Các \texttt{ERR\_STATUS} được triển khai trong thiết kế.}
+	\label{tab:err-status}
+	\begin{tabular}{C{1.5cm} L{4.0cm} L{7.5cm}}
+		\toprule
+		\textbf{Mã} & \textbf{Tên RTL}                                               & \textbf{Điều kiện}                                      \\
+		\midrule
+		0x0         & \texttt{Success}                                               & Transaction kết thúc không có lỗi được ghi nhận.        \\
+		0x4         & \texttt{AddrHeader}                                            & \Target{} NACK \AddressHeader{}.                        \\
+		0x5         & \texttt{Nack}                                                  & \DynamicAddress{} bị từ chối hai lần trong ENTDAA.      \\
+		0x6         & \texttt{Ovl}                                                   & TX underflow hoặc RX overflow.                          \\
+		0x7         & \texttt{I3cShortReadErr}                                       & \Target{} kết thúc read sớm khi policy yêu cầu báo lỗi. \\
+		0x8         & \texttt{HcAborted}                                             & \Host{} yêu cầu abort transaction.                      \\
+		0x9         & \shortstack[l]{\texttt{I2cDataNackOr}\\\texttt{I3cBusAborted}} & Data NACK của \iic{} hoặc bus abort tương ứng.          \\
+		0xA         & \texttt{NotSupported}                                          & Descriptor hoặc mode không thuộc tập hỗ trợ.            \\
+		\bottomrule
+	\end{tabular}
 \end{table}
 
-\begin{lstlisting}[language=Verilog,caption={Priority-ordered error consolidation in \texttt{flow\_active.sv}.},label={lst:err-map}]
-function automatic i3c_resp_err_status_e map_resp_err_status();
-  if      (addr_nack_q)      return AddrHeader;                 // 0x4
-  else if (data_nack_q)      return I2cDataNackOrI3cBusAborted; // 0x9
-  else if (daa_nack_error_q) return Nack;                       // 0x5
-  else if (rx_overflow_q ||
-           tx_underflow_q)   return Ovl;                        // 0x6
-  else if (short_read_q)     return I3cShortReadErr;            // 0x7
-  else if (not_supported_q)  return NotSupported;               // 0xA
-  else if (hc_aborted_q)     return HcAborted;                  // 0x8
-  else                       return Success;                    // 0x0
-endfunction
-\end{lstlisting}
+Khi nhiều điều kiện cùng xuất hiện, hàm \texttt{map\_resp\_err\_status()} chọn một mã duy nhất theo thứ
+tự ưu tiên cố định: address NACK đứng trước data NACK, tiếp đến NACK \DynamicAddress{} trong ENTDAA, overflow/underflow, short
+read, unsupported và cuối cùng là abort. Thứ tự này bảo đảm lỗi phát sinh trực tiếp từ giao thức được ghi nhận trước, không bị che bởi một
+yêu cầu abort đến muộn --- chẳng hạn giao dịch bị NACK ngay tại \AddressHeader{} sẽ báo
+\texttt{AddrHeader} dù \Host{} có phát abort sau đó. Việc ghi response giữ valid cho đến khi ready:
+\texttt{WriteResp} giữ \texttt{valid} và dữ liệu cho đến khi \ResponseFifo{} chấp nhận, nên response
+không bị mất khi Queue đang đầy.
 
-Centralising error reporting in the command FSM keeps the rest of the protocol path free of
-error-formatting logic: the serialisers and the clock generator simply report events, and the FSM
-decides how a transfer ends.
+\section{Các khối RTL hỗ trợ}
+\label{sec:rtl-support}
 
-% ---------------------------------------------------------------------------
-% PART B --- RTL Design and Implementation (flagship)
-% Per-module pattern: role / interface / FSM or datapath / key decision.
-% ---------------------------------------------------------------------------
-
-\section{PHY (\texttt{i3c\_phy})}
+\subsection{PHY và bus monitor}
 \label{sec:rtl-phy}
+\label{sec:rtl-monitor}
 
-\textbf{Role.} The PHY shim is the only module that touches the pads. On the input side it provides a
-two-flip-flop synchroniser for \texttt{scl_i} and \texttt{sda_i}, both resetting to logic high to match
-the idle (released) bus. On the output side it forwards the controller's driven value
-\texttt{ctrl_sda_i}, its output enable \texttt{ctrl_sda_oe_i}, the clock \texttt{ctrl_scl_i}, and the
-phase selector to the pad signals \texttt{sda_o}/\texttt{sda_oe_o}/\texttt{scl_o}/\texttt{sel_od_pp_o}.
+\texttt{i3c\_phy} thực hiện hai nhiệm vụ: đồng bộ SDA/SCL vào miền clock hệ thống và chuyển tiếp các tín hiệu
+điều khiển từ \ActiveController{} ra các cổng output của top-level. Ở chiều nhận, mức logic trên bus
+được lấy mẫu qua 2-FF synchronizer trước khi đưa vào các khối xử lý giao thức. Ở chiều phát, PHY chỉ
+chuyển tiếp giá trị SCL/SDA và chế độ lái đã được \ActiveController{} chọn ra ngoài top-level. PHY không tự quyết
+định pha giao thức; việc chọn giá trị SDA/SCL và chế độ lái do khối \ActiveController{} quyết định.
 
-\textbf{Key decision.} The PHY contains \emph{no} technology-specific pad primitives. Open-drain
-behaviour is expressed purely through the output-enable convention (\cref{sec:rtl-controller-active}),
-which keeps the design synthesis-target-agnostic and lets the testbench model the wired-AND bus with an
-ordinary signal. The synchroniser depth (two flops here, plus one capture flop in
-\texttt{bus_monitor}) is the project's metastability budget.
+\texttt{bus\_monitor} nhận tín hiệu đã đồng bộ, tạo xung báo cạnh và phát hiện START, \RepeatedSTART{}, STOP.
+Hai khối logic \texttt{edge\_detector} và \texttt{stable\_high\_detector} quyết định khi nào một chuyển tiếp SDA là hợp lệ:
+một chuyển tiếp của SDA chỉ được xem là điều kiện bus khi SCL đã ổn định ở mức cao đủ lâu, nhờ
+đó lọc được glitch và các cạnh xảy ra sát nhau. Monitor chỉ báo sự kiện, không thay đổi SDA/SCL; việc
+tách logic phát hiện sự kiện khỏi logic tạo tín hiệu bus, cho phép \Scoreboard{} và SVA dựa trên cùng một logic phát hiện sự kiện với RTL.
 
-\section{CSR register file and Device Address Table (\texttt{csr\_registers})}
+\subsection{CSR, DAT và HCI queues}
 \label{sec:rtl-csr}
+\label{sec:rtl-queues}
 
-\textbf{Role.} The CSR module is the software-visible face of the controller: a hand-written 32-bit
-register file plus the 32-entry DAT, the command/transmit staging logic, and the read/write multiplexers
-for the four queue ports. \textbf{Interface.} It speaks the simple register bus of
-\cref{sec:arch-top-block}; both register reads and the hardware DAT read are registered, giving one cycle
-of latency. \textbf{Map.} The roughly two dozen registers fall into the groups summarised in
-\cref{tab:csr-summary}; the complete bit-field map, including all eighteen timing registers and their
-reset values, is given in \cref{app:csr}.
+\CsrRegisters{} triển khai \CsrRegisterCount{} thanh ghi cùng vùng DAT gồm \DatEntryCount{} entry theo bản đồ thanh ghi tại \cref{app:csr}.
+Khối này lưu các giá trị timing mặc định, các bit enable/abort/reset, báo trạng thái bận của \Controller{} và
+chuyển các truy cập dữ liệu thành thao tác valid/ready với Queue. \CommandDescriptor{} \CommandDescriptorWidth{}-bit được ghép từ hai lần
+ghi \RegisterDataWidth{}-bit liên tiếp vào cùng một địa chỉ; nếu Queue chưa sẵn sàng nhận dữ liệu, dữ liệu và trạng thái valid được
+giữ đến khi \HciQueues{} chấp nhận, nên phần mềm không cần polling trước mỗi lần ghi. Thao tác ghi DAT áp dụng mask để các bit reserved luôn đọc về bằng không.
 
-\begin{table}[!htb]\centering
-  \caption{CSR register groups (overview). The full bit-field map is in \cref{app:csr}.}
-  \label{tab:csr-summary}
-  \small
-  \begin{tabular}{@{}l l >{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
-    \toprule
-    \textbf{Offset(s)} & \textbf{Group} & \textbf{Function} \\
-    \midrule
-    0x004, 0x010, 0x014 & Control/status & \texttt{HC\_CONTROL} (enable, abort), \texttt{RESET\_CONTROL} (soft reset), live \texttt{HC\_STATUS} \\
-    0x080--0x0B4        & Queue ports    & \texttt{CMD\_QUEUE\_PORT}, \texttt{RESP\_PORT}, \texttt{PIO\_DATA\_PORT}, \texttt{QUEUE\_STATUS} \\
-    0x32C--0x380        & Timing (×18)   & Nine I3C and nine \iic{} timing parameters, in system-clock cycles \\
-    0x400--0x47C        & DAT[0..31]     & 32 device-address-table entries (\cref{lst:dat-entry}) \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+\HciQueues{} đóng vai trò là lớp lưu trữ: bốn FIFO đồng bộ dùng chung clock, hỗ trợ flush bằng
+software reset và không diễn giải nội dung dữ liệu. Ngoài cờ full/empty, \HciQueues{} còn xuất số entry đang sử dụng hiện tại
+để CSR tổng hợp trạng thái Queue cho phần mềm. Cấu trúc này đủ cho luồng truy cập PIO trong phạm vi khoá luận, nhưng không
+cung cấp hoặc DMA như một HCI đầy đủ.
 
-\textbf{Key decisions.} Two are worth highlighting. First, the command port assembles a 64-bit
-descriptor from two consecutive 32-bit writes: the first stages the low DWORD, the second supplies the
-high DWORD and pushes the entry. Second, back-pressure is explicit and non-lossy --- when the command
-or transmit FIFO is full, the CSR captures one pending write, holds its valid/data, and deasserts
-\texttt{ready_o} until the FIFO accepts it, so no software write is silently dropped. Reading an empty
-receive or response port returns zero without popping the FIFO. Writing the register file by hand (rather
-than generating it from a register-description language, as the reference does) is the single decision
-that most improves study-ability, because the entire software contract is one readable
-\texttt{case} statement.
-
-\section{HCI queues (\texttt{hci\_queues} / \texttt{sync\_fifo})}
-\label{sec:rtl-fifo}
-
-\textbf{Role.} \texttt{hci_queues} instantiates the four buffers of \cref{tab:queue-dat-overview} from a
-single generic \texttt{sync_fifo} primitive: the 64-bit command queue and the three 32-bit data/response
-queues, each 64 entries deep, all flushed together by the software reset. \textbf{Datapath.} The
-\texttt{sync_fifo} is a classic single-clock circular buffer with one guard bit on each pointer; full and
-empty are distinguished by comparing the guard bits, and the \texttt{*\_valid}/\texttt{*\_ready}
-handshake gates every push and pop.
-
-\textbf{Key decision.} The FIFO depth is constrained to a power of two by an \emph{elaboration-time}
-assertion (\cref{lst:fifo-assert}) rather than by run-time logic. This turns an illegal parameterisation
-into a compile-time failure --- the basis of test case FIFO\_005, which deliberately elaborates a
-depth-3 FIFO and passes only if this fatal fires --- and lets the pointer arithmetic stay a simple binary
-increment with no modulo.
-
-\begin{lstlisting}[language=Verilog,caption={Power-of-two depth contract enforced at elaboration (\texttt{sync\_fifo.sv}).},label={lst:fifo-assert}]
-initial begin
-  assert (Depth == (1 << PtrW))
-  else $fatal(1, "sync_fifo: Depth (%0d) must be a power of 2", Depth);
-end
-\end{lstlisting}
-
-\section{Bus monitor (\texttt{bus\_monitor})}
-\label{sec:rtl-bus-monitor}
-
-\textbf{Role.} \texttt{bus_monitor} watches the synchronised \texttt{scl}/\texttt{sda} lines and reports
-the bus conditions the protocol needs: START, Repeated START (Sr), STOP, and the per-line edge and
-stability flags, all packed into a \texttt{bus_state_t}. \textbf{Datapath.} It captures the inputs once
-more (the third synchroniser flop), then drives four \texttt{edge_detector} instances (SCL/SDA rising and
-falling) and three \texttt{stable_high_detector} instances (SDA high, SCL high, SCL low). A START
-candidate is an SDA falling edge while SCL is stably high; a STOP candidate is an SDA rising edge while
-SCL is stably high; the candidate is only confirmed once the delayed edge detector agrees, which rejects
-a data-bit transition during SCL-low from being mis-reported after SCL rises.
-
-\textbf{Key decision.} START and Repeated START share the same electrical signature, so the monitor
-distinguishes them with a small piece of state: once a START has been seen and not yet followed by a
-STOP, any further START is reported as a Repeated START. This single bit is what lets the ENTDAA and
-combined-transfer logic downstream reason about frame boundaries correctly.
-
-\section{SCL generator (\texttt{scl\_generator})}
+\subsection{SCL generator}
 \label{sec:rtl-scl}
 
-\textbf{Role.} \texttt{scl_generator} is the controller's clock and bus-condition engine. Its 14-state
-FSM (\cref{fig:scl-fsm}) produces the SCL waveform during data phases and the carefully sequenced
-SDA/SCL edges for START, Repeated START, STOP, and the post-STOP bus-free interval.
+\SclGenerator{} là FSM chịu trách nhiệm tạo SCL và các điều kiện START, \RepeatedSTART{} và STOP trên
+bus. Các trạng thái chia thành bốn nhóm chức năng chính: nhóm tạo START condition kéo SDA xuống và
+duy trì SDA ở mức thấp trong khoảng thời gian yêu cầu; nhóm tạo xung SCL tạo luân phiên hai mức thấp
+và cao của SCL và dừng lại khi chưa có yêu cầu kế tiếp; nhóm tạo \RepeatedSTART{} condition tạo
+\RepeatedSTART{} condition giữa giao dịch; và nhóm tạo STOP condition đưa SDA lên cao khi SCL cao rồi
+chờ đủ \BusFreeCondition{} trước khi trở về Idle. Bộ đếm thời gian được nạp từ CSR theo trạng thái hiện
+tại; bảng đầy đủ tên và vai trò của từng trạng thái, cùng sơ đồ chuyển trạng thái nhóm theo bốn chức năng, nằm tại \cref{app:fsm} (\cref{fig:scl-gen-fsm}).
 
-\textbf{Datapath --- the single-counter strategy.} Rather than instantiate a separate timer per timing
-parameter, the generator keeps \emph{one} down-counter, \texttt{tcount}, and reloads it from the
-appropriate CSR timing value as it walks through its states (\texttt{DriveLow}, \texttt{DriveHigh}, the
-START/STOP setup and hold states, \texttt{BusFree}, and so on). The open-drain SCL-low period is selected
-by \texttt{scl_use_od_low_i} so that the slower open-drain address phase and the faster push-pull data
-phase use different low times from the same counter. This single-counter scheme is a deliberate area
-simplification over the reference's parallel timers.
+Ngoài ra, \SclGenerator{} còn bổ sung hai cơ chế đáng chú ý nhằm đáp ứng các yêu cầu timing trong một số pha đặc biệt. Thứ nhất, FSM có đường chuyển nhanh từ
+\texttt{DriveHigh} sang \texttt{RstartSdaFall}, dùng khi \ActiveController{} cần giành lại SDA ngay sau bit ACK hoặc
+\TBit{} mà không đi qua toàn bộ chuỗi tạo \RepeatedSTART{} thông thường. Thứ hai, \SclGenerator{}
+chọn thời gian mức thấp theo chế độ lái bus thực tế: các pha \OpenDrain{} dùng giá trị timing dành
+riêng cho \OpenDrain{}, còn các pha \PushPull{} dùng timing mức thấp tương ứng với chế độ \PushPull{}. Điều này cần thiết
+vì một giao dịch I3C vẫn có các pha \OpenDrain{} ở đầu frame.
 
-\textbf{Key decision.} The Repeated START needed to restart a frame --- for a read takeover or a direct
-CCC --- is requested through one input, \texttt{gen_rstart_i}, with a companion fast-path
-\texttt{takeover_i} that routes the FSM straight to \texttt{RstartSdaFall} when the command engine needs
-to seize SDA for a read. The chapter describes only this implemented request/handoff path; there are no
-other restart entry points.
+\subsection{TX/RX serializer}
+\label{sec:rtl-txrx}
 
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    >={Stealth[length=5pt]},
-    st/.style={draw, rounded corners=3pt, thick, fill=orange!12, font=\scriptsize\ttfamily,
-               align=center, minimum height=7mm, inner sep=3pt},
-    init/.style={st, fill=blue!10},
-    ed/.style={->, thick, black!70},
-    el/.style={font=\scriptsize\itshape, text=black!75, inner sep=1.5pt},
-  ]
-  \node[init] (idle) at (0,0) {Idle};
-  \node[st] (gst) at (0,2.6) {GenerateStart};
-  \node[st] (sf)  at (3.2,2.6) {SdaFall};
-  \node[st] (hs)  at (6.4,2.6) {HoldStart};
-  \node[st] (dl)  at (6.4,0) {DriveLow};
-  \node[st] (dh)  at (9.8,0) {DriveHigh};
-  \node[st] (wc)  at (9.8,2.6) {WaitCmd};
-  \node[st] (grs) at (3.0,-2.6) {GenerateRstart};
-  \node[st] (shr) at (3.0,-4.6) {SclHighForRstart};
-  \node[st] (rsf) at (6.4,-3.6) {RstartSdaFall};
-  \node[st] (gsp) at (13.0,0) {GenerateStop};
-  \node[st] (shs) at (13.0,-2.2) {SclHighForStop};
-  \node[st] (sr)  at (13.0,-4.4) {SdaRise};
-  \node[st] (bf)  at (9.8,-4.4) {BusFree};
+Đường phát gồm \BusTxFlow{} (\BusTxFlowStateCount{} trạng thái) ở mức điều phối và \BusTx{}
+(\BusTxStateCount{} trạng thái) ở mức phát bit. \BusTxFlow{} nhận yêu cầu phát một byte hoặc một bit,
+điều phối \BusTx{} thực hiện từng bit, rồi trả xung báo hoàn tất. \BusTx{} làm việc ở mức bit: chờ cạnh
+SCL thích hợp, đặt dữ liệu lên SDA trước Setup Time, giữ dữ liệu qua Hold Time và chuyển sang bit tiếp theo.
 
-  \draw[ed] (idle) -- node[el,left]{gen\_start} (gst);
-  \draw[ed] (gst) -- (sf);
-  \draw[ed] (sf) -- (hs);
-  \draw[ed] (hs) -- (dl);
-  \draw[ed] (dl) -- node[el,above]{gen\_clock} (dh);
-  \draw[ed] (dh) to[bend left=12] node[el,below]{gen\_clock} (dl);
-  \draw[ed] (dl) -- node[el,left]{else} (wc);
-  \draw[ed] (dh) -- node[el,right]{else} (wc);
-  \draw[ed] (wc) to[bend right=18] node[el,right,pos=0.4]{gen\_clock} (dl);
-  \draw[ed] (idle) to[bend right=10] node[el,left,pos=0.6]{gen\_rstart} (grs);
-  \draw[ed] (dl) -- node[el,below,pos=0.4]{gen\_rstart} (grs);
-  \draw[ed] (dh) -- node[el,above]{gen\_stop} (gsp);
-  \draw[ed] (dh.south) to[bend right=10] node[el,above,pos=0.7]{rstart \& takeover} (rsf.east);
-  \draw[ed] (wc) to[bend left=22] node[el,above,pos=0.3]{gen\_stop} (gsp.north);
-  \draw[ed] (grs) -- node[el,left]{texp \& scl} (shr);
-  \draw[ed] (shr) -- (rsf);
-  \draw[ed] (rsf) -- (hs);
-  \draw[ed] (gsp) -- node[el,right]{texp \& scl} (shs);
-  \draw[ed] (shs) -- (sr);
-  \draw[ed] (sr) -- (bf);
-  \draw[ed] (bf) to[bend left=12] node[el,below,pos=0.5]{texp} (idle.south east);
-\end{tikzpicture}}
-\caption[\texttt{scl\_generator} 14-state FSM]{The \texttt{scl\_generator} 14-state FSM. The START
-  sub-cycle (top), the data drive cycle (\texttt{DriveLow}/\texttt{DriveHigh}/\texttt{WaitCmd}), the
-  Repeated-START path, and the STOP\,$\to$\,bus-free path all walk from one state to the next as the
-  single down-counter expires. Unlabelled edges advance on counter expiry
-  (\texttt{tcount\_expired}); labelled edges show the request inputs (\texttt{gen\_start},
-  \texttt{gen\_rstart}, \texttt{gen\_stop}, \texttt{gen\_clock}, \texttt{takeover}) that choose the
-  next state.}
-\label{fig:scl-fsm}
-\end{figure}
+Đường nhận \BusRxFlow{} (\BusRxFlowStateCount{} trạng thái) có cấu trúc đối xứng với đường phát. Khối
+này lấy mẫu các bit trên SDA tại cạnh SCL tương ứng, ghép chúng theo thứ tự MSB-first và trả về byte
+hoàn chỉnh. Bảng trạng thái đầy đủ của ba khối tuần tự hóa nằm tại \cref{app:fsm}.
 
-\section{TX/RX serialisers (\texttt{bus\_tx}, \texttt{bus\_tx\_flow}, \texttt{bus\_rx\_flow})}
-\label{sec:rtl-serdes}
-
-\textbf{Role.} Three small FSMs move bytes and bits between the command engine and the bus.
-\texttt{bus_tx_flow} (four states: \texttt{Idle}, \texttt{DriveByte}, \texttt{DriveBit},
-\texttt{NextTaskDecision}) accepts a byte- or bit-level transmit request and walks it out one bit per SCL
-period; it delegates the actual per-bit edge timing to \texttt{bus_tx} (five states: \texttt{Idle},
-\texttt{AwaitClockNegedge}, \texttt{SetupData}, \texttt{TransmitData}, \texttt{HoldData}), which honours
-the data setup and hold windows. \texttt{bus_rx_flow} (four states: \texttt{Idle}, \texttt{ReadByte},
-\texttt{ReadBit}, \texttt{NextTaskDecision}) is the receive counterpart, sampling SDA on each SCL rising
-edge. \Cref{fig:serdes-fsm} shows the three machines.
-
-\textbf{Key decision.} The receive path aligns the acknowledge/T-Bit slot with the data it follows: the
-deserialiser presents the seven already-sampled bits together with the live SDA value on the eighth cycle,
-so that the assembled byte is valid exactly when \texttt{rx_done} asserts and the command engine can act
-on the trailing bit in the same step. This live-SDA alignment removes a pipeline bubble that would
-otherwise appear at every byte boundary.
-
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    >={Stealth[length=5pt]},
-    st/.style={draw, rounded corners=3pt, thick, fill=orange!12, font=\scriptsize\ttfamily,
-               align=center, minimum height=7mm, inner sep=3pt},
-    init/.style={st, fill=blue!10},
-    ed/.style={->, thick, black!70},
-    el/.style={font=\scriptsize\itshape, text=black!75, inner sep=1.5pt},
-    panel/.style={font=\footnotesize\bfseries},
-  ]
-  % --- bus_tx_flow (byte/bit dispatcher) ---
-  \node[panel] (t1) at (0,1.1) {\texttt{bus\_tx\_flow} (4)};
-  \node[init] (bf_i)  at (0,0)   {Idle};
-  \node[st]   (bf_db) at (3.0,0.9) {DriveByte};
-  \node[st]   (bf_dt) at (3.0,-0.9){DriveBit};
-  \node[st]   (bf_n)  at (6.4,0)  {NextTaskDecision};
-  \draw[ed] (bf_i) -- node[el,above,pos=0.5]{req\_byte} (bf_db);
-  \draw[ed] (bf_i) -- node[el,below,pos=0.5]{req\_bit} (bf_dt);
-  \draw[ed] (bf_db) -- node[el,above]{done} (bf_n);
-  \draw[ed] (bf_dt) -- node[el,below]{done} (bf_n);
-  \draw[ed] (bf_n) to[bend right=30] node[el,right,pos=0.5]{next req} (bf_db);
-  \draw[ed] (bf_n) to[bend left=30] (bf_dt);
-  \draw[ed] (bf_n) to[bend right=45] node[el,below,pos=0.5]{!drive} (bf_i);
-
-  % --- bus_tx (per-bit edge timing) ---
-  \node[panel] (t2) at (0,-3.0) {\texttt{bus\_tx} (5)};
-  \node[init] (x_i)  at (0,-4.1)   {Idle};
-  \node[st]   (x_a)  at (2.9,-4.1) {AwaitClockNegedge};
-  \node[st]   (x_s)  at (6.6,-4.1) {SetupData};
-  \node[st]   (x_t)  at (9.6,-4.1) {TransmitData};
-  \node[st]   (x_h)  at (12.6,-4.1){HoldData};
-  \draw[ed] (x_i) -- node[el,above]{drive,\,!scl\_low} (x_a);
-  \draw[ed] (x_a) -- node[el,above]{scl\_low} (x_s);
-  \draw[ed] (x_i) to[bend left=28] node[el,above,pos=0.5]{drive \& scl\_low} (x_s);
-  \draw[ed] (x_s) -- node[el,above]{tcnt=1} (x_t);
-  \draw[ed] (x_t) -- node[el,above]{scl$\downarrow$} (x_h);
-  \draw[ed] (x_t) to[bend right=30] node[el,below,pos=0.5]{t\_hd\_z} (x_i);
-  \draw[ed] (x_h) to[bend left=22] node[el,below,pos=0.5]{tcnt=0} (x_i);
-
-  % --- bus_rx_flow (receive counterpart) ---
-  \node[panel] (t3) at (0,-7.2) {\texttt{bus\_rx\_flow} (4)};
-  \node[init] (r_i)  at (0,-8.3)   {Idle};
-  \node[st]   (r_b)  at (3.0,-7.4) {ReadByte};
-  \node[st]   (r_t)  at (3.0,-9.2) {ReadBit};
-  \node[st]   (r_n)  at (6.4,-8.3) {NextTaskDecision};
-  \draw[ed] (r_i) -- node[el,above,pos=0.5]{rx\_req\_byte} (r_b);
-  \draw[ed] (r_i) -- node[el,below,pos=0.5]{rx\_req\_bit} (r_t);
-  \draw[ed] (r_b) -- node[el,above]{more} (r_n);
-  \draw[ed] (r_t) -- node[el,below]{more} (r_n);
-  \draw[ed] (r_b) to[bend left=30] node[el,above,pos=0.6]{done} (r_i);
-  \draw[ed] (r_n) to[bend right=30] node[el,right,pos=0.5]{next req} (r_b);
-  \draw[ed] (r_n) to[bend left=30] (r_t);
-\end{tikzpicture}}
-\caption[TX and RX serialiser FSMs]{The three serialiser FSMs. \texttt{bus\_tx\_flow} dispatches a
-  byte- or bit-level request and delegates each bit's edge timing to \texttt{bus\_tx}, which honours
-  the data setup (\texttt{SetupData}) and hold (\texttt{HoldData}) windows; \texttt{bus\_rx\_flow} is
-  the receive counterpart, sampling \texttt{sda} on each SCL rising edge. All three return to
-  \texttt{Idle} when the request is deasserted.}
-\label{fig:serdes-fsm}
-\end{figure}
-
-\section{ENTDAA subsystem (\texttt{entdaa\_controller} + \texttt{entdaa\_fsm})}
+\section{Khối xử lý ENTDAA}
 \label{sec:rtl-entdaa}
 
-\textbf{Role.} Dynamic Address Assignment is handled by a two-level subsystem, re-expressed entirely from
-the Controller's perspective. The outer \texttt{entdaa_controller} (seven states: \texttt{Idle},
-\texttt{StartLoop}, \texttt{RequestRStart}, \texttt{WaitRStart}, \texttt{ReadDAT}, \texttt{RunEntdaa},
-\texttt{Done}) manages the enumeration loop: it reads the DAT entry for the current round, invokes the
-inner FSM to enumerate one device, and advances the round until either no device answers or a STOP is
-seen, at which point it reaches \texttt{Done}. The inner \texttt{entdaa_fsm} (eight states: \texttt{Idle},
-\texttt{SendRsvdByte}, \texttt{ReadRsvdAck}, \texttt{ReceiveIDBit}, \texttt{SendAddr},
-\texttt{ReadAddrAck}, \texttt{WaitStop}, \texttt{Done}) performs one per-Target handshake.
-\Cref{fig:entdaa-fsm} shows both machines and \cref{fig:entdaa-flow} renders the loop as an algorithm.
+Khối xử lý ENTDAA được tổ chức thành hai FSM nhằm tách riêng logic điều phối vòng lặp
+khỏi logic cấp phát \DynamicAddress{} cho từng \Target{}. Ở logic điều phối, \EntdaaController{}
+(\EntdaaControllerStateCount{} trạng thái) quản lý vòng lặp qua các entry trong DAT. FSM này bắt đầu từ entry DAT được Descriptor chỉ định,
+đọc \DynamicAddress{} từ DAT, yêu cầu \RepeatedSTART{}, kích hoạt \EntdaaFsm{}, sau đó thu kết quả
+trả về từ \EntdaaFsm{}.
 
-\textbf{Per-Target handshake.} The inner FSM transmits the reserved address \texttt{7'h7E} with the
-read direction bit, reads the acknowledge (a NACK means no further device is arbitrating), then shifts in
-64 identification bits most-significant-first --- the 48-bit Provisioned ID, the 8-bit Bus
-Characteristics Register, and the 8-bit Device Characteristics Register. It then transmits the assigned
-seven-bit dynamic address together with its odd-parity bit and reads the Target's acknowledge. On
-completion it presents the captured PID/BCR/DCR to the command engine, which streams them back to
-software through the receive queue. A STOP detected mid-handshake forces the inner FSM directly to its
-\texttt{Done} state.
+Ở logic cấp phát, \EntdaaFsm{} (\EntdaaFsmStateCount{} trạng thái) xử lý một \Target{} trong một vòng ENTDAA.
+FSM này phát \IThreeCBroadcastAddress{} với RnW = Read, đọc ACK và PID/BCR/DCR từ \Target{},
+phát \DynamicAddress{} kèm parity và đọc ACK xác nhận địa chỉ được cấp. Bảng đầy đủ tên và vai trò
+các trạng thái của hai FSM nằm tại \cref{app:fsm}; sơ đồ chuyển trạng thái của \EntdaaFsm{} cho một
+vòng cấp địa chỉ được trình bày tại \cref{fig:entdaa-fsm}.
 
-\textbf{Key decision.} Placing the entire DAA protocol on the Controller side is the change that
-completes what the reference left unfinished, and it is why ENTDAA appears as a first-class, verifiable
-path in this design rather than as a Target-side stub. The outer/inner split keeps the loop bookkeeping
-(rounds, DAT indexing, repeated-rejection detection that raises the \texttt{Nack} error of
-\cref{tab:err-status}) separate from the per-device bit-level handshake.
+Vòng lặp trong \EntdaaController{} chỉ chạy trong số lượng \Target{} mà lệnh
+\DynamicAddressAssignment{} yêu cầu. Nếu \Target{} không chấp nhận \DynamicAddress{} được cấp,
+controller thử lại với cùng địa chỉ; nếu địa chỉ vẫn bị từ chối, transaction kết thúc với lỗi
+từ chối \DynamicAddress{} được cấp. Ngược lại, nếu không còn \Target{} nào ACK
+\IThreeCBroadcastAddress{}, quá trình kết thúc bình thường. Đây là cơ chế giúp
+vòng lặp phát hiện rằng quá trình \DynamicAddressAssignment{} đã hoàn tất.
 
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    >={Stealth[length=5pt]},
-    st/.style={draw, rounded corners=3pt, thick, fill=green!13, font=\scriptsize\ttfamily,
-               align=center, minimum height=7mm, inner sep=3pt},
-    init/.style={st, fill=blue!10},
-    ed/.style={->, thick, black!70},
-    el/.style={font=\scriptsize\itshape, text=black!75, inner sep=1.5pt},
-    panel/.style={font=\footnotesize\bfseries},
-  ]
-  % ---- outer: entdaa_controller (loop manager) ----
-  \node[panel, anchor=west] (h1) at (-1.0,1.6) {\texttt{entdaa\_controller} (7) --- enumeration loop};
-  \node[init] (c_i)  at (0,0)    {Idle};
-  \node[st]   (c_sl) at (3.6,0)  {StartLoop};
-  \node[st]   (c_rq) at (7.8,0)  {RequestRStart};
-  \node[st]   (c_wr) at (11.6,0) {WaitRStart};
-  \node[st]   (c_rd) at (15.0,0) {ReadDAT};
-  \node[st]   (c_re) at (18.2,0) {RunEntdaa};
-  \node[st]   (c_dn) at (10.6,-2.4){Done};
-  \draw[ed] (c_i)  -- node[el,above]{daa\_valid} (c_sl);
-  \draw[ed] (c_sl) -- node[el,above]{more rounds} (c_rq);
-  \draw[ed] (c_rq) -- (c_wr);
-  \draw[ed] (c_wr) -- node[el,above]{rstart\_det} (c_rd);
-  \draw[ed] (c_rd) -- (c_re);
-  \draw[ed] (c_re) to[bend right=18] node[el,above,pos=0.5]{next round} (c_sl);
-  \draw[ed] (c_re) to[bend left=12] node[el,right,pos=0.5]{stop / no dev / rejected} (c_dn);
-  \draw[ed] (c_sl) -- node[el,left,pos=0.5]{all rounds done} (c_dn);
-  \draw[ed] (c_dn) to[bend left=20] node[el,below,pos=0.5]{!daa\_valid} (c_i);
+Mỗi kết quả ENTDAA gồm thông tin định danh của \Target{} và \DynamicAddress{} đã cấp. Các kết quả
+này được \FlowActive{} đóng gói và trả về qua \RxFifo{}.
 
-  % ---- inner: entdaa_fsm (per-target handshake) ----
-  \node[panel, anchor=west] (h2) at (-1.0,-4.2) {\texttt{entdaa\_fsm} (8) --- per-Target handshake};
-  \node[init] (f_i)  at (0,-5.9)    {Idle};
-  \node[st]   (f_sr) at (3.4,-5.9)  {SendRsvdByte};
-  \node[st]   (f_ra) at (6.8,-5.9)  {ReadRsvdAck};
-  \node[st]   (f_ri) at (10.4,-5.9) {ReceiveIDBit};
-  \node[st]   (f_sa) at (13.8,-5.9) {SendAddr};
-  \node[st]   (f_aa) at (17.2,-5.9) {ReadAddrAck};
-  \node[st]   (f_ws) at (13.8,-8.2) {WaitStop};
-  \node[st]   (f_dn) at (6.8,-8.2)  {Done};
-  \draw[ed] (f_i)  -- node[el,above]{start} (f_sr);
-  \draw[ed] (f_sr) -- node[el,above]{tx\_done} (f_ra);
-  \draw[ed] (f_ra) -- node[el,above]{ACK} (f_ri);
-  \draw[ed] (f_ri) to[loop above] node[el,above]{bit\,$>$\,0} (f_ri);
-  \draw[ed] (f_ri) -- node[el,above]{bit=0} (f_sa);
-  \draw[ed] (f_sa) -- node[el,above]{tx\_done} (f_aa);
-  \draw[ed] (f_aa.south) to[bend left=12] node[el,above,pos=0.7]{!stop\_pend} (f_dn.south east);
-  \draw[ed] (f_aa) -- node[el,right,pos=0.6]{stop\_pend} (f_ws);
-  \draw[ed] (f_ri.south) to[bend right=12] node[el,left,pos=0.4]{stop\_pend} (f_ws.north west);
-  \draw[ed] (f_ws) -- node[el,below]{stop\_det} (f_dn);
-  \draw[ed] (f_ra.south) to[bend right=22] node[el,below,pos=0.45]{NACK} (f_dn.north);
-  \draw[ed] (f_dn) to[bend left=16] node[el,below,pos=0.5]{} (f_i);
-\end{tikzpicture}}
-\caption[ENTDAA subsystem FSMs]{The two-level ENTDAA subsystem. The outer
-  \texttt{entdaa\_controller} runs the enumeration loop --- one DAT read and one inner-FSM run per
-  round --- until a round goes unanswered or a STOP is seen. The inner \texttt{entdaa\_fsm} performs
-  one per-Target handshake: reserved byte, ACK test, 64 identification bits, dynamic address with
-  parity, and the Target acknowledge. A bus STOP forces either machine directly to \texttt{Done}.}
-\label{fig:entdaa-fsm}
-\end{figure}
-
-\begin{figure}[!htb]\centering
-\begin{tikzpicture}[
-    >={Stealth[length=5pt]},
-    node distance=7mm,
-    term/.style={draw, rounded corners=8pt, thick, fill=blue!10, align=center,
-                 font=\footnotesize, minimum width=2.6cm, minimum height=8mm},
-    proc/.style={draw, thick, fill=green!12, align=center, font=\footnotesize,
-                 minimum width=4.6cm, minimum height=8mm},
-    dec/.style={draw, diamond, aspect=2.4, thick, fill=orange!15, align=center,
-                font=\scriptsize, inner sep=1pt},
-    ed/.style={->, thick, black!70},
-    el/.style={font=\scriptsize\itshape, text=black!75, inner sep=1.5pt},
-  ]
-  \node[term] (start) {Start round (Repeated START)};
-  \node[proc, below=of start] (send7e) {Send \texttt{7'h7E} + R direction};
-  \node[dec, below=of send7e] (ack1) {ACK?};
-  \node[proc, below=12mm of ack1] (shift) {Shift 64 ID bits, MSB first\\(48-bit PID · 8-bit BCR · 8-bit DCR)};
-  \node[proc, below=of shift] (addr) {Send 7-bit dynamic address\\+ odd-parity bit};
-  \node[dec, below=12mm of addr] (ack2) {ACK?};
-  \node[proc, below=12mm of ack2] (present) {Present PID/BCR/DCR to host\\(via receive queue)};
-  \node[dec, below=12mm of present] (more) {Another\\device?};
-  \node[term, below=12mm of more] (done) {STOP --- enumeration done};
-
-  \draw[ed] (start) -- (send7e);
-  \draw[ed] (send7e) -- (ack1);
-  \draw[ed] (ack1) -- node[el,left]{ACK} (shift);
-  \draw[ed] (shift) -- (addr);
-  \draw[ed] (addr) -- (ack2);
-  \draw[ed] (ack2) -- node[el,left]{ACK} (present);
-  \draw[ed] (present) -- (more);
-  \draw[ed] (more) -- node[el,left]{no} (done);
-
-  % NACK / no device -> done (right side)
-  \coordinate (rx) at ($(present.east)+(3.2,0)$);
-  \draw[ed] (ack1.east) -| node[el,above,pos=0.25]{NACK (no device)} (rx |- ack1) -- (rx) |- (done.east);
-  % loop back: more devices -> next round
-  \draw[ed] (more.west) -| node[el,below,pos=0.25]{yes} ($(start.west)+(-2.4,0)$) |- (start.west);
-\end{tikzpicture}
-\caption[ENTDAA enumeration flowchart]{The ENTDAA per-Target enumeration loop as an algorithm. Each
-  round issues the reserved address with the read direction, tests the acknowledge (a NACK means no
-  further device is arbitrating), shifts in the 64 identification bits, assigns the dynamic address
-  with its parity, and streams the captured identity to software --- then either starts the next
-  round with a Repeated START or terminates the bus with a STOP.}
-\label{fig:entdaa-flow}
-\end{figure}
-
-\section{The \texttt{flow\_active} \FlowStateCount-state command FSM (flagship)}
+\section{FSM trung tâm \FlowActive{}}
 \label{sec:rtl-flow-active}
 
-\texttt{flow_active} is the headline RTL contribution: the single command authority that turns a popped
-descriptor into a complete bus transaction and a response. It is implemented as a
-\FlowStateCount-state machine (\cref{lst:flow-enum}), and unlike the reference --- which leaves several
-command-issue paths as \texttt{TODO} --- every state and every supported transaction path is realised and
-verified. \Cref{fig:flow-fsm} is the full-page state diagram and \cref{fig:flow-issue} renders the
-command-issue decision as an algorithm; \cref{tab:flow-states} summarises the role of each state, with
-the exhaustive transition table relegated to \cref{app:fsm-tables}.
+\subsection{Vai trò và tổ chức trạng thái}
+\label{sec:flow-states}
 
-\begin{lstlisting}[language=Verilog,caption={The \FlowStateCount{} states of \texttt{flow\_active} (\texttt{flow\_fsm\_state\_e}).},label={lst:flow-enum}]
-typedef enum logic [3:0] {
-  Idle              = 4'd0,  WaitForCmd        = 4'd1,
-  FetchDAT          = 4'd2,  WaitDAT           = 4'd3,
-  I3CBcastHeader    = 4'd4,  IssueImmediateCcc = 4'd5,
-  FetchTxData       = 4'd6,  InitI3CWrite      = 4'd7,
-  InitI3CRead       = 4'd8,  InitI2CWrite      = 4'd9,
-  InitI2CRead       = 4'd10, IssueCmd          = 4'd11,
-  WriteResp         = 4'd12
-} flow_fsm_state_e;
-\end{lstlisting}
+\FlowActive{} là khối điều phối chính của hệ thống, hiện thực máy trạng thái điều khiển I3C bằng
+\FlowStateCount{} trạng thái liệt kê ở \cref{tab:flow-states}. FSM không mở rộng theo từng byte hay bit của
+transaction. Thay vào đó, mỗi trạng thái thực thi dùng một bộ đếm vi mô nội bộ để tuần tự đi qua các pha
+START, \AddressHeader{}, ACK, data và \TBit{}. Nhờ vậy, số trạng thái không tăng khi bổ sung biến thể độ
+dài hay chiều truyền.
 
-\textbf{State architecture.} The machine has a short common prologue, a branch fan-out, a set of
-per-transfer issue paths that converge on a shared work state, and a single epilogue. From \texttt{Idle}
-it advances to \texttt{WaitForCmd} when the controller is enabled, pops a descriptor into
-\texttt{FetchDAT}, and validates it: an invalid or unsupported descriptor sets the \texttt{NotSupported}
-error and jumps straight to \texttt{WriteResp}, while a valid one launches the 1-cycle DAT read and waits
-in \texttt{WaitDAT}.
+Tổ chức trạng thái tách theo hai trục: chiều truyền và chế độ bus. Hai trạng thái preamble
+\texttt{InitWrite} và \texttt{InitRead} phát \AddressHeader{}, phân nhánh nội bộ theo loại \Target{} (I3C
+hay \iic{}) trong DAT entry. Năm trạng thái thực thi tách riêng theo chế độ: \texttt{IssueDAA} chạy
+ENTDAA; \texttt{IssueI3CWrite} và \texttt{IssueI2CWrite} truyền dữ liệu write; \texttt{IssueI3CRead} và
+\texttt{IssueI2CRead} nhận dữ liệu read. Cách tách này cô lập logic đặc thù I3C (parity \TBit{}, takeover)
+khỏi logic \iic{} (ACK/NACK) vào các trạng thái riêng, thay cho điều kiện lồng nhau trong một trạng thái
+chung.
 
-\textbf{Branch decision out of \texttt{WaitDAT}.} This is the heart of the FSM and the subject of the
-algorithm in \cref{fig:flow-issue}. Using the command attribute, the target type (I3C vs \iic{}, read
-from the DAT entry), the transfer direction, and whether a broadcast header is required, the FSM selects
-one of the issue paths: an immediate or address-assignment command goes through \texttt{I3CBcastHeader};
-an I3C private write or read goes to \texttt{InitI3CWrite}/\texttt{InitI3CRead} (optionally preceded by
-the broadcast header); and an \iic{} transfer goes to \texttt{InitI2CWrite}/\texttt{InitI2CRead}. A
-continuation of an in-progress frame (a back-to-back transfer to the same I3C Target) skips the broadcast
-header.
-
-\textbf{Issue paths.} The \texttt{Init*} states drive the START (or Repeated START) and the address byte
-with its acknowledge, switching \texttt{sel_od_pp} between the open-drain address phase and the push-pull
-data phase. Regular writes pull payload from the transmit queue via \texttt{FetchTxData}; immediate
-writes take their bytes directly from the descriptor with no queue traffic. CCCs are emitted from
-\texttt{IssueImmediateCcc}, which handles both the broadcast form (CCC code plus its odd-parity T-Bit,
-followed by an optional event byte for ENEC/DISEC) and the direct form (a Repeated START, the Target's
-dynamic address, and the defining byte). Address assignment enters \texttt{IssueCmd} and hands the bus to
-the ENTDAA subsystem of \cref{sec:rtl-entdaa}.
-
-\textbf{Convergence and read handling.} All data movement converges on \texttt{IssueCmd}, which sequences
-data bytes for writes and reads. The read sub-path is the most intricate: it commits each completed
-32-bit receive word, recognises an early Target termination as a short read, performs the SDA takeover
-needed to end an I3C read, and --- when chaining is possible --- can loop back to \texttt{FetchDAT} for a
-supported continuation rather than ending the frame.
-
-\textbf{Abort and epilogue.} A host abort is handled by an override at the top of the next-state logic: in
-any abortable state it steers the machine toward a clean STOP and then to \texttt{WriteResp}, latching the
-\texttt{HcAborted} (or, for an interrupted \iic{} read, the appropriate data-NACK) status. The single
-epilogue state, \texttt{WriteResp}, formats the response descriptor through the consolidation function of
-\cref{lst:err-map} and returns to \texttt{Idle} once the response queue accepts it.
-
-\begin{table}[!htb]\centering
-  \caption{Roles of the \FlowStateCount{} \texttt{flow\_active} states (representative summary; the full
-    transition table is in \cref{app:fsm-tables}).}
-  \label{tab:flow-states}
-  \small
-  \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.66\textwidth}@{}}
-    \toprule
-    \textbf{State} & \textbf{Role} \\
-    \midrule
-    \texttt{Idle}              & Wait for controller enable; clear all transfer context \\
-    \texttt{WaitForCmd}        & Pop the next command descriptor from the command queue \\
-    \texttt{FetchDAT}          & Validate the descriptor; launch the DAT read or fail to \texttt{WriteResp} \\
-    \texttt{WaitDAT}           & Await DAT data; select the issue path (branch fan-out) \\
-    \texttt{I3CBcastHeader}    & Drive START + \texttt{7E}/W broadcast header \\
-    \texttt{IssueImmediateCcc} & Emit a broadcast or direct CCC (code + T-Bit, optional event byte) \\
-    \texttt{FetchTxData}       & Pull the next payload word from the transmit queue \\
-    \texttt{InitI3CWrite}      & I3C write address phase (dynamic address + ACK) \\
-    \texttt{InitI3CRead}       & I3C read address phase (dynamic address + ACK) \\
-    \texttt{InitI2CWrite}      & \iic{} write address phase (static address + ACK) \\
-    \texttt{InitI2CRead}       & \iic{} read address phase (static address + ACK) \\
-    \texttt{IssueCmd}          & Sequence data bytes / run ENTDAA; detect end-of-transfer \\
-    \texttt{WriteResp}         & Format and push the response descriptor; return to \texttt{Idle} \\
-    \bottomrule
-  \end{tabular}
+\begin{table}[!htbp]
+	\centering
+	\caption{Vai trò tóm tắt của \FlowStateCount{} trạng thái \FlowActive{}.}
+	\label{tab:flow-states}
+	\begin{tabular}{C{1.0cm} L{3.5cm} L{8.4cm}}
+		\toprule
+		\textbf{ID} & \textbf{State}                                        & \textbf{Vai trò}                                          \\
+		\midrule
+		0           & \texttt{Idle}                                         & Xóa context transaction, giữ bus ở trạng thái nghỉ.       \\
+		1           & \texttt{WaitForCmd}                                   & Chờ \CommandFifo{} có Descriptor hợp lệ.                  \\
+		2           & \texttt{FetchDAT}                                     & Kiểm tra Descriptor, phát yêu cầu đọc DAT.                \\
+		3           & \texttt{WaitDAT}                                      & Chờ dữ liệu DAT, quyết định nhánh giao thức.              \\
+		4           & \texttt{I3CBcastHeader}                               & Phát broadcast preamble khi cấu hình yêu cầu.             \\
+		5           & \shortstack[l]{\texttt{IssueImmediate}\\\texttt{Ccc}} & Phát Broadcast/Direct ENEC hoặc DISEC.                    \\
+		6           & \texttt{FetchTxData}                                  & Lấy DWORD tiếp theo từ \TxFifo{}.                         \\
+		7           & \texttt{InitWrite}                                    & Phát \AddressHeader{} cho giao dịch write (I3C/\iic{}).   \\
+		8           & \texttt{InitRead}                                     & Phát \AddressHeader{} cho giao dịch read (I3C/\iic{}).    \\
+		9           & \texttt{IssueDAA}                                     & Chạy vòng ENTDAA arbitration.                            \\
+		10          & \texttt{IssueI3CWrite}                                & Truyền dữ liệu I3C write; parity \TBit{}, continuation.   \\
+		11          & \texttt{IssueI2CWrite}                                & Truyền dữ liệu \iic{} write; xác nhận ACK/NACK.           \\
+		12          & \texttt{IssueI3CRead}                                 & Nhận dữ liệu I3C read; \TBit{} takeover, HC-abort.        \\
+		13          & \texttt{IssueI2CRead}                                 & Nhận dữ liệu \iic{} read; ACK/NACK, NACK-then-STOP.       \\
+		14          & \texttt{WriteResp}                                    & Ghi \ResponseDescriptor{} qua valid/ready handshake.     \\
+		\bottomrule
+	\end{tabular}
 \end{table}
 
-\begin{landscape}
-\begin{figure}[p]\centering
-\resizebox{0.94\linewidth}{!}{%
-\begin{tikzpicture}[
-    >={Stealth[length=6pt]},
-    st/.style={draw, rounded corners=3pt, thick, fill=orange!12, font=\small\ttfamily,
-               align=center, minimum height=8mm, minimum width=2.4cm, inner sep=3pt},
-    init/.style={st, fill=blue!12},
-    resp/.style={st, fill=green!14},
-    ed/.style={->, thick, black!70},
-    el/.style={font=\small\itshape, text=black!75, inner sep=2pt},
-  ]
-  % prologue spine (y = 0)
-  \node[init] (idle) at (0,0) {Idle};
-  \node[st] (wfc)  at (3.4,0) {WaitForCmd};
-  \node[st] (fdat) at (6.8,0) {FetchDAT};
-  \node[st] (wdat) at (10.2,0) {WaitDAT};
+Mỗi vòng giao dịch đi qua bốn chặng: chuẩn bị Descriptor (\texttt{WaitForCmd}, \texttt{FetchDAT},
+\texttt{WaitDAT}); chọn preamble (\texttt{I3CBcastHeader} hoặc vào thẳng nhóm \texttt{Init}); thực thi
+transaction (\texttt{FetchTxData} và một trạng thái \texttt{Issue} tương ứng chế độ); trả kết quả
+(\texttt{WriteResp} trước khi tạo \texttt{STOP} và quay về \texttt{Idle}).
 
-  % issue-path fan-out (kept above the spine so the bottom band is clear for returns)
-  \node[st] (bch)  at (14.4,5.4)  {I3CBcastHeader};
-  \node[st] (i3w)  at (14.4,3.9)  {InitI3CWrite};
-  \node[st] (i3r)  at (14.4,2.4)  {InitI3CRead};
-  \node[st] (i2w)  at (14.4,0.9)  {InitI2CWrite};
-  \node[st] (i2r)  at (14.4,-0.6) {InitI2CRead};
+\subsection{Giải mã và định tuyến \CommandDescriptor{}}
+\label{sec:flow-route}
 
-  \node[st] (ccc)  at (19.0,5.4)  {IssueImmediateCcc};
-  \node[st] (ftx)  at (19.0,2.7)  {FetchTxData};
+Tại \texttt{FetchDAT}, ba lớp kiểm tra diễn ra trước khi bus bị tác động: loại Descriptor có thuộc tập
+hỗ trợ hay không, mode có phải \texttt{sdr0} hay không, và các trường riêng của từng loại có hợp lệ hay
+không. Descriptor vi phạm đi thẳng đến \texttt{WriteResp} với mã \texttt{NotSupported}, nên lệnh sai
+không bao giờ tạo hoạt động trên SDA/SCL. Descriptor hợp lệ phát yêu cầu đọc DAT; trạng thái
+\texttt{WaitDAT} dành một chu kỳ cho dữ liệu DAT ổn định trước khi quyết định nhánh.
 
-  % convergence + epilogue
-  \node[st]   (issue) at (23.0,1.4) {IssueCmd};
-  \node[resp] (wr)    at (27.0,1.4) {WriteResp};
+Sau DAT lookup, cờ loại \Target{} trong DAT entry quyết định bộ timing và cơ chế xác nhận
+(ACK/\TBit{} của I3C hay ACK/NACK của \iic{}). Nếu bit cấu hình phát \IThreeCBroadcastAddress{} được bật,
+private transfer I3C đi qua \texttt{I3CBcastHeader} để phát \IThreeCBroadcastAddress{} trước; nếu
+không, FSM vào trực tiếp nhóm \texttt{Init}. CCC dạng immediate luôn dùng \IThreeCBroadcastAddress{}. Address
+Assignment phát CCC ENTDAA qua \texttt{IssueDAA} rồi trao quyền vòng lặp cho phân hệ ENTDAA mô tả ở
+\cref{sec:rtl-entdaa}.
 
-  % prologue edges
-  \draw[ed] (idle) -- node[el,above]{enabled} (wfc);
-  \draw[ed] (wfc) to[bend left=40] node[el,above]{disabled} (idle);
-  \draw[ed] (wfc) -- node[el,above]{cmd ready} (fdat);
-  \draw[ed] (fdat) -- node[el,above]{valid} (wdat);
+\subsection{Private write, private read và Immediate Data}
+\label{sec:flow-merge}
 
-  % fan-out from WaitDAT (labels pushed toward the Init column where edges have spread)
-  \draw[ed] (wdat) -- node[el,above,pos=0.66,sloped]{imm / CCC / ENTDAA} (bch);
-  \draw[ed] (wdat) -- node[el,above,pos=0.66,sloped]{I3C write} (i3w);
-  \draw[ed] (wdat) -- node[el,above,pos=0.66,sloped]{I3C read} (i3r);
-  \draw[ed] (wdat) -- node[el,above,pos=0.66,sloped]{\iic{} write} (i2w);
-  \draw[ed] (wdat) -- node[el,below,pos=0.66,sloped]{\iic{} read} (i2r);
+Regular write chạy trong \texttt{IssueI3CWrite} (I3C) hoặc \texttt{IssueI2CWrite} (\iic{}). FSM lấy từng
+DWORD từ \TxFifo{}; \texttt{tx\_byte\_idx\_q} chọn byte hiện hành trong DWORD. Sau mỗi byte I3C, FSM phát
+\TBit{} odd parity; với \iic{}, FSM phát byte rồi yêu cầu \BusRxFlow{} thu ACK/NACK từ \Target{}. Khi
+DWORD cuối không đủ bốn byte, \texttt{remaining\_len\_q} dừng đường truyền đúng tại byte cuối. Nếu
+\TxFifo{} cạn giữa chừng, cờ underflow được tích lũy và giao dịch kết thúc với mã \texttt{Ovl} thay vì
+phát dữ liệu không xác định.
 
-  % header onward
-  \draw[ed] (bch) -- node[el,above]{CCC} (ccc);
-  \draw[ed] (bch) -- node[el,right]{private} (i3w);
-  \draw[ed] (bch.east) to[bend left=28] node[el,above,pos=0.7]{ENTDAA} (issue.north);
-  \draw[ed] (ccc.north) to[out=110,in=70,looseness=0.9]
-        node[el,above,pos=0.5]{done (no resp)} (idle.north);
+Private read chạy trong \texttt{IssueI3CRead} hoặc \texttt{IssueI2CRead}. FSM gom byte nhận được vào
+\texttt{rx\_dword\_q} và commit vào \RxFifo{} khi đủ bốn byte, khi hết độ dài yêu cầu, khi \Target{} kết
+thúc sớm hoặc khi abort. Với I3C, bit điều khiển sau mỗi byte được thu qua handoff path để \Controller{}
+giành lại SDA đúng lúc; với \iic{}, \Controller{} phát ACK khi còn muốn nhận và NACK ở byte cuối. Trường
+hợp \RxFifo{} đầy tạo mã \texttt{Ovl} và chấm dứt giao dịch theo đúng pha, không ghi đè dữ liệu \Host{}
+chưa đọc.
 
-  % init writes -> FetchTxData / IssueCmd
-  \draw[ed] (i3w.east) to[bend left=8] node[el,above,pos=0.55]{regular} (ftx.west);
-  \draw[ed] (i2w.east) to[bend right=10] (ftx.south west);
-  \draw[ed] (i3w.east) to[bend left=14] node[el,above,pos=0.7]{immediate} (issue.north west);
-  \draw[ed] (ftx) -- node[el,left,pos=0.45]{data} (issue);
-  \draw[ed] (issue) to[bend right=20] node[el,right,pos=0.5]{more data} (ftx);
+Immediate Data Transfer không dùng \TxFifo{}: tối đa bốn byte dữ liệu truyền nằm ngay trong DWORD thứ hai
+của Descriptor. Tuy nguồn dữ liệu khác, luồng thực thi vẫn đi qua trạng thái \texttt{IssueI3CWrite} hoặc
+\texttt{IssueI2CWrite}, nhờ đó parity, \AddressHeader{}, tính độ dài response và xử lý abort dùng chung
+logic với Regular write. Riêng CCC dạng immediate được tách sang \texttt{IssueImmediateCcc} vì \DirectCCC{}
+cần một chuỗi riêng: byte CCC, \RepeatedSTART{}, \AddressHeader{} của \Target{}, rồi mới đến \EventsByte{}.
+Cấu trúc này khác một private transfer.
 
-  % reads -> IssueCmd
-  \draw[ed] (i3r.east) to[bend left=4] (issue.west);
-  \draw[ed] (i2r.east) to[bend right=8] (issue.south west);
+\subsection{Continuation, abort và kết thúc transaction}
+\label{sec:flow-end}
 
-  % convergence behaviour
-  \draw[ed] (issue) to[loop above] node[el,above]{read takeover} (issue);
-  \draw[ed] (issue) -- node[el,above]{done / error} (wr);
+Thuộc tính \texttt{toc} quy định cách kết thúc sau mỗi \CommandDescriptor{}. Với \texttt{toc=1}, FSM tạo
+STOP; response được ghi khi \texttt{wroc=1} hoặc khi giao dịch có lỗi. Với \texttt{toc=0}, FSM giữ bus
+và kiểm tra Descriptor kế tiếp: chỉ Regular SDR private transfer hợp lệ mới được nối qua \RepeatedSTART{};
+mọi trường hợp khác buộc tạo STOP và báo lỗi, tránh tình huống bus bị giữ vô thời hạn bởi một chuỗi lệnh
+không thể tiếp tục.
 
-  % leftward returns routed through a deep bottom band, well below all nodes
-  \draw[ed] (issue.south) to[out=-90,in=-90,looseness=0.5]
-        node[el,below,pos=0.5]{chained continuation} (fdat.south);
-  \draw[ed] (wr.south) to[out=-90,in=-90,looseness=0.4]
-        node[el,below,pos=0.5]{response pushed} (idle.south);
+Abort được xử lý theo pha thay vì nhảy tức thời về \texttt{Idle}. Khi \Host{} đặt bit abort, FSM chờ
+serializer hoàn tất đơn vị đang truyền, tạo STOP có trật tự rồi trả mã \texttt{HcAborted}. Trong
+\texttt{IssueI3CRead}, \Controller{} phải hoàn thành việc thu \TBit{} và takeover trước khi được phép kéo
+SDA; trong \texttt{IssueI2CRead}, \Controller{} phát NACK rồi mới STOP. Kỷ luật theo pha này ngăn các
+chuyển tiếp SDA bất hợp lệ trong lúc SCL cao --- vốn sẽ bị mọi thiết bị trên bus diễn giải nhầm thành
+START hoặc STOP.
 
-  % abort override note (open upper-left region; global override, see caption)
-  \node[draw, dashed, rounded corners=3pt, fill=red!7, align=left, font=\small,
-        text width=6.6cm, very thick] (ab) at (5.0,4.2)
-        {\textbf{Host-abort override:} from any abortable state the FSM is steered to a clean STOP and
-         then to \texttt{WriteResp}, latching \texttt{HcAborted} (or the data-NACK status for an
-         interrupted \iic{} read).};
-\end{tikzpicture}}
-\caption[\texttt{flow\_active} 13-state command FSM]{The flagship \texttt{flow\_active} 13-state
-  command FSM. A short prologue (\texttt{Idle}\,$\to$\,\texttt{WaitForCmd}\,$\to$\,\texttt{FetchDAT}\,$\to$\,\texttt{WaitDAT})
-  validates the descriptor and launches the DAT read; \texttt{WaitDAT} fans out to the per-transfer
-  issue paths (I3C/\iic{} write and read, immediate CCC, and address assignment); all data movement
-  converges on \texttt{IssueCmd}; and the single epilogue \texttt{WriteResp} formats the response and
-  returns to \texttt{Idle}. Error and host-abort paths converge on \texttt{WriteResp}.}
-\label{fig:flow-fsm}
-\end{figure}
-\end{landscape}
-
-\begin{figure}[!htb]\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-    >={Stealth[length=5pt]},
-    node distance=9mm and 14mm,
-    term/.style={draw, rounded corners=8pt, thick, fill=blue!10, align=center,
-                 font=\footnotesize, minimum height=8mm},
-    issue/.style={draw, thick, fill=orange!13, align=center, font=\footnotesize\ttfamily,
-                  minimum width=2.5cm, minimum height=8mm},
-    dec/.style={draw, diamond, aspect=2.2, thick, fill=green!13, align=center,
-                font=\scriptsize, inner sep=1pt},
-    ed/.style={->, thick, black!70},
-    el/.style={font=\scriptsize\itshape, text=black!75, inner sep=1.5pt},
-  ]
-  \node[term] (start) {\texttt{WaitDAT}: DAT entry valid};
-  \node[dec, below=of start] (d1) {Address assignment\\or CCC-prefixed?};
-  \node[dec, below=14mm of d1] (d2) {\iic{} (legacy)\\target?};
-  \node[dec, below=14mm of d2] (d3) {Broadcast header\\needed?};
-  \node[dec, right=34mm of d3] (ddir) {Direction?};
-  \node[dec, left=30mm of d2] (di2c) {Direction?};
-
-  % issue terminals
-  \node[issue, right=22mm of d1] (bch) {I3CBcastHeader};
-  \node[issue, below left=10mm and 2mm of di2c] (i2w) {InitI2CWrite};
-  \node[issue, below right=10mm and 2mm of di2c] (i2r) {InitI2CRead};
-  \node[issue, below=10mm of ddir, xshift=-13mm] (i3w) {InitI3CWrite};
-  \node[issue, below=10mm of ddir, xshift=16mm] (i3r) {InitI3CRead};
-
-  \draw[ed] (start) -- (d1);
-  \draw[ed] (d1) -- node[el,above]{yes} (bch);
-  \draw[ed] (d1) -- node[el,left]{no} (d2);
-  \draw[ed] (d2) -- node[el,above]{yes} (di2c);
-  \draw[ed] (d2) -- node[el,left]{no (I3C)} (d3);
-  \draw[ed] (d3) -- node[el,above]{no} (ddir);
-  \draw[ed] (d3) to[bend left=12] node[el,left,pos=0.3]{yes} (bch.south);
-  \draw[ed] (di2c) -- node[el,left]{write} (i2w);
-  \draw[ed] (di2c) -- node[el,right]{read} (i2r);
-  \draw[ed] (ddir) -- node[el,left]{write} (i3w);
-  \draw[ed] (ddir) -- node[el,right]{read} (i3r);
-
-  \node[font=\scriptsize\itshape, text=black!60, below=4mm of i3w, xshift=14mm, align=center]
-        {``Broadcast header needed'' = broadcast enabled \emph{and} not a same-Target continuation.};
-\end{tikzpicture}}
-\caption[\texttt{flow\_active} command-issue decision]{The command-issue decision taken on leaving
-  \texttt{WaitDAT}. Using the command attribute, the target type (I3C vs legacy \iic{}), the transfer
-  direction, and whether a broadcast header is required, the FSM selects one of the issue states;
-  address-assignment, CCC, and header-requiring private transfers route through
-  \texttt{I3CBcastHeader} first.}
-\label{fig:flow-issue}
-\end{figure}
-
-\section{Integration: \texttt{controller\_active} and OD/PP switching}
+\section{Tích hợp trong \ControllerActive{}}
 \label{sec:rtl-controller-active}
 
-\textbf{Role.} \texttt{controller_active} is the integration glue of the protocol layer. It instantiates
-the command FSM, the ENTDAA subsystem, the clock generator, the serialisers, and the bus monitor, and it
-arbitrates the bus between the command FSM and the ENTDAA subsystem: while ENTDAA is active, the transmit
-and receive requests, the DAT read port, and the Repeated-START request are sourced from the DAA logic;
-otherwise they come from \texttt{flow_active}. It also selects the active timing-parameter set, switching
-every value between the I3C and \iic{} register banks according to the FSM's \texttt{use_i2c_timing}
-output.
+\ControllerActive{} tích hợp \FlowActive{}, SCL generator, hai đường TX/RX, bus monitor
+và phân hệ ENTDAA. Vì \FlowActive{} và ENTDAA dùng chung serializer và bảng DAT, khối tích hợp
+đặt MUX cho cả hai tài nguyên và phân kênh theo tín hiệu \texttt{daa\_active}. Một latch giữ yêu cầu
+\RepeatedSTART{} của ENTDAA cho đến khi SCL generator xác nhận, tránh mất pulse khi hai FSM không hoàn
+tất trong cùng chu kỳ.
 
-\textbf{OD/PP output formation.} The module composes the single driven \texttt{sda} from three
-prioritised sources --- the clock generator (which owns SDA during START/STOP/Sr), a low-bit handoff
-takeover, and otherwise the transmit serialiser --- and encodes open-drain versus push-pull entirely in
-the output enable, as shown in \cref{lst:odpp} and \cref{fig:odpp-switch}. In push-pull mode
-(\texttt{sel_od_pp = 1}) the driver is always enabled; in open-drain mode the driver is enabled only to
-pull the line low (\texttt{\textasciitilde sda}), letting the external pull-up provide the high level.
-This output-enable convention is exactly what lets the PHY omit real pad cells.
-
-\begin{lstlisting}[language=Verilog,caption={SDA composition and output-enable open-drain modelling (\texttt{controller\_active.sv}).},label={lst:odpp}]
-assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda :
-    handoff_takeover_q ? 1'b0 : tx_flow_sda_drive ? tx_flow_sda : 1'b1;
-assign ctrl_sda_oe_o = scl_gen_driving_sda ? ~scl_gen_sda
-    : handoff_takeover_q ? 1'b1
-    : tx_flow_sda_drive ? (tx_flow_sel_od_pp | ~tx_flow_sda) : 1'b0;
-assign sel_od_pp_o = (scl_gen_driving_sda || handoff_takeover_q) ? 1'b0
-    : tx_flow_sel_od_pp;
-\end{lstlisting}
-
-This completes the structural and behavioural walkthrough of the design. The cross-cutting decisions that
-recur across the modules were consolidated in \cref{sec:arch-boundary}; the full register map, descriptor
-layouts, port lists, and state-transition tables are collected in
-\crefrange{app:csr}{app:fsm-tables}; and all quantitative metrics --- module sizes, the reduction
-against the reference, and the verification results --- are reported in \cref{ch:results}.
-
-\begin{figure}[!htb]\centering
-\begin{tikzpicture}[
-    every node/.style={font=\footnotesize},
-    src/.style={draw, rounded corners=2pt, thick, align=center, minimum height=8mm,
-                minimum width=3.0cm, font=\scriptsize},
-    mux/.style={draw, thick, fill=orange!12, align=center, minimum width=1.4cm,
-                minimum height=3.4cm},
-    olbl/.style={font=\scriptsize\ttfamily, anchor=west},
-    sig/.style={-{Stealth[length=4pt]}, thick, black!70},
-    pr/.style={font=\tiny\bfseries, text=black!60},
-  ]
-  % priority sources (highest at top)
-  \node[src, fill=blue!8]   (scl) at (0,2.2)  {\texttt{scl\_generator}\\(owns SDA: S / Sr / P)};
-  \node[src, fill=green!12] (ho)  at (0,0.4)  {handoff takeover\\(drive low)};
-  \node[src, fill=orange!12](tx)  at (0,-1.4) {\texttt{bus\_tx\_flow}\\serialiser};
-  \node[src]                (def) at (0,-3.0) {default: release (1)};
-  \node[pr, left=1mm of scl] {hi};
-  \node[pr, left=1mm of def] {lo};
-
-  % priority mux
-  \node[mux] (m) at (5,-0.3) {priority\\mux};
-  \draw[sig] (scl.east) -- (scl.east -| m.west);
-  \draw[sig] (ho.east)  -- (ho.east  -| m.west);
-  \draw[sig] (tx.east)  -- (tx.east  -| m.west);
-  \draw[sig] (def.east) -- (def.east -| m.west);
-
-  % outputs
-  \node (sda)   at (8.4,0.6)  {};
-  \node (oe)    at (8.4,-0.3) {};
-  \node (selpp) at (8.4,-1.2) {};
-  \draw[sig] (m.east|-sda)   -- (sda)   node[olbl] {\ ctrl\_sda\_o};
-  \draw[sig] (m.east|-oe)    -- (oe)    node[olbl] {\ ctrl\_sda\_oe\_o};
-  \draw[sig] (m.east|-selpp) -- (selpp) node[olbl] {\ sel\_od\_pp\_o};
-
-  % OD vs PP encoding inset
-  \node[draw, rounded corners=2pt, fill=black!4, align=left, font=\scriptsize, very thick,
-        below=8mm of m, xshift=-1cm] (note)
-        {\textbf{Output-enable encodes OD vs PP:}\\[2pt]
-         \texttt{sel\_od\_pp=1} (PP): driver always enabled\\
-         \texttt{sel\_od\_pp=0} (OD): enabled only to pull low\\
-         \hspace*{3mm}($\sim$\texttt{sda}); pull-up provides the high level};
-\end{tikzpicture}
-\caption[Open-drain / push-pull output switching]{SDA composition in \texttt{controller\_active}. A
-  prioritised mux selects the driven value from the clock generator (which owns SDA during
-  START/STOP/Sr), a low-bit handoff takeover, or the transmit serialiser, defaulting to the released
-  high level. Open-drain versus push-pull is encoded entirely in the output enable: in push-pull the
-  driver is always on, while in open-drain it is enabled only to pull the line low, letting the
-  external pull-up supply the high level --- which is what lets the PHY omit real pad cells.}
-\label{fig:odpp-switch}
-\end{figure}
+Đường ra SDA được hợp nhất bằng MUX có thứ tự ưu tiên rõ ràng: khi SCL generator đang tạo START,
+\RepeatedSTART{} hoặc STOP, giá trị SDA của generator được chọn; trong pha dữ liệu, serializer hoặc ENTDAA
+điều khiển SDA. Tín hiệu \texttt{sel\_od\_pp\_o} chỉ được bật khi nguồn đang điều khiển SDA cần pha
+\PushPull{}; khi không có nguồn lái, mode được đưa về \OpenDrain{} để pad trở lại trạng thái nhả bus.
+Nhờ cấu trúc ưu tiên này, tại mọi thời điểm chỉ đúng một nguồn điều khiển SDA. Các ràng buộc
+mutual exclusion và handoff được kiểm tra bằng SVA tại \cref{sec:ver-sva}; hành vi xuyên suốt từ
+Descriptor đến bus được kiểm tra bởi \Scoreboard{} tại \cref{sec:ver-tlm}.

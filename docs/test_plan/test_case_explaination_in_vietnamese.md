@@ -316,7 +316,7 @@ sda_ff2 <= sda_ff1
 SDA input ổn định qua cửa sổ đồng bộ => ctrl_sda_o đúng với input
 ```
 
-Các cover chính gồm `cp_bus001_reset_sets_sync_idle`, `cp_bus001_scl_two_cycle_settle`, `cp_bus001_sda_two_cycle_settle`, và các pattern `cp_bus001_sync_pattern_00/10/01/11`.
+Các cover chính gồm `cp_bus001_reset_sets_sync_idle` và các pattern `cp_bus001_sync_pattern_00/10/01/11`. Tính đúng của từng tầng và latency hai chu kỳ được kiểm tra bằng assertion `ap_bus001_*_matches_shadow` và `ap_bus001_*_two_cycle_settle`; không tạo cover equality-only vì trạng thái idle có thể làm chúng hit ngay.
 
 Test này quan trọng vì nếu synchronizer sai, các block phía sau có thể phát hiện nhầm START/STOP hoặc đọc sai bit trên bus.
 
@@ -503,13 +503,13 @@ Implementation note: BUS_012 không cần vseq riêng. Stimulus đã có từ c�
 
 ### BUS_013 - `tb_pad_model_odpp_wiring`
 
-Test này kiểm tra pad model trong testbench sau khi DUT đã có `sda_oe_o` và `sel_od_pp_o`.
+Test này kiểm tra pad model trong testbench sau khi DUT export `sda_o` và `sel_od_pp_o`, còn testbench tự derive `sda_oe`.
 
-`sel_od_pp_o` cho biết bus đang ở mode open-drain hay push-pull. `sda_oe_o` cho biết DUT có đang thật sự drive SDA hay không. Hai signal này khác nhau và đều cần thiết để testbench model SDA đúng.
+`sel_od_pp_o` cho biết active drive đang ở mode open-drain hay push-pull. `sda_oe` trong testbench được tính bằng `sel_od_pp_o || !sda_o` để biết DUT có đang thật sự drive SDA hay không.
 
-Testbench sẽ quan sát `sda_oe_o`, `sda_o`, `sel_od_pp_o`, và `sda_bus` trong các transaction I3C write/read hiện có.
+Testbench sẽ quan sát `sda_oe` đã derive, `sda_o`, `sel_od_pp_o`, và `sda_bus` trong các transaction I3C write/read hiện có.
 
-Kết quả mong đợi là `tb_i3c_top` chỉ drive SDA khi `sda_oe_o=1`. Khi `sda_oe_o=0`, testbench phải release SDA về `Z` để pull-up hoặc target có thể điều khiển bus.
+Kết quả mong đợi là `tb_i3c_top` chỉ drive SDA khi `sda_oe=1`. Khi `sda_oe=0`, testbench phải release SDA về `Z` để pull-up hoặc target có thể điều khiển bus.
 
 Ví dụ trong I3C write data phase, DUT có thể dùng push-pull và drive SDA trực tiếp. Nhưng trong I3C read data phase, target là bên drive data, nên DUT phải release SDA dù data phase đang là push-pull.
 
@@ -523,13 +523,23 @@ Test này kiểm tra I2C legacy transfer không bao giờ bật push-pull mode.
 
 Trong thiết kế này, DAT entry có bit `device=1` được xem là I2C legacy target. Với I2C, controller phải giữ open-drain trong toàn bộ transaction: START, address, ACK, data byte, final NACK, và STOP. I2C không dùng push-pull data phase như I3C SDR.
 
-Testbench sẽ program một DAT entry là I2C device với static address hợp lệ, sau đó chạy cả I2C write và I2C read. Trong suốt transaction, testbench quan sát `sel_od_pp_o`, `sda_oe_o`, `sda_o`, và bus SDA thực tế.
+Testbench sẽ program một DAT entry là I2C device với static address hợp lệ, sau đó chạy cả I2C write và I2C read. Trong suốt transaction, testbench quan sát `sel_od_pp_o`, derived `sda_oe`, `sda_o`, và bus SDA thực tế.
 
 Kết quả mong đợi là `sel_od_pp_o` luôn bằng 0 trong toàn bộ I2C transaction. Khi DUT cần kéo SDA low, nó dùng open-drain low. Khi line cần high hoặc target drive ACK/data, DUT phải release SDA đúng lúc. Không được có phase nào DUT chuyển sang push-pull.
 
 Test này bổ sung cho `BUS_012`: `BUS_012` chứng minh I3C SDR có phase được phép dùng push-pull, còn `BUS_014` chứng minh I2C legacy không dùng push-pull. Hai test này tạo cross-coverage giữa OD/PP phase và device type.
 
 Implementation note: BUS_014 không cần vseq riêng. Stimulus I2C write/read đã có trong `i2c_regular_write_basic_vseq` và `i2c_regular_read_basic_vseq`; phần pass/fail chính được check bằng SVA `ap_bus014_i2c_regular_xfer_never_push_pull` trong `flow_active_sva` và top-level propagation SVA trong `i3c_controller_top_sva`.
+
+### BUS_015 - `start_when_bus_not_idle`
+
+Test này kiểm tra behavior khi software queue command trong lúc bus chưa idle.
+
+Trước khi issue command, testbench giữ `SCL` hoặc `SDA` ở trạng thái non-idle, tức không phải cả hai đều high. Sau đó queue một command bình thường.
+
+Kết quả mong đợi là controller phải chờ Bus Available/Idle hoặc báo lỗi theo policy đã được specification hóa. Nếu hardware không support case này, software precondition phải yêu cầu chỉ queue command khi bus idle.
+
+Test này quan trọng vì controller bắt đầu START trên bus không idle có thể làm target hiểu sai frame hoặc gây contention. Đây hiện là specification gap và chưa được tính là positive sign-off coverage.
 
 ## 4.4 I3C SDR Private Write
 
@@ -600,6 +610,8 @@ Test này kiểm tra controller chọn đúng DAT entry khi regular SDR private 
 Testbench program `DAT[0]` là I3C device có dynamic address `0x08`, và `DAT[1]` là I3C device có dynamic address `0x12`. Sau đó testbench queue một write tới `dev_idx=0` và một write tới `dev_idx=1`, với TID và payload khác nhau. Directed case hiện tại chạy ở private-address mode trực tiếp (`BROADCAST_ADDR_ENABLE=0`); biến thể broadcast-header DAT[1] được giữ làm future extension, còn framing broadcast-header đã được cover ở các SDRW khác với DAT[0].
 
 Kết quả mong đợi là bus thấy address theo đúng thứ tự `0x08/W` rồi `0x12/W`. Data payload của từng command phải đúng với TX FIFO data tương ứng, không được lấy nhầm payload giữa hai DAT index. RESP của mỗi command phải báo Success, TID đúng, length đúng, và tất cả queue empty sau test.
+
+Ngoài các case hai target, test chạy thêm một sweep xác định qua `dev_idx=0..31`. Mỗi DAT entry được program một dynamic address hợp lệ riêng, sau đó một write bốn byte được thực thi và hoàn tất trước khi chuyển sang index tiếp theo. Sweep này đóng đủ các bin command DAT index mà không làm thay đổi TID hoặc các scenario selector của những directed case khác.
 
 Test này quan trọng vì DAT index là contract giữa software command descriptor và hardware target lookup. Nếu controller luôn dùng DAT[0] hoặc giữ stale address từ command trước, các transfer multi-target sẽ đi sai device dù FIFO và data path vẫn có vẻ hoạt động.
 
@@ -891,15 +903,15 @@ Test này quan trọng vì software có thể không biết chính xác số lư
 
 ### DAA_004 - `entdaa_multi_device_dat_loop`
 
-Test này kiểm tra việc tăng DAT index qua nhiều ENTDAA round.
+Test này kiểm tra việc tăng DAT index và xử lý một chuỗi winner ENTDAA đã được resolve qua nhiều round.
 
-Testbench program nhiều DAT entry liên tiếp, rồi issue `AddressAssignment` với `dev_idx=N` và `dev_count=K`. Mỗi target phản hồi ở một round và ACK assigned address.
+Testbench tạo nhiều target identity, sort theo `{PID,BCR,DCR}` tăng dần để tạo thứ tự winner hợp lệ, rồi dùng một device-response item cho mỗi winner. Sau đó test program nhiều DAT entry liên tiếp và issue `AddressAssignment` với `dev_idx=N` và `dev_count=K`.
 
-Kết quả mong đợi là controller dùng đúng DAT index cho từng round: `N`, `N+1`, ..., `N+K-1`. Mỗi round phải có repeated START hoặc sequencing tương ứng trước khi bắt đầu round tiếp theo.
+Kết quả mong đợi là controller dùng đúng DAT index cho từng round: `N`, `N+1`, ..., `N+K-1`. Mỗi round sau round đầu phải bắt đầu bằng repeated START, và RX FIFO phải chứa PID/BCR/DCR theo đúng thứ tự winner đã resolve.
 
 Nếu có đủ `K` target phản hồi, controller phải assign đủ `K` dynamic address theo đúng thứ tự DAT.
 
-Test này quan trọng vì lỗi tăng index có thể làm nhiều target bị gán cùng địa chỉ, hoặc target thứ hai nhận nhầm địa chỉ của DAT entry khác.
+Test này không kiểm tra một thuật toán arbitration nằm trong controller. Controller chỉ quan sát identity winner trên SDA. Test tập trung vào việc controller capture đúng winner, tăng DAT index đúng và tiếp tục đủ các ENTDAA round.
 
 ### DAA_005 - `covered_by_sva_no_vseq`
 
@@ -1057,11 +1069,11 @@ Test này quan trọng vì data NACK khác với address NACK. Nếu report sai 
 
 Test này kiểm tra response khi I3C target kết thúc read sớm.
 
-Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M < N`, rồi báo end bằng T-bit theo read semantics. Các case phủ đủ vị trí kết thúc trong một DWORD và có riêng boundary `M = N - 1` để kiểm tra lỗi off-by-one giữa short read và read đủ chiều dài.
+Testbench request đọc `N` byte, nhưng target chỉ trả `M` byte với `M < N`, rồi báo end bằng T-bit theo read semantics. Các case phủ đủ vị trí kết thúc trong một DWORD, có riêng boundary `M = N - 1`, và phủ policy `SRE × WROC`.
 
-Test chạy `i3c_read_short_target_end_vseq` trong cả hai private-address mode, qua mọi partial-DWORD packing position và một subcase `toc=0` có command hợp lệ xếp sau.
+Test chạy `i3c_read_short_target_end_vseq` trong cả hai private-address mode. Sweep data-integrity dùng `SRE=1,WROC=1`; các case policy bổ sung `SRE=1,WROC=0`, `SRE=0,WROC=1`, `SRE=0,WROC=0`, và một subcase `SRE=0,toc=0` có command hợp lệ xếp sau.
 
-RX FIFO phải commit đúng các byte đã nhận, các byte padding phải bằng 0 và không được nhận thêm data sau T-bit kết thúc. Short read phải ép STOP, không phát continuation Repeated START và không consume command sau như một continuation. RESP phải báo error `I3cShortReadErr`. TID phải khớp command, reserved bits phải bằng 0, và length trong response phải phản ánh số byte thật sự đã nhận, không phải requested length `N`.
+RX FIFO phải commit đúng các byte đã nhận, các byte padding phải bằng 0 và không được nhận thêm data sau T-bit kết thúc. Short read luôn ép STOP, không phát continuation Repeated START và không consume command sau như một continuation. Khi `SRE=1`, RESP phải báo `I3cShortReadErr` với actual length `M` kể cả `WROC=0`. Khi `SRE=0`, early end là completion hợp lệ: `WROC=1` tạo Success RESP với actual length `M`, còn `WROC=0` không tạo RESP.
 
 Test này quan trọng vì short read không nhất thiết là bus corruption. Nó là một tình huống protocol cần report chính xác để software biết có bao nhiêu data hợp lệ trong RX FIFO.
 
@@ -1171,7 +1183,7 @@ Policy mong đợi là:
 - Command thành công với `wroc=1` ghi đúng một RESP `Success` với TID và actual length đúng.
 - Command thành công với `wroc=0` không ghi RESP.
 - Continuation hợp lệ `toc=0,wroc=1` chỉ accept command kế tiếp khi RESP FIFO ready; với `wroc=0`, controller accept continuation mà không phụ thuộc RESP FIFO, kể cả khi FIFO full.
-- Mọi error vẫn ghi RESP bất kể `wroc`, bao gồm address/data NACK, underflow/overflow, short read, HC abort, invalid descriptor và missing/unsupported continuation. Missing/unsupported continuation trả `NotSupported`.
+- Mọi error vẫn ghi RESP bất kể `wroc`, bao gồm address/data NACK, underflow/overflow, short read khi `sre=1`, HC abort, invalid descriptor và missing/unsupported continuation. Early target end khi `sre=0` là completion hợp lệ và tuân theo WROC. Missing/unsupported continuation trả `NotSupported`.
 - `AddressAssignment` không tham gia suppression policy: `wroc=0` vẫn là descriptor không hợp lệ và được cover bởi ERR_011.
 
 Scoreboard lưu `wroc` trong expected transaction và chỉ queue expected response cho success khi `wroc=1`; error luôn queue expected response. Các SVA `ap_wroc0_success_suppresses_resp`, `ap_wroc1_success_enters_write_resp`, `ap_wroc0_error_override_writes_resp`, `ap_wroc0_continuation_ignores_resp_ready` và `ap_wroc1_continuation_waits_for_resp_ready` kiểm tra policy độc lập với vseq.
@@ -1226,25 +1238,7 @@ Kết quả quan trọng là behavior phải được ghi nhận rõ, không đ�
 
 Test này quan trọng vì bus stuck là lỗi thực tế trên hệ thống open-drain. Nếu không có timeout/recovery, software hoặc system-level logic phải biết đây là giới hạn hiện tại.
 
-## 4.11 Arbitration and Bus Behavior
-
-Phần 4.11 kiểm tra các hành vi liên quan đến arbitration và trạng thái bus ngoài luồng transaction thông thường.
-
-Trong I3C, đặc biệt ở ENTDAA, bus có thể có nhiều target cùng drive theo kiểu wired-AND. Ngoài ra controller cũng cần có policy rõ khi gặp STOP bất ngờ hoặc khi software queue command trong lúc bus chưa idle. Các test trong phần này không chỉ kiểm tra data path, mà còn kiểm tra cách DUT quan sát bus thật và phản ứng với điều kiện bus bất thường.
-
-### ARB_001 - `i3c_entdaa_multi_target_arbitration_vseq`
-
-Test này kiểm tra true multi-target arbitration trong ENTDAA.
-
-Nhiều target chưa được assign address cùng tham gia ENTDAA và drive PID khác nhau. Vì bus open-drain/wired-AND, target nào thua arbitration phải dừng drive, còn target thắng tiếp tục round hiện tại.
-
-Kết quả mong đợi là controller assign address cho arbitration winner trước. Target thua sẽ retry ở round sau và được assign sau nếu vẫn còn tham gia.
-
-Case hai target chỉ là minimum subcase của mục multi-target này, không cần testcase riêng trong DAA category.
-
-Test này dùng UVM bus model mở rộng để nhiều target cùng drive SDA open-drain trong cùng một ENTDAA round. Vseq kiểm tra cả case target thua sớm theo PID và case target chỉ thua muộn ở DCR, sau đó đối chiếu thứ tự RX FIFO result với thứ tự winner dự đoán từ `{PID,BCR,DCR}`.
-
-### ARB_002 - `unexpected_stop_during_command`
+### ERR_017 - `unexpected_stop_during_command`
 
 Test này kiểm tra phản ứng của controller khi có STOP bất ngờ trong lúc command đang active.
 
@@ -1256,19 +1250,9 @@ Controller không được âm thầm tiếp tục dùng state cũ như thể kh
 
 Test này quan trọng vì bus event bất ngờ có thể xảy ra do reset, target lỗi, hoặc contention trong hệ thống. Verification cần biết scope/spec yêu cầu recovery đến mức nào.
 
-### ARB_003 - `start_when_bus_not_idle`
+## 4.11 UVM Environment, Scoreboard, and Regression Infrastructure
 
-Test này kiểm tra behavior khi software queue command trong lúc bus chưa idle.
-
-Trước khi issue command, testbench giữ `SCL` hoặc `SDA` ở trạng thái non-idle, tức không phải cả hai đều high. Sau đó queue một command bình thường.
-
-Kết quả mong đợi là controller phải chờ Bus Available/Idle hoặc báo lỗi theo policy đã được specification hóa. Nếu hardware không support case này, software precondition phải yêu cầu chỉ queue command khi bus idle.
-
-Test này quan trọng vì controller bắt đầu START trên bus không idle có thể làm target hiểu sai frame hoặc gây contention. Nếu hardware không tự bảo vệ, requirement phải được đẩy lên software.
-
-## 4.12 UVM Environment, Scoreboard, and Regression Infrastructure
-
-Phần 4.12 kiểm tra chính môi trường verification: compile flow, regression targets, scoreboard, device response sequence, monitor decode, và register agent.
+Phần 4.11 kiểm tra chính môi trường verification: compile flow, regression targets, scoreboard, device response sequence, monitor decode, và register agent.
 
 Các test này không phải protocol feature trực tiếp của DUT, nhưng rất quan trọng cho sign-off. Nếu testbench không compile ổn định, scoreboard không bắt mismatch, monitor không decode được CCC/DAA, hoặc device model không điều khiển ACK/NACK đúng, thì kết quả pass/fail của các test protocol phía trước không đáng tin cậy.
 
@@ -1352,9 +1336,9 @@ Kết quả mong đợi là `reg_driver` drive đúng single-cycle register acce
 
 Test này quan trọng vì gần như mọi testcase đều cấu hình DUT qua register bus. Nếu reg agent sai, lỗi có thể bị hiểu nhầm là lỗi RTL hoặc protocol trong khi thực tế là stimulus sai.
 
-## 4.13 Stress, Robustness, and Performance
+## 4.12 Stress, Robustness, and Performance
 
-Phần 4.13 kiểm tra độ bền của controller khi chạy nhiều transaction, nhiều loại command, trạng thái FIFO sát biên, và đo một số chỉ số performance.
+Phần 4.12 kiểm tra độ bền của controller khi chạy nhiều transaction, nhiều loại command, trạng thái FIFO sát biên, và đo một số chỉ số performance.
 
 Các test trong phần này khác với directed test ở các mục trước. Directed test kiểm tra từng behavior cụ thể, còn stress test cố tình trộn nhiều biến: direction, length, data pattern, TID, DAT entry, ACK/NACK, command class, và trạng thái queue. Mục tiêu là tìm lỗi state cleanup, ordering, backpressure, hoặc corner case chỉ xuất hiện khi nhiều flow chạy liên tiếp.
 

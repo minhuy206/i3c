@@ -1,0 +1,88 @@
+\begin{tikzpicture}[
+		font=\scriptsize,
+		st/.style={ellipse, draw=black, fill=white, align=center, inner sep=1.2pt,
+			minimum width=1.85cm, minimum height=0.82cm, font=\scriptsize},
+		hub/.style={st, draw=black!70, fill=black!10, font=\scriptsize},
+		e/.style={-{Latex[length=1.6mm]}, semithick},
+		fast/.style={-{Latex[length=1.6mm]}, semithick, orange!85!black, line width=1.0pt},
+		lb/.style={font=\scriptsize, inner sep=1pt, fill=white, align=center},
+		grp/.style={draw=black!45, dashed, rounded corners, inner sep=2.4mm, fill=black!3},
+		grplb/.style={font=\scriptsize\itshape, text=black!60, anchor=south},
+	]
+	% ---- Idle hub ----
+	\node[hub] (idle) at (0,3.1) {\texttt{Idle}};
+
+	% ---- Group A: START condition ----
+	\node[st] (gstart) at (-6.2,1.6)  {\texttt{Generate}\\\texttt{Start}};
+	\node[st] (sfall)  at (-6.2,0.0)  {\texttt{SdaFall}};
+	\node[st] (hstart) at (-6.2,-1.7) {\texttt{HoldStart}};
+
+	% ---- Group B: clock / bit generation ----
+	\node[st] (wcmd) at (-2.6,-0.3) {\texttt{WaitCmd}};
+	\node[st] (dlow) at (-3.8,-2.4) {\texttt{DriveLow}};
+	\node[st] (dhigh) at (-1.4,-2.4) {\texttt{DriveHigh}};
+
+	% ---- Group C: Repeated START ----
+	\node[st] (rsfall)  at (0.5,0.9)  {\texttt{RstartSda}\\\texttt{Fall}};
+	\node[st] (grstart) at (2.9,1.5)  {\texttt{Generate}\\\texttt{Rstart}};
+	\node[st] (shrstart) at (2.9,-0.2) {\texttt{SclHigh}\\\texttt{ForRstart}};
+
+	% ---- Group D: STOP + Bus Free ----
+	\node[st] (gstop)  at (-2.6,-4.6) {\texttt{Generate}\\\texttt{Stop}};
+	\node[st] (shstop) at (-0.2,-4.6) {\texttt{SclHigh}\\\texttt{ForStop}};
+	\node[st] (srise)  at (2.0,-4.6)  {\texttt{SdaRise}};
+	\node[st] (bfree)  at (4.2,-4.6)  {\texttt{BusFree}};
+
+	% ---- group boxes ----
+	\begin{scope}[on background layer]
+		\node[grp, fit=(gstart)(sfall)(hstart)] (boxA) {};
+		\node[grp, fit=(wcmd)(dlow)(dhigh)] (boxB) {};
+		\node[grp, fit=(rsfall)(grstart)(shrstart)] (boxC) {};
+		\node[grp, fit=(gstop)(shstop)(srise)(bfree)] (boxD) {};
+	\end{scope}
+	\node[grplb] at (boxA.north) {Tạo START};
+	\node[grplb] at (boxB.north) {Tạo xung nhịp (bit)};
+	\node[grplb] at (boxC.north) {Tạo Repeated START};
+	\node[grplb] at (boxD.north) {Tạo STOP và Bus Free};
+
+	% ---- edges ----
+	\begin{scope}[on background layer]
+		\draw[e] (0,4.0) node[lb, above] {reset} -- (idle);
+		\draw[e] (idle) to[out=180,in=70] node[lb, pos=0.6] {\texttt{gen\_start}} (gstart.north);
+		\draw[e] (idle) to[out=0,in=70] node[lb, pos=0.6] {\texttt{gen\_rstart}} (grstart.north);
+
+		% group A internal
+		\draw[e] (gstart) -- node[lb, right] {t=0} (sfall);
+		\draw[e] (sfall) -- (hstart);
+		\draw[e] (hstart) -- node[lb, pos=0.45, above] {t=0} (dlow);
+
+		% group B internal (clocking loop)
+		\draw[e] (dlow) to[out=25,in=155] node[lb, above] {t=0, \texttt{gen\_clock}} (dhigh);
+		\draw[e] (dhigh) to[out=-155,in=-25] node[lb, below] {t=0, \texttt{gen\_clock}} (dlow);
+		\draw[e] (dhigh) to[out=90,in=-20] node[lb, pos=0.4] {t=0, rảnh} (wcmd.east);
+		\draw[e] (wcmd) to[out=-110,in=110] node[lb, left] {\texttt{gen\_clock}} (dlow.north);
+
+		% B -> C (Sr) and B -> D (Stop)
+		\draw[e] (boxB.east) to[out=0,in=-120] node[lb, pos=0.5] {\texttt{gen\_rstart}} (shrstart.south);
+		\draw[e] (boxB.south) to[out=-90,in=180] node[lb, pos=0.4, below] {\texttt{gen\_stop}} (gstop.west);
+
+		% fast takeover path
+		\draw[fast] (dhigh) to[out=60,in=-120] node[lb, pos=0.5] {\texttt{gen\_rstart} \& \texttt{takeover}} (rsfall.south);
+
+		% group C internal
+		\draw[e] (grstart) -- node[lb, right] {t=0, SCL cao} (shrstart);
+		\draw[e] (shrstart) -- node[lb, above] {t=0} (rsfall);
+		\draw[e] (rsfall) to[out=180,in=90] node[lb, pos=0.4] {} (hstart.north);
+
+		% group D internal
+		\draw[e] (gstop) -- node[lb, above] {t=0, SCL cao} (shstop);
+		\draw[e] (shstop) -- node[lb, above] {t=0} (srise);
+		\draw[e] (srise) -- (bfree);
+		\draw[e] (bfree) to[out=90,in=0] node[lb, pos=0.6] {t=0} (idle.east);
+	\end{scope}
+
+	% ---- global note ----
+	\node[font=\scriptsize\itshape, text=black!60, align=left, anchor=north west]
+		at (-6.9,-5.7) {t=0: bộ đếm timing hết hạn \quad$\bullet$\quad
+		\texttt{gen\_idle} đưa FSM về \texttt{Idle} từ mọi trạng thái.};
+\end{tikzpicture}

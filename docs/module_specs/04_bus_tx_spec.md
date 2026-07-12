@@ -92,7 +92,7 @@ None.
 | Signal         | Direction | Width | Description                                                                              |
 | -------------- | --------- | ----- | ----------------------------------------------------------------------------------------- |
 | `sda_o`        | Output    | 1     | SDA drive output                                                                          |
-| `sda_drive_o`  | Output    | 1     | SDA drive-enable; pass-through from `bus_tx`, feeds the `ctrl_sda_oe_o` derivation in `controller_active` |
+| `sda_drive_o`  | Output    | 1     | SDA drive-active indicator; lets `controller_active` qualify `sel_od_pp_o` while deriving pad OE externally |
 
 ### bus_tx (Low-Level Bit Driver)
 
@@ -123,7 +123,7 @@ Same as `bus_tx_flow` (passed through).
 | ------------- | --------- | ----- | ----------------------------------------------------------------------------------------- |
 | `sel_od_pp_o` | Output    | 1     | Pass-through of `sel_od_pp_i`                                                              |
 | `sda_o`       | Output    | 1     | SDA drive output                                                                          |
-| `sda_drive_o` | Output    | 1     | SDA drive-enable signal, asserted whenever this module is actively driving `sda_o`; propagated up through `bus_tx_flow` and consumed by `controller_active` to derive `ctrl_sda_oe_o` |
+| `sda_drive_o` | Output    | 1     | SDA drive-active signal, asserted whenever this module is actively driving `sda_o`; propagated up through `bus_tx_flow` and consumed by `controller_active` to qualify `sel_od_pp_o` |
 
 ## 5. Functional Description
 

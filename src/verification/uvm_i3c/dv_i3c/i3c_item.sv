@@ -1,33 +1,26 @@
 class i3c_item extends uvm_sequence_item;
 
   // transaction data part
-  bit [7:0] data_q[$];
   bit [6:0] addr;
-  bit i3c_empty_broadcast;
+  bit addr_nack;
   bit start_with_broadcast_header;
-  bit broadcast_header_ack;
-  bit i3c_broadcast;
+  bit broadcast_header_nack;
   bit i3c_direct;
   i3c_ccc_e CCC;
   bit CCC_valid;
   bit ccc_t_bit_valid;
   bit ccc_t_bit;
-  bit [7:0] CCC_def[$];
-  i3c_item CCC_direct[$];
+  i3c_item CCC_direct_q[$];
   int tran_id;
   int num_data;  // valid data
   bus_op_e bus_op;
-  bit addr_ack;
-  bit data_ack_q[$];  // I2C Ack/NAck, I3C T-bit
+  bit [7:0] data_q[$];
+  bit data_nack_q[$];  // I2C NAck (1=NACK), I3C T-bit
   bit interrupted;  // I3C read stopped by controller
-  bit aborted;
   // transaction control part
   bit i3c;
-  bit nack;
-  bit ack;
   bit start_from_rstart;
   bit rstart;
-  bit start;
   bit stop;
 
   // Use for debug print
@@ -37,28 +30,22 @@ class i3c_item extends uvm_sequence_item;
     `uvm_field_int(tran_id, UVM_DEFAULT)
     `uvm_field_enum(bus_op_e, bus_op, UVM_DEFAULT)
     `uvm_field_int(addr, UVM_DEFAULT)
-    `uvm_field_int(i3c_empty_broadcast, UVM_DEFAULT)
     `uvm_field_int(start_with_broadcast_header, UVM_DEFAULT)
-    `uvm_field_int(broadcast_header_ack, UVM_DEFAULT)
-    `uvm_field_int(i3c_broadcast, UVM_DEFAULT)
+    `uvm_field_int(broadcast_header_nack, UVM_DEFAULT)
     `uvm_field_int(i3c_direct, UVM_DEFAULT)
     `uvm_field_enum(i3c_ccc_e, CCC, UVM_DEFAULT)
     `uvm_field_int(ccc_t_bit_valid, UVM_DEFAULT)
     `uvm_field_int(ccc_t_bit, UVM_DEFAULT)
-    `uvm_field_queue_int(CCC_def, UVM_DEFAULT)
-    `uvm_field_queue_object(CCC_direct, UVM_DEFAULT)
+    `uvm_field_queue_object(CCC_direct_q, UVM_DEFAULT)
     `uvm_field_int(num_data, UVM_DEFAULT)
-    `uvm_field_int(start, UVM_DEFAULT)
     `uvm_field_int(start_from_rstart, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(rstart, UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_field_int(stop, UVM_DEFAULT)
     `uvm_field_int(interrupted, UVM_DEFAULT)
     `uvm_field_queue_int(data_q, UVM_DEFAULT)
-    `uvm_field_int(ack, UVM_DEFAULT | UVM_NOPRINT | UVM_NOCOMPARE)
-    `uvm_field_int(nack, UVM_DEFAULT | UVM_NOPRINT | UVM_NOCOMPARE)
     `uvm_field_int(i3c, UVM_DEFAULT | UVM_NOPRINT | UVM_NOCOMPARE)
-    `uvm_field_int(addr_ack, UVM_DEFAULT | UVM_NOCOMPARE | UVM_NOPRINT)
-    `uvm_field_queue_int(data_ack_q, UVM_DEFAULT | UVM_NOCOMPARE | UVM_NOPRINT)
+    `uvm_field_int(addr_nack, UVM_DEFAULT | UVM_NOCOMPARE | UVM_NOPRINT)
+    `uvm_field_queue_int(data_nack_q, UVM_DEFAULT | UVM_NOCOMPARE | UVM_NOPRINT)
   `uvm_object_utils_end
 
   function new(string name = "");
@@ -69,22 +56,18 @@ class i3c_item extends uvm_sequence_item;
     num_data = 0;
     addr     = 0;
     data_q.delete();
-    addr_ack = 0;
-    i3c_empty_broadcast = 0;
+    addr_nack = 0;
     start_with_broadcast_header = 0;
-    broadcast_header_ack = 0;
-    data_ack_q.delete();
-    CCC_def.delete();
-    CCC_direct.delete();
+    broadcast_header_nack = 0;
+    data_nack_q.delete();
+    CCC_direct_q.delete();
     CCC_valid = 0;
     ccc_t_bit_valid = 0;
     ccc_t_bit = 0;
-    i3c_broadcast = 0;
     i3c_direct = 0;
   endfunction : clear_data
 
   function void clear_flag();
-    start             = 1'b0;
     start_from_rstart = 1'b0;
     stop              = 1'b0;
     rstart            = 1'b0;
@@ -105,18 +88,18 @@ class i3c_item extends uvm_sequence_item;
     str = {str, $sformatf("%s:bus_op    = %s\n", pname, bus_op.name)};
     str = {str, $sformatf("%s:addr      = 0x%2x\n", pname, addr)};
     str = {str, $sformatf("%s:bcast_hdr = %1b\n", pname, start_with_broadcast_header)};
-    str = {str, $sformatf("%s:bcast_ack = %s\n", pname, ack_to_string(broadcast_header_ack))};
+    str = {str, $sformatf("%s:bcast_ack = %s\n", pname, ack_to_string(!broadcast_header_nack))};
     str = {str, $sformatf("%s:direct    = 0x%2x\n", pname, i3c_direct)};
-    if (i3c_broadcast || i3c_direct) begin
+    if (CCC_valid) begin
       str = {str, $sformatf("%s:CCC       = %s\n", pname, CCC.name())};
-      str = {str, $sformatf("%s:CCC T-bit = %s\n", pname,
-                            ccc_t_bit_valid ? $sformatf("%0b", ccc_t_bit) : "--")};
-      foreach (CCC_def[i]) begin
-        str = {str, $sformatf("%s:CCC Def Byte [%0d]=0x%2x\n", pname, i, CCC_def[i])};
-      end
+      str = {
+        str,
+        $sformatf(
+            "%s:CCC T-bit = %s\n", pname, ccc_t_bit_valid ? $sformatf("%0b", ccc_t_bit) : "--"
+        )
+      };
     end
     str = {str, $sformatf("%s:num_data  = %0d\n", pname, num_data)};
-    str = {str, $sformatf("%s:start     = %1b\n", pname, start)};
     str = {str, $sformatf("%s:start_sr  = %1b\n", pname, start_from_rstart)};
     str = {str, $sformatf("%s:stop      = %1b\n", pname, stop)};
     str = {str, $sformatf("%s:rstart    = %1b\n", pname, rstart)};
