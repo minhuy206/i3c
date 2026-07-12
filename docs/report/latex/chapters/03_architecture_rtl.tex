@@ -232,12 +232,19 @@ này được \FlowActive{} đóng gói và trả về qua \RxFifo{}.
 \subsection{Vai trò và tổ chức trạng thái}
 \label{sec:flow-states}
 
-\FlowActive{} là khối điều phối chính và là module trung tâm của hệ thống. FSM có
-\FlowStateCount{} trạng thái, liệt kê tại \cref{tab:flow-states}. Quyết định thiết kế quan trọng nhất
-trong \FlowActive{} là không mở rộng FSM theo từng chi tiết byte/bit của transaction. Thay vào đó, bên
-trong \texttt{IssueCmd}, một bộ đếm vi mô nội bộ được dùng để tuần tự đi qua các pha START, \AddressHeader{}, ACK, data và \TBit{}.
-Nhờ vậy, số lượng trạng thái của FSM không đổi khi bổ sung thêm các biến thể transaction, và một trạng thái \texttt{IssueCmd} duy nhất phục vụ chung cho
-I3C, \iic{}, read, write lẫn Immediate transfer.
+\FlowActive{} là khối điều phối chính của hệ thống, hiện thực máy trạng thái điều khiển I3C bằng
+\FlowStateCount{} trạng thái liệt kê ở \cref{tab:flow-states}. FSM không mở rộng theo từng byte hay bit của
+transaction. Thay vào đó, mỗi trạng thái thực thi dùng một bộ đếm vi mô nội bộ để tuần tự đi qua các pha
+START, \AddressHeader{}, ACK, data và \TBit{}. Nhờ vậy, số trạng thái không tăng khi bổ sung biến thể độ
+dài hay chiều truyền.
+
+Tổ chức trạng thái tách theo hai trục: chiều truyền và chế độ bus. Hai trạng thái preamble
+\texttt{InitWrite} và \texttt{InitRead} phát \AddressHeader{}, phân nhánh nội bộ theo loại \Target{} (I3C
+hay \iic{}) trong DAT entry. Năm trạng thái thực thi tách riêng theo chế độ: \texttt{IssueDAA} chạy
+ENTDAA; \texttt{IssueI3CWrite} và \texttt{IssueI2CWrite} truyền dữ liệu write; \texttt{IssueI3CRead} và
+\texttt{IssueI2CRead} nhận dữ liệu read. Cách tách này cô lập logic đặc thù I3C (parity \TBit{}, takeover)
+khỏi logic \iic{} (ACK/NACK) vào các trạng thái riêng, thay cho điều kiện lồng nhau trong một trạng thái
+chung.
 
 \begin{table}[!htbp]
 	\centering
@@ -245,34 +252,31 @@ I3C, \iic{}, read, write lẫn Immediate transfer.
 	\label{tab:flow-states}
 	\begin{tabular}{C{1.0cm} L{3.5cm} L{8.4cm}}
 		\toprule
-		\textbf{ID} & \textbf{State}                                        & \textbf{Vai trò}                                                \\
+		\textbf{ID} & \textbf{State}                                        & \textbf{Vai trò}                                          \\
 		\midrule
-		0           & \texttt{Idle}                                         & Xóa context transaction và giữ bus ở trạng thái nghỉ.           \\
-		1           & \texttt{WaitForCmd}                                   & Chờ \CommandFifo{} có Descriptor hợp lệ.                        \\
-		2           & \texttt{FetchDAT}                                     & Kiểm tra Descriptor, phát yêu cầu đọc DAT.                      \\
-		3           & \texttt{WaitDAT}                                      & Chờ dữ liệu DAT và quyết định nhánh giao thức.                  \\
-		4           & \texttt{I3CBcastHeader}                               & Phát broadcast preamble khi cấu hình yêu cầu.                   \\
-		5           & \shortstack[l]{\texttt{IssueImmediate}\\\texttt{Ccc}} & Phát Broadcast/Direct ENEC hoặc DISEC.                          \\
-		6           & \texttt{FetchTxData}                                  & Lấy DWORD tiếp theo từ \TxFifo{}.                               \\
-		7           & \texttt{InitI3CWrite}                                 & Phát \AddressHeader{} cho giao dịch I3C write.                  \\
-		8           & \texttt{InitI3CRead}                                  & Phát \AddressHeader{} cho giao dịch I3C read.                   \\
-		9           & \texttt{InitI2CWrite}                                 & Phát \AddressHeader{} cho giao dịch \iic{} write.               \\
-		10          & \texttt{InitI2CRead}                                  & Phát \AddressHeader{} cho giao dịch \iic{} read.                \\
-		11          & \texttt{IssueCmd}                                     & Truyền dữ liệu truyền, chạy ENTDAA và xử lý continuation/abort. \\
-		12          & \texttt{WriteResp}                                    & Ghi \ResponseDescriptor{} bằng valid/ready handshake.           \\
+		0           & \texttt{Idle}                                         & Xóa context transaction, giữ bus ở trạng thái nghỉ.       \\
+		1           & \texttt{WaitForCmd}                                   & Chờ \CommandFifo{} có Descriptor hợp lệ.                  \\
+		2           & \texttt{FetchDAT}                                     & Kiểm tra Descriptor, phát yêu cầu đọc DAT.                \\
+		3           & \texttt{WaitDAT}                                      & Chờ dữ liệu DAT, quyết định nhánh giao thức.              \\
+		4           & \texttt{I3CBcastHeader}                               & Phát broadcast preamble khi cấu hình yêu cầu.             \\
+		5           & \shortstack[l]{\texttt{IssueImmediate}\\\texttt{Ccc}} & Phát Broadcast/Direct ENEC hoặc DISEC.                    \\
+		6           & \texttt{FetchTxData}                                  & Lấy DWORD tiếp theo từ \TxFifo{}.                         \\
+		7           & \texttt{InitWrite}                                    & Phát \AddressHeader{} cho giao dịch write (I3C/\iic{}).   \\
+		8           & \texttt{InitRead}                                     & Phát \AddressHeader{} cho giao dịch read (I3C/\iic{}).    \\
+		9           & \texttt{IssueDAA}                                     & Chạy vòng ENTDAA arbitration.                            \\
+		10          & \texttt{IssueI3CWrite}                                & Truyền dữ liệu I3C write; parity \TBit{}, continuation.   \\
+		11          & \texttt{IssueI2CWrite}                                & Truyền dữ liệu \iic{} write; xác nhận ACK/NACK.           \\
+		12          & \texttt{IssueI3CRead}                                 & Nhận dữ liệu I3C read; \TBit{} takeover, HC-abort.        \\
+		13          & \texttt{IssueI2CRead}                                 & Nhận dữ liệu \iic{} read; ACK/NACK, NACK-then-STOP.       \\
+		14          & \texttt{WriteResp}                                    & Ghi \ResponseDescriptor{} qua valid/ready handshake.     \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Ở mức giao thức, \FlowActive{} hiện thực máy trạng thái điều khiển I3C. Mỗi vòng giao dịch xuất phát từ
-\texttt{START}, đi qua một chế độ truyền, rồi kết thúc bằng \texttt{STOP} để quay về \texttt{Idle}.
-\FlowStateCount{} trạng thái RTL ở \cref{tab:flow-states} hiện thực chi tiết luồng điều khiển này.
-
-
-Quỹ đạo chung của FSM gồm bốn chặng: chuẩn bị Descriptor (\texttt{WaitForCmd}, \texttt{FetchDAT},
-\texttt{WaitDAT}), chọn preamble (\texttt{I3CBcastHeader} hoặc vào thẳng nhóm \texttt{Init*}), thực thi
-transaction (\texttt{FetchTxData}, \texttt{IssueCmd}) và trả kết quả (\texttt{WriteResp} rồi quay về
-\texttt{Idle}). Bảng vai trò đầy đủ của \FlowStateCount{} trạng thái nằm ở \cref{tab:flow-states}.
+Mỗi vòng giao dịch đi qua bốn chặng: chuẩn bị Descriptor (\texttt{WaitForCmd}, \texttt{FetchDAT},
+\texttt{WaitDAT}); chọn preamble (\texttt{I3CBcastHeader} hoặc vào thẳng nhóm \texttt{Init}); thực thi
+transaction (\texttt{FetchTxData} và một trạng thái \texttt{Issue} tương ứng chế độ); trả kết quả
+(\texttt{WriteResp} trước khi tạo \texttt{STOP} và quay về \texttt{Idle}).
 
 \subsection{Giải mã và định tuyến \CommandDescriptor{}}
 \label{sec:flow-route}
@@ -286,28 +290,33 @@ không bao giờ tạo hoạt động trên SDA/SCL. Descriptor hợp lệ phát
 Sau DAT lookup, cờ loại \Target{} trong DAT entry quyết định bộ timing và cơ chế xác nhận
 (ACK/\TBit{} của I3C hay ACK/NACK của \iic{}). Nếu bit cấu hình phát \IThreeCBroadcastAddress{} được bật,
 private transfer I3C đi qua \texttt{I3CBcastHeader} để phát \IThreeCBroadcastAddress{} trước; nếu
-không, FSM vào trực tiếp nhóm \texttt{Init*}. CCC dạng immediate luôn dùng \IThreeCBroadcastAddress{}. Address
-Assignment phát CCC ENTDAA rồi trao quyền vòng lặp cho phân hệ ENTDAA mô tả ở \cref{sec:rtl-entdaa}.
+không, FSM vào trực tiếp nhóm \texttt{Init}. CCC dạng immediate luôn dùng \IThreeCBroadcastAddress{}. Address
+Assignment phát CCC ENTDAA qua \texttt{IssueDAA} rồi trao quyền vòng lặp cho phân hệ ENTDAA mô tả ở
+\cref{sec:rtl-entdaa}.
 
 \subsection{Private write, private read và Immediate Data}
 \label{sec:flow-merge}
 
-Regular write lấy từng DWORD từ \TxFifo{}; \texttt{tx\_byte\_idx\_q} chọn byte hiện hành trong
-DWORD. Sau mỗi byte I3C, FSM phát \TBit{} odd parity; với \iic{}, cùng đường trạng thái đó
-phát byte nhưng yêu cầu \BusRxFlow{} thu ACK/NACK từ \Target{}. Khi DWORD cuối không đủ bốn byte,
-\texttt{remaining\_len\_q} dừng đường truyền đúng tại byte cuối. Nếu \TxFifo{} cạn giữa chừng, cờ
-underflow được tích lũy và giao dịch kết thúc với mã \texttt{Ovl} thay vì phát dữ liệu không xác định.
+Regular write chạy trong \texttt{IssueI3CWrite} (I3C) hoặc \texttt{IssueI2CWrite} (\iic{}). FSM lấy từng
+DWORD từ \TxFifo{}; \texttt{tx\_byte\_idx\_q} chọn byte hiện hành trong DWORD. Sau mỗi byte I3C, FSM phát
+\TBit{} odd parity; với \iic{}, FSM phát byte rồi yêu cầu \BusRxFlow{} thu ACK/NACK từ \Target{}. Khi
+DWORD cuối không đủ bốn byte, \texttt{remaining\_len\_q} dừng đường truyền đúng tại byte cuối. Nếu
+\TxFifo{} cạn giữa chừng, cờ underflow được tích lũy và giao dịch kết thúc với mã \texttt{Ovl} thay vì
+phát dữ liệu không xác định.
 
-Private read gom byte nhận được vào \texttt{rx\_dword\_q} và commit vào \RxFifo{} khi đủ bốn byte,
-khi hết độ dài yêu cầu, khi \Target{} kết thúc sớm hoặc khi abort. Với I3C, bit điều khiển sau mỗi byte
-được thu qua handoff path để \Controller{} giành lại SDA đúng lúc; với \iic{}, \Controller{}
-phát ACK khi còn muốn nhận và NACK ở byte cuối. Trường hợp \RxFifo{} đầy tạo mã \texttt{Ovl} và
-chấm dứt giao dịch theo đúng pha, không ghi đè dữ liệu \Host{} chưa đọc.
+Private read chạy trong \texttt{IssueI3CRead} hoặc \texttt{IssueI2CRead}. FSM gom byte nhận được vào
+\texttt{rx\_dword\_q} và commit vào \RxFifo{} khi đủ bốn byte, khi hết độ dài yêu cầu, khi \Target{} kết
+thúc sớm hoặc khi abort. Với I3C, bit điều khiển sau mỗi byte được thu qua handoff path để \Controller{}
+giành lại SDA đúng lúc; với \iic{}, \Controller{} phát ACK khi còn muốn nhận và NACK ở byte cuối. Trường
+hợp \RxFifo{} đầy tạo mã \texttt{Ovl} và chấm dứt giao dịch theo đúng pha, không ghi đè dữ liệu \Host{}
+chưa đọc.
 
 Immediate Data Transfer không dùng \TxFifo{}: tối đa bốn byte dữ liệu truyền nằm ngay trong DWORD thứ hai
-của Descriptor. Tuy nguồn dữ liệu khác, luồng thực thi vẫn đi qua \texttt{IssueCmd}, nhờ đó parity,
-\AddressHeader{}, tính độ dài response và xử lý abort dùng chung logic với Regular write. Riêng CCC dạng
-immediate được tách sang \texttt{IssueImmediateCcc} vì \DirectCCC{} cần chuỗi riêng: byte CCC, \RepeatedSTART{}, \AddressHeader{} của \Target{} rồi mới đến \EventsByte{} --- khác về cấu trúc với một private transfer.
+của Descriptor. Tuy nguồn dữ liệu khác, luồng thực thi vẫn đi qua trạng thái \texttt{IssueI3CWrite} hoặc
+\texttt{IssueI2CWrite}, nhờ đó parity, \AddressHeader{}, tính độ dài response và xử lý abort dùng chung
+logic với Regular write. Riêng CCC dạng immediate được tách sang \texttt{IssueImmediateCcc} vì \DirectCCC{}
+cần một chuỗi riêng: byte CCC, \RepeatedSTART{}, \AddressHeader{} của \Target{}, rồi mới đến \EventsByte{}.
+Cấu trúc này khác một private transfer.
 
 \subsection{Continuation, abort và kết thúc transaction}
 \label{sec:flow-end}
@@ -319,11 +328,11 @@ mọi trường hợp khác buộc tạo STOP và báo lỗi, tránh tình huố
 không thể tiếp tục.
 
 Abort được xử lý theo pha thay vì nhảy tức thời về \texttt{Idle}. Khi \Host{} đặt bit abort, FSM chờ
-serializer hoàn tất đơn vị đang truyền, tạo STOP có trật tự rồi trả mã \texttt{HcAborted}. Với I3C read,
-\Controller{} phải hoàn thành việc thu \TBit{} và takeover trước khi được phép kéo SDA; với
-\iic{} read, \Controller{} phát NACK rồi mới STOP. Kỷ luật theo pha này ngăn các chuyển tiếp
-SDA bất hợp lệ trong lúc SCL cao --- vốn sẽ bị mọi thiết bị trên bus diễn giải nhầm thành START hoặc
-STOP.
+serializer hoàn tất đơn vị đang truyền, tạo STOP có trật tự rồi trả mã \texttt{HcAborted}. Trong
+\texttt{IssueI3CRead}, \Controller{} phải hoàn thành việc thu \TBit{} và takeover trước khi được phép kéo
+SDA; trong \texttt{IssueI2CRead}, \Controller{} phát NACK rồi mới STOP. Kỷ luật theo pha này ngăn các
+chuyển tiếp SDA bất hợp lệ trong lúc SCL cao --- vốn sẽ bị mọi thiết bị trên bus diễn giải nhầm thành
+START hoặc STOP.
 
 \section{Tích hợp trong \ControllerActive{}}
 \label{sec:rtl-controller-active}

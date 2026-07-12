@@ -165,7 +165,7 @@ với giá trị parity tương ứng.
 // SDR Private Write data phase: T-Bit must carry odd parity
 ap_sdr_write_tbit_parity:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-    state_q == IssueCmd && sdr_regular_i3c_write() &&
+    state_q == IssueI3CWrite && sdr_regular_i3c_write() &&
     remaining_len_q > 16'h0 &&
     issue_phase_q > PhaseAddrAck && !issue_phase_q[0]
     |->
@@ -174,7 +174,7 @@ ap_sdr_write_tbit_parity:
 
 cp_sdr_write_tbit_parity:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-    state_q == IssueCmd && sdr_regular_i3c_write() &&
+    state_q == IssueI3CWrite && sdr_regular_i3c_write() &&
     remaining_len_q > 16'h0 &&
     issue_phase_q > PhaseAddrAck && !issue_phase_q[0] &&
     bus_tx_req_bit && !bus_tx_req_byte &&
