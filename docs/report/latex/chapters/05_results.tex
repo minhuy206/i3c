@@ -31,10 +31,10 @@ trắng, trên các file \texttt{.sv}/\texttt{.svh}. Quy tắc thô này đượ
 ``dòng lệnh hiệu dụng'' vì nó không phụ thuộc công cụ và áp dụng được như nhau cho thiết kế của khóa
 luận lẫn thiết kế tham chiếu. Coverage được thu khi chạy với \texttt{COV=1}, merge qua toàn bộ 80
 test của thư viện Virtual Sequence, và trích xuất từ coverage database qua giao diện UCIS thành
-report dạng văn bản; quy trình sinh report được ghi tại \cref{app:build}. \Cref{tab:res-baseline}
-tóm tắt baseline.
+report dạng văn bản qua các target \texttt{cov\_report} và \texttt{sva\_cov\_report} của Makefile.
+\Cref{tab:res-baseline} tóm tắt baseline.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{Baseline đo kết quả và quy tắc đếm.}
   \label{tab:res-baseline}
@@ -67,7 +67,7 @@ Toàn bộ 80 Virtual Sequence PASS với \texttt{SEED=1}: không có \texttt{UV
 theo mười nhóm kịch bản của \cref{tab:vseq-cat}; trích đoạn log và bảng tổng kết regression được đặt
 tại \cref{app:regression}.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{Kết quả regression theo nhóm kịch bản (\texttt{SEED=1}).}
   \label{tab:res-regression}
@@ -114,7 +114,7 @@ với \texttt{DUMP\_WAVES=1}, nhằm xác nhận rằng chuỗi sự kiện trê
 \cref{sec:rtl-controller-active} mô tả ở mức RTL.
 
 % PLACEHOLDER — ảnh chụp SimVision từ waves/wave_i3c_write_vseq (SHM có sẵn dưới src/verification/waves/).
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
   \fbox{\parbox[c][5.2cm][c]{0.92\textwidth}{\centering\itshape
     [Hình chờ bổ sung]\\
@@ -126,7 +126,7 @@ với \texttt{DUMP\_WAVES=1}, nhằm xác nhận rằng chuỗi sự kiện trê
 \end{figure}
 
 % PLACEHOLDER — ảnh chụp SimVision từ waves/wave_i3c_read_vseq.
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
   \fbox{\parbox[c][5.2cm][c]{0.92\textwidth}{\centering\itshape
     [Hình chờ bổ sung]\\
@@ -150,7 +150,7 @@ Sau khi merge 80 test, mô hình coverage ba lớp ghi nhận 1.324 trên 1.639 
 \Cref{tab:res-cov} phân rã theo ba coverage component của \cref{sec:ver-cov}; trong 42 covergroup
 của toàn mô hình, 19 covergroup đạt 100\%.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{Kết quả Functional Coverage theo component (merge 80 test).}
   \label{tab:res-cov}
@@ -168,7 +168,7 @@ của toàn mô hình, 19 covergroup đạt 100\%.
 \end{table}
 
 % PLACEHOLDER — ảnh chụp phần đầu coverage_report.txt hoặc giao diện IMC trên cov_work.
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
   \fbox{\parbox[c][4.6cm][c]{0.92\textwidth}{\centering\itshape
     [Hình chờ bổ sung]\\
@@ -205,7 +205,7 @@ Trên toàn bộ regression, 145 instance checker SVA (chín checker gắn bằn
 theo số instance của module đích, cùng checker pad model trong Testbench) ghi nhận 411 assertion và
 590 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{Kết quả SVA trên toàn bộ regression (merge 80 test).}
   \label{tab:res-sva}
@@ -238,7 +238,7 @@ RTL của khóa luận gồm 18 file với tổng cộng 5.121 dòng, phân bố
 \texttt{flow\_active} --- FSM trung tâm ở \cref{sec:rtl-flow-active} --- chiếm 1.794 dòng, phản ánh
 đúng vị trí hội tụ độ phức tạp mà \cref{ch:architecture} đã phân tích.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{Quy mô RTL theo phân hệ.}
   \label{tab:res-loc}
@@ -263,7 +263,7 @@ một commit cố định (\texttt{f8ea634}, 2026-06-08): đếm mọi file \tex
 \texttt{src/}, loại ba file mô hình UVM và covergroup sinh tự động vì chúng thuộc phía kiểm chứng.
 \Cref{tab:res-compare} đối chiếu theo phân hệ.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{So sánh quy mô RTL với thiết kế tham chiếu (số dòng, cùng quy tắc đếm).}
   \label{tab:res-compare}
@@ -284,7 +284,7 @@ một commit cố định (\texttt{f8ea634}, 2026-06-08): đếm mọi file \tex
 \end{table}
 
 % PLACEHOLDER — biểu đồ cột so sánh số dòng theo phân hệ, vẽ từ số liệu tab:res-compare.
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
   \fbox{\parbox[c][4.6cm][c]{0.92\textwidth}{\centering\itshape
     [Hình chờ bổ sung]\\
@@ -311,7 +311,7 @@ với bằng chứng kiểm chứng tương ứng, theo khung ánh xạ đã l�
 chức năng đều có nhóm test PASS và coverage tương ứng; các phần coverage chưa đóng đã được định
 danh cụ thể ở \cref{sec:res-coverage}.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{Đối chiếu yêu cầu chức năng với bằng chứng kiểm chứng.}
   \label{tab:res-req}

@@ -16,12 +16,11 @@ hiện trọn luồng xử lý từ Command Descriptor phần mềm ghi vào đ�
 Response Descriptor trả về, bao phủ SDR private write/read, Immediate Data Transfer, các CCC
 ENEC/DISEC, ENTDAA và giao dịch I\textsuperscript{2}C Fast Mode. So với thiết kế tham chiếu CHIPS
 Alliance \texttt{i3c-core}, phần RTL bằng khoảng 13,4\% quy mô theo cùng quy tắc đếm
-(\cref{sec:res-size}), kết quả của việc thu hẹp phạm vi có chủ đích kết hợp với register file viết
-tay và giao diện bus tối giản.
+(\cref{sec:res-size}).
 
-Về kiểm chứng, khóa luận xây dựng một môi trường UVM~1.2 với 29.017 dòng mã --- gấp khoảng năm lần
-rưỡi RTL --- gồm Register Agent, I3C Target Agent khả lập trình, Virtual Sequencer, Scoreboard
-với reference model độc lập, 145 instance checker SVA và mô hình Functional Coverage ba lớp. Thư
+Về kiểm chứng, khóa luận xây dựng một môi trường UVM~1.2 với 29.017 dòng mã, gồm Register Agent,
+I3C Target Agent khả lập trình, Virtual Sequencer, Scoreboard với \ReferenceModel{} độc lập, 145
+instance checker SVA và mô hình Functional Coverage ba lớp. Thư
 viện 80 Virtual Sequence phủ mười nhóm kịch bản từ truy cập CSR đến các chuỗi lỗi--phục hồi.
 
 Về kết quả, toàn bộ 80 test PASS với seed cố định; 411 assertion không ghi nhận lần fail nào; mô
@@ -40,7 +39,7 @@ phân biệt phần thuộc giao thức với phần thuộc quy ước giao di�
 RTL cho đường điều khiển nhiều FSM phối hợp: phân rã chức năng thành các FSM có ranh giới rõ,
 thiết kế handshake giữa chúng, và xử lý các trường hợp biên như abort, backpressure và reset giữa
 giao dịch. Thứ ba là phương pháp luận kiểm chứng: xây dựng môi trường UVM nhiều agent, viết
-reference model cho Scoreboard, thiết kế assertion kèm cover property đối ứng, và quan trọng nhất
+\ReferenceModel{} cho Scoreboard, thiết kế assertion kèm cover property đối ứng, và quan trọng nhất
 là tư duy coverage-driven --- đo mức độ đầy đủ của bằng chứng thay vì dừng ở việc test chạy qua.
 Cuối cùng là kỹ năng làm việc với hạ tầng công cụ: quy trình build/regression bằng Makefile trên
 Xcelium, trích xuất coverage database qua UCIS, debug bằng SimVision, và khai thác một mã nguồn
@@ -53,9 +52,8 @@ Các hạn chế của khóa luận được tổng hợp tại đây thành m�
 thiết kế lẫn hạn chế của bộ bằng chứng đánh giá:
 
 \begin{itemize}
-  \item \textbf{Phạm vi giao thức:} các tính năng tại \cref{tab:req-oos} --- HDR, In-Band
-  Interrupt, Hot-Join, Secondary Controller, Target mode và HCI đầy đủ --- không được hiện thực;
-  IP chỉ đảm nhận vai trò Active Controller duy nhất trên bus.
+  \item \textbf{Phạm vi giao thức:} các tính năng ngoài phạm vi tại \cref{tab:req-oos} không được
+  hiện thực; IP chỉ đảm nhận vai trò Active Controller duy nhất trên bus.
   \item \textbf{Coverage chưa closure:} mô hình coverage dừng ở 80,8\%; phần thiếu tập trung vào
   các cross bậc ba của lớp correlated (chuỗi lệnh nối tiếp qua điểm biên, lỗi chồng lỗi khi phục
   hồi), đòi hỏi thêm kịch bản có chủ đích và một vòng rà soát loại trừ có căn cứ.
@@ -78,7 +76,7 @@ Các hạn chế trên xác định trực tiếp lộ trình phát triển ti�
 \cref{tab:concl-roadmap} theo thứ tự ưu tiên: trước hết củng cố bộ bằng chứng cho phạm vi hiện
 tại, sau đó mở rộng giao thức theo hướng tăng dần độ phức tạp kiến trúc.
 
-\begin{table}[H]
+\begin{table}[!htbp]
   \centering
   \caption{Lộ trình phát triển đề xuất.}
   \label{tab:concl-roadmap}

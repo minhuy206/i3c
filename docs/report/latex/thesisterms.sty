@@ -1,0 +1,131 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{thesisterms}[2026/07/05 Centralized thesis terminology and facts]
+
+% Protocol roles and canonical terminology.
+\newcommand{\Controller}{Controller}
+\newcommand{\ActiveController}{Active Controller}
+\newcommand{\SecondaryController}{Secondary Controller}
+\newcommand{\Target}{Target}
+\newcommand{\Device}{Device}
+\newcommand{\IThreeCDevice}{I3C Device}
+\newcommand{\Host}{Host}
+\newcommand{\DynamicAddress}{Dynamic Address}
+\newcommand{\StaticAddress}{Static Address}
+\newcommand{\LegacyIic}{Legacy \iic{}}
+\newcommand{\LegacyIicCoexistence}{\LegacyIic{} Device co-existence}
+\newcommand{\DynamicAddressAssignment}{Dynamic Address Assignment}
+\newcommand{\AddressHeader}{Address Header}
+\newcommand{\DefiningByte}{Defining Byte}
+\newcommand{\EventsByte}{Events Byte}
+\newcommand{\CommonCommandCode}{Common Command Code}
+\newcommand{\IThreeCBroadcastAddress}{I3C Broadcast Address}
+\newcommand{\BroadcastCCC}{Broadcast CCC}
+\newcommand{\DirectCCC}{Direct CCC}
+\newcommand{\SingleDataRateMode}{Single Data Rate Mode}
+\newcommand{\HighDataRateMode}{High Data Rate Mode}
+\newcommand{\OpenDrain}{Open Drain}
+\newcommand{\PushPull}{Push-Pull}
+\newcommand{\RepeatedSTART}{Repeated START}
+\newcommand{\BusFreeCondition}{Bus Free Condition}
+\newcommand{\BusAvailableCondition}{Bus Available Condition}
+\newcommand{\BusIdleCondition}{Bus Idle Condition}
+\newcommand{\TBit}{T-Bit}
+\newcommand{\InBandInterrupt}{In-Band Interrupt}
+\newcommand{\HotJoin}{Hot-Join}
+\newcommand{\ProvisionedID}{Provisioned ID}
+\newcommand{\BusCharacteristicsRegister}{Bus Characteristics Register}
+\newcommand{\DeviceCharacteristicsRegister}{Device Characteristics Register}
+
+% HCI terminology.
+\newcommand{\CommandDescriptor}{Command Descriptor}
+\newcommand{\ResponseDescriptor}{Response Descriptor}
+\newcommand{\CommandResponseDescriptor}{Command/Response Descriptor}
+\newcommand{\CommandFifo}{Command FIFO}
+\newcommand{\ResponseFifo}{Response FIFO}
+\newcommand{\CommandResponseFifo}{Command/Response FIFO}
+\newcommand{\TxFifo}{TX FIFO}
+\newcommand{\RxFifo}{RX FIFO}
+\newcommand{\TxRxFifo}{TX/RX FIFO}
+\newcommand{\DeviceAddressTable}{Device Address Table}
+\newcommand{\DeviceCharacteristicsTable}{Device Characteristics Table}
+
+% Verification terminology.
+\newcommand{\Testbench}{Testbench}
+\newcommand{\Scoreboard}{Scoreboard}
+\newcommand{\ReferenceModel}{Reference Model}
+\newcommand{\FunctionalCoverage}{Functional Coverage}
+\newcommand{\VirtualSequence}{Virtual Sequence}
+\newcommand{\VirtualSequencer}{Virtual Sequencer}
+\newcommand{\RegisterAgent}{Register Agent}
+\newcommand{\TargetAgent}{I3C Target Agent}
+\newcommand{\TLMAnalysisPort}{TLM Analysis Port}
+\newcommand{\CorrelatedCoverage}{Correlated Coverage}
+\newcommand{\Regression}{Regression}
+\newcommand{\Waveform}{Waveform}
+
+% Organizations, products, standards, and tools.
+\newcommand{\MIPIAlliance}{MIPI Alliance}
+\newcommand{\MIPIIThreeCBasic}{MIPI I3C Basic}
+\newcommand{\CHIPSAlliance}{CHIPS Alliance}
+\newcommand{\IThreeCCore}{\texttt{i3c-core}}
+\newcommand{\Caliptra}{Caliptra}
+\newcommand{\SystemVerilog}{SystemVerilog}
+\newcommand{\CadenceXcelium}{Cadence Xcelium}
+\newcommand{\SimVision}{SimVision}
+\newcommand{\UVMVersion}{UVM~1.2}
+
+% RTL module names.
+\newcommand{\FlowActive}{\texttt{flow\_active}}
+\newcommand{\SclGenerator}{\texttt{scl\_generator}}
+\newcommand{\EntdaaController}{\texttt{entdaa\_controller}}
+\newcommand{\EntdaaFsm}{\texttt{entdaa\_fsm}}
+\newcommand{\BusTx}{\texttt{bus\_tx}}
+\newcommand{\BusTxFlow}{\texttt{bus\_tx\_flow}}
+\newcommand{\BusRxFlow}{\texttt{bus\_rx\_flow}}
+\newcommand{\ControllerActive}{\texttt{controller\_active}}
+\newcommand{\CsrRegisters}{\texttt{csr\_registers}}
+\newcommand{\HciQueues}{\texttt{hci\_queues}}
+\newcommand{\IThreeCPhy}{\texttt{i3c\_phy}}
+\newcommand{\SyncFifo}{\texttt{sync\_fifo}}
+\newcommand{\BusMonitor}{\texttt{bus\_monitor}}
+\newcommand{\IThreeCControllerTop}{\texttt{i3c\_controller\_top}}
+
+% Architecture facts derived from the current RTL.
+\newcommand{\FlowStateCount}{13}
+\newcommand{\SclStateCount}{14}
+\newcommand{\EntdaaControllerStateCount}{7}
+\newcommand{\EntdaaFsmStateCount}{8}
+\newcommand{\BusTxStateCount}{5}
+\newcommand{\BusTxFlowStateCount}{4}
+\newcommand{\BusRxFlowStateCount}{4}
+\newcommand{\CsrRegisterCount}{26}
+\newcommand{\DatEntryCount}{32}
+\newcommand{\CommandDescriptorWidth}{64}
+\newcommand{\ResponseDescriptorWidth}{32}
+\newcommand{\DatEntryWidth}{32}
+\newcommand{\DataBufferWordWidth}{32}
+\newcommand{\RegisterDataWidth}{32}
+\newcommand{\RegisterAddressWidth}{12}
+\newcommand{\DefaultQueueDepth}{64}
+\newcommand{\QueueCount}{4}
+\newcommand{\FunctionalRequirementCount}{10}
+
+% Verification facts derived from the current UVM environment.
+\newcommand{\DriverPhaseCount}{13}
+\newcommand{\SvaCheckerCount}{10}
+\newcommand{\BoundSvaCheckerCount}{9}
+\newcommand{\RunnableVseqCount}{80}
+\newcommand{\VseqCategoryCount}{10}
+\newcommand{\BusVseqCount}{11}
+\newcommand{\CccVseqCount}{5}
+\newcommand{\CsrVseqCount}{14}
+\newcommand{\DaaVseqCount}{6}
+\newcommand{\FifoVseqCount}{5}
+\newcommand{\ImmediateVseqCount}{4}
+\newcommand{\ResponseVseqCount}{21}
+\newcommand{\SdrReadVseqCount}{6}
+\newcommand{\SdrWriteVseqCount}{5}
+\newcommand{\IicVseqCount}{3}
+\newcommand{\VseqBaseClassCount}{4}
+\newcommand{\VseqHelperCount}{1}
+\newcommand{\TestbenchQueueDepth}{8}

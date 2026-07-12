@@ -1,5 +1,5 @@
 % =====================================================================
-%  KHÓA LUẬN TỐT NGHIỆP — "Thiết kế bộ điều khiển truyền thông I3C"
+%  KHÓA LUẬN TỐT NGHIỆP — "Thiết kế bộ điều khiển I3C"
 %  Tác giả : Võ Minh Huy (22207042)
 %  GVHD    : ThS. Nguyễn Duy Mạnh Thi
 %  Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM · Khoa Điện tử - Viễn thông
@@ -32,10 +32,14 @@
 
 % ----- Hình ảnh -----
 \usepackage{graphicx}
-\graphicspath{ {Images/} }
+\graphicspath{ {Images/} {figures/} }
 \usepackage{caption}
 \usepackage[export]{adjustbox}
 \usepackage{float}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.8}
 
 % ----- Mã nguồn -----
 \usepackage{listings}
@@ -108,16 +112,15 @@
 
 \titleformat{\chapter}
     [block]
-    {\filcenter\normalfont\bfseries\fontsize{16}{19}\selectfont}
-    {\chaptername\ \thechapter:}{10pt}{\fontsize{16}{19}\selectfont}
+    {\filcenter\normalfont\bfseries\normalsize}{\chaptername \ \thechapter :}{10pt}{\normalsize}
 \titlespacing*{\chapter}{0pt}{-10pt}{10pt}
 
 \titleformat{\section}
-    {\normalfont\bfseries\fontsize{14}{17}\selectfont}{\thesection}{1em}{}
+    {\normalfont\bfseries\normalsize}{\thesection}{1em}{}
 \titleformat{\subsection}
-    {\normalfont\bfseries\fontsize{13}{16}\selectfont}{\thesubsection}{1em}{}
+    {\normalfont\bfseries\normalsize}{\thesubsection}{1em}{}
 \titleformat{\subsubsection}
-    {\normalfont\bfseries\fontsize{13}{16}\selectfont}{\thesubsubsection}{1em}{}
+    {\normalfont\bfseries\normalsize}{\thesubsubsection}{1em}{}
 
 % ----- Giãn dòng 1.5 + thụt đầu dòng -----
 \usepackage{setspace}
@@ -148,11 +151,12 @@
 
 % ----- Trang bìa -----
 \usepackage{tikz}
-\usetikzlibrary{calc,automata,positioning,arrows.meta,shapes.geometric,chains}
+\usetikzlibrary{calc,automata,positioning,arrows.meta,shapes.geometric,chains,fit,backgrounds}
 \newcommand\HRule{\rule{\textwidth}{1pt}}
 
 % ----- Danh mục chữ viết tắt -----
 \usepackage{myacronyms}
+\usepackage{thesisterms}
 
 \usepackage{ifthen}
 \newcommand\myemptypage{%
@@ -182,7 +186,7 @@
 % =========================================================================== %
 \newcommand{\tenSV}{Võ~Minh~Huy}
 \newcommand{\mssv}{22207042}
-\newcommand{\tenKL}{THIẾT KẾ BỘ ĐIỀU KHIỂN TRUYỀN THÔNG I3C}
+\newcommand{\tenKL}{THIẾT KẾ BỘ ĐIỀU KHIỂN I3C}
 \newcommand{\tenGVHD}{ThS. Nguyễn Duy Mạnh Thi}
 \newcommand{\tenBM}{Kỹ thuật Điện tử - Viễn thông}
 
@@ -197,25 +201,25 @@
 \include{Appendix/tomtat}
 
 % Mục lục, danh mục hình, bảng, chữ viết tắt
-\cleardoublepage
+\clearpage
 \phantomsection
 \tableofcontents
 
 \glsaddall
 \printglossary[type=\acronymtype,
-                title=DANH MỤC TỪ VIẾT TẮT,
-                toctitle=DANH MỤC TỪ VIẾT TẮT,
-                nonumberlist]
+	title=DANH MỤC TỪ VIẾT TẮT,
+	toctitle=DANH MỤC TỪ VIẾT TẮT,
+	nonumberlist]
 
-\cleardoublepage\newpage\phantomsection
+\clearpage\phantomsection
 \addcontentsline{toc}{chapter}{\listfigurename}
 \listoffigures
 
-\cleardoublepage\newpage\phantomsection
+\clearpage\phantomsection
 \addcontentsline{toc}{chapter}{\listtablename}
 \listoftables
 
-\cleardoublepage
+\clearpage
 \pagenumbering{arabic}
 
 % ----- Các chương nội dung -----
@@ -227,7 +231,7 @@
 \include{chapters/06_conclusion}
 
 % ----- Tài liệu tham khảo -----
-\cleardoublepage\newpage\phantomsection
+\clearpage\phantomsection
 \addcontentsline{toc}{chapter}{TÀI LIỆU THAM KHẢO}
 \DeclareNameAlias{sortname}{last-first}
 \DeclareNameAlias{default}{last-first}
@@ -241,10 +245,6 @@
 \include{Appendix/appendixA}
 \include{Appendix/appendixB}
 \include{Appendix/appendixC}
-\include{Appendix/appendixD}
 \include{Appendix/appendixE}
-\include{Appendix/appendixG}
-\include{Appendix/appendixH}
-\include{Appendix/appendixI}
 
 \end{document}

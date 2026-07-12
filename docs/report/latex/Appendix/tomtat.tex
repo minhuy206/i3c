@@ -1,26 +1,26 @@
 \chapter*{TÓM TẮT}
 \addcontentsline{toc}{chapter}{TÓM TẮT}
 
-Chuẩn giao tiếp I3C do MIPI Alliance đề xuất nhằm khắc phục các hạn chế của bus I\textsuperscript{2}C
-truyền thống — tín hiệu Open Drain tốc độ thấp, địa chỉ cố định và thiếu cơ chế ngắt gốc — trong khi
+Chuẩn giao tiếp I3C do \MIPIAlliance{} đề xuất nhằm khắc phục các hạn chế của bus \iic{}
+truyền thống — tín hiệu \OpenDrain{} tốc độ thấp, địa chỉ cố định và thiếu cơ chế ngắt gốc — trong khi
 vẫn giữ được ưu điểm hai dây và khả năng tương thích ngược. Việc tự thiết kế một bộ điều khiển I3C từ
 đặc tả là một bài toán tiêu biểu cho toàn bộ luồng thiết kế IP số front-end, từ đọc hiểu giao thức,
 thiết kế RTL đến kiểm chứng chức năng.
 
-Khóa luận này thiết kế một bộ điều khiển I3C Active Controller đơn giản hóa, hỗ trợ chế độ SDR ở tốc độ
-12.5~MHz, tương thích I\textsuperscript{2}C Fast Mode 400~kHz, gán địa chỉ động qua ENTDAA và một tập
-Common Command Code (CCC) chọn lọc. Thiết kế được phát triển theo hướng nghiên cứu và đơn giản hóa từ dự
-án mã nguồn mở CHIPS Alliance \texttt{i3c-core}, đồng thời hoàn thiện những nhánh của máy trạng thái điều
-khiển mà bản tham chiếu còn bỏ ngỏ. Bộ điều khiển được mô tả bằng SystemVerilog RTL và được kiểm chứng
-bằng một môi trường Universal Verification Methodology (UVM) 1.2 chạy trên trình mô phỏng Cadence Xcelium,
-kết hợp Functional Coverage và SystemVerilog Assertions (SVA).
+Khóa luận này thiết kế một bộ điều khiển I3C \ActiveController{} đơn giản hóa, hỗ trợ chế độ SDR ở tốc độ
+12.5~MHz, tương thích \iic{} Fast Mode 400~kHz, gán địa chỉ động qua ENTDAA và một tập
+\CommonCommandCode{} (CCC) chọn lọc. Thiết kế được phát triển theo hướng nghiên cứu và đơn giản hóa từ dự
+án mã nguồn mở \CHIPSAlliance{} \IThreeCCore{}, đồng thời hoàn thiện những nhánh của máy trạng thái điều
+khiển mà bản tham chiếu còn bỏ ngỏ. Bộ điều khiển được mô tả bằng \SystemVerilog{} RTL và được kiểm chứng
+bằng một môi trường Universal Verification Methodology (UVM) 1.2 chạy trên trình mô phỏng \CadenceXcelium{},
+kết hợp \FunctionalCoverage{} và \SystemVerilog{} Assertions (SVA).
 
 Kết quả cho thấy bộ điều khiển thực hiện đúng các luồng truyền SDR private (ghi, đọc, Immediate Data),
 CCC, ENTDAA và truy cập thanh ghi, vượt qua bộ hồi quy phân loại theo nhóm chức năng. Chi tiết định lượng
 về quy mô mã nguồn, độ phủ và so sánh với bản tham chiếu được trình bày trong chương Kết quả.
 
 \vspace{0.3cm}
-\noindent\textbf{Từ khóa:} I3C, MIPI, SDR, Dynamic Address Assignment, RTL, SystemVerilog, UVM,
+\noindent\textbf{Từ khóa:} I3C, MIPI, SDR, \DynamicAddressAssignment{}, RTL, \SystemVerilog{}, UVM,
 Functional Verification.
 
 \clearpage
@@ -28,27 +28,27 @@ Functional Verification.
 \chapter*{ABSTRACT}
 \addcontentsline{toc}{chapter}{ABSTRACT}
 
-\noindent\textbf{Design of an I3C Communication Controller}
+\noindent\textbf{Design of an I3C Communication \Controller{}}
 
 \vspace{0.3cm}
-The MIPI I3C standard was introduced to overcome the limitations of the legacy I\textsuperscript{2}C bus —
-low-speed Open Drain signalling, manufacture-fixed addresses, and the lack of a native interrupt — while
+The MIPI I3C standard was introduced to overcome the limitations of the legacy \iic{} bus —
+low-speed \OpenDrain{} signalling, manufacture-fixed addresses, and the lack of a native interrupt — while
 preserving its two-wire simplicity and backward compatibility. Designing an I3C controller from the
 specification is a representative exercise spanning the full front-end digital-IC flow, from reading the
 protocol, through RTL design, to functional verification.
 
-This thesis designs a simplified I3C Active Controller that supports SDR mode at 12.5~MHz,
-I\textsuperscript{2}C Fast-Mode (400~kHz) interoperability, Dynamic Address Assignment through ENTDAA, and
-a selected subset of Common Command Codes. The design follows a study-and-simplify flow derived from the
-open-source CHIPS Alliance \texttt{i3c-core} project, and additionally completes the command finite-state
-machine that the reference leaves unfinished. The controller is described in SystemVerilog RTL and verified
-in a Universal Verification Methodology (UVM) 1.2 environment running on the Cadence Xcelium simulator,
-combined with Functional Coverage and SystemVerilog Assertions (SVA).
+This thesis designs a simplified I3C \ActiveController{} that supports SDR mode at 12.5~MHz,
+\iic{} Fast-Mode (400~kHz) interoperability, \DynamicAddressAssignment{} through ENTDAA, and
+a selected subset of \CommonCommandCode{}s. The design follows a study-and-simplify flow derived from the
+open-source \CHIPSAlliance{} \IThreeCCore{} project, and additionally completes the command finite-state
+machine that the reference leaves unfinished. The controller is described in \SystemVerilog{} RTL and verified
+in a Universal Verification Methodology (UVM) 1.2 environment running on the \CadenceXcelium{} simulator,
+combined with \FunctionalCoverage{} and \SystemVerilog{} Assertions (SVA).
 
 The controller correctly performs the SDR private transfers (write, read, Immediate Data), CCC, ENTDAA, and
 register-access flows, passing the category-based regression suite. Quantitative results on code size,
 coverage, and comparison with the reference are reported in the Results chapter.
 
 \vspace{0.3cm}
-\noindent\textbf{Keywords:} I3C, MIPI, SDR, Dynamic Address Assignment, RTL, SystemVerilog, UVM,
+\noindent\textbf{Keywords:} I3C, MIPI, SDR, \DynamicAddressAssignment{}, RTL, \SystemVerilog{}, UVM,
 Functional Verification.

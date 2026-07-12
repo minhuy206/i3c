@@ -2,10 +2,9 @@
 \label{app:desc}
 
 Phụ lục này trình bày bố trí trường của các cấu trúc dữ liệu trao đổi giữa phần mềm và phần cứng, định
-nghĩa trong \texttt{i3c\_pkg} và \texttt{controller\_pkg}, bổ trợ cho \cref{sec:arch-desc}. Command
-Descriptor rộng 64-bit (hai DWORD); Response Descriptor và mục DAT rộng 32-bit.
+nghĩa trong \texttt{i3c\_pkg} và \texttt{controller\_pkg}, bổ trợ cho \cref{sec:arch-desc}. \CommandDescriptor{} rộng \CommandDescriptorWidth{}-bit (hai DWORD); \ResponseDescriptor{} và mục DAT rộng \ResponseDescriptorWidth{}-bit.
 
-\section*{Response Descriptor (32-bit)}
+\section*{\ResponseDescriptor{} (\ResponseDescriptorWidth{}-bit)}
 
 \begin{longtable}{C{3.2cm} C{2.6cm} L{7.0cm}}
   \toprule
@@ -19,7 +18,7 @@ Descriptor rộng 64-bit (hai DWORD); Response Descriptor và mục DAT rộng 3
   \bottomrule
 \end{longtable}
 
-\section*{Immediate Data Transfer Descriptor (64-bit)}
+\section*{Immediate Data Transfer Descriptor (\CommandDescriptorWidth{}-bit)}
 
 Dạng immediate nhúng tối đa bốn byte dữ liệu ngay trong descriptor, tránh phải dùng TX Buffer.
 
@@ -32,7 +31,7 @@ Dạng immediate nhúng tối đa bốn byte dữ liệu ngay trong descriptor, 
   \texttt{tid}         & Transaction ID. \\
   \texttt{cmd}         & Mã CCC / HDR (nếu có). \\
   \texttt{cp}          & Command present (có CCC hay không). \\
-  \texttt{dev\_idx}    & Chỉ số mục DAT của Target đích. \\
+  \texttt{dev\_idx}    & Chỉ số mục DAT của \Target{} đích. \\
   \texttt{dtt}         & Số byte dữ liệu hợp lệ (0--4). \\
   \texttt{mode}        & Tốc độ/chế độ truyền (\texttt{sdr0}\ldots). \\
   \texttt{rnw}         & Hướng (immediate chỉ ghi). \\
@@ -42,7 +41,7 @@ Dạng immediate nhúng tối đa bốn byte dữ liệu ngay trong descriptor, 
   \bottomrule
 \end{longtable}
 
-\section*{Regular Transfer Descriptor (64-bit)}
+\section*{Regular Transfer Descriptor (\CommandDescriptorWidth{}-bit)}
 
 Dạng regular dùng cho giao dịch có dữ liệu nằm trong TX/RX Buffer.
 
@@ -53,7 +52,7 @@ Dạng regular dùng cho giao dịch có dữ liệu nằm trong TX/RX Buffer.
   \endhead
   \texttt{attr}        & Thuộc tính lệnh = \texttt{RegularTransfer}. \\
   \texttt{tid}, \texttt{cmd}, \texttt{cp} & Transaction ID, mã CCC, cờ command present. \\
-  \texttt{dev\_idx}    & Chỉ số mục DAT của Target đích. \\
+  \texttt{dev\_idx}    & Chỉ số mục DAT của \Target{} đích. \\
   \texttt{mode}, \texttt{rnw} & Chế độ truyền và hướng. \\
   \texttt{sre}         & Báo đọc kết thúc sớm là ShortReadErr. \\
   \texttt{dbp}         & Defining byte present. \\
