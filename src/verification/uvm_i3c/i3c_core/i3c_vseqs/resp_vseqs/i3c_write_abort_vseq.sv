@@ -1,12 +1,11 @@
 class i3c_write_abort_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_write_abort_vseq)
 
-  // Early abort: fires right at IssueCmd entry, likely 0-3 bytes sent.
+  // Early abort: fires right at IssueI3CWrite entry, likely 0-3 bytes sent.
   localparam int unsigned DATA_LENGTH = 8;
   // Deep abort: fires after >=1 TX word consumed (>=4 bytes sent), tests SW reset flushes TX FIFO.
   localparam int unsigned DATA_LENGTH_DEEP = 16;
 
-  localparam bit [3:0] FSM_ISSUE_CMD = 4'd11;
 
   function new(string name = "i3c_write_abort_vseq");
     super.new(name);
@@ -60,7 +59,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     write_tx_words(tx_words);
     write_write_cmd(cfg, .toc(1'b1));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI3CWrite, cfg.ctxt, device_done_timeout_cycles(cfg));
 
     reg_write(ADDR_HC_CONTROL, hc_control_value(
               .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));
@@ -123,7 +122,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     write_write_cmd(cfg, .toc(1'b1));
 
     // Enter data phase, then hold off abort until >=1 TX word has been popped from the FIFO.
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI3CWrite, cfg.ctxt, device_done_timeout_cycles(cfg));
     begin : wait_tx_consumed
       int timeout = device_done_timeout_cycles(cfg);
       for (int i = 0; i < timeout; i++) begin
@@ -195,7 +194,7 @@ class i3c_write_abort_vseq extends i3c_base_vseq;
     write_tx_words(tx_words);
     write_write_cmd(cfg, .toc(1'b0));
 
-    wait_for_flow_fsm_state(FSM_ISSUE_CMD, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI3CWrite, cfg.ctxt, device_done_timeout_cycles(cfg));
 
     reg_write(ADDR_HC_CONTROL, hc_control_value(
               .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));

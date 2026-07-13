@@ -20,7 +20,7 @@ The `flow_active` module is the **central command processor** of the I3C control
 5. Generating response descriptors to the RESP FIFO
 6. Accumulating errors during transactions
 
-This is the **most critical module** in the design. The reference has 8 out of 13 states unimplemented (TODO). This design implements all 13 states.
+This is the **most critical module** in the design. The reference has multiple unimplemented command-flow states (TODO). This design implements all 15 states, including the per-mode `IssueDAA`/`IssueI3CWrite`/`IssueI2CWrite`/`IssueI3CRead`/`IssueI2CRead` split that replaces a single monolithic `IssueCmd` state and the merged `InitWrite`/`InitRead` states that replace the former per-mode `InitI3CWrite`/`InitI2CWrite`/`InitI3CRead`/`InitI2CRead`.
 
 ## 2. Dependencies
 
@@ -157,7 +157,7 @@ This is the **most critical module** in the design. The reference has 8 out of 1
 | `daa_dev_idx_o`   | Output    | 5     | Starting DAT index for address lookup (from `addr_assign_desc_t.dev_idx`) |
 | `ccc_done_i`      | Input     | 1     | ENTDAA complete (from `entdaa_controller.done_o`)                         |
 | `daa_stop_req_i`  | Input     | 1     | Request to generate STOP now and end the ENTDAA loop                      |
-| `daa_stopped_i`   | Input     | 1     | ENTDAA loop has stopped (gates `IssueCmd` → `WriteResp` together with `ccc_done_i`) |
+| `daa_stopped_i`   | Input     | 1     | ENTDAA loop has stopped (gates `IssueDAA` → `WriteResp` together with `ccc_done_i`) |
 | `daa_nack_error_i`| Input     | 1     | A device address-assignment attempt was NACKed after retry; latched into `daa_nack_error_q` and reported as `Nack` |
 
 ### ENTDAA Results (from entdaa_controller module)
@@ -199,13 +199,22 @@ typedef enum logic [3:0] {
   I3CBcastHeader    = 4'd4,   // Optional I3C broadcast-header preamble
   IssueImmediateCcc = 4'd5,   // Immediate CCC execution
   FetchTxData       = 4'd6,   // Fetch DWORD from TX FIFO
-  InitI3CWrite      = 4'd7,   // Initialize I3C write transaction
-  InitI3CRead       = 4'd8,   // Initialize I3C read transaction
-  InitI2CWrite      = 4'd9,   // Initialize I2C write transaction
-  InitI2CRead       = 4'd10,  // Initialize I2C read transaction
-  IssueCmd          = 4'd11,  // Drive command/data bytes on bus
-  WriteResp         = 4'd12   // Generate and write response descriptor
+  InitWrite         = 4'd7,   // Initialize write transaction (I3C or I2C)
+  InitRead          = 4'd8,   // Initialize read transaction (I3C or I2C)
+  IssueDAA          = 4'd9,   // Drive ENTDAA broadcast header + CCC code + DAA rounds
+  IssueI3CWrite     = 4'd10,  // Drive I3C regular/immediate write data bytes
+  IssueI2CWrite     = 4'd11,  // Drive I2C legacy write data bytes
+  IssueI3CRead      = 4'd12,  // Receive I3C regular read data bytes
+  IssueI2CRead      = 4'd13,  // Receive I2C legacy read data bytes
+  WriteResp         = 4'd14   // Generate and write response descriptor
 } flow_fsm_state_e;
+```
+
+This typedef lives in `controller_pkg` (not locally in `flow_active`) so `flow_active_sva.sv` and
+the DV vseqs that backdoor-poll `state_q` can `import controller_pkg::*;` and compare against the
+named states directly instead of re-declaring the encoding as local magic-number `localparam`s.
+
+```systemverilog
 ```
 
 A second, narrower helper enum steers the exit out of `I3CBcastHeader` once the broadcast
@@ -221,8 +230,8 @@ typedef enum logic [1:0] {
 ```
 
 `bcast_header_next_q` is latched in `WaitDAT` alongside the main FSM state and read back in
-`I3CBcastHeader` to choose its successor state (`IssueImmediateCcc`/`IssueCmd`/`InitI3CWrite`/
-`InitI3CRead`) — see the dispatch edges in the diagram below.
+`I3CBcastHeader` to choose its successor state (`IssueImmediateCcc`/`IssueDAA`/`InitWrite`/
+`InitRead`) — see the dispatch edges in the diagram below.
 
 ```mermaid
 stateDiagram-v2
@@ -234,42 +243,54 @@ stateDiagram-v2
     FetchDAT --> WriteResp: invalid descriptor (NotSupported, no DAT/bus access)
     FetchDAT --> WaitDAT: valid descriptor, dat_read_valid_hw_q=1
 
-    WaitDAT --> InitI2CWrite: q=0, I2C + Immediate/Regular Write
+    WaitDAT --> InitWrite: q=0, I2C + Immediate/Regular Write
     WaitDAT --> I3CBcastHeader: q=0, I3C + broadcast_header_enable_i (private) or CCC/ENTDAA
-    WaitDAT --> InitI3CWrite: q=0, private I3C Immediate/Regular Write, no broadcast header
-    WaitDAT --> InitI3CRead: q=0, I3C Regular + Read, no broadcast header
-    WaitDAT --> InitI2CWrite: q=0, I2C Regular + Write
-    WaitDAT --> InitI2CRead: q=0, I2C Regular + Read
+    WaitDAT --> InitWrite: q=0, private I3C Immediate/Regular Write, no broadcast header
+    WaitDAT --> InitRead: q=0, I3C Regular + Read, no broadcast header
+    WaitDAT --> InitWrite: q=0, I2C Regular + Write
+    WaitDAT --> InitRead: q=0, I2C Regular + Read
 
     I3CBcastHeader --> IssueImmediateCcc: bcast_header_next_q=BcastHeaderBroadcastCCC/DirectCCC
-    I3CBcastHeader --> IssueCmd: bcast_header_next_q=BcastHeaderEntdaa
-    I3CBcastHeader --> InitI3CWrite: bcast_header_next_q=BcastHeaderPrivate, Immediate/Regular Write
-    I3CBcastHeader --> InitI3CRead: bcast_header_next_q=BcastHeaderPrivate, Regular Read
+    I3CBcastHeader --> IssueDAA: bcast_header_next_q=BcastHeaderEntdaa
+    I3CBcastHeader --> InitWrite: bcast_header_next_q=BcastHeaderPrivate, Immediate/Regular Write
+    I3CBcastHeader --> InitRead: bcast_header_next_q=BcastHeaderPrivate, Regular Read
 
     IssueImmediateCcc --> WriteResp: transfer complete, wroc=1
     IssueImmediateCcc --> Idle: successful transfer complete, wroc=0
 
-    FetchTxData --> IssueCmd: data fetched
+    FetchTxData --> IssueI3CWrite: data fetched, target is I3C
+    FetchTxData --> IssueI2CWrite: data fetched, target is I2C
     FetchTxData --> WriteResp: TX FIFO empty, STOP complete, RESP Ovl
 
-    IssueCmd --> FetchTxData: need more TX data
-    IssueCmd --> WriteResp: transfer complete with wroc=1, or any error
-    IssueCmd --> Idle: successful transfer complete with wroc=0
-    IssueCmd --> FetchDAT: toc=0 continuation — next queued command accepted in-line (accept_continuation_cmd), no return to Idle
+    IssueI3CWrite --> FetchTxData: need more TX data
+    IssueI3CWrite --> WriteResp: transfer complete with wroc=1, or any error
+    IssueI3CWrite --> Idle: successful transfer complete with wroc=0
+    IssueI3CWrite --> FetchDAT: toc=0 continuation — next queued command accepted in-line (accept_continuation_cmd), no return to Idle
 
-    InitI3CWrite --> FetchTxData: regular/combo I3C write address phase complete
-    InitI3CWrite --> IssueCmd: private immediate I3C address phase complete
-    InitI3CRead --> IssueCmd: I3C read address phase complete
-    InitI2CWrite --> FetchTxData: regular/combo I2C write address phase complete
-    InitI2CWrite --> IssueCmd: immediate I2C address phase complete
-    InitI2CRead --> IssueCmd: I2C read initialized
+    IssueI2CWrite --> FetchTxData: need more TX data
+    IssueI2CWrite --> WriteResp: transfer complete with wroc=1, or any error
+    IssueI2CWrite --> Idle: successful transfer complete with wroc=0
+
+    IssueI3CRead --> WriteResp: transfer complete with wroc=1, or any error
+    IssueI3CRead --> Idle: successful transfer complete with wroc=0
+    IssueI3CRead --> FetchDAT: toc=0 continuation — next queued command accepted in-line, no return to Idle
+    IssueI3CRead --> IssueI3CRead: HC abort (abort_i) on active read — STOP deferred to next T-Bit/ACK boundary (abort_active_state/abort_stop_now/abort_stop_required), then terminates via the WriteResp/Idle edges above
+
+    IssueI2CRead --> WriteResp: transfer complete with wroc=1, or any error
+    IssueI2CRead --> Idle: successful transfer complete with wroc=0
+
+    IssueDAA --> WriteResp: ENTDAA loop stopped (daa_stopped_i/entdaa_stop_req_q)
+
+    InitWrite --> FetchTxData: regular/combo I3C write address phase complete, or any I2C regular write
+    InitWrite --> IssueI3CWrite: private immediate I3C address phase complete, or zero-length I3C regular write
+    InitWrite --> IssueI2CWrite: private immediate I2C address phase complete
+    InitRead --> IssueI3CRead: I3C read address phase complete
+    InitRead --> IssueI2CRead: I2C read address phase complete
 
     WriteResp --> Idle: response written
-
-    IssueCmd --> IssueCmd: HC abort (abort_i) on active I3C/I2C read — STOP deferred to next T-Bit/ACK boundary (abort_active_state/abort_stop_now/abort_stop_required), then terminates via the FetchTxData/WriteResp edges above
 ```
 
-### 5.2. State Descriptions (All 13 States)
+### 5.2. State Descriptions (15 States)
 
 #### Idle (State 0) — IMPLEMENTED in reference
 
@@ -298,11 +319,11 @@ stateDiagram-v2
 - **Outputs:** none (all defaults; `dat_read_valid_hw_d = 0` is critical — lets `q` drop to 0)
 - **Transition (on `!dat_read_valid_hw_q`):**
   - Immediate CCC (`cp = 1`) → `I3CBcastHeader`
-  - Private immediate I3C (`cp = 0`) → `I3CBcastHeader` when `broadcast_header_enable_i = 1`; otherwise `InitI3CWrite`. Immediate transfers do not support continuation via `toc = 0`.
-  - Legacy I2C immediate → `InitI2CWrite`
+  - Private immediate I3C (`cp = 0`) → `I3CBcastHeader` when `broadcast_header_enable_i = 1`; otherwise `InitWrite`. Immediate transfers do not support continuation via `toc = 0`.
+  - Legacy I2C immediate → `InitWrite`
   - Valid `cmd_attr == AddressAssignment` → `I3CBcastHeader` (ENTDAA); descriptor validation already occurred in `FetchDAT`
-  - Private regular I3C write/read → `I3CBcastHeader` only when `broadcast_header_enable_i = 1` and this is not a continuation; otherwise `InitI3CWrite`/`InitI3CRead`
-  - Legacy I2C regular write/read → `InitI2CWrite`/`InitI2CRead`
+  - Private regular I3C write/read → `I3CBcastHeader` only when `broadcast_header_enable_i = 1` and this is not a continuation; otherwise `InitWrite`/`InitRead`
+  - Legacy I2C regular write/read → `InitWrite`/`InitRead`
 - **Timing cost:** +2 cycles vs original FetchDAT direct dispatch (negligible vs SCL timing)
 
 #### I3CBcastHeader (State 4)
@@ -314,9 +335,9 @@ stateDiagram-v2
 
 #### Legacy I2C immediate write
 
-- **Path:** `WaitDAT` -> `InitI2CWrite` -> `IssueCmd` -> `WriteResp`.
-- **Address phase:** `InitI2CWrite` generates START, sends `{static_address, Write}`, and reads ACK.
-- **Data phase:** `IssueCmd` sends up to four inline descriptor bytes and reads the I2C ACK/NACK after each byte.
+- **Path:** `WaitDAT` -> `InitWrite` -> `IssueI2CWrite` -> `WriteResp`.
+- **Address phase:** `InitWrite` generates START, sends `{static_address, Write}`, and reads ACK.
+- **Data phase:** `IssueI2CWrite` sends up to four inline descriptor bytes and reads the I2C ACK/NACK after each byte.
 - **OD/PP:** Open-Drain throughout.
 - **Completion:** Generate STOP after all bytes, address NACK, data NACK, or HC abort.
 
@@ -369,48 +390,28 @@ stateDiagram-v2
   - Capture `tx_queue_rdata_i` into internal `tx_dword` register
   - Track byte position within the DWORD (4 bytes per DWORD)
 - **Transition:**
-  - → `IssueCmd` when data captured
+  - → `IssueI3CWrite` when data captured and target is I3C; → `IssueI2CWrite` when target is I2C
   - → `WriteResp` with response error `Ovl` if TX FIFO is empty when the controller needs the next DWORD
 
-#### InitI3CWrite (State 7) — **NEW (was TODO)**
+#### InitWrite (State 7) — **NEW (was TODO)**; merges the former InitI3CWrite/InitI2CWrite
 
-- **Purpose:** Initialize a regular I3C write transaction
+- **Purpose:** Initialize a regular write transaction, I3C or I2C, selected by `!dat_entry.device`/`dat_entry.device`
 - **Actions:**
-  - Generate START or repeated START through the shared I3C address preamble
-  - Send `{dynamic_address, 1'b0}` from the DAT entry
+  - Generate START or repeated START through the shared I3C/I2C address preamble (`drive_i3c_addr_preamble`/`drive_i2c_addr_preamble`, selected by `target_is_i3c`)
+  - I3C: send `{dynamic_address, 1'b0}` from the DAT entry. I2C: send `{static_address, 1'b0}`
   - Read address ACK and set `AddrHeader` response status on NACK
-- **OD/PP:** Open-Drain for START/address/ACK; later data phase is Push-Pull in `IssueCmd`
-- **Transition:** → `FetchTxData` when `data_length > 0`; → `IssueCmd` for zero-length writes
+- **OD/PP:** Open-Drain for START/address/ACK throughout (I2C never switches to Push-Pull); for I3C the later data phase is Push-Pull in `IssueI3CWrite`
+- **Transition:** I3C regular → `FetchTxData` when `data_length > 0`, else `IssueI3CWrite`. I2C regular → `FetchTxData` unconditionally. I3C immediate → `IssueI3CWrite`; I2C immediate → `IssueI2CWrite`
 
-#### InitI3CRead (State 8) — **NEW (was TODO)**
+#### InitRead (State 8) — **NEW (was TODO)**; merges the former InitI3CRead/InitI2CRead
 
-- **Purpose:** Initialize a regular I3C read transaction
+- **Purpose:** Initialize a regular read transaction, I3C or I2C, selected by `!dat_entry.device`/`dat_entry.device`
 - **Actions:**
-  - Generate START or repeated START through the shared I3C address preamble
-  - Send `{dynamic_address, 1'b1}` from the DAT entry
+  - Generate START or repeated START through the shared I3C/I2C address preamble, selected by `target_is_i3c`
+  - I3C: send `{dynamic_address, 1'b1}` from the DAT entry. I2C: send `{static_address, 1'b1}`
   - Read address ACK and set `AddrHeader` response status on NACK
-- **OD/PP:** Open-Drain for START/address/ACK; later read data phase uses Push-Pull timing/ownership rules in `IssueCmd`
-- **Transition:** → `IssueCmd` after address phase, or → `WriteResp` on NACK after STOP
-
-#### InitI2CWrite (State 9) — **NEW (was TODO)**
-
-- **Purpose:** Initialize a regular I2C write transaction
-- **Actions:**
-  - Generate START (Open-Drain)
-  - Send `{static_address, 1'b0}` (I2C address + write bit)
-  - Read ACK — if NACK, latch `addr_nack_q` → response status `AddrHeader`
-- **OD/PP:** Open-Drain throughout
-- **Transition:** → `IssueCmd` to send data bytes, or → `WriteResp` on NACK
-
-#### InitI2CRead (State 10) — **NEW (was TODO)**
-
-- **Purpose:** Initialize a regular I2C read transaction
-- **Actions:**
-  - Generate START (Open-Drain)
-  - Send `{static_address, 1'b1}` (I2C address + read bit)
-  - Read ACK — if NACK, latch `addr_nack_q` → response status `AddrHeader`
-- **OD/PP:** Open-Drain throughout
-- **Transition:** → `IssueCmd` to receive data bytes, or → `WriteResp` on NACK
+- **OD/PP:** Open-Drain for START/address/ACK throughout (I2C never switches to Push-Pull); for I3C the later read data phase uses Push-Pull timing/ownership rules in `IssueI3CRead`
+- **Transition:** → `IssueI3CRead`/`IssueI2CRead` (per `target_is_i3c`) after address phase, or → `WriteResp` on NACK after STOP
 
 #### TX FIFO underflow handling
 
@@ -422,27 +423,58 @@ stateDiagram-v2
   - Write a response descriptor with error status `Ovl` and `data_length` equal to the number of bytes already transferred.
 - **Transition:** `FetchTxData` → `WriteResp` after STOP completes.
 
-#### IssueCmd (State 11) — **NEW (was TODO)**
+#### IssueDAA (State 9) — **NEW (was TODO)**; split out of the former monolithic IssueCmd
 
-- **Purpose:** Core bus transaction execution — sends/receives data bytes on the bus
-- **Actions (Write):**
+- **Purpose:** Drive the ENTDAA broadcast CCC code and run the per-device DAA rounds
+- **Actions:**
+  - Set `sel_i3c_i2c_o = 1` (I3C mode)
+  - Generate START (Open-Drain)
+  - Send `{7'h7E, 1'b0}` broadcast header; read ACK
+  - Send ENTDAA code `8'h07` followed by controller T-bit
+  - Activate entdaa_controller: assert `ccc_valid_o = 1`, provide `ccc_dev_count_o` and `daa_dev_idx_o` from command descriptor
+  - Wait for `ccc_done_i`; deassert `ccc_valid_o` (the `daa_restart_pending_q` latch in `controller_active` routes each restart pulse from `entdaa_controller` to `scl_generator` automatically — `flow_active` does not service restart requests)
+  - On each `daa_address_valid_i` pulse: forward the DAA result to RX FIFO for SW readback as three DWORDs:
+    `PID[47:16]`, `{PID[15:0], BCR[7:0], DCR[7:0]}`, and `{25'h0, DA[6:0]}`
+  - If `entdaa_controller` reports that the next DAT dynamic address is reserved, wait for the normal DAA STOP completion and report `NotSupported` with `data_length` equal to the already committed DAA result bytes
+  - If RX FIFO cannot accept a DAA result DWORD, latch `rx_overflow`, request STOP, and report `Ovl` with `data_length` equal to the number of DAA result bytes actually committed
+  - Generate STOP; → `WriteResp`
+- **OD/PP switching:** Open-Drain for address/ACK, Push-Pull for the ENTDAA code byte + T-bit
+
+#### IssueI3CWrite (State 10) / IssueI2CWrite (State 11) — **NEW (was TODO)**; split out of the former monolithic IssueCmd
+
+- **Purpose:** Drive write data bytes on the bus. `IssueI3CWrite` handles I3C regular/immediate
+  private writes; `IssueI2CWrite` handles legacy I2C writes. Bodies are near-identical (mirrored
+  from a single implementation that used to branch on `target_is_i3c`); the only real difference
+  is timing/OD-PP mode and the I3C-only `toc=0` continuation path below.
+- **Actions:**
   - Enable clock generation (`gen_clock_o = 1`)
   - For each byte in `tx_dword`: send via `bus_tx_flow` with T-bit (odd parity)
   - Read ACK after address byte
   - Decrement `remaining_len_q` counter
   - When DWORD exhausted: → `FetchTxData` for more; on successful completion, → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`
-- **Actions (Read):**
+  - `IssueI3CWrite` only: on a supported `toc=0` continuation, → `FetchDAT` in-line (`accept_continuation_cmd`) instead of returning to `Idle`/`WriteResp`. `IssueI2CWrite` never accepts a `toc=0` continuation — legacy I2C always completes with `WriteResp`/`Idle`.
+- **OD/PP switching:** `IssueI3CWrite` — Open-Drain for address/ACK, Push-Pull for data.
+  `IssueI2CWrite` — always Open-Drain.
+
+#### IssueI3CRead (State 12) / IssueI2CRead (State 13) — **NEW (was TODO)**; split out of the former monolithic IssueCmd
+
+- **Purpose:** Receive read data bytes from the bus. `IssueI3CRead` handles I3C regular reads;
+  `IssueI2CRead` handles legacy I2C reads. Bodies are near-identical (mirrored from a single
+  implementation that used to branch on `target_is_i3c`); the read-takeover/abort machinery below
+  is I3C-only.
+- **Actions:**
   - Enable clock generation
   - Receive bytes via `bus_rx_flow`, check T-bit
   - Drive ACK/NACK (ACK if more data expected, NACK on last byte)
   - Accumulate into 32-bit DWORD, push to RX FIFO when full
   - If RX FIFO cannot accept a committed DWORD, latch `rx_overflow` and terminate with `Ovl`
-  - For an I2C read, when the received byte completes a DWORD that RX FIFO cannot
+  - `IssueI2CRead` only: when the received byte completes a DWORD that RX FIFO cannot
     accept, drive NACK in that byte's controller-owned ACK/NACK slot, then STOP.
     The rejected DWORD is not stored, while response `data_length` includes all bytes
     received through that rejected commit boundary.
-  - When `data_length` is reached successfully: → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`. Target early termination (T-bit=0 before the requested length, latched as `short_read_q`) always forces STOP and ends the transfer — no `toc=0` continuation is taken regardless of the next command, even when `sre=0`. Whether the termination is *reported* as an error is a separate, `sre`-gated decision (`short_read_error = short_read_q && reg_desc.sre`, §5.4): with `sre=1` → `WriteResp` with `I3cShortReadErr`; with `sre=0` the same termination is not an error — → `WriteResp` with `Success` if `wroc=1`, or → `Idle` with no response at all if `wroc=0`
-  - **Controller read takeover / abort (MIPI I3C Basic v1.1.1 §5.1.2.3.4):** once the
+  - When `data_length` is reached successfully: → `WriteResp` for `wroc=1` or → `Idle` for `wroc=0`. Target early termination (T-bit=0 before the requested length, latched as `short_read_q`, `IssueI3CRead` only) always forces STOP and ends the transfer — no `toc=0` continuation is taken regardless of the next command, even when `sre=0`. Whether the termination is *reported* as an error is a separate, `sre`-gated decision (`short_read_error = short_read_q && reg_desc.sre`, §5.4): with `sre=1` → `WriteResp` with `I3cShortReadErr`; with `sre=0` the same termination is not an error — → `WriteResp` with `Success` if `wroc=1`, or → `Idle` with no response at all if `wroc=0`
+  - `IssueI3CRead` only, on a supported `toc=0` continuation: → `FetchDAT` in-line (`accept_continuation_cmd`) instead of returning to `Idle`/`WriteResp`. `IssueI2CRead` never accepts a `toc=0` continuation.
+  - **Controller read takeover / abort (MIPI I3C Basic v1.1.1 §5.1.2.3.4, `IssueI3CRead` only):** once the
     target has ACKed a read address it drives SDA push-pull, so the controller may only
     retake the bus at a **T-Bit** (9th bit), where the target parks SDA to High-Z. The
     controller never tears a read down with a bare STOP mid-word.
@@ -456,28 +488,16 @@ stateDiagram-v2
       `read_abort_term_q`/`hc_aborted_q`, then retakes SDA: **T-Bit=1 → Repeated START
       then STOP**; **T-Bit=0 → direct STOP** (target already released SDA). Response is
       `HcAborted` (not `I3cShortReadErr`), with `data_length` = bytes actually received.
-    - **HC abort (`abort_i`) of an active I2C read:** the blanket abort STOP is
+    - **HC abort (`abort_i`) of an active I2C read (`IssueI2CRead`):** the blanket abort STOP is
       deferred until the current byte reaches the I2C ACK/NACK bit. The controller
       receives and commits the in-flight byte, drives NACK as the controller-owned
       9th bit, then generates STOP. No Repeated START or continuation is generated
       for an I2C read abort, even when `toc=0`. Response is `HcAborted`, with
       `data_length` = committed bytes including the abort-terminated byte.
-- **Actions (ENTDAA):**
-  - Set `sel_i3c_i2c_o = 1` (I3C mode)
-  - Generate START (Open-Drain)
-  - Send `{7'h7E, 1'b0}` broadcast header; read ACK
-  - Send ENTDAA code `8'h07` followed by controller T-bit
-  - Activate entdaa_controller: assert `ccc_valid_o = 1`, provide `ccc_dev_count_o` and `daa_dev_idx_o` from command descriptor
-  - Wait for `ccc_done_i`; deassert `ccc_valid_o` (the `daa_restart_pending_q` latch in `controller_active` routes each restart pulse from `entdaa_controller` to `scl_generator` automatically — `flow_active` does not service restart requests)
-  - On each `daa_address_valid_i` pulse: forward the DAA result to RX FIFO for SW readback as three DWORDs:
-    `PID[47:16]`, `{PID[15:0], BCR[7:0], DCR[7:0]}`, and `{25'h0, DA[6:0]}`
-  - If RX FIFO cannot accept a DAA result DWORD, latch `rx_overflow`, request STOP, and report `Ovl` with `data_length` equal to the number of DAA result bytes actually committed
-  - Generate STOP; → `WriteResp`
-- **OD/PP switching:**
-  - I2C transfers: always Open-Drain
-  - I3C transfers: Open-Drain for address/ACK, Push-Pull for data
+- **OD/PP switching:** `IssueI3CRead` — Open-Drain for address/ACK, Push-Pull for data.
+  `IssueI2CRead` — always Open-Drain.
 
-#### WriteResp (State 12) — IMPLEMENTED in reference
+#### WriteResp (State 14) — IMPLEMENTED in reference
 
 - **Purpose:** Generate response descriptor and push to RESP FIFO
 - **Entry policy:** successful regular, immediate, and immediate-CCC commands enter this state only when their active descriptor has `wroc=1`. Any error enters this state regardless of `wroc`. `AddressAssignment.wroc=0` remains an invalid descriptor and is rejected with `NotSupported`.
@@ -529,6 +549,7 @@ Before DAT access, `invalid_cmd_desc()` applies the implemented-subset policy:
 - `dev_count` in bits [29:26] → drives `ccc_dev_count_o`
 - `dev_idx` in bits [20:16] → drives `daa_dev_idx_o` (starting DAT index; entdaa_controller reads DAT entries `[dev_idx .. dev_idx + dev_count - 1]`)
 - Triggers ENTDAA via entdaa_controller module; `flow_active` sends the opening broadcast header via `I3CBcastHeader`, then sends ENTDAA code before activating `ccc_valid_o`
+- The assigned dynamic address selected from DAT for each ENTDAA round must be non-reserved. A reserved DAT dynamic address is rejected by the DAA engine before that round starts and is surfaced as `NotSupported`, not as `Nack`.
 
 ### 5.4. Error Accumulation
 
@@ -574,7 +595,7 @@ always_comb begin
   sel_od_pp_o = 1'b0;  // Default: Open-Drain
   if (!i2c_cmd) begin
     // I3C mode: Push-Pull after Repeated START for data phase
-    if (state == IssueCmd && phase == DataPhase)
+    if ((state == IssueI3CWrite || state == IssueI3CRead) && phase == DataPhase)
       sel_od_pp_o = 1'b1;
     // ACK/NACK bits always Open-Drain
     if (ack_phase)
@@ -597,12 +618,12 @@ end
 
 | Aspect                    | Reference                                    | This Design                        |
 | ------------------------- | -------------------------------------------- | ---------------------------------- |
-| Implemented states        | 6 of 14 (8 TODO)                             | All 14 implemented                 |
+| Implemented states        | Several states left as TODO                  | 15 states implemented               |
 | IssueImmediateCcc         | Empty TODO                                   | Full implementation                |
 | FetchTxData               | Empty TODO                                   | Full implementation                |
-| InitI2CWrite/Read         | Empty TODO                                   | Full implementation                |
+| InitWrite/Read (I2C path)  | Empty TODO                                   | Full implementation                |
 | TX underflow / RX overflow | Incomplete or delegated handling            | Error response with `Ovl`          |
-| IssueCmd                  | Empty TODO                                   | Full implementation                |
+| IssueDAA/IssueI3CWrite/IssueI2CWrite/IssueI3CRead/IssueI2CRead | Empty TODO (as reference's single IssueCmd) | Full implementation, split per mode/direction |
 | WaitDAT (State 3)         | Not present                                  | Added for M-6 DAT capture fix      |
 | Error handling            | Always returns `Success`                     | Proper error accumulation          |
 | Error codes emitted       | `Success` only                               | `Success`, `AddrHeader`, `I2cDataNackOrI3cBusAborted`, `Nack`, `Ovl`, `I3cShortReadErr`, `NotSupported`, `HcAborted` |
@@ -622,6 +643,7 @@ end
 | Address NACK     | ACK bit = 1 after address byte (I2C or I3C)             | `AddrHeader`     |
 | I2C data NACK    | ACK bit = 1 after an I2C data byte (`data_nack_q`)      | `I2cDataNackOrI3cBusAborted` |
 | DAA address-assignment reject | ENTDAA device address attempt NACKed after retry (`daa_nack_error_i`/`daa_nack_error_q`) | `Nack` |
+| DAA reserved assigned address | DAT dynamic address selected for the next ENTDAA round is reserved by `is_i3c_rsvd_addr()` | `NotSupported` |
 | TX underflow     | TX FIFO empty when a regular/combo write needs data    | `Ovl`            |
 | RX overflow      | RX FIFO cannot accept received data or DAA result data | `Ovl`            |
 | Short read       | Target drives T-bit=0 before all requested bytes sent and descriptor `sre=1` | `I3cShortReadErr`|
@@ -641,6 +663,7 @@ end
 6. **I2C Write (regular):** Regular write via TX FIFO to I2C device
 7. **I2C Read:** Read from I2C device; verify data in RX FIFO
 8. **ENTDAA:** Execute ENTDAA via valid AddressAssignment command; verify broadcast header + ENTDAA code sent, entdaa_controller activated with correct dev_count/dev_idx
+8a. **ENTDAA reserved assigned address:** Program a reserved DAT dynamic address and verify ENTDAA uses the normal STOP path before issuing that DAA round, then writes `NotSupported`
 9. **CCC ENEC broadcast:** ImmediateDataTransfer with cp=1, cmd=0x00, legal dtt<=4; verify [S][0x7E+W][ACK][0x00][T][TargetEvents][T][P] frame
 10. **CCC ENEC dtt>4 rejection:** ImmediateDataTransfer with cp=1, cmd=0x00, dtt=5..7; verify no DAT read, no bus frame, and response `NotSupported` with length 0
 11. **Invalid descriptor rejection:** Sweep unsupported attributes/modes, Immediate `rnw=1`/`dtt>4`, unsupported immediate CCC opcodes, Regular `cp=1`, and AddressAssignment with a non-ENTDAA opcode; separately cover AddressAssignment `toc=0`, `wroc=0`, `dev_count=0`, and a DAT span beyond `DatDepth`; verify no DAT read or bus frame, exact `NotSupported` response, and successful recovery without reset

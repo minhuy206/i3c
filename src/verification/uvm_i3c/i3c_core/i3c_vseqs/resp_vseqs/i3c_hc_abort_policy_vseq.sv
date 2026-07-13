@@ -1,7 +1,6 @@
 class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
   `uvm_object_utils(i3c_hc_abort_policy_vseq)
 
-  localparam bit [3:0] FSM_ISSUE_IMMEDIATE_CCC = 4'd5;
   localparam string ISSUE_PHASE_PATH = "tb_i3c_top.dut.u_ctrl.u_flow_fsm.issue_phase_q";
   localparam string ADDR_NACK_PATH = "tb_i3c_top.dut.u_ctrl.u_flow_fsm.addr_nack_q";
   localparam bit [6:0] TARGET_ADDR = 7'h08;
@@ -218,7 +217,7 @@ class i3c_hc_abort_policy_vseq extends i3c_base_vseq;
       if (!uvm_hdl_read(ISSUE_PHASE_PATH, phase_val)) begin
         `uvm_fatal(`gfn, $sformatf("%s: failed to read %s", ctxt, ISSUE_PHASE_PATH))
       end
-      if ((state_val[3:0] == FSM_ISSUE_IMMEDIATE_CCC) && (phase_val[7:0] == target_phase)) return;
+      if ((state_val[3:0] == IssueImmediateCcc) && (phase_val[7:0] == target_phase)) return;
     end
     `uvm_fatal(`gfn, $sformatf("%s: CCC phase %0d was not reached", ctxt, target_phase))
   endtask

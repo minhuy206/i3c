@@ -245,6 +245,7 @@ daa_addr_next = entry.dynamic_address;  // bits [22:16]
 ```
 
 Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` with the addresses to assign before issuing the ENTDAA command.
+The controller must not assign reserved I3C dynamic addresses. Before starting each ENTDAA round, the address read from the DAT entry for that round is checked with `is_i3c_rsvd_addr()`. If it is reserved, the ENTDAA loop requests the normal STOP path and terminates without sending that round's `7'h7E+R` frame or `Addr+P` byte.
 
 ## 6. Timing Requirements
 
@@ -277,6 +278,7 @@ Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` wi
 | No target on bus        | NACK after `0x7E+R` (from `entdaa_fsm.no_device_o`) | Exit loop early; assert `done_o`          |
 | Target rejects address (1st time)  | NACK after `Addr+P` (`addr_valid_o = 0`), `addr_rejected_once_q == 0` | `daa_address_valid_o` not pulsed; `addr_rejected_once_d = 1`; retry same round via `StartLoop` |
 | Target rejects address (2nd consecutive) | NACK after `Addr+P` again, `addr_rejected_once_q == 1` | `nack_error_d = 1` (sticky `nack_error_o`); abandon retries → `Done` |
+| Reserved assigned address | `is_i3c_rsvd_addr()` returns true for the DAT dynamic address selected for the next round | Request STOP through the normal STOP path; terminate without issuing that round; report `NotSupported` through `flow_active` |
 | Unexpected STOP         | `bus_stop_det_i` in any active state except `RunEntdaa` | Forced → `Done`; during `RunEntdaa` the STOP is instead absorbed by the child `entdaa_fsm` and reported back via `stopped_o`/`completed_by_stop_q` |
 | dev_count exhausted     | `dev_round_q >= dev_count_i` in `StartLoop`     | Normal termination → `Done`                   |
 | DAT index out of range  | SW must ensure `dev_idx + dev_count <= DatDepth`| No hardware check; SW responsibility          |
@@ -295,6 +297,7 @@ Software must pre-populate DAT entries `[dev_idx .. dev_idx + dev_count - 1]` wi
 8. **DAT address correctness:** `dev_idx=2`, round 1: verify `dat_index_o = 3`; round 2: `dat_index_o = 4`
 9. **Parity calculation:** Verify `Addr+P` byte has correct odd parity for various 7-bit addresses
 10. **req_rstart_o latch:** Verify 1-cycle pulse is held by `controller_active` until `scl_generator` acknowledges (M-7)
+11. **Reserved DAT address:** Program a DAT dynamic address reserved by the I3C spec; verify ENTDAA stops before that round's `7'h7E+R` frame and reports `NotSupported`
 
 ### UVM Test Structure
 
@@ -312,4 +315,5 @@ src/verification/uvm_i3c/
 - The `req_rstart_o` pulse is 1 cycle. `controller_active`'s `daa_restart_pending_q` extends it until `scl_generator` acknowledges. `entdaa_controller` does not need a ready signal back — it waits for `bus_rstart_det_i` from `bus_monitor`.
 - `bus_tx_req_bit_o`, `bus_tx_sel_od_pp_o`, `bus_rx_req_bit_handoff_o`, and `bus_rx_req_byte_o` read as `0` throughout ENTDAA activity, but not because `entdaa_controller` ties them off directly — they are forwarded from `entdaa_fsm`, which itself never drives them non-zero (ENTDAA uses byte-level TX for `0x7E+R`/`Addr+P` and bit-level RX for ACK/ID bits only). Push-Pull (`bus_tx_sel_od_pp_o`) is never used because targets drive ACK and PID bits simultaneously (wired-AND).
 - Software must fill DAT entries `[dev_idx .. dev_idx + dev_count - 1]` with valid dynamic addresses before issuing the ENTDAA `AddressAssignment` command.
+- A reserved dynamic address in any selected DAT entry is a command-data error, not a target NACK. Hardware rejects it with `NotSupported` after the already-active ENTDAA opening phase has reached the common STOP path.
 - On `bus_stop_det_i`, `entdaa_controller` itself force-transitions directly to `Done` in every active state except `RunEntdaa` (and `Idle`/`Done`). While in `RunEntdaa`, the STOP is instead absorbed by the child `entdaa_fsm`, which terminates its round and reports `stopped_o`; `entdaa_controller` then latches `completed_by_stop_q` and moves to `Done` via the normal `done_daa_o` path — avoiding a double, unsynchronized reaction to the same STOP.

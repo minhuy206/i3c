@@ -35,31 +35,6 @@ class csr_base_vseq extends i3c_base_vseq;
                                                get_type_name(), reg_name, ctxt))
   endtask
 
-  virtual task check_queue_flags(string queue_name, int full_bit, int empty_bit, bit exp_full,
-                                 bit exp_empty, string ctxt);
-    bit [31:0] status;
-
-    reg_read(ADDR_QUEUE_STATUS, status);
-    `DV_CHECK_EQ(status[full_bit], exp_full, $sformatf("%s: %s full flag mismatch %s",
-                                                       get_type_name(), queue_name, ctxt))
-    `DV_CHECK_EQ(status[empty_bit], exp_empty, $sformatf("%s: %s empty flag mismatch %s",
-                                                         get_type_name(), queue_name, ctxt))
-  endtask
-
-  virtual task check_no_host_start_for_cycles(int unsigned cycles, string ctxt);
-    fork : no_host_start_window
-      begin
-        p_sequencer.cfg.m_i3c_agent_cfg.vif.wait_for_host_start(
-            p_sequencer.cfg.m_i3c_agent_cfg.tc.i3c_tc);
-        `uvm_error(`gfn, $sformatf("%s: bus START observed during disabled window", ctxt))
-      end
-      begin
-        repeat (cycles) @(posedge p_sequencer.cfg.m_i3c_agent_cfg.vif.clk_i);
-      end
-    join_any
-    disable fork;
-  endtask
-
   virtual task check_no_host_start_until_event(event done_e, string ctxt);
     fork : no_host_start_until_event
       begin
@@ -72,42 +47,6 @@ class csr_base_vseq extends i3c_base_vseq;
       end
     join_any
     disable fork;
-  endtask
-
-  virtual task clear_scoreboard_cmd_tx_model(string ctxt);
-    uvm_component  comp;
-    i3c_scoreboard scb;
-
-    comp = uvm_top.find("uvm_test_top.env.m_scoreboard");
-    if (!$cast(scb, comp)) begin
-      `uvm_fatal(`gfn, $sformatf("%s: could not find i3c_scoreboard", ctxt))
-    end
-
-    scb.exp_txn_queue.delete();
-    scb.tx_data_queue.delete();
-  endtask
-
-  virtual task request_sw_reset(bit keep_enabled = 1'b0);
-    bit [31:0] data;
-    bit        keep_broadcast_header_enable;
-
-    poll_idle();
-    reg_read(ADDR_HC_CONTROL, data);
-    keep_broadcast_header_enable = data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT];
-    reg_write(ADDR_HC_CONTROL, hc_control_value(.bus_enable(keep_enabled),
-                                                .iba_include(keep_broadcast_header_enable)));
-    reg_write(ADDR_RESET_CONTROL, 32'h1 << RESET_CTRL_SOFT_RST_BIT);
-    settle_cycles();
-
-    reg_read(ADDR_HC_CONTROL, data);
-    `DV_CHECK_EQ(data[HC_CTRL_ENABLE_BIT], keep_enabled,
-                 $sformatf("%s: SW_RESET should preserve requested enable state", get_type_name()))
-    `DV_CHECK_EQ(data[HC_CTRL_BROADCAST_HEADER_ENABLE_BIT], keep_broadcast_header_enable,
-                 $sformatf("%s: SW_RESET should preserve BROADCAST_HEADER_ENABLE config",
-                           get_type_name()))
-    reg_read(ADDR_RESET_CONTROL, data);
-    `DV_CHECK_EQ(data[RESET_CTRL_SOFT_RST_BIT], 1'b0, $sformatf("%s: SOFT_RST should self-clear",
-                                                                get_type_name()))
   endtask
 
 endclass

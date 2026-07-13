@@ -14,6 +14,8 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     check_queue_state(resp_paths, 0, "RESP at reset");
 
     fill_cmd_queue();
+    check_queue_status_write_ignored();
+    check_queue_state(cmd_paths, QueueDepth, "after writes to read-only QUEUE_STATUS");
     sw_reset_and_check(1'b0, "after CMD queue reset");
 
     fill_tx_queue();
@@ -29,6 +31,21 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     check_queue_state(tx_paths, 0, "TX at end of CSR_010");
     check_queue_state(rx_paths, 0, "RX at end of CSR_010");
     check_queue_state(resp_paths, 0, "RESP at end of CSR_010");
+  endtask
+
+  task check_queue_status_write_ignored();
+    bit [31:0] status_before;
+    bit [31:0] status_after;
+
+    reg_read(ADDR_QUEUE_STATUS, status_before);
+    reg_write(ADDR_QUEUE_STATUS, 32'hFFFF_FFFF);
+    reg_read(ADDR_QUEUE_STATUS, status_after);
+    `DV_CHECK_EQ(status_after, status_before,
+                 "csr_queue_status_flags_vseq: all-ones write changed read-only QUEUE_STATUS")
+    reg_write(ADDR_QUEUE_STATUS, 32'h0000_0000);
+    reg_read(ADDR_QUEUE_STATUS, status_after);
+    `DV_CHECK_EQ(status_after, status_before,
+                 "csr_queue_status_flags_vseq: all-zeroes write changed read-only QUEUE_STATUS")
   endtask
 
   task check_queue_state(queue_hdl_paths_t paths, int unsigned exp_depth, string ctxt);

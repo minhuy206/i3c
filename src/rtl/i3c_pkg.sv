@@ -19,6 +19,17 @@ package i3c_pkg;
   localparam int unsigned DatDepth = 32;
   localparam int unsigned DatAw = $clog2(DatDepth);
 
+  function automatic logic is_i3c_rsvd_addr(input logic [6:0] addr);
+    return addr inside {
+      [7'h00 : 7'h07],
+      7'h3E,
+      7'h5E,
+      7'h6E,
+      7'h76,
+      [7'h78 : 7'h7F]
+    };
+  endfunction
+
   // Response error ID width
   localparam int unsigned RespErrIdWidth = 4;
 

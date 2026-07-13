@@ -265,6 +265,7 @@ function void i3c_scoreboard::handle_cmd_dword(bit [31:0] wdata);
         dat_idx = daa_desc.dev_idx + round;
         if ((dat_idx < DAT_DEPTH) && dat_model[dat_idx].valid) begin
           exp.daa_addr_valid[round]    = 1'b1;
+          exp.daa_addr_reserved[round] = is_i3c_rsvd_addr(dat_model[dat_idx].dynamic_address);
           exp.daa_assigned_addr[round] = dat_model[dat_idx].dynamic_address;
         end
       end

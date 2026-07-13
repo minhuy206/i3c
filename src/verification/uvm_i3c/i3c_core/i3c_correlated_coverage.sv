@@ -516,7 +516,7 @@ class i3c_correlated_coverage extends uvm_subscriber #(i3c_correlated_item);
 
     cp_final_t_bit: coverpoint item.final_t_bit iff (item.length_t_bit_valid) {
       bins target_end = {1'b0};
-      bins controller_continue = {1'b1};
+      bins target_has_more = {1'b1};
     }
 
     cp_length_outcome: coverpoint item.length_outcome iff (item.length_t_bit_valid) {
@@ -528,8 +528,33 @@ class i3c_correlated_coverage extends uvm_subscriber #(i3c_correlated_item);
     cx_t_bit_length_outcome: cross cp_final_t_bit, cp_length_outcome {
       ignore_bins target_end_beyond = binsof(cp_final_t_bit.target_end) &&
                                       binsof(cp_length_outcome.beyond_requested);
-      ignore_bins continue_exact = binsof(cp_final_t_bit.controller_continue) &&
-                                   binsof(cp_length_outcome.exact);
+      ignore_bins target_has_more_exact = binsof(cp_final_t_bit.target_has_more) &&
+                                          binsof(cp_length_outcome.exact);
+    }
+  endgroup
+
+  covergroup cg_sdr_read_t_bit_abort;
+    option.per_instance = 1;
+
+    cp_final_t_bit: coverpoint item.final_t_bit
+        iff (item.private_transfer_valid && item.target_is_i3c && item.rnw &&
+             item.length_t_bit_valid && item.abort_valid) {
+      bins target_end = {1'b0};
+      bins target_has_more = {1'b1};
+    }
+
+    cp_abort_cause: coverpoint item.abort_cause
+        iff (item.private_transfer_valid && item.target_is_i3c && item.rnw &&
+             item.length_t_bit_valid && item.abort_valid) {
+      bins hc_abort = {HC_ABORT};
+      bins protocol_termination = {PROTOCOL_TERMINATION};
+      ignore_bins reset = {RESET};
+    }
+
+    cx_t_bit_abort_cause: cross cp_final_t_bit, cp_abort_cause {
+      ignore_bins target_has_more_protocol_termination =
+          binsof(cp_final_t_bit.target_has_more) &&
+          binsof(cp_abort_cause.protocol_termination);
     }
   endgroup
 
@@ -825,6 +850,7 @@ class i3c_correlated_coverage extends uvm_subscriber #(i3c_correlated_item);
     cg_address_response_correlation = new();
     cg_response_presence_policy = new();
     cg_sdr_read_length_t_bit = new();
+    cg_sdr_read_t_bit_abort = new();
     cg_i2c_write_nack_position = new();
     cg_short_read_boundary = new();
     cg_data_integrity = new();
@@ -850,6 +876,7 @@ class i3c_correlated_coverage extends uvm_subscriber #(i3c_correlated_item);
     cg_address_response_correlation.sample();
     cg_response_presence_policy.sample();
     cg_sdr_read_length_t_bit.sample();
+    cg_sdr_read_t_bit_abort.sample();
     cg_i2c_write_nack_position.sample();
     cg_short_read_boundary.sample();
     cg_data_integrity.sample();
@@ -874,6 +901,7 @@ class i3c_correlated_coverage extends uvm_subscriber #(i3c_correlated_item);
                "cg_address_response_correlation=%0.2f%% ",
                "cg_response_presence_policy=%0.2f%% ",
                "cg_sdr_read_length_t_bit=%0.2f%% ",
+               "cg_sdr_read_t_bit_abort=%0.2f%% ",
                "cg_i2c_write_nack_position=%0.2f%% ",
                "cg_short_read_boundary=%0.2f%% ",
                "cg_data_integrity=%0.2f%% ",
@@ -893,6 +921,7 @@ class i3c_correlated_coverage extends uvm_subscriber #(i3c_correlated_item);
               cg_address_response_correlation.get_inst_coverage(),
               cg_response_presence_policy.get_inst_coverage(),
               cg_sdr_read_length_t_bit.get_inst_coverage(),
+              cg_sdr_read_t_bit_abort.get_inst_coverage(),
               cg_i2c_write_nack_position.get_inst_coverage(),
               cg_short_read_boundary.get_inst_coverage(),
               cg_data_integrity.get_inst_coverage(),

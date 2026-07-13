@@ -366,11 +366,13 @@ endfunction
 
 function void i3c_scoreboard::prepare_abort_response(abort_cause_e cause, abort_point_e point,
                                      int unsigned byte_count);
+  // Transaction-category publishers emit correlated abort coverage after the
+  // checker has finalized all bus observations. This function only preserves
+  // metadata for the later response and recovery checks.
   pending_abort_response_valid = 1'b1;
   pending_abort_cause = cause;
   pending_abort_point = point;
   pending_abort_byte_boundary = classify_abort_byte_boundary(byte_count);
-  publish_abort_observation(cause, point, byte_count);
 endfunction
 
 function void i3c_scoreboard::start_recovery_context(recovery_source_e source, i3c_resp_cmd_class_e cmd_class,

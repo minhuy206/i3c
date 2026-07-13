@@ -1,6 +1,5 @@
 module flow_active
-  import controller_pkg::cmd_transfer_dir_e, controller_pkg::dat_entry_t, controller_pkg::ACK,
-         controller_pkg::NACK, controller_pkg::Read, controller_pkg::Write, i3c_pkg::*;
+  import controller_pkg::*, i3c_pkg::*;
 #(
     parameter int HciCmdDataWidth = 64,
     parameter int HciTxDataWidth = 32,
@@ -69,6 +68,7 @@ module flow_active
     input  logic       daa_stop_req_i,
     input  logic       daa_stopped_i,
     input  logic       daa_nack_error_i,
+    input  logic       daa_invalid_addr_i,
 
     input logic [ 6:0] daa_address_i,
     input logic        daa_address_valid_i,
@@ -83,22 +83,6 @@ module flow_active
     input  logic abort_i,
     output logic i3c_fsm_idle_o
 );
-
-  typedef enum logic [3:0] {
-    Idle              = 4'd0,
-    WaitForCmd        = 4'd1,
-    FetchDAT          = 4'd2,
-    WaitDAT           = 4'd3,
-    I3CBcastHeader    = 4'd4,
-    IssueImmediateCcc = 4'd5,
-    FetchTxData       = 4'd6,
-    InitI3CWrite      = 4'd7,
-    InitI3CRead       = 4'd8,
-    InitI2CWrite      = 4'd9,
-    InitI2CRead       = 4'd10,
-    IssueCmd          = 4'd11,
-    WriteResp         = 4'd12
-  } flow_fsm_state_e;
 
   typedef enum logic [1:0] {
     BcastHeaderPrivate      = 2'd0,
@@ -315,12 +299,12 @@ module flow_active
 
   function automatic logic abort_stop_now(input flow_fsm_state_e state, input logic target_i3c,
                                           input cmd_transfer_dir_e dir, input i3c_cmd_attr_e attr);
-    abort_stop_now = !((state == IssueCmd) && target_i3c && (dir == Read) &&
+    abort_stop_now = !((state == IssueI3CRead) && target_i3c && (dir == Read) &&
         ((attr == RegularTransfer) || (attr == ComboTransfer)));
   endfunction
 
   function automatic logic i2c_read_abort();
-    i2c_read_abort = (state_q == IssueCmd) && !target_is_i3c &&
+    i2c_read_abort = (state_q == IssueI2CRead) && !target_is_i3c &&
         (cmd_attr == RegularTransfer) && (cmd_dir == Read) &&
         (issue_phase_q > PhaseAddrAck) && (remaining_len_q > 16'h0) &&
         !rx_overflow_q && !read_abort_term_q;
@@ -796,7 +780,8 @@ module flow_active
   always_comb begin : select_imm_data_byte
     imm_data_phase = 8'h0;
     if (state_q == IssueImmediateCcc ||
-        (state_q == IssueCmd && cmd_attr == ImmediateDataTransfer && !imm_desc.cp)) begin
+        ((state_q == IssueI3CWrite || state_q == IssueI2CWrite) &&
+         cmd_attr == ImmediateDataTransfer && !imm_desc.cp)) begin
       if (issue_phase_q > PhaseAddrAck) imm_data_phase = (issue_phase_q - PhaseDataStart) >> 1;
     end
 
@@ -827,7 +812,7 @@ module flow_active
             state_q
         ) && abort_stop_now(
             state_q, target_is_i3c, cmd_dir, cmd_attr
-        ) && !((state_q == IssueCmd) && (cmd_attr == AddressAssignment) &&
+        ) && !((state_q == IssueDAA) &&
                (issue_phase_q > 8'd4))) begin
       if (abort_stop_required(state_q, cont_pending_q)) begin
         state_d = scl_stop_done_q ? WriteResp : state_q;
@@ -865,9 +850,9 @@ module flow_active
             if (cmd_attr == ImmediateDataTransfer) begin
               if (!imm_desc.cp) begin
                 if (!target_is_i3c) begin
-                  state_d = InitI2CWrite;
+                  state_d = InitWrite;
                 end else if (!broadcast_header_enable_i) begin
-                  state_d = InitI3CWrite;
+                  state_d = InitWrite;
                 end else begin
                   state_d = I3CBcastHeader;
                 end
@@ -878,17 +863,17 @@ module flow_active
               state_d = I3CBcastHeader;
             end else if (cmd_dir == Write) begin
               if (!target_is_i3c) begin
-                state_d = InitI2CWrite;
+                state_d = InitWrite;
               end else if (cont_pending_q || !broadcast_header_enable_i) begin
-                state_d = InitI3CWrite;
+                state_d = InitWrite;
               end else begin
                 state_d = I3CBcastHeader;
               end
             end else begin
               if (!target_is_i3c) begin
-                state_d = InitI2CRead;
+                state_d = InitRead;
               end else if (cont_pending_q || !broadcast_header_enable_i) begin
-                state_d = InitI3CRead;
+                state_d = InitRead;
               end else begin
                 state_d = I3CBcastHeader;
               end
@@ -907,9 +892,9 @@ module flow_active
             unique case (bcast_header_next_q)
               BcastHeaderPrivate: begin
                 if (cmd_attr == ImmediateDataTransfer) begin
-                  state_d = InitI3CWrite;
+                  state_d = InitWrite;
                 end else begin
-                  state_d = (cmd_dir == Read) ? InitI3CRead : InitI3CWrite;
+                  state_d = (cmd_dir == Read) ? InitRead : InitWrite;
                 end
               end
 
@@ -922,7 +907,7 @@ module flow_active
               end
 
               BcastHeaderEntdaa: begin
-                state_d = IssueCmd;
+                state_d = IssueDAA;
               end
             endcase
           end
@@ -958,111 +943,122 @@ module flow_active
           end else if (tx_queue_empty_i) begin
             state_d = FetchTxData;
           end else if (tx_queue_rvalid_i) begin
-            state_d = IssueCmd;
+            state_d = target_is_i3c ? IssueI3CWrite : IssueI2CWrite;
           end
         end
 
-        InitI2CWrite: begin
+        InitWrite: begin
           if (addr_nack_q) begin
             if (scl_stop_done_q) begin
               state_d = WriteResp;
             end
           end else if (issue_phase_q > PhaseAddrAck) begin
             if (cmd_attr == ImmediateDataTransfer) begin
-              state_d = IssueCmd;
+              state_d = target_is_i3c ? IssueI3CWrite : IssueI2CWrite;
+            end else if (target_is_i3c) begin
+              state_d = (remaining_len_q > 16'h0) ? FetchTxData : IssueI3CWrite;
             end else begin
               state_d = FetchTxData;
             end
           end
         end
 
-        InitI2CRead: begin
+        InitRead: begin
           if (addr_nack_q) begin
             if (scl_stop_done_q) begin
               state_d = WriteResp;
             end
           end else if (issue_phase_q > PhaseAddrAck) begin
-            state_d = IssueCmd;
+            state_d = target_is_i3c ? IssueI3CRead : IssueI2CRead;
           end
         end
 
-        InitI3CWrite: begin
-          if (addr_nack_q) begin
-            if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end else if (issue_phase_q > PhaseAddrAck) begin
-            if (cmd_attr == ImmediateDataTransfer) begin
-              state_d = IssueCmd;
-            end else begin
-              state_d = (remaining_len_q > 16'h0) ? FetchTxData : IssueCmd;
-            end
+        IssueDAA: begin
+          if (daa_stopped_i && ccc_done_i && !daa_wr_busy_q) begin
+            state_d = WriteResp;
+          end else if (entdaa_stop_req_q && scl_gen_done_i) begin
+            state_d = WriteResp;
           end
         end
 
-        InitI3CRead: begin
-          if (addr_nack_q) begin
-            if (scl_stop_done_q) begin
-              state_d = WriteResp;
-            end
-          end else if (issue_phase_q > PhaseAddrAck) begin
-            state_d = IssueCmd;
-          end
-        end
-
-        IssueCmd: begin
-          if (cmd_attr == AddressAssignment) begin
-            if (daa_stopped_i && ccc_done_i && !daa_wr_busy_q) begin
-              state_d = WriteResp;
-            end else if (entdaa_stop_req_q && scl_gen_done_i) begin
-              state_d = WriteResp;
-            end
-          end else if (cmd_dir == Write) begin
-            if (remaining_len_q == 16'h0 || data_nack_q) begin
-              if (bus_tx_idle_i && bus_rx_idle_i) begin
-                if (((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) &&
-                    scl_stop_done_q) begin
-                  state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
-                end else if (!((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc :
-                                reg_desc.toc)) begin
-                  if (cmd_attr == ImmediateDataTransfer) begin
-                    if (scl_stop_done_q) begin
-                      state_d = WriteResp;
-                    end
-                  end else if (target_is_i3c && next_cmd_available && next_cmd_supported &&
-                    (!active_wroc || resp_queue_wready_i)) begin
-                    state_d = FetchDAT;
-                  end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
-                             scl_stop_done_q) begin
+        IssueI3CWrite: begin
+          if (remaining_len_q == 16'h0 || data_nack_q) begin
+            if (bus_tx_idle_i && bus_rx_idle_i) begin
+              if (((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) &&
+                  scl_stop_done_q) begin
+                state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
+              end else if (!((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc :
+                              reg_desc.toc)) begin
+                if (cmd_attr == ImmediateDataTransfer) begin
+                  if (scl_stop_done_q) begin
                     state_d = WriteResp;
                   end
+                end else if (next_cmd_available && next_cmd_supported &&
+                  (!active_wroc || resp_queue_wready_i)) begin
+                  state_d = FetchDAT;
+                end else if (!(next_cmd_available && next_cmd_supported) &&
+                           scl_stop_done_q) begin
+                  state_d = WriteResp;
                 end
               end
-            end else if (tx_byte_idx_q == 2'd3 && remaining_len_q > 16'h1) begin
-              if (target_is_i3c) begin
-                if (!issue_phase_q[0] && bus_tx_done_i) state_d = FetchTxData;
-              end else begin
-                if (!issue_phase_q[0] && bus_rx_done_i) state_d = FetchTxData;
+            end
+          end else if (tx_byte_idx_q == 2'd3 && remaining_len_q > 16'h1) begin
+            if (!issue_phase_q[0] && bus_tx_done_i) state_d = FetchTxData;
+          end
+        end
+
+        IssueI2CWrite: begin
+          if (remaining_len_q == 16'h0 || data_nack_q) begin
+            if (bus_tx_idle_i && bus_rx_idle_i) begin
+              if (((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) &&
+                  scl_stop_done_q) begin
+                state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
+              end else if (!((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc :
+                              reg_desc.toc)) begin
+                if (scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end
               end
             end
-          end else begin
-            if ((remaining_len_q == 16'h0 || short_read_q || read_abort_term_q ||
-                 rx_overflow_q) && issue_phase_q > PhaseAddrAck) begin
-              if (target_is_i3c && read_takeover_pending_q) begin
-                state_d = IssueCmd;
-              end else if (bus_tx_idle_i && bus_rx_idle_i) begin
-                if ((short_read_q || reg_desc.toc || read_abort_term_q ||
-                     rx_overflow_q) && scl_stop_done_q) begin
-                  state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
-                end else if (!short_read_q && !reg_desc.toc && !read_abort_term_q &&
-                             !rx_overflow_q) begin
-                  if (target_is_i3c && next_cmd_available && next_cmd_supported &&
-                    (!active_wroc || resp_queue_wready_i)) begin
-                    state_d = FetchDAT;
-                  end else if ((!target_is_i3c || !(next_cmd_available && next_cmd_supported)) &&
-                             scl_stop_done_q) begin
-                    state_d = WriteResp;
-                  end
+          end else if (tx_byte_idx_q == 2'd3 && remaining_len_q > 16'h1) begin
+            if (!issue_phase_q[0] && bus_rx_done_i) state_d = FetchTxData;
+          end
+        end
+
+        IssueI3CRead: begin
+          if ((remaining_len_q == 16'h0 || short_read_q || read_abort_term_q ||
+               rx_overflow_q) && issue_phase_q > PhaseAddrAck) begin
+            if (read_takeover_pending_q) begin
+              state_d = IssueI3CRead;
+            end else if (bus_tx_idle_i && bus_rx_idle_i) begin
+              if ((short_read_q || reg_desc.toc || read_abort_term_q ||
+                   rx_overflow_q) && scl_stop_done_q) begin
+                state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
+              end else if (!short_read_q && !reg_desc.toc && !read_abort_term_q &&
+                           !rx_overflow_q) begin
+                if (next_cmd_available && next_cmd_supported &&
+                  (!active_wroc || resp_queue_wready_i)) begin
+                  state_d = FetchDAT;
+                end else if (!(next_cmd_available && next_cmd_supported) &&
+                           scl_stop_done_q) begin
+                  state_d = WriteResp;
+                end
+              end
+            end
+          end
+        end
+
+        IssueI2CRead: begin
+          if ((remaining_len_q == 16'h0 || short_read_q || read_abort_term_q ||
+               rx_overflow_q) && issue_phase_q > PhaseAddrAck) begin
+            if (bus_tx_idle_i && bus_rx_idle_i) begin
+              if ((short_read_q || reg_desc.toc || read_abort_term_q ||
+                   rx_overflow_q) && scl_stop_done_q) begin
+                state_d = (active_wroc || completion_error_q) ? WriteResp : Idle;
+              end else if (!short_read_q && !reg_desc.toc && !read_abort_term_q &&
+                           !rx_overflow_q) begin
+                if (scl_stop_done_q) begin
+                  state_d = WriteResp;
                 end
               end
             end
@@ -1153,7 +1149,7 @@ module flow_active
             state_q
         ) && abort_stop_now(
             state_q, target_is_i3c, cmd_dir, cmd_attr
-        ) && !((state_q == IssueCmd) && (cmd_attr == AddressAssignment) &&
+        ) && !((state_q == IssueDAA) &&
                (issue_phase_q > 8'd4))) begin
       hc_aborted_d = 1'b1;
       sel_i3c_i2c = target_is_i3c;
@@ -1409,315 +1405,312 @@ module flow_active
           end
         end
 
-        InitI3CWrite: begin
-          sel_i3c_i2c = 1'b1;
-          gen_clock   = 1'b1;
+        InitWrite: begin
+          sel_i3c_i2c    = target_is_i3c;
+          use_i2c_timing = !target_is_i3c;
+          sel_od_pp      = 1'b0;
+          gen_clock      = 1'b1;
           if (addr_nack_q) begin
             request_stop(1'b0);
-          end else begin
+          end else if (target_is_i3c) begin
             drive_i3c_addr_preamble(Write);
-          end
-        end
-
-        InitI3CRead: begin
-          sel_i3c_i2c = 1'b1;
-          gen_clock   = 1'b1;
-          if (addr_nack_q) begin
-            request_stop(1'b0);
-          end else begin
-            drive_i3c_addr_preamble(Read);
-          end
-        end
-
-        InitI2CWrite: begin
-          sel_i3c_i2c = 1'b0;
-          use_i2c_timing = 1'b1;
-          sel_od_pp = 1'b0;
-          gen_clock = 1'b1;
-          if (addr_nack_q) begin
-            request_stop(1'b0);
           end else begin
             drive_i2c_addr_preamble(Write);
           end
         end
 
-        InitI2CRead: begin
-          sel_i3c_i2c = 1'b0;
-          use_i2c_timing = 1'b1;
-          sel_od_pp = 1'b0;
-          gen_clock = 1'b1;
+        InitRead: begin
+          sel_i3c_i2c    = target_is_i3c;
+          use_i2c_timing = !target_is_i3c;
+          sel_od_pp      = 1'b0;
+          gen_clock      = 1'b1;
           if (addr_nack_q) begin
             request_stop(1'b0);
+          end else if (target_is_i3c) begin
+            drive_i3c_addr_preamble(Read);
           end else begin
             drive_i2c_addr_preamble(Read);
           end
         end
 
-        IssueCmd: begin
-          use_i2c_timing = (cmd_attr != AddressAssignment) && !target_is_i3c;
+        IssueDAA: begin
           gen_clock = 1'b1;
           scl_stop_done_d = scl_stop_done_q;
-
-          if (cmd_attr == AddressAssignment) begin
-            sel_i3c_i2c = 1'b1;
-            sel_od_pp   = 1'b0;
-            unique case (issue_phase_q)
-              8'd3: begin
-                sel_od_pp = 1'b1;
-                bus_tx_req_byte = 1'b1;
-                bus_tx_req_value = ENTDAA;
-                if (bus_tx_done_i) begin
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
+          sel_i3c_i2c = 1'b1;
+          sel_od_pp   = 1'b0;
+          unique case (issue_phase_q)
+            8'd3: begin
+              sel_od_pp = 1'b1;
+              bus_tx_req_byte = 1'b1;
+              bus_tx_req_value = ENTDAA;
+              if (bus_tx_done_i) begin
+                issue_phase_d = issue_phase_q + 8'h1;
               end
+            end
 
-              8'd4: begin
-                sel_od_pp        = 1'b1;
-                bus_tx_req_bit   = 1'b1;
-                bus_tx_req_value = {7'b0, ~^8'(ENTDAA)};
-                if (bus_tx_done_i) begin
-                  issue_phase_d = issue_phase_q + 8'h1;
-                end
+            8'd4: begin
+              sel_od_pp        = 1'b1;
+              bus_tx_req_bit   = 1'b1;
+              bus_tx_req_value = {7'b0, ~^8'(ENTDAA)};
+              if (bus_tx_done_i) begin
+                issue_phase_d = issue_phase_q + 8'h1;
               end
+            end
 
-              default: begin
-                if (issue_phase_q > 8'd4) begin
-                  ccc_valid     = 1'b1;
-                  daa_stop      = hc_aborted_q || abort_i;
-                  ccc_dev_count = aa_desc.dev_count;
-                  daa_dev_idx   = aa_desc.dev_idx;
-                  hc_aborted_d |= abort_i;
-                  daa_nack_error_d |= daa_nack_error_i;
-                  if (daa_wr_busy_q) begin
-                    rx_queue_wdata = daa_rx_result_word(daa_wr_phase_q, daa_pid_q, daa_bcr_q,
-                                                        daa_dcr_q, daa_addr_q);
-                    if (rx_queue_wready_i && !rx_queue_full_i) begin
-                      rx_queue_wvalid = 1'b1;
-                      resp_data_len_d = resp_data_len_q + 16'd4;
-                      if (daa_wr_phase_q == 2'd2) begin
-                        daa_wr_busy_d  = 1'b0;
-                        daa_wr_phase_d = 2'd0;
-                      end else begin
-                        daa_wr_phase_d = daa_wr_phase_q + 2'd1;
-                      end
+            default: begin
+              if (issue_phase_q > 8'd4) begin
+                ccc_valid     = 1'b1;
+                daa_stop      = hc_aborted_q || abort_i;
+                ccc_dev_count = aa_desc.dev_count;
+                daa_dev_idx   = aa_desc.dev_idx;
+                hc_aborted_d |= abort_i;
+                daa_nack_error_d |= daa_nack_error_i;
+                not_supported_d |= daa_invalid_addr_i;
+                if (daa_wr_busy_q) begin
+                  rx_queue_wdata = daa_rx_result_word(daa_wr_phase_q, daa_pid_q, daa_bcr_q,
+                                                      daa_dcr_q, daa_addr_q);
+                  if (rx_queue_wready_i && !rx_queue_full_i) begin
+                    rx_queue_wvalid = 1'b1;
+                    resp_data_len_d = resp_data_len_q + 16'd4;
+                    if (daa_wr_phase_q == 2'd2) begin
+                      daa_wr_busy_d  = 1'b0;
+                      daa_wr_phase_d = 2'd0;
                     end else begin
-                      rx_overflow_d     = 1'b1;
-                      daa_wr_busy_d     = 1'b0;
-                      daa_wr_phase_d    = 2'd0;
-                      entdaa_stop_req_d = 1'b1;
-                      gen_stop          = 1'b1;
+                      daa_wr_phase_d = daa_wr_phase_q + 2'd1;
                     end
-                  end else if (daa_address_valid_i && !daa_wr_busy_q && !rx_overflow_q && !entdaa_stop_req_q) begin
-                    daa_pid_d      = daa_pid_i;
-                    daa_bcr_d      = daa_bcr_i;
-                    daa_dcr_d      = daa_dcr_i;
-                    daa_addr_d     = daa_address_i;
-                    daa_wr_busy_d  = 1'b1;
-                    daa_wr_phase_d = 2'd0;
-                  end
-                  if (daa_stop_req_i || (ccc_done_i && !daa_stopped_i) || entdaa_stop_req_q) begin
-                    gen_stop = 1'b1;
-                  end
-
-                  if (ccc_done_i && !daa_stopped_i) begin
+                  end else begin
+                    rx_overflow_d     = 1'b1;
+                    daa_wr_busy_d     = 1'b0;
+                    daa_wr_phase_d    = 2'd0;
                     entdaa_stop_req_d = 1'b1;
+                    gen_stop          = 1'b1;
                   end
+                end else if (daa_address_valid_i && !daa_wr_busy_q && !rx_overflow_q && !entdaa_stop_req_q) begin
+                  daa_pid_d      = daa_pid_i;
+                  daa_bcr_d      = daa_bcr_i;
+                  daa_dcr_d      = daa_dcr_i;
+                  daa_addr_d     = daa_address_i;
+                  daa_wr_busy_d  = 1'b1;
+                  daa_wr_phase_d = 2'd0;
+                end
+                if (daa_stop_req_i || (ccc_done_i && !daa_stopped_i) || entdaa_stop_req_q) begin
+                  gen_stop = 1'b1;
+                end
 
-                  if (entdaa_stop_req_q && scl_gen_done_i) begin
-                    entdaa_stop_req_d = 1'b0;
-                  end
+                if (ccc_done_i && !daa_stopped_i) begin
+                  entdaa_stop_req_d = 1'b1;
+                end
+
+                if (entdaa_stop_req_q && scl_gen_done_i) begin
+                  entdaa_stop_req_d = 1'b0;
                 end
               end
-            endcase
-          end else if (cmd_dir == Write) begin
-            sel_i3c_i2c = target_is_i3c;
-            if (target_is_i3c) begin
-              if (remaining_len_q == 16'h0 &&
-                  issue_phase_q > PhaseAddrAck &&
-                  bus_tx_idle_i && bus_rx_idle_i) begin
-                if ((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) begin
-                  request_stop(1'b0);
-                end else if (cmd_attr == ImmediateDataTransfer) begin
-                  request_stop(1'b1);
-                end else if (next_cmd_available && next_cmd_supported) begin
-                  if (!active_wroc || resp_queue_wready_i) begin
-                    accept_continuation_cmd(1'b0);
-                  end
-                end else if (!next_cmd_available) begin
-                  request_missing_continuation_stop();
-                end else begin
-                  request_stop(1'b1);
+            end
+          endcase
+        end
+
+        IssueI3CWrite: begin
+          gen_clock = 1'b1;
+          scl_stop_done_d = scl_stop_done_q;
+          sel_i3c_i2c = 1'b1;
+          if (remaining_len_q == 16'h0 &&
+              issue_phase_q > PhaseAddrAck &&
+              bus_tx_idle_i && bus_rx_idle_i) begin
+            if ((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) begin
+              request_stop(1'b0);
+            end else if (cmd_attr == ImmediateDataTransfer) begin
+              request_stop(1'b1);
+            end else if (next_cmd_available && next_cmd_supported) begin
+              if (!active_wroc || resp_queue_wready_i) begin
+                accept_continuation_cmd(1'b0);
+              end
+            end else if (!next_cmd_available) begin
+              request_missing_continuation_stop();
+            end else begin
+              request_stop(1'b1);
+            end
+          end else if (remaining_len_q > 16'h0) begin
+            sel_od_pp = 1'b1;
+            if (issue_phase_q[0]) begin
+              bus_tx_req_byte = 1'b1;
+              bus_tx_req_value = (cmd_attr == ImmediateDataTransfer) ? imm_data_byte :
+                                  current_tx_byte;
+              if (bus_tx_done_i) issue_phase_d = issue_phase_q + 8'h1;
+            end else begin
+              bus_tx_req_bit = 1'b1;
+              bus_tx_req_value = {
+                7'b0, ~^((cmd_attr == ImmediateDataTransfer) ? imm_data_byte : current_tx_byte)
+              };
+              if (bus_tx_done_i) begin
+                issue_phase_d = issue_phase_q + 8'h1;
+                if (cmd_attr != ImmediateDataTransfer) begin
+                  tx_byte_idx_d = next_byte_idx(tx_byte_idx_q);
                 end
-              end else if (remaining_len_q > 16'h0) begin
-                sel_od_pp = 1'b1;
-                if (issue_phase_q[0]) begin
-                  bus_tx_req_byte = 1'b1;
-                  bus_tx_req_value = (cmd_attr == ImmediateDataTransfer) ? imm_data_byte :
-                                      current_tx_byte;
-                  if (bus_tx_done_i) issue_phase_d = issue_phase_q + 8'h1;
-                end else begin
-                  bus_tx_req_bit = 1'b1;
-                  bus_tx_req_value = {
-                    7'b0, ~^((cmd_attr == ImmediateDataTransfer) ? imm_data_byte : current_tx_byte)
-                  };
-                  if (bus_tx_done_i) begin
-                    issue_phase_d = issue_phase_q + 8'h1;
-                    if (cmd_attr != ImmediateDataTransfer) begin
-                      tx_byte_idx_d = next_byte_idx(tx_byte_idx_q);
-                    end
-                    remaining_len_d = remaining_len_q - 16'h1;
-                    resp_data_len_d = resp_data_len_q + 16'h1;
-                  end
-                end
+                remaining_len_d = remaining_len_q - 16'h1;
+                resp_data_len_d = resp_data_len_q + 16'h1;
+              end
+            end
+          end
+        end
+
+        IssueI2CWrite: begin
+          gen_clock = 1'b1;
+          scl_stop_done_d = scl_stop_done_q;
+          use_i2c_timing = 1'b1;
+          sel_i3c_i2c = 1'b0;
+          sel_od_pp = 1'b0;
+          if (data_nack_q ||
+              (remaining_len_q == 16'h0 &&
+               issue_phase_q > PhaseAddrAck &&
+               bus_tx_idle_i && bus_rx_idle_i)) begin
+            if (data_nack_q ||
+                ((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) ||
+                addr_nack_q) begin
+              request_stop(1'b0);
+            end else begin
+              request_stop(1'b1);
+            end
+          end else if (remaining_len_q > 16'h0) begin
+            if (issue_phase_q[0]) begin
+              bus_tx_req_byte = 1'b1;
+              bus_tx_req_value = (cmd_attr == ImmediateDataTransfer) ? imm_data_byte :
+                                  current_tx_byte;
+              if (bus_tx_done_i) begin
+                issue_phase_d = issue_phase_q + 8'h1;
               end
             end else begin
-              sel_od_pp = 1'b0;
-              if (data_nack_q ||
-                  (remaining_len_q == 16'h0 &&
-                   issue_phase_q > PhaseAddrAck &&
-                   bus_tx_idle_i && bus_rx_idle_i)) begin
-                if (data_nack_q ||
-                    ((cmd_attr == ImmediateDataTransfer) ? imm_desc.toc : reg_desc.toc) ||
-                    addr_nack_q) begin
-                  request_stop(1'b0);
-                end else begin
-                  request_stop(1'b1);
+              bus_rx_req_bit = 1'b1;
+              if (bus_rx_done_i) begin
+                data_nack_d   = bus_rx_data_i[0];
+                issue_phase_d = issue_phase_q + 8'h1;
+                if (cmd_attr != ImmediateDataTransfer) begin
+                  tx_byte_idx_d = next_byte_idx(tx_byte_idx_q);
                 end
-              end else if (remaining_len_q > 16'h0) begin
-                if (issue_phase_q[0]) begin
-                  bus_tx_req_byte = 1'b1;
-                  bus_tx_req_value = (cmd_attr == ImmediateDataTransfer) ? imm_data_byte :
-                                      current_tx_byte;
-                  if (bus_tx_done_i) begin
-                    issue_phase_d = issue_phase_q + 8'h1;
+                remaining_len_d = remaining_len_q - 16'h1;
+                resp_data_len_d = resp_data_len_q + 16'h1;
+              end
+            end
+          end
+        end
+
+        IssueI3CRead: begin
+          gen_clock = 1'b1;
+          scl_stop_done_d = scl_stop_done_q;
+          sel_i3c_i2c = 1'b1;
+          if (read_takeover_pending_q) begin
+            request_read_takeover();
+          end else if ((remaining_len_q == 16'h0 || short_read_q || read_abort_term_q ||
+                        rx_overflow_q) && bus_tx_idle_i && bus_rx_idle_i) begin
+            if (short_read_q || reg_desc.toc || read_abort_term_q || rx_overflow_q) begin
+              request_stop(1'b0);
+            end else if (next_cmd_available && next_cmd_supported) begin
+              if (!active_wroc || resp_queue_wready_i) begin
+                accept_continuation_cmd(read_takeover_done_q);
+              end
+            end else if (!next_cmd_available) begin
+              request_missing_continuation_stop();
+            end else begin
+              request_stop(1'b1);
+            end
+          end else if (remaining_len_q > 16'h0 && !rx_overflow_q && !short_read_q &&
+                       !read_abort_term_q) begin
+            sel_od_pp = 1'b1;
+            if (issue_phase_q[0]) begin
+              bus_rx_req_byte = 1'b1;
+              if (bus_rx_done_i) begin
+                rx_dword_d    = rx_word_with_byte(rx_dword_q, rx_byte_idx_q, bus_rx_data_i);
+                issue_phase_d = issue_phase_q + 8'h1;
+              end
+            end else begin
+              bus_rx_req_bit_handoff = 1'b1;
+              if (bus_rx_done_i) begin
+                issue_phase_d   = issue_phase_q + 8'h1;
+                rx_byte_idx_d   = next_byte_idx(rx_byte_idx_q);
+                remaining_len_d = remaining_len_q - 16'h1;
+                resp_data_len_d = resp_data_len_q + 16'h1;
+                if (abort_i) begin
+                  request_rx_commit(rx_dword_q);
+                  read_abort_term_d = 1'b1;
+                  hc_aborted_d      = 1'b1;
+                  if (bus_rx_data_i[0]) begin
+                    request_read_takeover();
+                  end else begin
+                    request_stop(1'b0);
                   end
-                end else begin
-                  bus_rx_req_bit = 1'b1;
-                  if (bus_rx_done_i) begin
-                    data_nack_d   = bus_rx_data_i[0];
-                    issue_phase_d = issue_phase_q + 8'h1;
-                    if (cmd_attr != ImmediateDataTransfer) begin
-                      tx_byte_idx_d = next_byte_idx(tx_byte_idx_q);
-                    end
-                    remaining_len_d = remaining_len_q - 16'h1;
-                    resp_data_len_d = resp_data_len_q + 16'h1;
+                end else if (remaining_len_d == 16'h0) begin
+                  request_rx_commit(rx_dword_q);
+                  if (bus_rx_data_i[0]) begin
+                    request_read_takeover();
+                  end
+                end else if (bus_rx_data_i[0] == 1'b0) begin
+                  request_rx_commit(rx_dword_q);
+                  request_stop(1'b0);
+                  short_read_d = 1'b1;
+                end else if (rx_byte_idx_q == 2'd3) begin
+                  request_rx_commit(rx_dword_q);
+                  if (rx_overflow_d) begin
+                    request_read_takeover();
                   end
                 end
               end
             end
-          end else begin
-            sel_i3c_i2c = target_is_i3c;
-            if (target_is_i3c) begin
-              if (read_takeover_pending_q) begin
-                request_read_takeover();
-              end else if ((remaining_len_q == 16'h0 || short_read_q || read_abort_term_q ||
-                            rx_overflow_q) && bus_tx_idle_i && bus_rx_idle_i) begin
-                if (short_read_q || reg_desc.toc || read_abort_term_q || rx_overflow_q) begin
-                  request_stop(1'b0);
-                end else if (next_cmd_available && next_cmd_supported) begin
-                  if (!active_wroc || resp_queue_wready_i) begin
-                    accept_continuation_cmd(read_takeover_done_q);
-                  end
-                end else if (!next_cmd_available) begin
-                  request_missing_continuation_stop();
-                end else begin
-                  request_stop(1'b1);
-                end
-              end else if (remaining_len_q > 16'h0 && !rx_overflow_q && !short_read_q &&
-                           !read_abort_term_q) begin
-                sel_od_pp = 1'b1;
-                if (issue_phase_q[0]) begin
-                  bus_rx_req_byte = 1'b1;
-                  if (bus_rx_done_i) begin
-                    rx_dword_d    = rx_word_with_byte(rx_dword_q, rx_byte_idx_q, bus_rx_data_i);
-                    issue_phase_d = issue_phase_q + 8'h1;
-                  end
-                end else begin
-                  bus_rx_req_bit_handoff = 1'b1;
-                  if (bus_rx_done_i) begin
-                    issue_phase_d   = issue_phase_q + 8'h1;
-                    rx_byte_idx_d   = next_byte_idx(rx_byte_idx_q);
-                    remaining_len_d = remaining_len_q - 16'h1;
-                    resp_data_len_d = resp_data_len_q + 16'h1;
-                    if (abort_i) begin
-                      request_rx_commit(rx_dword_q);
-                      read_abort_term_d = 1'b1;
-                      hc_aborted_d      = 1'b1;
-                      if (bus_rx_data_i[0]) begin
-                        request_read_takeover();
-                      end else begin
-                        request_stop(1'b0);
-                      end
-                    end else if (remaining_len_d == 16'h0) begin
-                      request_rx_commit(rx_dword_q);
-                      if (bus_rx_data_i[0]) begin
-                        request_read_takeover();
-                      end
-                    end else if (bus_rx_data_i[0] == 1'b0) begin
-                      request_rx_commit(rx_dword_q);
-                      request_stop(1'b0);
-                      short_read_d = 1'b1;
-                    end else if (rx_byte_idx_q == 2'd3) begin
-                      request_rx_commit(rx_dword_q);
-                      if (rx_overflow_d) begin
-                        request_read_takeover();
-                      end
-                    end
-                  end
-                end
+          end
+        end
+
+        IssueI2CRead: begin
+          gen_clock = 1'b1;
+          scl_stop_done_d = scl_stop_done_q;
+          use_i2c_timing = 1'b1;
+          sel_i3c_i2c = 1'b0;
+          sel_od_pp = 1'b0;
+          if (rx_overflow_q ||
+              read_abort_term_q ||
+              (remaining_len_q == 16'h0 &&
+               issue_phase_q > PhaseAddrAck &&
+               bus_tx_idle_i && bus_rx_idle_i)) begin
+            if (rx_overflow_q || read_abort_term_q || reg_desc.toc) begin
+              request_stop(1'b0);
+            end else begin
+              request_stop(1'b1);
+            end
+          end else if (remaining_len_q > 16'h0) begin
+            if (issue_phase_q[0]) begin
+              bus_rx_req_byte = 1'b1;
+              if (abort_i) begin
+                hc_aborted_d = 1'b1;
+              end
+              if (bus_rx_done_i) begin
+                rx_dword_d    = rx_word_with_byte(rx_dword_q, rx_byte_idx_q, bus_rx_data_i);
+                issue_phase_d = issue_phase_q + 8'h1;
               end
             end else begin
-              sel_od_pp = 1'b0;
-              if (rx_overflow_q ||
-                  read_abort_term_q ||
-                  (remaining_len_q == 16'h0 &&
-                   issue_phase_q > PhaseAddrAck &&
-                   bus_tx_idle_i && bus_rx_idle_i)) begin
-                if (rx_overflow_q || read_abort_term_q || reg_desc.toc) begin
-                  request_stop(1'b0);
-                end else begin
-                  request_stop(1'b1);
-                end
-              end else if (remaining_len_q > 16'h0) begin
-                if (issue_phase_q[0]) begin
-                  bus_rx_req_byte = 1'b1;
-                  if (abort_i) begin
-                    hc_aborted_d = 1'b1;
-                  end
-                  if (bus_rx_done_i) begin
-                    rx_dword_d    = rx_word_with_byte(rx_dword_q, rx_byte_idx_q, bus_rx_data_i);
-                    issue_phase_d = issue_phase_q + 8'h1;
-                  end
-                end else begin
-                  if (abort_i || hc_aborted_q) begin
-                    bus_tx_req_bit   = 1'b1;
-                    bus_tx_req_value = NACK;
-                  end else if (rx_byte_idx_q == 2'd3 &&
-                               (!rx_queue_wready_i || rx_queue_full_i)) begin
-                    bus_tx_req_bit   = 1'b1;
-                    bus_tx_req_value = NACK;
-                  end else if (remaining_len_q > 16'h1) begin
-                    bus_tx_req_bit   = 1'b1;
-                    bus_tx_req_value = ACK;
-                  end else begin
-                    bus_tx_req_bit   = 1'b1;
-                    bus_tx_req_value = NACK;
-                  end
-                  if (bus_tx_done_i) begin
-                    issue_phase_d   = issue_phase_q + 8'h1;
-                    rx_byte_idx_d   = next_byte_idx(rx_byte_idx_q);
-                    remaining_len_d = remaining_len_q - 16'h1;
-                    resp_data_len_d = resp_data_len_q + 16'h1;
-                    if (abort_i || hc_aborted_q) begin
-                      request_rx_commit(rx_dword_q);
-                      read_abort_term_d = 1'b1;
-                      hc_aborted_d      = 1'b1;
-                    end else if (rx_byte_idx_q == 2'd3) begin
-                      request_rx_commit(rx_dword_q);
-                    end else if (remaining_len_d == 16'h0) begin
-                      request_rx_commit(rx_dword_q);
-                    end
-                  end
+              if (abort_i || hc_aborted_q) begin
+                bus_tx_req_bit   = 1'b1;
+                bus_tx_req_value = NACK;
+              end else if (rx_byte_idx_q == 2'd3 &&
+                           (!rx_queue_wready_i || rx_queue_full_i)) begin
+                bus_tx_req_bit   = 1'b1;
+                bus_tx_req_value = NACK;
+              end else if (remaining_len_q > 16'h1) begin
+                bus_tx_req_bit   = 1'b1;
+                bus_tx_req_value = ACK;
+              end else begin
+                bus_tx_req_bit   = 1'b1;
+                bus_tx_req_value = NACK;
+              end
+              if (bus_tx_done_i) begin
+                issue_phase_d   = issue_phase_q + 8'h1;
+                rx_byte_idx_d   = next_byte_idx(rx_byte_idx_q);
+                remaining_len_d = remaining_len_q - 16'h1;
+                resp_data_len_d = resp_data_len_q + 16'h1;
+                if (abort_i || hc_aborted_q) begin
+                  request_rx_commit(rx_dword_q);
+                  read_abort_term_d = 1'b1;
+                  hc_aborted_d      = 1'b1;
+                end else if (rx_byte_idx_q == 2'd3) begin
+                  request_rx_commit(rx_dword_q);
+                end else if (remaining_len_d == 16'h0) begin
+                  request_rx_commit(rx_dword_q);
                 end
               end
             end
@@ -1745,11 +1738,12 @@ module flow_active
       scl_use_od_low = !sel_od_pp;
     end else if (state_q == IssueImmediateCcc) begin
       scl_use_od_low = !sel_od_pp;
-    end else if (state_q == InitI3CWrite) begin
+    end else if (state_q == InitWrite && target_is_i3c) begin
       scl_use_od_low = !sel_od_pp;
-    end else if (state_q == InitI3CRead) begin
+    end else if (state_q == InitRead && target_is_i3c) begin
       scl_use_od_low = !sel_od_pp;
-    end else if (state_q == IssueCmd && (cmd_attr == AddressAssignment || target_is_i3c)) begin
+    end else if (state_q == IssueDAA || state_q == IssueI3CWrite ||
+                 state_q == IssueI3CRead) begin
       scl_use_od_low = !sel_od_pp;
     end
   end
