@@ -55,12 +55,9 @@ Figures and tables are referenced by the F-/T- numbers fixed in the (compliant) 
 | F# | Figure | RTL source | Status |
 |---|---|---|---|
 | F3.6 | `flow_active` 13-state (flagship, landscape) | `ctrl/flow_active.sv` | not drawn |
-| F3.7 | `scl_generator` 14-state | `ctrl/scl_generator.sv` | not drawn |
+| F3.7 | `scl_generator` 13-state | `ctrl/scl_generator.sv` | drawn |
 | F3.8a | `entdaa_controller` 7-state | `ctrl/entdaa_controller.sv` | not drawn |
 | F3.8b | `entdaa_fsm` 8-state | `ctrl/entdaa_fsm.sv` | not drawn |
-| F3.9a | `bus_tx` 5-state | `ctrl/bus_tx.sv` | not drawn |
-| F3.9b | `bus_tx_flow` 4-state | `ctrl/bus_tx_flow.sv` | not drawn |
-| F3.9c | `bus_rx_flow` 4-state | `ctrl/bus_rx_flow.sv` | not drawn |
 
 ### Algorithm flowcharts — TikZ (NEW · satisfy the official "algorithm flowchart" rule)
 | F# | Figure | Source | Status |
@@ -82,7 +79,7 @@ Figures and tables are referenced by the F-/T- numbers fixed in the (compliant) 
 
 ### Block / topology — TikZ (later pass)
 F1.1 SoC context · F1.2 thesis roadmap · F3.1 three-layer · F3.2 top block · F3.3 transaction dataflow ·
-F3.4 clock/reset · F3.10 OD/PP switching · F4.1 directed-vs-random · F4.2 layered test stack ·
+F3.4 clock/reset · F4.1 directed-vs-random · F4.2 layered test stack ·
 F4.3 TLM path · F4.4 env class hierarchy · F4.5 reg agent · F4.6 I3C agent.
 
 ### Waveform screenshots — SimVision (after sims)

@@ -75,7 +75,7 @@ Before adding a section, table, or figure, identify its owner. Other chapters us
 | Fact | Value | Source of truth |
 |---|---|---|
 | `flow_active` FSM | 13 states (Idle…WriteResp) | `src/rtl/ctrl/flow_active.sv` `flow_fsm_state_e` |
-| `scl_generator` FSM | 14 states (Idle…BusFree) | `src/rtl/ctrl/scl_generator.sv` `state_e` |
+| `scl_generator` FSM | 13 states (Idle…BusFree) | `src/rtl/ctrl/scl_generator.sv` `state_e` |
 | `entdaa_controller` / `entdaa_fsm` | 7 / 8 states; `DatDepth`=32 | specs 08 / 08b |
 | `bus_tx_flow` / `bus_rx_flow` | 4 states `[2:0]` each | specs 04 / 05 |
 | `bus_tx` | 5 states | spec 04 |
@@ -305,10 +305,10 @@ Each entry: **Sections · Figures · Tables · essential constraints.** Page tar
 
 - **Sources:** specs 00–11; `improvements.md`; `CLAUDE.md` block diagram; `i3c_pkg.sv`, `controller_pkg.sv`; and read RTL directly — `flow_active.sv`, `scl_generator.sv`, `entdaa_controller.sv`+`entdaa_fsm.sv`, `csr_registers.sv`, `hci_queues.sv`/`sync_fifo.sv`, `bus_tx*.sv`/`bus_rx_flow.sv`, `bus_monitor.sv`, `i3c_phy.sv`, `controller_active.sv`, `edge_detector.sv`, `stable_high_detector.sv`.
 - **Sections — architecture:** three-layer architecture · top module + block diagram · transaction dataflow (Host → CMD FIFO → `flow_active` → bus → RESP/RX) · clock/reset + signal conventions (2FF sync) · reference-derived design boundary (single qualitative CHIPS-Alliance comparison) · queue/DAT/descriptor formats · error-handling model.
-- **Sections — RTL:** PHY (`i3c_phy`) · CSR + 32-entry DAT (`csr_register`) · HCI queues (`hci_queues`/`sync_fifo`; power-of-2 elaboration assert) · `bus_monitor` · `scl_generator` (14-state; DAA restart via `gen_rstart_i`) · TX/RX serializers (`bus_tx`, `bus_tx_flow`, `bus_rx_flow`) · ENTDAA subsystem (`entdaa_controller` 7-state + `entdaa_fsm` 8-state, Controller perspective) · **`flow_active` 13-state FSM (flagship)** — SDR/I²C write+read, private immediate merged into `IssueCmd`, CCC immediate (`cp=1`) via `IssueImmediateCcc`, ENTDAA, abort · `controller_active` wrapper + OD/PP switching.
-- **Figures:** F3.1 three-layer architecture · F3.2 top-level block diagram · F3.3 transaction dataflow · F3.4 clock/reset & 2FF sync · F3.5 CHIPS Alliance `i3c-core` reference architecture · **F3.6 `flow_active` 13-state FSM (landscape, flagship)** · F3.7 `scl_generator` 14-state FSM · F3.8 `entdaa_controller` 7-state + `entdaa_fsm` 8-state · F3.9 `bus_tx`/`bus_tx_flow`/`bus_rx_flow` FSMs · F3.10 OD/PP switching · F3.11 `flow_active` command-issue algorithm flowchart · F3.12 ENTDAA per-Target loop algorithm flowchart.
+- **Sections — RTL:** PHY (`i3c_phy`) · CSR + 32-entry DAT (`csr_register`) · HCI queues (`hci_queues`/`sync_fifo`; power-of-2 elaboration assert) · `bus_monitor` · `scl_generator` (13-state; DAA restart via `gen_rstart_i`) · TX/RX serializers (`bus_tx`, `bus_tx_flow`, `bus_rx_flow`) · ENTDAA subsystem (`entdaa_controller` 7-state + `entdaa_fsm` 8-state, Controller perspective) · **`flow_active` 13-state FSM (flagship)** — SDR/I²C write+read, private immediate merged into `IssueCmd`, CCC immediate (`cp=1`) via `IssueImmediateCcc`, ENTDAA, abort · `controller_active` wrapper + OD/PP switching.
+- **Figures:** F3.1 three-layer architecture · F3.2 top-level block diagram · F3.3 transaction dataflow · F3.4 clock/reset & 2FF sync · F3.5 CHIPS Alliance `i3c-core` reference architecture · **F3.6 `flow_active` 13-state FSM (landscape, flagship)** · F3.7 `scl_generator` 13-state FSM · F3.8 `entdaa_controller` 7-state + `entdaa_fsm` 8-state · F3.9 `bus_tx`/`bus_tx_flow`/`bus_rx_flow` FSMs · F3.10 OD/PP switching · F3.11 `flow_active` command-issue algorithm flowchart · F3.12 ENTDAA per-Target loop algorithm flowchart.
 - **Tables:** T3.1 queue/DAT/descriptor formats (→ App. B) · T3.2 error-status encoding · T3.3 `flow_active` 13-state table (→ App. C) · T3.4 full CSR map (→ App. A) · T3.5 per-module port lists (→ App. B/C). Per-module LoC tables → Ch.5.
-- **Notes:** start FSM diagrams early (long pole). `scl_generator` restart/handoff driven by `gen_rstart_i` + `takeover_i` (fast-path `RstartSdaFall` read takeover); use RTL names only. `flow_active` = 13 states (indices 0–12).
+- **Notes:** start FSM diagrams early (long pole). `scl_generator` restart/handoff driven by `gen_rstart_i` + `takeover_i` (fast-path `SdaFall` read takeover); use RTL names only. `flow_active` = 13 states (indices 0–12).
 
 **Page-budget management (Ch.3 — manage, do not trim):**
 
@@ -399,7 +399,7 @@ Per-chapter numbering; every entry has a caption and a body-text reference. Chap
 | F3.4 | Clock/reset & 2FF sync | Ch.3 | `i3c_phy.sv` |
 | F3.5 | CHIPS Alliance `i3c-core` reference architecture | Ch.3 | `improvements.md`/`CLAUDE.md` |
 | F3.6 | `flow_active` 13-state FSM (landscape, flagship) | Ch.3 | `flow_active.sv` |
-| F3.7 | `scl_generator` 14-state FSM | Ch.3 | `scl_generator.sv` |
+| F3.7 | `scl_generator` 13-state FSM | Ch.3 | `scl_generator.sv` |
 | F3.8 | `entdaa_controller` 7-state + `entdaa_fsm` 8-state | Ch.3 | `entdaa_*.sv` |
 | F3.9 | `bus_tx`/`bus_tx_flow`/`bus_rx_flow` FSMs | Ch.3 | `bus_tx*.sv`, `bus_rx_flow.sv` |
 | F3.10 | OD/PP switching logic | Ch.3 | `controller_active.sv` |

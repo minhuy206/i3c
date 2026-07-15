@@ -38,14 +38,14 @@ khiển giao thức, đến hoạt động trên SDA/SCL và \ResponseDescriptor
 \begin{itemize}
 	\item xây dựng kiến trúc phân lớp giữa software-visible register interface, khối \ActiveController{} và
 	      lớp PHY;
-	\item triển khai các luồng SDR private write, SDR private read, Immediate Data Transfer, một số CCC được lựa chọn, ENTDAA và giao dịch với \Target{} \iic{} Fast Mode;
+	\item triển khai các luồng SDR \PrivateWrite{}, SDR \PrivateRead{}, \ImmediateDataTransfer{}, một số CCC được lựa chọn, ENTDAA và giao dịch với \Target{} \iic{} Fast Mode;
 	\item xây dựng cấu trúc \CommandFifo{}, \ResponseFifo{}, \TxRxFifo{} và DAT nhằm tách giao tiếp với phần mềm khỏi phần quá trình xử lý trên bus;
 	\item xây dựng môi trường UVM gồm \RegisterAgent{}, \TargetAgent{}, \VirtualSequencer{}, \Scoreboard{},
 	      \FunctionalCoverage{} và SVA;
 	\item đánh giá thiết kế bằng regression test, coverage và các kết quả triển khai có khả năng tái lập.
 \end{itemize}
 
-Phạm vi của đề tài là một I3C \ActiveController{} hỗ trợ SDR private transfer, các CCC được chọn, ENTDAA và hỗ trợ
+Phạm vi của đề tài là một I3C \ActiveController{} hỗ trợ SDR \PrivateTransfer{}, các CCC được chọn, ENTDAA và hỗ trợ
 tương thích \iic{} Fast Mode. HDR, \InBandInterrupt{}, \HotJoin{}, \SecondaryController{}, \Target{} mode và FPGA validation không nằm trong phạm vi triển khai. Các yêu cầu chi tiết, tiêu chí đánh giá, và tiêu chí kiểm chứng được trình bày tại
 \cref{sec:req}; các giới hạn của thiết kế và kết quả đánh giá được tổng kết tại \cref{ch:conclusion}.
 

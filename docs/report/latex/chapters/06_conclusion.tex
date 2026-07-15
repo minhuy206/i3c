@@ -1,112 +1,55 @@
 \chapter{Kết luận và Hướng phát triển}
 \label{ch:conclusion}
 
-\section{Tổng kết kết quả đạt được}
-\label{sec:concl-summary}
+\section{Đánh giá kết quả}
 
-Khóa luận đặt mục tiêu thiết kế và kiểm chứng một I3C Active Controller theo MIPI I3C Basic
-v1.1.1 ở mức RTL có thể tổng hợp, với phạm vi được xác định tường minh tại \cref{sec:req}. Đối
-chiếu với các mục tiêu ở \cref{sec:intro-objective}, các kết quả chính như sau.
+Khóa luận đã hoàn thành việc thiết kế và kiểm chứng một I3C \ActiveController{} ở mức RTL
+theo phạm vi yêu cầu tại \cref{sec:req}. Thiết kế tiếp nhận lệnh từ \Host{}, thực hiện giao
+dịch trên bus và trả kết quả qua \ResponseDescriptor{}.
 
-Về thiết kế, khóa luận xây dựng một IP hoàn chỉnh gồm 18 module RTL với 5.121 dòng mã, tổ chức
-theo ba lớp: giao diện thanh ghi 32-bit với CSR, DAT và bốn queue; khối Active Controller với FSM
-trung tâm \texttt{flow\_active} 13 trạng thái điều phối các engine tuần tự hóa, tạo SCL và vòng
-ENTDAA; và lớp PHY với đồng bộ hai flip-flop cùng chuyển pha Open Drain/Push-Pull. Thiết kế thực
-hiện trọn luồng xử lý từ Command Descriptor phần mềm ghi vào đến giao dịch trên SDA/SCL và
-Response Descriptor trả về, bao phủ SDR private write/read, Immediate Data Transfer, các CCC
-ENEC/DISEC, ENTDAA và giao dịch I\textsuperscript{2}C Fast Mode. So với thiết kế tham chiếu CHIPS
-Alliance \texttt{i3c-core}, phần RTL bằng khoảng 13,4\% quy mô theo cùng quy tắc đếm
-(\cref{sec:res-size}).
+\subsection{Kết quả đạt được}
 
-Về kiểm chứng, khóa luận xây dựng một môi trường UVM~1.2 với 29.017 dòng mã, gồm Register Agent,
-I3C Target Agent khả lập trình, Virtual Sequencer, Scoreboard với \ReferenceModel{} độc lập, 145
-instance checker SVA và mô hình Functional Coverage ba lớp. Thư
-viện 80 Virtual Sequence phủ mười nhóm kịch bản từ truy cập CSR đến các chuỗi lỗi--phục hồi.
-
-Về kết quả, toàn bộ 80 test PASS với seed cố định; 411 assertion không ghi nhận lần fail nào; mô
-hình coverage đạt 80,8\% tổng thể với 19 trên 42 covergroup đạt 100\%, và phần chưa đóng được định
-danh, phân loại nguyên nhân tại \cref{sec:res-coverage} thay vì chỉ báo cáo một con số tổng. Mười
-yêu cầu chức năng F1--F10 và năm chỉ tiêu P1--P5 đều có bằng chứng kiểm chứng đối chiếu được tại
-\cref{sec:res-eval}.
-
-\section{Kiến thức và kỹ năng thu được}
-\label{sec:concl-skills}
-
-Quá trình thực hiện khóa luận đem lại các nhóm kiến thức và kỹ năng chính sau. Thứ nhất là kỹ năng
-đọc và áp dụng đặc tả công nghiệp: chuyển các điều khoản của MIPI I3C Basic v1.1.1 --- điều kiện
-bus, pha Open Drain/Push-Pull, T-Bit, vòng ENTDAA --- thành yêu cầu thiết kế kiểm chứng được, và
-phân biệt phần thuộc giao thức với phần thuộc quy ước giao diện host. Thứ hai là kỹ năng thiết kế
-RTL cho đường điều khiển nhiều FSM phối hợp: phân rã chức năng thành các FSM có ranh giới rõ,
-thiết kế handshake giữa chúng, và xử lý các trường hợp biên như abort, backpressure và reset giữa
-giao dịch. Thứ ba là phương pháp luận kiểm chứng: xây dựng môi trường UVM nhiều agent, viết
-\ReferenceModel{} cho Scoreboard, thiết kế assertion kèm cover property đối ứng, và quan trọng nhất
-là tư duy coverage-driven --- đo mức độ đầy đủ của bằng chứng thay vì dừng ở việc test chạy qua.
-Cuối cùng là kỹ năng làm việc với hạ tầng công cụ: quy trình build/regression bằng Makefile trên
-Xcelium, trích xuất coverage database qua UCIS, debug bằng SimVision, và khai thác một mã nguồn
-tham chiếu lớn một cách có phê phán để rút ra quyết định thiết kế cho phạm vi hẹp hơn.
-
-\section{Hạn chế}
-\label{sec:concl-limits}
-
-Các hạn chế của khóa luận được tổng hợp tại đây thành một danh sách duy nhất, gồm cả hạn chế của
-thiết kế lẫn hạn chế của bộ bằng chứng đánh giá:
+Các kết quả chính của khóa luận gồm:
 
 \begin{itemize}
-  \item \textbf{Phạm vi giao thức:} các tính năng ngoài phạm vi tại \cref{tab:req-oos} không được
-  hiện thực; IP chỉ đảm nhận vai trò Active Controller duy nhất trên bus.
-  \item \textbf{Coverage chưa closure:} mô hình coverage dừng ở 80,8\%; phần thiếu tập trung vào
-  các cross bậc ba của lớp correlated (chuỗi lệnh nối tiếp qua điểm biên, lỗi chồng lỗi khi phục
-  hồi), đòi hỏi thêm kịch bản có chủ đích và một vòng rà soát loại trừ có căn cứ.
-  \item \textbf{Bảy assertion chưa được kích hoạt:} các thuộc tính về chuỗi continuation
-  \texttt{toc=0}, backpressure trên cổng Command Queue và một tình huống chuyển quyền lái pad
-  chưa có stimulus tương ứng, nghĩa là các hành vi này chưa được chứng minh dù checker đã sẵn sàng.
-  \item \textbf{Cấu hình kiểm chứng:} Testbench giảm độ sâu queue xuống 8 để dồn kích thích vào
-  các biên full/empty; cấu hình độ sâu mặc định 64 của RTL chưa được chạy regression riêng. Môi
-  trường dùng một I3C Target Agent, nên tương tác nhiều Target chỉ được kiểm chứng trong khuôn
-  khổ vòng ENTDAA.
-  \item \textbf{Thiếu bằng chứng hậu synthesis:} toàn bộ đánh giá dựa trên simulation RTL; khóa
-  luận không có dữ liệu synthesis, timing closure hay kiểm thử FPGA, nên chỉ tiêu tần số 333~MHz
-  mới được xác nhận ở mức hành vi theo chu kỳ clock.
+    \item Xây dựng kiến trúc RTL phân lớp giữa giao diện thanh ghi, khối xử lý giao thức và PHY.
+    Thiết kế gồm 18 tệp RTL, hỗ trợ I3C \PrivateWriteRead{}, \ImmediateDataTransfer{}, ENEC,
+    DISEC, ENTDAA và giao dịch với \Target{} \iic{} Fast Mode.
+
+    \item Xây dựng môi trường kiểm chứng gồm \ReferenceModel{}, scoreboard, SVA và
+    \FunctionalCoverage{} để kiểm tra thiết kế ở cả mức giao dịch và mức chu kỳ.
+
+    \item Hoàn thành 80 \VirtualSequence{} với seed đã công bố. Toàn bộ phép thử đều đạt,
+    không ghi nhận vi phạm SVA và độ bao phủ chức năng tổng hợp đạt 80,8\%. Các yêu cầu
+    F1--F10 và chỉ tiêu P1--P5 đều có bằng chứng mô phỏng tương ứng tại \cref{sec:res-eval}.
 \end{itemize}
 
-\section{Hướng phát triển}
-\label{sec:concl-future}
+\subsection{Hạn chế}
 
-Các hạn chế trên xác định trực tiếp lộ trình phát triển tiếp theo, tóm tắt trong
-\cref{tab:concl-roadmap} theo thứ tự ưu tiên: trước hết củng cố bộ bằng chứng cho phạm vi hiện
-tại, sau đó mở rộng giao thức theo hướng tăng dần độ phức tạp kiến trúc.
+Bên cạnh các kết quả đạt được, thiết kế vẫn còn những hạn chế sau:
 
-\begin{table}[!htbp]
-  \centering
-  \caption{Lộ trình phát triển đề xuất.}
-  \label{tab:concl-roadmap}
-  \begin{tabular}{C{1.2cm} L{4.6cm} L{7.4cm}}
-    \toprule
-    \textbf{Ưu tiên} & \textbf{Hạng mục} & \textbf{Nội dung chính} \\
-    \midrule
-    1 & Đóng coverage và SVA & Bổ sung kịch bản continuation \texttt{toc=0}, backpressure Command
-        Queue, chuỗi lỗi--phục hồi bậc ba; rà soát loại trừ các tổ hợp không thể xảy ra. \\
-    2 & Mở rộng cấu hình kiểm chứng & Regression với độ sâu queue 64; nhiều I3C Target Agent hoạt
-        động đồng thời ngoài ENTDAA. \\
-    3 & Synthesis và FPGA & Tổng hợp, đánh giá tài nguyên và timing tại 333~MHz; kiểm thử trên
-        board với Target I3C thật. \\
-    4 & In-Band Interrupt & Tiếp nhận và điều phối IBI --- phần mở rộng giao thức tự nhiên đầu
-        tiên vì tái sử dụng đường Open Drain và bus monitor hiện có. \\
-    5 & Hot-Join & Xử lý Target tham gia bus khi hệ thống đang hoạt động, xây trên nền IBI. \\
-    6 & HDR và Target mode & HDR-DDR cho băng thông cao hơn; vai trò Target hoặc Secondary
-        Controller --- các thay đổi kiến trúc lớn nhất, đặt sau cùng. \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+\begin{itemize}
+    \item Phạm vi giao thức chưa bao gồm IBI, Hot-Join, HDR và các vai trò
+    \Target{}/Secondary Controller; mô hình hiện tại chủ yếu kiểm tra một \ActiveController{}
+    với một \Target{}.
 
-Điểm đáng lưu ý của lộ trình là ba hạng mục đầu không đòi hỏi thay đổi RTL đáng kể: chúng nâng cấp
-độ tin cậy của bằng chứng cho thiết kế hiện có. Kiến trúc phân lớp ở \cref{ch:architecture} được
-tổ chức để các mở rộng giao thức phía sau khớp vào ranh giới sẵn có --- IBI và Hot-Join tập trung
-vào bus monitor và lớp điều phối, HDR bổ sung engine truyền song song với đường SDR --- thay vì
-phải tái cấu trúc FSM trung tâm.
+    \item Độ bao phủ chức năng chưa đóng hoàn toàn; 7 assertion và 13 cover property chưa được
+    kích hoạt. Không gian kiểm chứng còn giới hạn ở độ sâu hàng đợi 8 và một seed hồi quy cố định.
 
-Tổng kết lại, khóa luận đã hoàn thành mục tiêu đề ra: một I3C Active Controller phạm vi xác định,
-được hiện thực gọn, kèm một môi trường kiểm chứng UVM đầy đủ ba cơ chế kiểm tra và một bộ bằng
-chứng định lượng, tái lập được. Giá trị của kết quả không chỉ nằm ở IP cụ thể mà còn ở khung làm
-việc --- yêu cầu định danh được, kiểm chứng ánh xạ theo yêu cầu, và số liệu đo theo quy tắc công
-khai --- có thể tiếp tục mang theo khi mở rộng thiết kế theo lộ trình trên.
+    \item Thiết kế chưa được tổng hợp, phân tích timing hoặc triển khai trên FPGA nên chưa có
+    số liệu về tài nguyên, tần số hoạt động và khả năng vận hành trên phần cứng thực.
+\end{itemize}
+
+\section{Định hướng phát triển}
+
+Từ các hạn chế trên, thiết kế có thể được phát triển theo các hướng sau:
+
+\begin{itemize}
+    \item Bổ sung test, seed hồi quy và cấu hình mô phỏng để đóng các điểm bao phủ và SVA còn thiếu.
+
+    \item Mở rộng độ sâu hàng đợi, số lượng \Target{}; thực hiện tổng hợp, phân tích timing và
+    kiểm chứng trên FPGA.
+
+    \item Bổ sung IBI và Hot-Join, sau đó mở rộng sang HDR và các vai trò
+    \Target{}/Secondary Controller.
+\end{itemize}

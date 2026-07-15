@@ -23,9 +23,13 @@
 \newcommand{\DirectCCC}{Direct CCC}
 \newcommand{\SingleDataRateMode}{Single Data Rate Mode}
 \newcommand{\HighDataRateMode}{High Data Rate Mode}
-\newcommand{\OpenDrain}{Open Drain}
+\newcommand{\OpenDrain}{Open-Drain}
 \newcommand{\PushPull}{Push-Pull}
 \newcommand{\RepeatedSTART}{Repeated START}
+\newcommand{\PrivateWrite}{Private Write}
+\newcommand{\PrivateRead}{Private Read}
+\newcommand{\PrivateWriteRead}{Private Write/Read}
+\newcommand{\PrivateTransfer}{Private Transfer}
 \newcommand{\BusFreeCondition}{Bus Free Condition}
 \newcommand{\BusAvailableCondition}{Bus Available Condition}
 \newcommand{\BusIdleCondition}{Bus Idle Condition}
@@ -38,6 +42,10 @@
 
 % HCI terminology.
 \newcommand{\CommandDescriptor}{Command Descriptor}
+\newcommand{\RegularTransfer}{Regular Transfer}
+\newcommand{\ImmediateDataTransfer}{Immediate Data Transfer}
+\newcommand{\AddressAssignment}{Address Assignment}
+\newcommand{\ComboTransfer}{Combo Transfer}
 \newcommand{\ResponseDescriptor}{Response Descriptor}
 \newcommand{\CommandResponseDescriptor}{Command/Response Descriptor}
 \newcommand{\CommandFifo}{Command FIFO}
@@ -92,7 +100,7 @@
 
 % Architecture facts derived from the current RTL.
 \newcommand{\FlowStateCount}{15}
-\newcommand{\SclStateCount}{14}
+\newcommand{\SclStateCount}{13}
 \newcommand{\EntdaaControllerStateCount}{7}
 \newcommand{\EntdaaFsmStateCount}{8}
 \newcommand{\BusTxStateCount}{5}
@@ -117,15 +125,15 @@
 \newcommand{\RunnableVseqCount}{80}
 \newcommand{\VseqCategoryCount}{10}
 \newcommand{\BusVseqCount}{11}
-\newcommand{\CccVseqCount}{5}
+\newcommand{\CccVseqCount}{4}
 \newcommand{\CsrVseqCount}{14}
-\newcommand{\DaaVseqCount}{6}
+\newcommand{\DaaVseqCount}{9}
 \newcommand{\FifoVseqCount}{5}
-\newcommand{\ImmediateVseqCount}{4}
-\newcommand{\ResponseVseqCount}{21}
-\newcommand{\SdrReadVseqCount}{6}
-\newcommand{\SdrWriteVseqCount}{5}
-\newcommand{\IicVseqCount}{3}
+\newcommand{\ImmediateVseqCount}{5}
+\newcommand{\ResponseVseqCount}{14}
+\newcommand{\SdrReadVseqCount}{8}
+\newcommand{\SdrWriteVseqCount}{6}
+\newcommand{\IicVseqCount}{4}
 \newcommand{\VseqBaseClassCount}{4}
 \newcommand{\VseqHelperCount}{1}
 \newcommand{\TestbenchQueueDepth}{8}

@@ -7,75 +7,77 @@ Phụ lục này liệt kê đầy đủ các trạng thái của mọi máy tr�
 \section*{\SclGenerator{} — \SclStateCount{} trạng thái}
 
 \begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
-  \toprule
-  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
-  \midrule\endhead
-  0  & \texttt{Idle}             & Chờ yêu cầu phát START/xung nhịp. \\
-  1  & \texttt{GenerateStart}    & Bắt đầu tạo điều kiện START. \\
-  2  & \texttt{SdaFall}          & Kéo SDA xuống khi SCL cao. \\
-  3  & \texttt{HoldStart}        & Giữ điều kiện START. \\
-  4  & \texttt{DriveLow}         & Kéo SCL xuống (nửa chu kỳ thấp). \\
-  5  & \texttt{DriveHigh}        & Thả SCL lên (nửa chu kỳ cao). \\
-  6  & \texttt{WaitCmd}          & Chờ lệnh/dữ liệu tiếp theo giữa chừng. \\
-  7  & \texttt{GenerateRstart}   & Bắt đầu tạo \RepeatedSTART{}. \\
-  8  & \texttt{SclHighForRstart} & Đưa SCL lên để chuẩn bị Sr. \\
-  9  & \texttt{RstartSdaFall}    & Kéo SDA xuống cho Sr (đường tắt takeover). \\
-  10 & \texttt{GenerateStop}     & Bắt đầu tạo điều kiện STOP. \\
-  11 & \texttt{SclHighForStop}   & Đưa SCL lên để chuẩn bị STOP. \\
-  12 & \texttt{SdaRise}          & Thả SDA lên khi SCL cao (STOP). \\
-  13 & \texttt{BusFree}          & Đợi \BusFreeCondition{} sau STOP. \\
-  \bottomrule
+	\toprule
+	\textbf{\#} & \textbf{Trạng thái}       & \textbf{Vai trò}                                \\
+	\midrule\endhead
+	0           & \texttt{Idle}             & Chờ yêu cầu phát START/xung nhịp.               \\
+	1           & \texttt{GenerateStart}    & Bắt đầu tạo điều kiện START.                    \\
+	2           & \texttt{SdaFall}          & Kéo SDA xuống khi SCL cao để tạo START hoặc Sr. \\
+	3           & \texttt{HoldStart}        & Giữ điều kiện START.                            \\
+	4           & \texttt{DriveLow}         & Kéo SCL xuống (nửa chu kỳ thấp).                \\
+	5           & \texttt{DriveHigh}        & Thả SCL lên (nửa chu kỳ cao).                   \\
+	6           & \texttt{WaitCmd}          & Chờ lệnh/dữ liệu tiếp theo giữa chừng.          \\
+	7           & \texttt{GenerateRstart}   & Bắt đầu tạo \RepeatedSTART{}.                   \\
+	8           & \texttt{SclHighForRstart} & Đưa SCL lên để chuẩn bị Sr.                     \\
+	9           & \texttt{GenerateStop}     & Bắt đầu tạo điều kiện STOP.                     \\
+	10          & \texttt{SclHighForStop}   & Đưa SCL lên để chuẩn bị STOP.                   \\
+	11          & \texttt{SdaRise}          & Thả SDA lên khi SCL cao (STOP).                 \\
+	12          & \texttt{BusFree}          & Đợi \BusFreeCondition{} sau STOP.               \\
+	\bottomrule
 \end{longtable}
 
 \begin{figure}[!htbp]
-  \centering
-  \begin{adjustbox}{max width=\textwidth}
-    \input{figures/scl_generator_fsm.tex}
-  \end{adjustbox}
-  \caption{Sơ đồ chuyển trạng thái của \SclGenerator{}, nhóm theo bốn chức năng.}
-  \label{fig:scl-gen-fsm}
+	\centering
+	\includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/scl_generator_fsm.pdf}
+	\caption{Sơ đồ chuyển trạng thái của \SclGenerator{}.}
+	\label{fig:scl-gen-fsm}
 \end{figure}
 
 \section*{\EntdaaController{} — \EntdaaControllerStateCount{} trạng thái}
 
 \begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
-  \toprule
-  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
-  \midrule\endhead
-  0 & \texttt{Idle}          & Chờ khởi động ENTDAA. \\
-  1 & \texttt{StartLoop}     & Bắt đầu một vòng gán địa chỉ. \\
-  2 & \texttt{RequestRStart} & Yêu cầu \RepeatedSTART{}. \\
-  3 & \texttt{WaitRStart}    & Chờ Sr hoàn tất. \\
-  4 & \texttt{ReadDAT}       & Đọc mục DAT lấy \DynamicAddress{} dự kiến. \\
-  5 & \texttt{RunEntdaa}     & Chạy một vòng gán qua \EntdaaFsm{}. \\
-  6 & \texttt{Done}          & Kết thúc khi không còn \Target{} đáp ứng. \\
-  \bottomrule
+	\toprule
+	\textbf{\#} & \textbf{Trạng thái}    & \textbf{Vai trò}                           \\
+	\midrule\endhead
+	0           & \texttt{Idle}          & Chờ khởi động ENTDAA.                      \\
+	1           & \texttt{StartLoop}     & Bắt đầu một vòng gán địa chỉ.              \\
+	2           & \texttt{RequestRStart} & Yêu cầu \RepeatedSTART{}.                  \\
+	3           & \texttt{WaitRStart}    & Chờ Sr hoàn tất.                           \\
+	4           & \texttt{ReadDAT}       & Đọc mục DAT lấy \DynamicAddress{} dự kiến. \\
+	5           & \texttt{RunEntdaa}     & Chạy một vòng gán qua \EntdaaFsm{}.        \\
+	6           & \texttt{Done}          & Kết thúc khi không còn \Target{} đáp ứng.  \\
+	\bottomrule
 \end{longtable}
+
+\begin{figure}[!htbp]
+	\centering
+	\includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/entdaa_controller_fsm.pdf}
+	\caption{Sơ đồ chuyển trạng thái của \EntdaaController{}.}
+	\label{fig:entdaa-controller-fsm}
+\end{figure}
 
 \section*{\EntdaaFsm{} — \EntdaaFsmStateCount{} trạng thái}
 
 \begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
-  \toprule
-  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
-  \midrule\endhead
-  0 & \texttt{Idle}         & Chờ bắt đầu trình tự một \Target{}. \\
-  1 & \texttt{SendRsvdByte} & Phát byte broadcast dành riêng. \\
-  2 & \texttt{ReadRsvdAck}  & Đọc ACK của byte dành riêng. \\
-  3 & \texttt{ReceiveIDBit} & Nhận 64 bit PID/BCR/DCR theo phân xử. \\
-  4 & \texttt{SendAddr}     & Phát \DynamicAddress{} kèm parity. \\
-  5 & \texttt{ReadAddrAck}  & Đọc ACK địa chỉ từ \Target{}. \\
-  6 & \texttt{WaitStop}     & Chờ điều kiện dừng. \\
-  7 & \texttt{Done}         & Hoàn tất một vòng. \\
-  \bottomrule
+	\toprule
+	\textbf{\#} & \textbf{Trạng thái}       & \textbf{Vai trò}                                    \\
+	\midrule\endhead
+	0           & \texttt{Idle}             & Chờ bắt đầu trình tự một \Target{}.                 \\
+	1           & \texttt{SendDAAHeader}    & Phát byte broadcast dành riêng.                     \\
+	2           & \texttt{ReceiveHeaderACK} & Đọc ACK của byte dành riêng.                        \\
+	3           & \texttt{ReceiveID}        & Nhận 64 bit PID/BCR/DCR theo phân xử (arbitration). \\
+	4           & \texttt{SendDynamicAddr}  & Phát \DynamicAddress{} kèm parity.                  \\
+	5           & \texttt{ReceiveAddrACK}   & Đọc ACK địa chỉ từ \Target{}.                       \\
+	6           & \texttt{WaitStop}         & Chờ điều kiện dừng.                                 \\
+	7           & \texttt{Done}             & Hoàn tất một vòng.                                  \\
+	\bottomrule
 \end{longtable}
 
 \begin{figure}[!htbp]
-  \centering
-  \begin{adjustbox}{max width=\textwidth}
-    \input{figures/entdaa_fsm.tex}
-  \end{adjustbox}
-  \caption{Sơ đồ chuyển trạng thái của \EntdaaFsm{} cho một vòng cấp địa chỉ.}
-  \label{fig:entdaa-fsm}
+	\centering
+	\includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/entdaa_fsm.pdf}
+	\caption{Sơ đồ chuyển trạng thái của \EntdaaFsm{}.}
+	\label{fig:entdaa-fsm}
 \end{figure}
 
 \section*{Các máy trạng thái tuần tự hóa}
@@ -83,41 +85,41 @@ Phụ lục này liệt kê đầy đủ các trạng thái của mọi máy tr�
 \subsection*{\BusTx{} — \BusTxStateCount{} trạng thái}
 
 \begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
-  \toprule
-  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
-  \midrule\endhead
-  0 & \texttt{Idle}              & Chờ yêu cầu phát một bit hoặc một byte. \\
-  1 & \texttt{AwaitClockNegedge} & Chờ cạnh xuống SCL để canh thời điểm đặt dữ liệu. \\
-  2 & \texttt{SetupData}         & Giữ khoảng setup dữ liệu trước khi phát bit. \\
-  3 & \texttt{TransmitData}      & Lái bit dữ liệu ra SDA trong nửa chu kỳ SCL. \\
-  4 & \texttt{HoldData}          & Giữ khoảng hold sau bit trước khi trở về \texttt{Idle}. \\
-  \bottomrule
+	\toprule
+	\textbf{\#} & \textbf{Trạng thái}        & \textbf{Vai trò}                                        \\
+	\midrule\endhead
+	0           & \texttt{Idle}              & Chờ yêu cầu phát một bit hoặc một byte.                 \\
+	1           & \texttt{AwaitClockNegedge} & Chờ cạnh xuống SCL để canh thời điểm đặt dữ liệu.       \\
+	2           & \texttt{SetupData}         & Giữ khoảng setup dữ liệu trước khi phát bit.            \\
+	3           & \texttt{TransmitData}      & Lái bit dữ liệu ra SDA trong nửa chu kỳ SCL.            \\
+	4           & \texttt{HoldData}          & Giữ khoảng hold sau bit trước khi trở về \texttt{Idle}. \\
+	\bottomrule
 \end{longtable}
 
 \subsection*{\BusTxFlow{} — \BusTxFlowStateCount{} trạng thái}
 
 \begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
-  \toprule
-  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
-  \midrule\endhead
-  0 & \texttt{Idle}             & Chờ yêu cầu phát byte hoặc bit. \\
-  1 & \texttt{DriveByte}        & Điều phối phát lần lượt 8 bit của một byte qua \BusTx{}. \\
-  2 & \texttt{DriveBit}         & Điều phối phát một bit đơn (ACK hoặc \TBit{}) qua \BusTx{}. \\
-  3 & \texttt{NextTaskDecision} & Quyết định phát byte/bit kế tiếp hay trở về \texttt{Idle}. \\
-  \bottomrule
+	\toprule
+	\textbf{\#} & \textbf{Trạng thái}       & \textbf{Vai trò}                                            \\
+	\midrule\endhead
+	0           & \texttt{Idle}             & Chờ yêu cầu phát byte hoặc bit.                             \\
+	1           & \texttt{DriveByte}        & Điều phối phát lần lượt 8 bit của một byte qua \BusTx{}.    \\
+	2           & \texttt{DriveBit}         & Điều phối phát một bit đơn (ACK hoặc \TBit{}) qua \BusTx{}. \\
+	3           & \texttt{NextTaskDecision} & Quyết định phát byte/bit kế tiếp hay trở về \texttt{Idle}.  \\
+	\bottomrule
 \end{longtable}
 
 \subsection*{\BusRxFlow{} — \BusRxFlowStateCount{} trạng thái}
 
 \begin{longtable}{C{1.2cm} L{4.2cm} L{7.2cm}}
-  \toprule
-  \textbf{\#} & \textbf{Trạng thái} & \textbf{Vai trò} \\
-  \midrule\endhead
-  0 & \texttt{Idle}             & Chờ yêu cầu nhận byte hoặc bit. \\
-  1 & \texttt{ReadByte}         & Điều phối nhận lần lượt 8 bit của một byte. \\
-  2 & \texttt{ReadBit}          & Điều phối nhận một bit đơn (ACK hoặc \TBit{}). \\
-  3 & \texttt{NextTaskDecision} & Quyết định nhận byte/bit kế tiếp hay trở về \texttt{Idle}. \\
-  \bottomrule
+	\toprule
+	\textbf{\#} & \textbf{Trạng thái}       & \textbf{Vai trò}                                           \\
+	\midrule\endhead
+	0           & \texttt{Idle}             & Chờ yêu cầu nhận byte hoặc bit.                            \\
+	1           & \texttt{ReadByte}         & Điều phối nhận lần lượt 8 bit của một byte.                \\
+	2           & \texttt{ReadBit}          & Điều phối nhận một bit đơn (ACK hoặc \TBit{}).             \\
+	3           & \texttt{NextTaskDecision} & Quyết định nhận byte/bit kế tiếp hay trở về \texttt{Idle}. \\
+	\bottomrule
 \end{longtable}
 
 \noindent Bảng \FlowStateCount{} trạng thái của \FlowActive{} đã trình bày ở \cref{tab:flow-states}.

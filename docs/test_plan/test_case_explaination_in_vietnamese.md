@@ -450,7 +450,7 @@ Testbench sẽ đưa controller vào flow ENTDAA hoặc directed CCC, sau đó y
 
 Kết quả mong đợi là repeated START được tạo hợp lệ, timing đúng, và controller không bị kẹt ở trạng thái chờ.
 
-Implementation note: BUS_009 dùng vseq `bus_scl_repeated_start_from_waitcmd_vseq` để tạo stimulus đưa `scl_generator` vào `WaitCmd` rồi request `gen_rstart_i`. Checker chính là `scl_generator_sva`, với các assertion/cover như `ap_bus009_waitcmd_rstart_enters_generate_rstart`, `ap_bus009_generate_rstart_holds_scl_low`, `ap_bus009_rstart_sda_fall_drives_sr`, `cp_bus009_waitcmd_to_rstart`, và `cp_rstart_state_sequence`.
+Implementation note: BUS_009 dùng vseq `bus_scl_repeated_start_from_waitcmd_vseq` để tạo stimulus đưa `scl_generator` vào `WaitCmd` rồi request `gen_rstart_i`. Checker chính là `scl_generator_sva`, với các assertion/cover như `ap_bus009_waitcmd_rstart_enters_generate_rstart`, `ap_bus009_generate_rstart_holds_scl_low`, `ap_bus009_scl_high_for_rstart_expires_to_sda_fall`, `cp_bus009_waitcmd_to_rstart`, và `cp_rstart_state_sequence`.
 
 ### BUS_010 - `bus_tx_byte_and_bit_order`
 

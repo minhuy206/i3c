@@ -151,7 +151,8 @@
 
 % ----- Trang bìa -----
 \usepackage{tikz}
-\usetikzlibrary{calc,automata,positioning,arrows.meta,shapes.geometric,chains,fit,backgrounds}
+\usetikzlibrary{calc,automata,positioning,arrows.meta,shapes.geometric,chains,fit,backgrounds,patterns}
+\usepackage{tikz-timing}   % biểu đồ định thời (waveform) cho handshake CSR--Queue
 \newcommand\HRule{\rule{\textwidth}{1pt}}
 
 % ----- Danh mục chữ viết tắt -----
@@ -207,6 +208,7 @@
 
 \glsaddall
 \printglossary[type=\acronymtype,
+	style=acrotwocol,
 	title=DANH MỤC TỪ VIẾT TẮT,
 	toctitle=DANH MỤC TỪ VIẾT TẮT,
 	nonumberlist]

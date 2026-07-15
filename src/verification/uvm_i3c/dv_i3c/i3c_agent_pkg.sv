@@ -40,7 +40,7 @@ package i3c_agent_pkg;
     DrvEntdaa,
     DrvStop,
     DrvBcastDispatch,
-    DrvCccPayload
+    DrvCccData
   } i3c_drv_phase_e;
 
   typedef enum int {

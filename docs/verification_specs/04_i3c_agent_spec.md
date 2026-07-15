@@ -229,7 +229,7 @@ local driver-state/protocol-context enums and source include set documented belo
 | `if_mode_e` | `Host`, `Device` | Agent mode (Device only is exercised) |
 | `bus_op_e` | `BusOpWrite`, `BusOpRead` | Transfer direction |
 | `sampled_ack_nack_e` | `SampledAck`, `SampledNack` | Raw ACK/NACK bit stored in `i3c_seq_item.data_nack_q` for legacy I2C reads |
-| `i3c_drv_phase_e` | `DrvIdle`, `DrvAddrArbit`, `DrvAddrPushPull`, `DrvAck`, `DrvSelectNext`, `DrvWr`, `DrvWrPushPull`, `DrvRd`, `DrvRdPushPull`, `DrvEntdaa`, `DrvStop`, `DrvBcastDispatch`, `DrvCccPayload` | Driver FSM states (§8.4) |
+| `i3c_drv_phase_e` | `DrvIdle`, `DrvAddrArbit`, `DrvAddrPushPull`, `DrvAck`, `DrvSelectNext`, `DrvWr`, `DrvWrPushPull`, `DrvRd`, `DrvRdPushPull`, `DrvEntdaa`, `DrvStop`, `DrvBcastDispatch`, `DrvCccData` | Driver FSM states (§8.4) |
 | `i3c_proto_ctx_e` | `ProtoCtxNone`, `ProtoCtxEntdaa`, `ProtoCtxDirectCcc`, `ProtoCtxBroadcastCcc` | Which CCC/ENTDAA protocol context the driver is servicing after a broadcast header (§8.4) |
 | `i3c_ccc_e` | `ENEC`, `DISEC`, `ENTDAA`, `DIR_ENEC`, `DIR_DISEC`, ... | CCC command codes (imported from `i3c_pkg`) |
 
@@ -365,7 +365,7 @@ Drives the I3C bus interface based on sequence items. In Phase 1, operates exclu
 
 ### 8.2. Adapted from Reference
 
-Heavily diverged from `i3c-core/verification/uvm_i3c/dv_i3c/i3c_driver.sv`: Host-mode support was removed entirely (`build_phase()` now `` `DV_CHECK_FATAL``s unless `cfg.if_mode == Device`), and broadcast-header/CCC/ENTDAA dispatch (`i3c_proto_ctx_e`, `DrvBcastDispatch`, `DrvCccPayload`, `DrvEntdaa`) was added — none of this exists in the reference driver.
+Heavily diverged from `i3c-core/verification/uvm_i3c/dv_i3c/i3c_driver.sv`: Host-mode support was removed entirely (`build_phase()` now `` `DV_CHECK_FATAL``s unless `cfg.if_mode == Device`), and broadcast-header/CCC/ENTDAA dispatch (`i3c_proto_ctx_e`, `DrvBcastDispatch`, `DrvCccData`, `DrvEntdaa`) was added — none of this exists in the reference driver.
 
 ### 8.3. Key Architecture
 
@@ -391,14 +391,14 @@ stateDiagram-v2
     DrvSelectNext --> DrvWrPushPull: ACKed private address, I3C write
     DrvSelectNext --> DrvRd: ACKed private address, I2C read
     DrvSelectNext --> DrvRdPushPull: ACKed private address, I3C read
-    DrvBcastDispatch --> DrvCccPayload: ENEC/DISEC opcode decoded
+    DrvBcastDispatch --> DrvCccData: ENEC/DISEC opcode decoded
     DrvBcastDispatch --> DrvAddrPushPull: ENTDAA/DIR_ENEC/DIR_DISEC decoded, Sr observed
     DrvBcastDispatch --> DrvIdle: opcode unsupported, or terminated without Sr
     DrvAddrPushPull --> DrvEntdaa: proto_ctx == ProtoCtxEntdaa
-    DrvAddrPushPull --> DrvCccPayload: proto_ctx == ProtoCtxDirectCcc
+    DrvAddrPushPull --> DrvCccData: proto_ctx == ProtoCtxDirectCcc
     DrvAddrPushPull --> DrvAck: proto_ctx == ProtoCtxNone (plain Sr into a private transfer)
     DrvEntdaa --> DrvIdle: do_entdaa_round() returns (one round per call)
-    DrvCccPayload --> DrvIdle: do_ccc_payload() returns (one payload byte per call)
+    DrvCccData --> DrvIdle: do_ccc_payload() returns (one payload byte per call)
     DrvWr --> DrvStop: data complete or NACK
     DrvWrPushPull --> DrvStop: data complete (externally terminated, §8.6)
     DrvRd --> DrvStop: data complete or NACK
@@ -416,10 +416,10 @@ stateDiagram-v2
 | `DrvAddrArbit` (`do_addr_arbit()`) | Sample 7-bit address + R/W (`sample_addr()`); sets `rsp.start_with_broadcast_header` when the sequence requested one and the sampled address is `I3C_RSVD_ADDR` |
 | `DrvAck` (`do_send_addr_ack()`) | Compute ACK via `get_addr_ack()` (§8.4); drive it with `device_i3c_send_addr_ack_no_handoff()`/`_handoff()` (I3C) or the inverted bit via `device_i2c_send_bit()` (I2C) |
 | `DrvSelectNext` (`next_state_after_ack()`) | Pure dispatch function — no bus activity (§8.4 diagram) |
-| `DrvBcastDispatch` (`handle_broadcast_dispatch()`) | Sample the CCC opcode byte (`sample_ccc_byte_or_term()`). `ENEC`/`DISEC` → `proto_ctx=ProtoCtxBroadcastCcc`, → `DrvCccPayload`. `ENTDAA` → `proto_ctx=ProtoCtxEntdaa`, wait for the frame terminator; Sr → `DrvAddrPushPull` (next sub-frame is the `0x7E+R` arbitration byte), else the round ends. `DIR_ENEC`/`DIR_DISEC` → `proto_ctx=ProtoCtxDirectCcc`, same Sr-then-`DrvAddrPushPull` pattern (warns if no Sr follows). Any other/undecoded opcode → wait for terminator, transaction ends |
+| `DrvBcastDispatch` (`handle_broadcast_dispatch()`) | Sample the CCC opcode byte (`sample_ccc_byte_or_term()`). `ENEC`/`DISEC` → `proto_ctx=ProtoCtxBroadcastCcc`, → `DrvCccData`. `ENTDAA` → `proto_ctx=ProtoCtxEntdaa`, wait for the frame terminator; Sr → `DrvAddrPushPull` (next sub-frame is the `0x7E+R` arbitration byte), else the round ends. `DIR_ENEC`/`DIR_DISEC` → `proto_ctx=ProtoCtxDirectCcc`, same Sr-then-`DrvAddrPushPull` pattern (warns if no Sr follows). Any other/undecoded opcode → wait for terminator, transaction ends |
 | `DrvAddrPushPull` (`do_addr_push_pull()`) | Sample the post-Sr address; dispatch on `proto_ctx` (§8.4) |
 | `DrvEntdaa` (`do_entdaa_round()`) | ACK the `0x7E+R` arbitration byte iff `req.entdaa_join`; if ACKed, drive the 8-byte PID/BCR/DCR identity (`drive_entdaa_identity()`), sample the controller-assigned address byte, ACK/NACK it per `req.daa_accept_addr` (`device_i3c_send_addr_ack_handoff()`); wait for the frame terminator. Handles exactly one round, then → `DrvIdle` |
-| `DrvCccPayload` (`do_ccc_payload()`) | For a direct CCC (`proto_ctx==ProtoCtxDirectCcc`), first ACK/NACK the target address via `direct_ccc_addr_match()` against `req.ccc_target_addr`/`ccc_target_addr_valid`; then sample one CCC/event-byte payload (`sample_ccc_byte_or_term()`) and wait for the terminator. One byte per call, then → `DrvIdle` |
+| `DrvCccData` (`do_ccc_payload()`) | For a direct CCC (`proto_ctx==ProtoCtxDirectCcc`), first ACK/NACK the target address via `direct_ccc_addr_match()` against `req.ccc_target_addr`/`ccc_target_addr_valid`; then sample one CCC/event-byte payload (`sample_ccc_byte_or_term()`) and wait for the terminator. One byte per call, then → `DrvIdle` |
 | `DrvRd` (`do_i2c_read()`) | For each byte in `req.data`: drive OD, wait for host ACK/NACK, record into `rsp.data_nack_q`; stop early on NACK |
 | `DrvRdPushPull` (`do_i3c_read()`) | For each byte in `req.data`: drive PP + drive `req.t_bit_q[i]` as the T-bit |
 | `DrvWr` (`do_i2c_write()`) | Sample bytes into `rsp.data` until the device NACKs one, per `req.data_nack_q` |
@@ -442,7 +442,7 @@ If STOP wins, `bus_state → DrvIdle`, `proto_ctx` is cleared, and (if a respons
 - The driver does NOT drive SCL — only the DUT drives SCL
 - The driver uses `cfg.tc.i3c_tc` / `cfg.tc.i2c_tc` timing constants for bit-level timing
 - `release_bus()` sets `device_sda_o = 1` and `device_sda_pp_en = 0`
-- `proto_ctx`/`proto_ccc` (`i3c_proto_ctx_e`) are cleared on reset and after each `DrvEntdaa`/`DrvCccPayload` round; they are the only state carried from a broadcast-header dispatch across Sr into the following sub-frame
+- `proto_ctx`/`proto_ccc` (`i3c_proto_ctx_e`) are cleared on reset and after each `DrvEntdaa`/`DrvCccData` round; they are the only state carried from a broadcast-header dispatch across Sr into the following sub-frame
 
 ---
 

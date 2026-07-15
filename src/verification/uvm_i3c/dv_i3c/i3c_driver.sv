@@ -41,7 +41,7 @@ class i3c_driver extends uvm_driver #(
       DrvEntdaa:        return "DrvEntdaa";
       DrvStop:          return "DrvStop";
       DrvBcastDispatch: return "DrvBcastDispatch";
-      DrvCccPayload:    return "DrvCccPayload";
+      DrvCccData:       return "DrvCccData";
       default:          return "Unknown";
     endcase
   endfunction : drv_phase_name
@@ -253,7 +253,7 @@ class i3c_driver extends uvm_driver #(
         return;
       end
     end else if (proto_ctx != ProtoCtxBroadcastCcc) begin
-      `uvm_fatal(`gfn, $sformatf("DrvCccPayload entered with invalid context %0d", proto_ctx))
+      `uvm_fatal(`gfn, $sformatf("DrvCccData entered with invalid context %0d", proto_ctx))
       return;
     end
 
@@ -293,7 +293,7 @@ class i3c_driver extends uvm_driver #(
       ENEC, DISEC: begin
         proto_ctx = ProtoCtxBroadcastCcc;
         proto_ccc = ccc;
-        set_drv_state(DrvCccPayload);
+        set_drv_state(DrvCccData);
       end
 
       ENTDAA: begin
@@ -450,7 +450,7 @@ class i3c_driver extends uvm_driver #(
     sample_addr(rsp, "device addr");
     case (proto_ctx)
       ProtoCtxEntdaa: set_drv_state(DrvEntdaa);
-      ProtoCtxDirectCcc: set_drv_state(DrvCccPayload);
+      ProtoCtxDirectCcc: set_drv_state(DrvCccData);
       default: set_drv_state(DrvAck);
     endcase
   endtask : do_addr_push_pull
@@ -587,7 +587,7 @@ class i3c_driver extends uvm_driver #(
           return;
         end
 
-        DrvCccPayload: begin
+        DrvCccData: begin
           do_ccc_payload(req, rsp);
           clear_proto_ctx();
           set_drv_state(DrvIdle);

@@ -81,8 +81,8 @@ None.
 | -------------------------- | --------- | ----- | ------------------------------------------------------------------|
 | `bus_rx_data_i`            | Input     | 8     | `[0]` = single received bit                                       |
 | `bus_rx_done_i`            | Input     | 1     | RX completed                                                      |
-| `bus_rx_req_bit_o`         | Output    | 1     | Request single-bit reception (used in `ReadRsvdAck`, `ReceiveIDBit`) |
-| `bus_rx_req_bit_handoff_o` | Output    | 1     | Request single-bit reception routed through the handoff RX path; asserted only in `ReadAddrAck` for the address-ACK read |
+| `bus_rx_req_bit_o`         | Output    | 1     | Request single-bit reception (used in `ReceiveHeaderACK`, `ReceiveID`) |
+| `bus_rx_req_bit_handoff_o` | Output    | 1     | Request single-bit reception routed through the handoff RX path; asserted only in `ReceiveAddrACK` for the address-ACK read |
 | `bus_rx_req_byte_o`        | Output    | 1     | Always `0` (unused)                                               |
 
 ### Bus Monitor Interface
@@ -93,9 +93,9 @@ None.
 
 ### Stop / Handoff Handshake
 
-When the round needs to end with a STOP on the bus (`stop_pending_i` asserted by `entdaa_controller`), `ReceiveIDBit` (on its final bit) and `ReadAddrAck` do not transition straight to `Done`. Instead they route through `WaitStop`, which holds `req_stop_o = 1` until the controller/bus layer issues the STOP. `WaitStop` always advances to `Done` next cycle (see §5.1/§5.2); `stopped_o` independently latches whenever `bus_stop_det_i` fires in any active, non-`Idle`/non-`Done` state, including a STOP that is forced externally rather than requested via `req_stop_o`.
+When the round needs to end with a STOP on the bus (`stop_pending_i` asserted by `entdaa_controller`), `ReceiveID` (on its final bit) and `ReceiveAddrACK` do not transition straight to `Done`. Instead they route through `WaitStop`, which holds `req_stop_o = 1` until the controller/bus layer issues the STOP. `WaitStop` always advances to `Done` next cycle (see §5.1/§5.2); `stopped_o` independently latches whenever `bus_stop_det_i` fires in any active, non-`Idle`/non-`Done` state, including a STOP that is forced externally rather than requested via `req_stop_o`.
 
-The address-ACK read in `ReadAddrAck` does not use the plain bit-request port `bus_rx_req_bit_o`; it asserts `bus_rx_req_bit_handoff_o` instead, routing that read through the handoff RX path (used because the address phase follows directly from the TX-driven address byte and needs the handoff sequencing rather than a fresh standalone bit request).
+The address-ACK read in `ReceiveAddrACK` does not use the plain bit-request port `bus_rx_req_bit_o`; it asserts `bus_rx_req_bit_handoff_o` instead, routing that read through the handoff RX path (used because the address phase follows directly from the TX-driven address byte and needs the handoff sequencing rather than a fresh standalone bit request).
 
 ## 5. Functional Description
 
@@ -104,37 +104,37 @@ The address-ACK read in `ReadAddrAck` does not use the plain bit-request port `b
 ```systemverilog
 typedef enum logic [2:0] {
   Idle           = 3'd0,
-  SendRsvdByte   = 3'd1,
-  ReadRsvdAck    = 3'd2,
-  ReceiveIDBit   = 3'd3,
-  SendAddr       = 3'd4,
-  ReadAddrAck    = 3'd5,
+  SendDAAHeader   = 3'd1,
+  ReceiveHeaderACK    = 3'd2,
+  ReceiveID   = 3'd3,
+  SendDynamicAddr       = 3'd4,
+  ReceiveAddrACK    = 3'd5,
   WaitStop       = 3'd6,
   Done           = 3'd7
 } entdaa_state_e;
 ```
 
-There is no separate "no device" state. `no_device_q` is a flag, set while in `ReadRsvdAck` on a NACK (`bus_rx_data_i[0] == 1`), and is emitted on `no_device_o` only when the FSM reaches `Done`. The flag-vs-state distinction matters: a NACK on the reserved byte still routes through `Done`, not through a dedicated terminal state.
+There is no separate "no device" state. `no_device_q` is a flag, set while in `ReceiveHeaderACK` on a NACK (`bus_rx_data_i[0] == 1`), and is emitted on `no_device_o` only when the FSM reaches `Done`. The flag-vs-state distinction matters: a NACK on the reserved byte still routes through `Done`, not through a dedicated terminal state.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
 
-    Idle --> SendRsvdByte: start_i
+    Idle --> SendDAAHeader: start_i
 
-    SendRsvdByte --> ReadRsvdAck: bus_tx_done_i
+    SendDAAHeader --> ReceiveHeaderACK: bus_tx_done_i
 
-    ReadRsvdAck --> ReceiveIDBit: ack==0 (target responded)
-    ReadRsvdAck --> Done: ack==1 (no_device_q set, no target)
+    ReceiveHeaderACK --> ReceiveID: ack==0 (target responded)
+    ReceiveHeaderACK --> Done: ack==1 (no_device_q set, no target)
 
-    ReceiveIDBit --> ReceiveIDBit: bus_rx_done_i && bit_cnt_q > 0
-    ReceiveIDBit --> SendAddr: bus_rx_done_i && bit_cnt_q == 0 && !stop_pending_i
-    ReceiveIDBit --> WaitStop: bus_rx_done_i && bit_cnt_q == 0 && stop_pending_i
+    ReceiveID --> ReceiveID: bus_rx_done_i && bit_cnt_q > 0
+    ReceiveID --> SendDynamicAddr: bus_rx_done_i && bit_cnt_q == 0 && !stop_pending_i
+    ReceiveID --> WaitStop: bus_rx_done_i && bit_cnt_q == 0 && stop_pending_i
 
-    SendAddr --> ReadAddrAck: bus_tx_done_i
+    SendDynamicAddr --> ReceiveAddrACK: bus_tx_done_i
 
-    ReadAddrAck --> Done: bus_rx_done_i && !stop_pending_i (addr_valid_q reflects ack==0 accepted / ack==1 rejected)
-    ReadAddrAck --> WaitStop: bus_rx_done_i && stop_pending_i
+    ReceiveAddrACK --> Done: bus_rx_done_i && !stop_pending_i (addr_valid_q reflects ack==0 accepted / ack==1 rejected)
+    ReceiveAddrACK --> WaitStop: bus_rx_done_i && stop_pending_i
 
     WaitStop --> Done: (next cycle, req_stop_o asserted while waiting)
 
@@ -150,7 +150,7 @@ stateDiagram-v2
 
 Wait for `start_i`. On entry, reset `bit_cnt_q` to 63, clear `id_shift_q`, and clear `addr_valid_q`/`no_device_q`/`stopped_q`.
 
-#### SendRsvdByte (State 1)
+#### SendDAAHeader (State 1)
 
 Transmit the reserved address with read bit:
 
@@ -160,17 +160,17 @@ bus_tx_req_byte_o  = 1'b1;
 bus_tx_sel_od_pp_o = 1'b0;                    // Open-Drain
 ```
 
-Advance to `ReadRsvdAck` when `bus_tx_done_i`.
+Advance to `ReceiveHeaderACK` when `bus_tx_done_i`.
 
-#### ReadRsvdAck (State 2)
+#### ReceiveHeaderACK (State 2)
 
 Request one bit read (`bus_rx_req_bit_o = 1`). When `bus_rx_done_i`:
 
 - `no_device_q <= bus_rx_data_i[0]` is latched unconditionally (captures ACK==0/NACK==1)
-- `bus_rx_data_i[0] == 0` (ACK) → at least one target responded → `ReceiveIDBit`
+- `bus_rx_data_i[0] == 0` (ACK) → at least one target responded → `ReceiveID`
 - `bus_rx_data_i[0] == 1` (NACK) → no target on bus → `Done` directly (the `no_device_q` flag, not a separate state, marks this outcome)
 
-#### ReceiveIDBit (State 3)
+#### ReceiveID (State 3)
 
 Read one bit per invocation (`bus_rx_req_bit_o = 1`). Shift into `id_shift_q`:
 
@@ -181,11 +181,11 @@ if (bit_cnt_q != 0) bit_cnt_d = bit_cnt_q - 1;
 
 When `bit_cnt_q` reaches 0, all 64 bits are captured (decoded later, in `Done`, from `id_shift_q`). Next state on `bus_rx_done_i`:
 
-- `bit_cnt_q == 0 && !stop_pending_i` → `SendAddr`
+- `bit_cnt_q == 0 && !stop_pending_i` → `SendDynamicAddr`
 - `bit_cnt_q == 0 && stop_pending_i` → `WaitStop`
-- `bit_cnt_q > 0` → stay in `ReceiveIDBit`
+- `bit_cnt_q > 0` → stay in `ReceiveID`
 
-#### SendAddr (State 4)
+#### SendDynamicAddr (State 4)
 
 Compute odd parity over 7 address bits and transmit:
 
@@ -196,9 +196,9 @@ bus_tx_req_value_o = {addr_i, parity};
 bus_tx_sel_od_pp_o = 1'b0;
 ```
 
-Advance to `ReadAddrAck` when `bus_tx_done_i`.
+Advance to `ReceiveAddrACK` when `bus_tx_done_i`.
 
-#### ReadAddrAck (State 5)
+#### ReceiveAddrACK (State 5)
 
 Request the address-ACK bit via the handoff RX path (`bus_rx_req_bit_handoff_o = 1`, **not** `bus_rx_req_bit_o`). When `bus_rx_done_i`:
 
@@ -207,7 +207,7 @@ Request the address-ACK bit via the handoff RX path (`bus_rx_req_bit_handoff_o =
 
 #### WaitStop (State 6)
 
-Holds `req_stop_o = 1'b1` to request the STOP be issued. Unconditionally advances to `Done` the next cycle. Reached only from `ReceiveIDBit` or `ReadAddrAck` when `stop_pending_i` was asserted.
+Holds `req_stop_o = 1'b1` to request the STOP be issued. Unconditionally advances to `Done` the next cycle. Reached only from `ReceiveID` or `ReceiveAddrACK` when `stop_pending_i` was asserted.
 
 #### Done (State 7)
 
@@ -223,7 +223,7 @@ bcr_o        = id_shift_q[15:8];
 dcr_o        = id_shift_q[7:0];
 ```
 
-`no_device_o` and `addr_valid_o` are not separate terminal states — they are flags (`no_device_q`, `addr_valid_q`) latched earlier (`ReadRsvdAck`, `ReadAddrAck`) and simply read out while in `Done`. Return to `Idle` next cycle.
+`no_device_o` and `addr_valid_o` are not separate terminal states — they are flags (`no_device_q`, `addr_valid_q`) latched earlier (`ReceiveHeaderACK`, `ReceiveAddrACK`) and simply read out while in `Done`. Return to `Idle` next cycle.
 
 #### Forced-Stop Override (any active state except Idle/Done)
 
@@ -234,7 +234,7 @@ If `bus_stop_det_i` is asserted while `state_q` is not `Idle` and not `Done`, th
 | Aspect              | Requirement                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------- |
 | Per-device round    | 2 bytes TX + 65 RX bits (ACK + 64 ID bits) = ~74 SCL cycles minimum                     |
-| Address parity      | Computed combinationally (`~^addr_i`) in `SendAddr`; no extra cycles                    |
+| Address parity      | Computed combinationally (`~^addr_i`) in `SendDynamicAddr`; no extra cycles                    |
 | No-device detection | NACK detected on the ACK bit after `0x7E+R` = 1 RX bit cycle                            |
 
 ## 7. Changes from Reference Design
@@ -242,7 +242,7 @@ If `bus_stop_det_i` is asserted while `state_q` is not `Idle` and not `Done`, th
 | Aspect                           | Reference (`ccc_entdaa.sv`, target-side)                                                             | This Design (master-side)                                     |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Perspective                      | Target sends its own PID, receives assigned address from master                                      | Master receives PID/BCR/DCR, sends the address               |
-| States                           | 13 (Idle, WaitStart, ReceiveRsvdByte, AckRsvdByte, SendNack, SendID, PrepareIDBit, SendIDBit, LostArbitration, ReceiveAddr, AckAddr, Done, Error) | 8 (Idle, SendRsvdByte, ReadRsvdAck, ReceiveIDBit, SendAddr, ReadAddrAck, WaitStop, Done) |
+| States                           | 13 (Idle, WaitStart, ReceiveRsvdByte, AckRsvdByte, SendNack, SendID, PrepareIDBit, SendIDBit, LostArbitration, ReceiveAddr, AckAddr, Done, Error) | 8 (Idle, SendDAAHeader, ReceiveHeaderACK, ReceiveID, SendDynamicAddr, ReceiveAddrACK, WaitStop, Done) |
 | `id_i/bcr_i/dcr_i`              | Inputs: target's own identity to send to master                                                      | Removed (master does not send its identity)                  |
 | `arbitration_lost_i`             | Target detects arbitration loss on SDA during PID transmission                                       | Removed (master reads bus as-is; arbitration is among targets)|
 | `process_virtual_i`              | Caliptra virtual device support                                                                      | Removed                                                      |
@@ -254,7 +254,7 @@ If `bus_stop_det_i` is asserted while `state_q` is not `Idle` and not `Done`, th
 
 | Error                   | Detection                                     | Action                          |
 | ----------------------- | --------------------------------------------- | ------------------------------- |
-| No target on bus        | NACK after `0x7E+R` (`bus_rx_data_i[0] == 1`) | `no_device_q` flag latched in `ReadRsvdAck`; → `Done` directly with `no_device_o = 1` |
+| No target on bus        | NACK after `0x7E+R` (`bus_rx_data_i[0] == 1`) | `no_device_q` flag latched in `ReceiveHeaderACK`; → `Done` directly with `no_device_o = 1` |
 | Target rejects address  | NACK after `Addr+P` (`bus_rx_data_i[0] == 1`) | `Done` (or `WaitStop` → `Done` if `stop_pending_i`) with `addr_valid_o = 0` |
 | Unexpected STOP         | `bus_stop_det_i` in any active state except `Idle`/`Done` | Forced → `Done`, `stopped_o` latched |
 
@@ -263,14 +263,14 @@ If `bus_stop_det_i` is asserted while `state_q` is not `Idle` and not `Done`, th
 ### Scenarios
 
 1. **Successful round:** 1 target; verify full state sequence Idle→Done; check `pid_o`, `bcr_o`, `dcr_o`, `addr_valid_o`
-2. **No device:** NACK on `0x7E+R`; verify Idle→SendRsvdByte→ReadRsvdAck→Done with `no_device_o=1`
+2. **No device:** NACK on `0x7E+R`; verify Idle→SendDAAHeader→ReceiveHeaderACK→Done with `no_device_o=1`
 3. **Address NACK:** Target ACKs `0x7E+R` but NACKs `Addr+P`; verify Done with `addr_valid_o=0`
 4. **64-bit reception:** Drive 64 specific bits; verify `id_shift_q` captures correctly (MSB first)
 5. **Odd parity:** Test address 7'h08 (parity=0), 7'h09 (parity=1); verify `bus_tx_req_value_o[0]`
-6. **Stop pending during ReceiveIDBit:** Assert `stop_pending_i` before the last ID bit; verify ReceiveIDBit→WaitStop→Done with `req_stop_o` asserted in `WaitStop`
-7. **Stop pending during ReadAddrAck:** Assert `stop_pending_i`; verify ReadAddrAck→WaitStop→Done
-8. **Forced STOP during ReceiveIDBit:** Assert `bus_stop_det_i` mid-PID; verify forced → `Done` with `stopped_o=1`
-9. **Forced STOP during SendAddr:** Assert `bus_stop_det_i`; verify forced → `Done` with `stopped_o=1`
+6. **Stop pending during ReceiveID:** Assert `stop_pending_i` before the last ID bit; verify ReceiveID→WaitStop→Done with `req_stop_o` asserted in `WaitStop`
+7. **Stop pending during ReceiveAddrACK:** Assert `stop_pending_i`; verify ReceiveAddrACK→WaitStop→Done
+8. **Forced STOP during ReceiveID:** Assert `bus_stop_det_i` mid-PID; verify forced → `Done` with `stopped_o=1`
+9. **Forced STOP during SendDynamicAddr:** Assert `bus_stop_det_i`; verify forced → `Done` with `stopped_o=1`
 
 ### UVM Test Structure
 
@@ -284,10 +284,10 @@ src/verification/uvm_i3c/
 
 ## 10. Implementation Notes
 
-- **64-bit reception is bit-serial:** `ReceiveIDBit` loops 64 times using `bus_rx_req_bit_o`. The `id_shift_q` register is 64 bits wide; bits arrive MSB first per I3C spec.
+- **64-bit reception is bit-serial:** `ReceiveID` loops 64 times using `bus_rx_req_bit_o`. The `id_shift_q` register is 64 bits wide; bits arrive MSB first per I3C spec.
 - **Arbitration transparency:** The master reads whatever bit combination the wired-AND of all competing targets produces. The target that loses arbitration (drives `1` but sees `0`) stops participating in subsequent bits. The master reads the arbitration result naturally without any special handling.
-- **`bus_tx_req_bit_o = 1'b0` always:** ACK and ID-bit reception use `bus_rx_req_bit_o` (`ReadRsvdAck`, `ReceiveIDBit`) or `bus_rx_req_bit_handoff_o` (`ReadAddrAck`), never bit-level TX. The `bus_tx_req_bit_o` port is present for interface compatibility with the MUX in `entdaa_controller` but is permanently deasserted.
+- **`bus_tx_req_bit_o = 1'b0` always:** ACK and ID-bit reception use `bus_rx_req_bit_o` (`ReceiveHeaderACK`, `ReceiveID`) or `bus_rx_req_bit_handoff_o` (`ReceiveAddrACK`), never bit-level TX. The `bus_tx_req_bit_o` port is present for interface compatibility with the MUX in `entdaa_controller` but is permanently deasserted.
 - **`bus_rx_req_byte_o = 1'b0` always:** All reception in ENTDAA is single-bit. The port exists for interface compatibility but is permanently deasserted.
-- **Two RX bit-request paths:** `bus_rx_req_bit_o` is used for the reserved-byte ACK and the 64 ID bits; `bus_rx_req_bit_handoff_o` is used only for the address-ACK bit in `ReadAddrAck`, routing that single read through the handoff RX path instead.
+- **Two RX bit-request paths:** `bus_rx_req_bit_o` is used for the reserved-byte ACK and the 64 ID bits; `bus_rx_req_bit_handoff_o` is used only for the address-ACK bit in `ReceiveAddrACK`, routing that single read through the handoff RX path instead.
 - **Open-Drain throughout:** `bus_tx_sel_od_pp_o = 1'b0` in all states. Push-Pull is never used in `entdaa_fsm` because targets drive ACK and PID bits simultaneously.
 - **Address parity:** I3C requires odd parity — the parity bit is set such that the total number of `1`s in all 8 bits is odd. In SystemVerilog: `parity = ~^addr_i` (XOR-reduce over 7 bits, then invert gives odd parity).

@@ -52,7 +52,7 @@ This module does NOT exist as a standalone component in the reference design —
 | --------------- | --------- | ----- | ------------------------------------------------- |
 | `gen_start_i`   | Input     | 1     | Request START condition                           |
 | `gen_rstart_i`  | Input     | 1     | Request Repeated START condition                  |
-| `takeover_i`    | Input     | 1     | ENTDAA restart fast-path: bypass tcount wait in `DriveHigh` and jump straight to `RstartSdaFall` |
+| `takeover_i`    | Input     | 1     | ENTDAA restart fast-path: bypass tcount wait in `DriveHigh` and jump straight to `SdaFall` |
 | `gen_stop_i`    | Input     | 1     | Request STOP condition                            |
 | `gen_clock_i`   | Input     | 1     | Enable continuous clock generation                |
 | `gen_idle_i`    | Input     | 1     | Return to idle state (both lines HIGH)            |
@@ -130,7 +130,7 @@ flowchart LR
     subgraph SG["scl_generator"]
         direction TB
 
-        FSM["14-State FSM\nIdle / GenerateStart / SdaFall\nHoldStart / DriveLow / DriveHigh\nWaitCmd / GenerateRstart / SclHighForRstart\nRstartSdaFall / GenerateStop\nSclHighForStop / SdaRise / BusFree"]
+        FSM["13-State FSM\nIdle / GenerateStart / SdaFall\nHoldStart / DriveLow / DriveHigh\nWaitCmd / GenerateRstart / SclHighForRstart\nGenerateStop / SclHighForStop\nSdaRise / BusFree"]
 
         subgraph CNT["Timing Counter"]
             direction LR
@@ -142,8 +142,8 @@ flowchart LR
         subgraph OL["Output Logic\n(combinational)"]
             direction TB
             SCL_DRV["scl_o\n0: DriveLow, WaitCmd\n   GenerateStop/GenerateRstart before expiry\n1: otherwise"]
-            SDA_DRV["sda_o\n0: SdaFall, HoldStart\n   RstartSdaFall\n   GenerateStop, SclHighForStop\n1: otherwise"]
-            SDA_ACT["sda_ctrl_active_o\n1: GenerateStart, SdaFall, HoldStart\n   RstartSdaFall, GenerateRstart\n   SclHighForRstart, GenerateStop\n   SclHighForStop, SdaRise\n0: Idle, DriveLow, DriveHigh\n   WaitCmd"]
+            SDA_DRV["sda_o\n0: SdaFall, HoldStart\n   GenerateStop, SclHighForStop\n1: otherwise"]
+            SDA_ACT["sda_ctrl_active_o\n1: GenerateStart, SdaFall, HoldStart\n   GenerateRstart, SclHighForRstart\n   GenerateStop, SclHighForStop, SdaRise\n0: Idle, DriveLow, DriveHigh\n   WaitCmd"]
         end
 
         FSM -->|"load keyed on\ncurrent state"| MUX
@@ -178,12 +178,11 @@ typedef enum logic [3:0] {
   DriveHigh      = 4'd5,
   WaitCmd        = 4'd6,
   GenerateRstart = 4'd7,
-  SclHighForRstart        = 4'd8,
-  RstartSdaFall  = 4'd9,
-  GenerateStop   = 4'd10,
-  SclHighForStop = 4'd11,
-  SdaRise        = 4'd12,
-  BusFree        = 4'd13
+  SclHighForRstart = 4'd8,
+  GenerateStop   = 4'd9,
+  SclHighForStop = 4'd10,
+  SdaRise        = 4'd11,
+  BusFree        = 4'd12
 } state_e;
 ```
 
@@ -192,22 +191,19 @@ stateDiagram-v2
     [*] --> Idle
 
     Idle --> GenerateStart: gen_start_i
-    Idle --> GenerateRstart: gen_rstart_i
-
     GenerateStart --> SdaFall: t_su_sta expired
     SdaFall --> HoldStart: SDA driven LOW
     HoldStart --> DriveLow: t_hd_sta expired
 
     GenerateRstart --> SclHighForRstart: SCL released HIGH
-    SclHighForRstart --> RstartSdaFall: t_su_sta expired
-    RstartSdaFall --> HoldStart: SDA driven LOW
+    SclHighForRstart --> SdaFall: t_su_sta expired
 
     DriveLow --> GenerateStop: gen_stop_i & t_low expired
     DriveLow --> GenerateRstart: gen_rstart_i & t_low expired
     DriveLow --> DriveHigh: gen_clock_i & t_low expired
     DriveLow --> WaitCmd: !gen_clock_i & t_low expired
 
-    DriveHigh --> RstartSdaFall: gen_rstart_i & takeover_i (bypasses t_high wait)
+    DriveHigh --> SdaFall: gen_rstart_i & takeover_i (bypasses t_high wait)
     DriveHigh --> GenerateRstart: t_high expired & gen_rstart_i & !takeover_i
     DriveHigh --> GenerateStop: t_high expired & gen_stop_i & !(gen_rstart_i & !takeover_i)
     DriveHigh --> DriveLow: t_high expired & gen_clock_i & !gen_stop_i & !gen_rstart_i
@@ -232,14 +228,13 @@ stateDiagram-v2
 | ---------------- | --- | --- | ------------------- | -------------------------------------- |
 | `Idle`           | Z/H | Z/H | 0                   | Both lines released, bus idle          |
 | `GenerateStart`  | H   | H   | 1                   | Own SDA mux and release SDA HIGH while waiting t_su_sta |
-| `SdaFall`        | H   | L   | 1                   | Pull SDA LOW (START condition)         |
+| `SdaFall`        | H   | L   | 1                   | Pull SDA LOW (START or Repeated START) |
 | `HoldStart`      | H   | L   | 1                   | Hold SDA LOW for t_hd_sta              |
 | `DriveLow`       | L   | -   | 0                   | Drive SCL LOW, count active_t_low      |
 | `DriveHigh`      | H   | -   | 0                   | Release SCL HIGH, count t_high         |
 | `WaitCmd`        | L   | -   | 0                   | Hold SCL LOW, wait for next command    |
 | `GenerateRstart` | L→H | L→H | 1                   | From clock LOW, release SDA HIGH first |
 | `SclHighForRstart`        | H   | H   | 1                   | SCL goes HIGH, wait t_su_sta for Sr    |
-| `RstartSdaFall`  | H   | L   | 1                   | Pull SDA LOW (Repeated START)          |
 | `GenerateStop`   | L→H | L   | 1                   | Hold SDA LOW, then release SCL HIGH    |
 | `SclHighForStop` | H   | L   | 1                   | SCL HIGH, wait t_su_sto                |
 | `SdaRise`        | H   | H   | 1                   | Release SDA HIGH (STOP condition)      |
@@ -263,11 +258,11 @@ assign ctrl_sda_o = scl_gen_driving_sda ? scl_gen_sda
 DAA restart requests are folded into `gen_rstart_i` upstream in `controller_active` — there is no separate restart-request port on `scl_generator`. Instead, `takeover_i` lets `controller_active` fast-path an ENTDAA-driven repeated START directly out of `DriveHigh`, bypassing the normal `t_high` countdown wait that a `flow_active`-driven `gen_rstart_i` would otherwise have to wait through:
 
 ```systemverilog
-// In DriveHigh, a takeover request jumps straight to RstartSdaFall,
+// In DriveHigh, a takeover request jumps straight to SdaFall,
 // skipping the tcount_expired check entirely:
 DriveHigh: begin
   if (gen_rstart_i && takeover_i) begin
-    state_d = RstartSdaFall;
+    state_d = SdaFall;
   end else if (tcount_expired) begin
     ...
   end
@@ -296,9 +291,8 @@ The `tcount_load_value` is computed combinationally and keyed on the **current**
 | Current state (`state_q`)  | Load condition                              | Load value                  |
 | --------------------------- | -------------------------------------------- | ---------------------------- |
 | `Idle`                      | `gen_start_i`                                | `t_su_sta_i`                 |
-| `Idle`                      | `gen_rstart_i` (else, if not `gen_start_i`)  | `active_t_low + t_f_i`        |
 | `GenerateRstart`            | `tcount_expired && scl_i`                    | `t_su_sta_i`                  |
-| `SdaFall`, `RstartSdaFall`  | always (unconditional)                       | `t_hd_sta_i`                  |
+| `SdaFall`                   | always (unconditional)                       | `t_hd_sta_i`                  |
 | `HoldStart`                 | `tcount_expired`                             | `active_t_low + t_f_i`        |
 | `WaitCmd`                   | `gen_stop_i \|\| gen_rstart_i \|\| gen_clock_i` | `active_t_low + t_f_i`     |
 | `DriveHigh`                 | `tcount_expired && (gen_stop_i \|\| (gen_rstart_i && !takeover_i) \|\| gen_clock_i)` | `active_t_low + t_f_i` |
@@ -308,7 +302,7 @@ The `tcount_load_value` is computed combinationally and keyed on the **current**
 | `GenerateStop`              | `tcount_expired && scl_i`                    | `t_su_sto_i`                  |
 | `SdaRise`                   | always (unconditional)                       | `t_bus_free_i`                |
 
-`active_t_low` is `t_low_od_i` when `scl_use_od_low_i` is 1, otherwise `t_low_i`. Note that the load happens one cycle *before* the corresponding state transition (e.g. the `DriveLow` load of `t_high_i + t_r_i` is what `DriveHigh` will count down once entered), and that `DriveHigh`'s own tcount-load (re-arming `active_t_low + t_f_i` for the next `DriveLow`/`GenerateRstart`/`GenerateStop`) is itself gated by `!takeover_i` — a `takeover_i` exit skips this load because the FSM jumps straight to `RstartSdaFall` instead.
+`active_t_low` is `t_low_od_i` when `scl_use_od_low_i` is 1, otherwise `t_low_i`. Note that the load happens one cycle *before* the corresponding state transition (e.g. the `DriveLow` load of `t_high_i + t_r_i` is what `DriveHigh` will count down once entered), and that `DriveHigh`'s own tcount-load (re-arming `active_t_low + t_f_i` for the next `DriveLow`/`GenerateRstart`/`GenerateStop`) is itself gated by `!takeover_i` — a `takeover_i` exit skips this load because the FSM jumps straight to `SdaFall` instead.
 
 ### 6.6. Output Logic
 
@@ -335,7 +329,7 @@ always_comb begin
       end
     end
 
-    SdaFall, HoldStart, RstartSdaFall, SclHighForStop: sda_o = 1'b0;
+    SdaFall, HoldStart, SclHighForStop: sda_o = 1'b0;
 
     default: ;
   endcase
@@ -352,7 +346,6 @@ assign sda_ctrl_active_o = (state_q == GenerateStart)     |
                             (state_q == HoldStart)         |
                             (state_q == GenerateRstart)    |
                             (state_q == SclHighForRstart)  |
-                            (state_q == RstartSdaFall)     |
                             (state_q == GenerateStop)      |
                             (state_q == SclHighForStop)    |
                             (state_q == SdaRise);
@@ -414,12 +407,12 @@ This is a completely new module. In the reference design:
 1. **START generation:** Assert `gen_start_i`; verify SDA falls while SCL is HIGH with correct t_su_sta and t_hd_sta timing
 2. **STOP generation:** Assert `gen_stop_i`; verify SDA rises while SCL is HIGH with correct t_su_sto timing
 3. **Repeated START (from flow_active):** During clock generation, assert and hold `gen_rstart_i` (with `takeover_i` LOW) until the generator services it from a low-phase state (`DriveLow`/`WaitCmd`) or from `DriveHigh` on tcount expiry; verify Sr condition with correct timing
-4. **Repeated START takeover (from ENTDAA):** Assert `gen_rstart_i` together with `takeover_i` while in `DriveHigh`; verify the FSM jumps immediately to `RstartSdaFall` without waiting for `t_high` to expire
+4. **Repeated START takeover (from ENTDAA):** Assert `gen_rstart_i` together with `takeover_i` while in `DriveHigh`; verify the FSM jumps immediately to `SdaFall` without waiting for `t_high` to expire
 5. **I3C SDR clock:** Set I3C timing values; verify SCL frequency of ~12.5 MHz with correct duty cycle
 6. **I2C FM clock:** Set I2C timing values; verify SCL frequency of ~400 kHz
 7. **Clock gating:** Deassert `gen_clock_i` during DriveLow; verify SCL stays LOW until re-asserted
 8. **Full transaction:** START → 9 clock cycles → Sr → 9 clock cycles → STOP; verify complete waveform
-9. **`sda_ctrl_active_o`:** Verify asserted during GenerateStart, SdaFall, HoldStart, GenerateRstart, SclHighForRstart, RstartSdaFall, GenerateStop, SclHighForStop, SdaRise; deasserted during Idle, DriveLow, DriveHigh, WaitCmd
+9. **`sda_ctrl_active_o`:** Verify asserted during GenerateStart, SdaFall, HoldStart, GenerateRstart, SclHighForRstart, GenerateStop, SclHighForStop, SdaRise; deasserted during Idle, DriveLow, DriveHigh, WaitCmd
 10. **Reset behavior:** Verify both outputs go HIGH (idle) immediately on reset
 
 ### UVM Test Structure
@@ -446,9 +439,9 @@ src/verification/uvm_i3c/
 
 - The `sda_o` output of this module is ONLY used for START/STOP/Sr conditions. During data phases, SDA is driven by `bus_tx_flow`. `controller_active` MUXes between `scl_generator.sda_o` and `bus_tx_flow.sda_o` using `sda_ctrl_active_o` as the select signal (M-2 fix).
 - The counter width of 20 bits supports up to 2^20 = ~1M cycles, which at 333 MHz is ~3 ms — more than sufficient for any I3C/I2C timing parameter.
-- STOP, repeated-START, and clock-deassertion requests are all serviced from `DriveLow` or `WaitCmd` on tcount expiry. `DriveHigh` ALSO directly services `gen_rstart_i`, `gen_stop_i`, and `gen_clock_i` on its own tcount expiry (it is not limited to transitioning only to `DriveLow`) — and additionally exposes the `takeover_i` fast-path described below, which exits `DriveHigh` to `RstartSdaFall` immediately, without waiting on tcount at all. Callers must hold `gen_stop_i` or `gen_rstart_i` until the generator reaches one of these states and reports completion (or, for ENTDAA, assert `takeover_i` to short-circuit the wait).
-- For Repeated START: the module first releases SDA HIGH (from data LOW), then releases SCL HIGH, then pulls SDA LOW. This 3-step sequence is critical for proper Sr generation. The `takeover_i` fast-path skips directly to the SDA-LOW step (`RstartSdaFall`) from `DriveHigh`, since SCL is already released HIGH in that state.
+- STOP, repeated-START, and clock-deassertion requests are all serviced from `DriveLow` or `WaitCmd` on tcount expiry. `DriveHigh` ALSO directly services `gen_rstart_i`, `gen_stop_i`, and `gen_clock_i` on its own tcount expiry (it is not limited to transitioning only to `DriveLow`) — and additionally exposes the `takeover_i` fast-path described below, which exits `DriveHigh` to `SdaFall` immediately, without waiting on tcount at all. Callers must hold `gen_stop_i` or `gen_rstart_i` until the generator reaches one of these states and reports completion (or, for ENTDAA, assert `takeover_i` to short-circuit the wait).
+- For Repeated START: the module first releases SDA HIGH (from data LOW), then releases SCL HIGH, then pulls SDA LOW. This 3-step sequence is critical for proper Sr generation. The `takeover_i` fast-path skips directly to the shared SDA-LOW step (`SdaFall`) from `DriveHigh`, since SCL is already released HIGH in that state.
 - `done_o` pulses on three distinct transitions, not just one: (1) `HoldStart → DriveLow` (START/Sr hold-time complete), (2) `DriveHigh → DriveLow` specifically when caused by `gen_clock_i` continuing and neither `gen_stop_i` nor `gen_rstart_i` is asserted (i.e. an ordinary clock low-phase re-entry, not a STOP/Sr branch), and (3) `BusFree → Idle` (STOP sequence fully complete).
 - The `sel_i3c_i2c_i` input is informational only — the actual timing comes from the register values. The module does not use it to select different counter presets; the caller must write correct timing values for the active mode.
-- `takeover_i` lets `controller_active` fast-path an ENTDAA-driven repeated START out of `DriveHigh`: when `gen_rstart_i && takeover_i`, the FSM transitions straight to `RstartSdaFall` regardless of `tcount_expired`, and the `DriveHigh` tcount-load is itself suppressed while `takeover_i` is asserted (see §6.5). DAA restart requests are otherwise folded into the ordinary `gen_rstart_i` signal — there is no separate restart-request handshake into this module.
+- `takeover_i` lets `controller_active` fast-path an ENTDAA-driven repeated START out of `DriveHigh`: when `gen_rstart_i && takeover_i`, the FSM transitions straight to `SdaFall` regardless of `tcount_expired`, and the `DriveHigh` tcount-load is itself suppressed while `takeover_i` is asserted (see §6.5). DAA restart requests are otherwise folded into the ordinary `gen_rstart_i` signal — there is no separate restart-request handshake into this module.
 - `gen_idle_i` is a global override checked ahead of the per-state `case` in the next-state block: whenever asserted, `state_d` is forced to `Idle` from any current state, taking priority over every other transition (see §9).

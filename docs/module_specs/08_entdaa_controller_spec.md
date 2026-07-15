@@ -253,7 +253,7 @@ The controller must not assign reserved I3C dynamic addresses. Before starting e
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Per-device round    | 2 bytes TX (`0x7E+R`, `Addr+P`) + 65 bit RX (ACK + 64 ID bits) = ~74 SCL cycles minimum                                         |
 | DAT read latency    | 1 system clock cycle (registered synchronous read)                                                                              |
-| Sr-to-`0x7E+R` gap  | DAT read (1 cycle) + `start_daa_i` → `SendRsvdByte` (1 cycle); SCL generator Sr takes many SCL cycles — no bus timing violation |
+| Sr-to-`0x7E+R` gap  | DAT read (1 cycle) + `start_daa_i` → `SendDAAHeader` (1 cycle); SCL generator Sr takes many SCL cycles — no bus timing violation |
 | No-device detection | NACK detected on the ACK bit after `0x7E+R` = 1 RX bit cycle                                                                    |
 
 ## 7. Changes from Reference Design

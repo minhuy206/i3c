@@ -9,8 +9,8 @@ DAT \DatEntryCount{} mục), bổ trợ cho \cref{sec:rtl-csr}. Địa chỉ tí
   \textbf{Thanh ghi} & \textbf{Địa chỉ} & \textbf{Chức năng} \\
   \midrule
   \endhead
-  \texttt{HC\_CONTROL}    & 0x004 & Điều khiển bộ điều khiển (enable, i3c\_fsm\_en, sw\_reset, phát \IThreeCBroadcastAddress{}, abort). \\
-  \texttt{RESET\_CONTROL} & 0x010 & Điều khiển reset mềm các khối và hàng đợi. \\
+  \texttt{HC\_CONTROL}    & 0x004 & Điều khiển bộ điều khiển (enable, i3c\_fsm\_en, phát \IThreeCBroadcastAddress{}, abort). \\
+  \texttt{RESET\_CONTROL} & 0x010 & Reset mềm (sw\_reset) cho các khối và hàng đợi; chỉ có hiệu lực khi FSM ở Idle. \\
   \texttt{HC\_STATUS}     & 0x014 & Trạng thái của bộ điều khiển. \\
   \texttt{CMD\_QUEUE}     & 0x080 & Cổng ghi \CommandDescriptor{} vào \CommandFifo{}. \\
   \texttt{RESP}           & 0x084 & Cổng đọc \ResponseDescriptor{} từ \ResponseFifo{}. \\
@@ -38,5 +38,17 @@ DAT \DatEntryCount{} mục), bổ trợ cho \cref{sec:rtl-csr}. Địa chỉ tí
   \bottomrule
 \end{longtable}
 
-Mỗi mục DAT (\texttt{dat\_entry\_t}) rộng \DatEntryWidth{}-bit gồm: cờ \texttt{device} ở bit [31] (1 = thiết bị
-\iic{} legacy), \DynamicAddress{} ở [22:16], và \StaticAddress{} ở [6:0]; các bit còn lại dự trữ.
+Mỗi mục DAT (\texttt{dat\_entry\_t}) rộng \DatEntryWidth{}-bit, bố trí trường như sau:
+
+\begin{longtable}{C{3.2cm} C{2.6cm} L{7.0cm}}
+  \toprule
+  \textbf{Trường} & \textbf{Bit} & \textbf{Ý nghĩa} \\
+  \midrule
+  \endhead
+  \texttt{device}           & [31]    & Cờ phân loại: 1 = thiết bị \iic{} legacy, 0 = thiết bị I3C. \\
+  (dự trữ)                  & [30:23] & Reserved. \\
+  \texttt{dynamic\_address} & [22:16] & \DynamicAddress{} I3C. \\
+  (dự trữ)                  & [15:7]  & Reserved. \\
+  \texttt{static\_address}  & [6:0]   & \StaticAddress{} \iic{}. \\
+  \bottomrule
+\end{longtable}

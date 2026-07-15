@@ -32,17 +32,17 @@ module entdaa_fsm
     output logic bus_tx_sel_od_pp_o,
 
     // Bus Monitor interface
-    input logic bus_stop_det_i
+  input logic bus_stop_det_i
 );
   typedef enum logic [2:0] {
-    Idle         = 3'd0,
-    SendRsvdByte = 3'd1,
-    ReadRsvdAck  = 3'd2,
-    ReceiveIDBit = 3'd3,
-    SendAddr     = 3'd4,
-    ReadAddrAck  = 3'd5,
-    WaitStop     = 3'd6,
-    Done         = 3'd7
+    Idle             = 3'd0,
+    SendDAAHeader    = 3'd1,
+    ReceiveHeaderACK = 3'd2,
+    ReceiveID        = 3'd3,
+    SendDynamicAddr  = 3'd4,
+    ReceiveAddrACK   = 3'd5,
+    WaitStop         = 3'd6,
+    Done             = 3'd7
   } state_e;
 
   state_e state_q, state_d;
@@ -127,20 +127,20 @@ module entdaa_fsm
         end
       end
 
-      SendRsvdByte: begin
+      SendDAAHeader: begin
         bus_tx_req_value = {I3C_RSVD_ADDR, Read};
         bus_tx_req_byte  = 1;
         bus_tx_sel_od_pp = 1'b0;
       end
 
-      ReadRsvdAck: begin
+      ReceiveHeaderACK: begin
         bus_rx_req_bit = 1'b1;
         if (bus_rx_done_i) begin
           no_device_d = bus_rx_data_i[0];
         end
       end
 
-      ReceiveIDBit: begin
+      ReceiveID: begin
         bus_rx_req_bit = 1'b1;
         if (bus_rx_done_i) begin
           id_shift_d = {id_shift_q[62:0], bus_rx_data_i[0]};
@@ -148,14 +148,14 @@ module entdaa_fsm
         end
       end
 
-      SendAddr: begin
+      SendDynamicAddr: begin
         parity = ~^addr_i;
         bus_tx_req_byte = 1'b1;
         bus_tx_req_value = {addr_i, parity};
         bus_tx_sel_od_pp = 1'b0;
       end
 
-      ReadAddrAck: begin
+      ReceiveAddrACK: begin
         bus_rx_req_bit_handoff = 1'b1;
         if (bus_rx_done_i) begin
           addr_valid_d = ~bus_rx_data_i[0];
@@ -192,43 +192,43 @@ module entdaa_fsm
       unique case (state_q)
         Idle: begin
           if (start_i) begin
-            state_d = SendRsvdByte;
+            state_d = SendDAAHeader;
           end
         end
 
-        SendRsvdByte: begin
+        SendDAAHeader: begin
           if (bus_tx_done_i) begin
-            state_d = ReadRsvdAck;
+            state_d = ReceiveHeaderACK;
           end
         end
 
-        ReadRsvdAck: begin
+        ReceiveHeaderACK: begin
           if (bus_rx_done_i) begin
             if (bus_rx_data_i[0]) begin
               state_d = Done;
             end else begin
-              state_d = ReceiveIDBit;
+              state_d = ReceiveID;
             end
           end
         end
 
-        ReceiveIDBit: begin
+        ReceiveID: begin
           if (bus_rx_done_i) begin
             if (bit_cnt_q == 0) begin
-              state_d = stop_pending_i ? WaitStop : SendAddr;
+              state_d = stop_pending_i ? WaitStop : SendDynamicAddr;
             end else if (bit_cnt_q > 0) begin
-              state_d = ReceiveIDBit;
+              state_d = ReceiveID;
             end
           end
         end
 
-        SendAddr: begin
+        SendDynamicAddr: begin
           if (bus_tx_done_i) begin
-            state_d = ReadAddrAck;
+            state_d = ReceiveAddrACK;
           end
         end
 
-        ReadAddrAck: begin
+        ReceiveAddrACK: begin
           if (bus_rx_done_i) begin
             state_d = stop_pending_i ? WaitStop : Done;
           end

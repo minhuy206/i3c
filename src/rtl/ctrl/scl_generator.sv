@@ -42,11 +42,10 @@ module scl_generator #(
     WaitCmd          = 4'd6,
     GenerateRstart   = 4'd7,
     SclHighForRstart = 4'd8,
-    RstartSdaFall    = 4'd9,
-    GenerateStop     = 4'd10,
-    SclHighForStop   = 4'd11,
-    SdaRise          = 4'd12,
-    BusFree          = 4'd13
+    GenerateStop     = 4'd9,
+    SclHighForStop   = 4'd10,
+    SdaRise          = 4'd11,
+    BusFree          = 4'd12
   } state_e;
 
   state_e state_q, state_d;
@@ -80,9 +79,6 @@ module scl_generator #(
         if (gen_start_i) begin
           load_tcount     = 1'b1;
           tcount_load_val = t_su_sta_i;
-        end else if (gen_rstart_i) begin
-          load_tcount     = 1'b1;
-          tcount_load_val = active_t_low + t_f_i;
         end
       end
 
@@ -93,7 +89,7 @@ module scl_generator #(
         end
       end
 
-      SdaFall, RstartSdaFall: begin
+      SdaFall: begin
         load_tcount = 1'b1;
         tcount_load_val = t_hd_sta_i;
       end
@@ -160,8 +156,6 @@ module scl_generator #(
         Idle: begin
           if (gen_start_i) begin
             state_d = GenerateStart;
-          end else if (gen_rstart_i) begin
-            state_d = GenerateRstart;
           end
         end
 
@@ -195,7 +189,7 @@ module scl_generator #(
 
         DriveHigh: begin
           if (gen_rstart_i && takeover_i) begin
-            state_d = RstartSdaFall;
+            state_d = SdaFall;
           end else if (tcount_expired) begin
             if (gen_rstart_i) begin
               state_d = GenerateRstart;
@@ -224,11 +218,7 @@ module scl_generator #(
         end
 
         SclHighForRstart: begin
-          if (tcount_expired) state_d = RstartSdaFall;
-        end
-
-        RstartSdaFall: begin
-          state_d = HoldStart;
+          if (tcount_expired) state_d = SdaFall;
         end
 
         GenerateStop: begin
@@ -275,7 +265,7 @@ module scl_generator #(
         end
       end
 
-      SdaFall, HoldStart, RstartSdaFall, SclHighForStop: sda_o = 1'b0;
+      SdaFall, HoldStart, SclHighForStop: sda_o = 1'b0;
 
       default: ;
     endcase
@@ -293,7 +283,6 @@ module scl_generator #(
                               (state_q == HoldStart)       |
                               (state_q == GenerateRstart)  |
                               (state_q == SclHighForRstart)|
-                              (state_q == RstartSdaFall)   |
                               (state_q == GenerateStop)    |
                               (state_q == SclHighForStop)  |
                               (state_q == SdaRise);
