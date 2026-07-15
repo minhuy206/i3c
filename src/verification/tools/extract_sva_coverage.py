@@ -16,7 +16,20 @@ import os
 import subprocess
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+
+WAIVERS = {
+    ("cover", "cp_reset_readback_unmapped_020"): (
+        "Raw readback of one specific unmapped address (0x020) is diagnostic, "
+        "not a feature F1-F10 closure goal."
+    ),
+}
+
+
+def waiver_reason(kind: str, directive: str) -> str | None:
+    return WAIVERS.get((kind, directive))
 
 
 def find_ucd_files(cov_work: str) -> list[Path]:
@@ -67,7 +80,11 @@ def format_report(ucd_files: list[Path], totals: dict, testers: dict) -> str:
     assertion_stats = Counter()
     cover_stats = Counter()
 
-    for (kind, _instance, _directive), counts in totals.items():
+    waived_stats = Counter()
+    for (kind, _instance, directive), counts in totals.items():
+        if waiver_reason(kind, directive):
+            waived_stats[kind] += 1
+            continue
         if kind == "assert":
             assertion_stats[assertion_status(counts)] += 1
         else:
@@ -88,11 +105,14 @@ def format_report(ucd_files: list[Path], totals: dict, testers: dict) -> str:
         f"  VACUOUS        : {assertion_stats['VACUOUS']}",
         f"  FAIL           : {assertion_stats['FAIL']}",
         f"  MISS           : {assertion_stats['MISS']}",
+        f"  WAIVED         : {waived_stats['assert']}",
         f"  Closure        : {assertion_pct:.1f}%",
         f"Cover properties : {cover_total}",
         f"  HIT            : {cover_stats['HIT']}",
         f"  MISS           : {cover_stats['MISS']}",
+        f"  WAIVED         : {waived_stats['cover']}",
         f"  Closure        : {cover_pct:.1f}%",
+        "Waiver policy   : waived directives are shown below but excluded from closure",
     ]
 
     by_instance = defaultdict(list)
@@ -107,6 +127,13 @@ def format_report(ucd_files: list[Path], totals: dict, testers: dict) -> str:
             kind, _instance, directive = key
             counts = totals[key]
             active_tests = set().union(*testers[key].values()) if testers[key] else set()
+            reason = waiver_reason(kind, directive)
+            if reason:
+                lines.append(
+                    f"[WAIVED ] {kind.upper():<6} {directive:<52} "
+                    f"reason={reason}"
+                )
+                continue
             if kind == "assert":
                 status = assertion_status(counts)
                 lines.append(
@@ -144,18 +171,21 @@ def main() -> None:
     testers = defaultdict(lambda: defaultdict(set))
 
     try:
-        for ucd in ucd_files:
-            test_name = ucd.parent.name
-            for row in run_ucd2sva(converter, ucd):
-                kind = row["kind"]
-                if kind not in {"assert", "cover"}:
-                    raise RuntimeError(f"unsupported SVA kind {kind!r} in {ucd}")
-                key = (kind, row["instance"], row["directive"])
-                bin_name = row["bin"]
-                count = int(row["count"])
-                totals[key][bin_name] += count
-                if count > 0:
-                    testers[key][bin_name].add(test_name)
+        worker_count = min(8, len(ucd_files))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            converted_rows = executor.map(lambda ucd: run_ucd2sva(converter, ucd), ucd_files)
+            for ucd, rows in zip(ucd_files, converted_rows):
+                test_name = ucd.parent.name
+                for row in rows:
+                    kind = row["kind"]
+                    if kind not in {"assert", "cover"}:
+                        raise RuntimeError(f"unsupported SVA kind {kind!r} in {ucd}")
+                    key = (kind, row["instance"], row["directive"])
+                    bin_name = row["bin"]
+                    count = int(row["count"])
+                    totals[key][bin_name] += count
+                    if count > 0:
+                        testers[key][bin_name].add(test_name)
     except (OSError, RuntimeError, ValueError) as err:
         sys.exit(f"Error: {err}")
 

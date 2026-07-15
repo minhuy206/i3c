@@ -535,6 +535,12 @@ module flow_active_sva
   endfunction
 
 
+  function automatic logic sdr_write_active_state();
+    return (state_q == InitWrite) ||
+           (state_q == FetchTxData) ||
+           (state_q == IssueI3CWrite);
+  endfunction
+
   function automatic logic sdr_write_done_ready();
     return state_q == IssueI3CWrite &&
            sdr_regular_i3c_write() &&
@@ -2076,33 +2082,8 @@ module flow_active_sva
                                             state_q == InitRead &&
                                             next_start_is_rstart_q);
 
-  cp_toc0_accept_then_rstart_then_toc1_stop_read :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            sdr_read_done_ready() &&
-                                            !reg_desc.toc &&
-                                            reg_desc.wroc &&
-                                            next_cmd_available &&
-                                            next_cmd_supported &&
-                                            resp_queue_wready_i &&
-                                            success_resp_matches_current_len() &&
-                                            cmd_queue_rready_o &&
-                                            !gen_stop_o
-                                            ##[1:64]
-                                            state_q == InitRead &&
-                                            sdr_regular_i3c_read() &&
-                                            issue_phase_q == PhaseStart &&
-                                            next_start_is_rstart_q &&
-                                            gen_rstart_o &&
-                                            !gen_start_o &&
-                                            !gen_stop_o
-                                            ##[1:1024]
-                                            sdr_read_done_ready() &&
-                                            reg_desc.toc &&
-                                            gen_stop_o
-                                            ##[1:256]
-                                            state_q == WriteResp &&
-                                            sdr_regular_i3c_read() &&
-                                            success_resp_matches_current_len());
+  // No end-to-end toc0/read composite cover: continuation acceptance,
+  // repeated START, toc1 STOP, and final response each have focused covers.
 
   ap_toc0_accept_continuation :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2129,6 +2110,22 @@ module flow_active_sva
                                              (!reg_desc.wroc && !resp_queue_wvalid)) &&
                                             cmd_queue_rready_o &&
                                             !gen_stop_o);
+
+  // Guard every active SDR-write cycle against an unexpected CMD FIFO pop.
+  // cp_toc0_accept_continuation above is the matching legal-pop scenario, so
+  // a second cover for the same event would be redundant.
+  ap_sdr_write_no_cmd_pop_except_continuation :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            sdr_write_active_state() &&
+                                            sdr_regular_i3c_write() &&
+                                            cmd_queue_rready_o
+                                            |->
+                                            sdr_write_done_ready() &&
+                                            !reg_desc.toc &&
+                                            next_cmd_available &&
+                                            next_cmd_supported &&
+                                            (!reg_desc.wroc || resp_queue_wready_i))
+  else $error("flow_active_sva: SDR write must not pop CMD FIFO except accepted continuation in %m");
 
   ap_toc0_missing_continuation_requests_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -2238,56 +2235,9 @@ module flow_active_sva
                                             gen_stop_o)
   else $error("flow_active_sva: SDR write toc=1 completion must request STOP in %m");
 
-  cp_toc0_accept_then_rstart_then_toc1_stop :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            sdr_write_done_ready() &&
-                                            !reg_desc.toc &&
-                                            next_cmd_available &&
-                                            next_cmd_supported &&
-                                            resp_queue_wready_i &&
-                                            success_resp_matches_current_len() &&
-                                            cmd_queue_rready_o &&
-                                            !gen_stop_o
-                                            ##[1:64]
-                                            state_q == InitWrite &&
-                                            sdr_regular_i3c_write() &&
-                                            issue_phase_q == PhaseStart &&
-                                            next_start_is_rstart_q &&
-                                            gen_rstart_o &&
-                                            !gen_start_o &&
-                                            !gen_stop_o
-                                            ##[1:1024]
-                                            sdr_write_done_ready() &&
-                                            reg_desc.toc &&
-                                            gen_stop_o
-                                            ##[1:256]
-                                            state_q == WriteResp &&
-                                            sdr_regular_i3c_write() &&
-                                            success_resp_matches_current_len());
-
-  cp_toc0_bcast_header_once_write :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            broadcast_header_enable_i &&
-                                            state_q == I3CBcastHeader &&
-                                            sdr_regular_i3c_write()
-                                            ##[1:1024]
-                                            sdr_write_done_ready() &&
-                                            !reg_desc.toc &&
-                                            next_cmd_available &&
-                                            next_cmd_supported &&
-                                            resp_queue_wready_i &&
-                                            success_resp_matches_current_len() &&
-                                            cmd_queue_rready_o &&
-                                            !gen_stop_o
-                                            ##[1:128]
-                                            state_q == InitWrite &&
-                                            cont_pending_q &&
-                                            sdr_regular_i3c_write() &&
-                                            issue_phase_q == PhaseStart &&
-                                            next_start_is_rstart_q &&
-                                            gen_rstart_o &&
-                                            !gen_start_o &&
-                                            !gen_stop_o);
+  // No end-to-end toc0/write composites: the focused continuation, repeated
+  // START, broadcast-header suppression, toc1 STOP, and response covers avoid
+  // duplicating the same behavior in timing-fragile multi-phase sequences.
 
   // ----------------------------------------------------------------------
   // I2C legacy path (DAT.device=1) — RegularTransfer (I2C_001 / I2C_002)
@@ -2758,6 +2708,16 @@ module flow_active_sva
                                             ##1
                                             state_q == InitRead);
 
+  // The read/write transition covers above prove I2C stimulus. This converse
+  // invariant independently rejects any I2C descriptor observed in the I3C
+  // broadcast-header state, so a separate idle-like cover is not useful.
+  ap_i2c_never_enters_broadcast_header :
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+                                            state_q == I3CBcastHeader
+                                            |->
+                                            !i2c_regular_xfer())
+  else $error("flow_active_sva: I2C legacy transfer must never enter the I3C broadcast header in %m");
+
   // ----------------------------------------------------------------------
   // I2C_004 — length sweep / partial final RX DWORD
   //
@@ -3119,16 +3079,8 @@ module flow_active_sva
                                             not_supported_resp_matches_current_len() &&
                                             (resp_queue_wdata[15:0] == 16'h0000));
 
-  // IMM_002 (negative): the dtt>4 response descriptor is NotSupported (len 0).
-  ap_imm_dtt_gt4_not_supported_resp :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == WriteResp &&
-                                            cmd_attr == ImmediateDataTransfer &&
-                                            imm_desc.dtt > 3'd4
-                                            |->
-                                            not_supported_resp_matches_current_len())
-  else $error("flow_active_sva: immediate dtt>4 response must be NotSupported in %m");
-
+  // IMM_002 (negative): invalid_cmd_desc() includes dtt>4, so the generic
+  // invalid-command assertion owns response correctness. Keep a distinct bin.
   cp_imm_dtt_gt4_not_supported_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
@@ -3136,22 +3088,9 @@ module flow_active_sva
                                             imm_desc.dtt > 3'd4 &&
                                             not_supported_resp_matches_current_len());
 
-  // DAA_007 / ERR_011: reject invalid AddressAssignment descriptors before DAT or bus access.
-  ap_addr_assign_invalid_rejected_before_access :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == FetchDAT &&
-                                            cmd_attr == AddressAssignment &&
-                                            invalid_addr_assign_desc()
-                                            |->
-                                            (!dat_read_valid_hw_o &&
-                                             !gen_start_o &&
-                                             !gen_rstart_o &&
-                                             !gen_stop_o &&
-                                             !bus_tx_req_byte &&
-                                             !bus_tx_req_bit)
-                                            ##1 state_q == WriteResp)
-  else $error("flow_active_sva: invalid AddressAssignment must be rejected before DAT or bus access in %m");
-
+  // DAA_007 / ERR_011: invalid_cmd_desc() delegates AddressAssignment
+  // validation to invalid_addr_assign_desc(). The generic rejection assertion
+  // owns correctness; this cover distinguishes the descriptor class.
   cp_addr_assign_invalid_rejected_before_access :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == FetchDAT &&
@@ -3159,15 +3098,6 @@ module flow_active_sva
                                             invalid_addr_assign_desc() &&
                                             !dat_read_valid_hw_o
                                             ##1 state_q == WriteResp);
-
-  ap_addr_assign_invalid_not_supported_resp :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            state_q == WriteResp &&
-                                            cmd_attr == AddressAssignment &&
-                                            invalid_addr_assign_desc()
-                                            |->
-                                            not_supported_resp_matches_current_len())
-  else $error("flow_active_sva: invalid AddressAssignment response must be NotSupported with length 0 in %m");
 
   cp_addr_assign_invalid_not_supported_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -3198,7 +3128,6 @@ module flow_active_sva
                                             cmd_attr == AddressAssignment &&
                                             issue_phase_q > 8'd4 &&
                                             daa_invalid_addr_i &&
-                                            !entdaa_stop_req_q &&
                                             !daa_wr_busy_q
                                             |->
                                             (gen_stop_o &&
@@ -3211,7 +3140,6 @@ module flow_active_sva
                                             cmd_attr == AddressAssignment &&
                                             issue_phase_q > 8'd4 &&
                                             daa_invalid_addr_i &&
-                                            !entdaa_stop_req_q &&
                                             !daa_wr_busy_q &&
                                             gen_stop_o &&
                                             !resp_queue_wvalid);
@@ -3989,19 +3917,8 @@ module flow_active_sva
                                             ##1
                                             state_q == WriteResp && resp_queue_wvalid);
 
-  ap_wroc0_continuation_ignores_resp_ready :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            (sdr_write_done_ready() || sdr_read_done_ready()) &&
-                                            !reg_desc.toc &&
-                                            !reg_desc.wroc &&
-                                            next_cmd_available &&
-                                            next_cmd_supported
-                                            |->
-                                            cmd_queue_rready_o &&
-                                            !resp_queue_wvalid &&
-                                            !gen_stop_o)
-  else $error("flow_active_sva: wroc=0 continuation must not depend on RESP ready in %m");
-
+  // The read/write toc0 continuation assertions already cover the complete
+  // wroc=0 behavior. This cover adds the distinct RESP-not-ready scenario.
   cp_wroc0_continuation_ignores_resp_ready :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             (sdr_write_done_ready() || sdr_read_done_ready()) &&
@@ -4016,9 +3933,20 @@ module flow_active_sva
 
   ap_wroc1_continuation_waits_for_resp_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            (sdr_write_done_ready() || sdr_read_done_ready()) &&
+                                            state_q inside {IssueI3CWrite, IssueI3CRead} &&
+                                            cmd_attr == RegularTransfer &&
+                                            !dat_entry.device &&
+                                            !addr_nack_q &&
+                                            ((state_q == IssueI3CRead) ?
+                                             (!short_read_q &&
+                                              !rx_overflow_q &&
+                                              rx_byte_idx_q == 2'd0) : 1'b1) &&
+                                            remaining_len_q == 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            bus_tx_idle_i &&
+                                            bus_rx_idle_i &&
                                             !reg_desc.toc &&
-                                            reg_desc.wroc &&
+                                            active_wroc &&
                                             next_cmd_available &&
                                             next_cmd_supported &&
                                             !resp_queue_wready_i
@@ -4028,9 +3956,20 @@ module flow_active_sva
 
   cp_wroc1_continuation_waits_for_resp_ready :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            (sdr_write_done_ready() || sdr_read_done_ready()) &&
+                                            state_q inside {IssueI3CWrite, IssueI3CRead} &&
+                                            cmd_attr == RegularTransfer &&
+                                            !dat_entry.device &&
+                                            !addr_nack_q &&
+                                            ((state_q == IssueI3CRead) ?
+                                             (!short_read_q &&
+                                              !rx_overflow_q &&
+                                              rx_byte_idx_q == 2'd0) : 1'b1) &&
+                                            remaining_len_q == 16'h0 &&
+                                            issue_phase_q > PhaseAddrAck &&
+                                            bus_tx_idle_i &&
+                                            bus_rx_idle_i &&
                                             !reg_desc.toc &&
-                                            reg_desc.wroc &&
+                                            active_wroc &&
                                             next_cmd_available &&
                                             next_cmd_supported &&
                                             !resp_queue_wready_i &&

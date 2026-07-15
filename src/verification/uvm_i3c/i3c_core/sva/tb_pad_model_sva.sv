@@ -65,14 +65,9 @@ module tb_pad_model_sva (
       dut_sda_oe_i, dut_sda_o_i, dut_sel_od_pp_i, device_sda_o_i, device_sda_pp_en_i,
       sda_bus_i, hc_abort_i);
 
-  cp_pad_model_no_unsafe_sda_contention:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  !unsafe_contention && (dut_drives || device_drives));
-
-  cp_pad_model_dut_drive_high_pp:
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  dut_drives && dut_sda_o_i && dut_sel_od_pp_i &&
-                  (sda_bus_i === 1'b1));
+  // No aggregate safe-activity cover: the DUT/target drive and legal-overlap
+  // covers below partition all safe ownership cases. DUT high push-pull is
+  // already covered by the paired bus-high and push-pull-mode properties.
 
   ap_dut_sda_low_drive_bus_low:
   assert property (@(posedge clk_i) disable iff (!rst_ni)

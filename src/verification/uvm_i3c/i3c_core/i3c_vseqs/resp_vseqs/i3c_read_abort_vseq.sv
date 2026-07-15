@@ -158,18 +158,19 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
   endtask
 
   virtual task run_read_abort_toc_zero_case(bit broadcast_header_enable);
-    transfer_stimulus_cfg_t        cfg;
-    bit                     [31:0] resp;
-    i3c_device_response_seq        dev_seq;
-    word_queue_t                   rx_words;
+    transfer_stimulus_cfg_t        cfg0;
+    transfer_stimulus_cfg_t        cfg1;
+    bit                     [31:0] resp0;
+    i3c_device_response_seq        dev_seq0;
+    word_queue_t                   rx_words0;
 
-    byte_queue_t                   read_data;
-    build_random_payload(DATA_LENGTH, read_data);
+    byte_queue_t                   read_data0;
+    build_random_payload(DATA_LENGTH, read_data0);
 
     enable_dut(broadcast_header_enable);
     write_dat_entry(0, 7'h50, 7'h08, 1'b0);
 
-    cfg = make_transfer_cfg(
+    cfg0 = make_transfer_cfg(
         .ctxt($sformatf(
             "ERR_009 %s read_abort_toc0", private_addr_mode_name(broadcast_header_enable)
         )),
@@ -189,27 +190,56 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
         .settle_before_cmd(0),
         .timeout_cycles(0)
     );
+    cfg1 = make_transfer_cfg(
+        .ctxt($sformatf(
+            "ERR_009 %s queued recovery after read_abort_toc0",
+            private_addr_mode_name(broadcast_header_enable)
+        )),
+        .seq_name($sformatf(
+            "sdrr009_%s_toc0_queued_recovery_dev_seq",
+            private_addr_mode_name(broadcast_header_enable)
+        )),
+        .tid(4'hA),
+        .dev_idx(5'd0),
+        .target_addr(7'h08),
+        .is_i3c(1'b1),
+        .addr_nack(1'b0),
+        .data_nack(1'b0),
+        .tx_before_cmd(1'b0),
+        .wait_device_done(1'b1),
+        .start_with_broadcast_header(broadcast_header_enable),
+        .data_length(1),
+        .settle_before_cmd(0),
+        .timeout_cycles(0)
+    );
 
-    start_device_response(cfg, 1'b1, read_data, dev_seq);
+    start_device_response(cfg0, 1'b1, read_data0, dev_seq0);
 
-    write_read_cmd(cfg, .toc(1'b0));
+    write_read_cmd(cfg0, .toc(1'b0));
+    write_read_cmd(cfg1, .toc(1'b1));
 
-    wait_for_flow_fsm_state(IssueI3CRead, cfg.ctxt, device_done_timeout_cycles(cfg));
+    wait_for_flow_fsm_state(IssueI3CRead, cfg0.ctxt, device_done_timeout_cycles(cfg0));
 
     reg_write(ADDR_HC_CONTROL, hc_control_value(
               .bus_enable(1'b1), .iba_include(broadcast_header_enable), .abort(1'b1)));
 
     poll_idle();
-    wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
-    read_response(resp);
-    read_rx_words(int'(resp[15:0]), rx_words);
+    wait_for_device_done(dev_seq0, cfg0.ctxt, device_done_timeout_cycles(cfg0));
+    read_response(resp0);
+    read_rx_words(int'(resp0[15:0]), rx_words0);
+    `DV_CHECK_EQ(hdl_read_fifo_depth(cmd_paths.depth_path), 1,
+                 "ERR_009 toc0 abort must leave the queued continuation pending")
 
+    // Flush the deliberately retained command while abort still blocks idle
+    // acceptance. The read-abort takeover may itself use RSTART, so FIFO depth
+    // is the unambiguous proof that the continuation was not consumed.
+    reg_write(ADDR_RESET_CONTROL, 32'h1 << RESET_CTRL_SOFT_RST_BIT);
+    settle_cycles();
     reg_write(ADDR_HC_CONTROL, hc_control_value(
               .bus_enable(1'b1), .iba_include(broadcast_header_enable)));
-    check_all_queues_empty(
-        $sformatf(
-        "ERR_009 %s toc0: before recovery transfer", private_addr_mode_name(broadcast_header_enable)
-        ));
+    check_all_queues_empty($sformatf(
+                           "ERR_009 %s toc0: after flushing blocked continuation",
+                           private_addr_mode_name(broadcast_header_enable)));
     run_read_recovery_case(broadcast_header_enable, "toc0_abort");
     request_sw_reset(.keep_enabled(1'b1));
     check_all_queues_empty(
@@ -221,8 +251,8 @@ class i3c_read_abort_vseq extends i3c_base_vseq;
         `gfn,
         $sformatf(
             "ERR_009 result: mode=%s case=toc0_abort resp_data_length=%0d observed_rstart=%0b resp_status=0x%0h recovery_without_reset=1",
-            private_addr_mode_name(broadcast_header_enable), resp[15:0], dev_seq.observed_rstart,
-            resp[31:28]), UVM_LOW)
+            private_addr_mode_name(broadcast_header_enable), resp0[15:0],
+            dev_seq0.observed_rstart, resp0[31:28]), UVM_LOW)
   endtask
 
   virtual task run_read_recovery_case(bit broadcast_header_enable, string case_name);

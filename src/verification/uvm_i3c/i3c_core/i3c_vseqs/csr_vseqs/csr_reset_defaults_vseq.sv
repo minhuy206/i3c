@@ -8,6 +8,9 @@ class csr_reset_defaults_vseq extends csr_base_vseq;
   task body();
     bit [31:0] data;
 
+    // Keep this read before any CSR write so the reset-qualified unmapped
+    // readback cover observes the architectural zero default.
+    check_reg_eq(12'h020, 32'h0000_0000, "UNMAPPED_020", "after reset");
     check_reg_eq(ADDR_HC_CONTROL, 32'h0000_0000, "HC_CONTROL", "after reset");
     check_reg_eq(ADDR_RESET_CONTROL, 32'h0000_0000, "RESET_CONTROL", "after reset");
     reg_read(ADDR_HC_CONTROL, data);

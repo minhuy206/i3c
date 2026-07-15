@@ -51,7 +51,6 @@ typedef enum bit [1:0] {
 } nack_position_e;
 
 typedef enum bit [2:0] {
-  SHORT_ZERO,
   SHORT_ONE_BYTE,
   SHORT_DWORD_BOUNDARY,
   SHORT_PARTIAL_1,
@@ -59,14 +58,6 @@ typedef enum bit [2:0] {
   SHORT_PARTIAL_3,
   SHORT_OTHER
 } short_boundary_e;
-
-typedef enum bit [2:0] {
-  DATA_PATTERN_ZERO,
-  DATA_PATTERN_ONES,
-  DATA_PATTERN_ALTERNATING,
-  DATA_PATTERN_WALKING_ONE,
-  DATA_PATTERN_OTHER
-} data_pattern_e;
 
 typedef enum bit [1:0] {
   HC_ABORT,
@@ -135,39 +126,23 @@ class i3c_correlated_item extends uvm_sequence_item;
   bit                           data_nack;
   bit                           response_valid;
   i3c_resp_cmd_class_e          response_cmd_class;
-  bit                           response_descriptor_valid;
   i3c_resp_err_status_e         expected_resp_status;
   i3c_resp_err_status_e         observed_resp_status;
-  bit                     [3:0] expected_resp_tid;
-  bit                     [3:0] observed_resp_tid;
-  int unsigned                  expected_resp_len;
-  int unsigned                  observed_resp_len;
   bit                           response_length_valid;
-  int unsigned                  actual_bus_len;
   int unsigned                  response_len;
   i3c_resp_len_relation_e       response_len_relation;
-  bit                           ccc_response_valid;
-  i3c_ccc_e                     ccc_opcode;
-  bit                           ccc_direct;
   i3c_resp_err_status_e         resp_status;
   bit                           daa_valid;
   int unsigned                  daa_requested_count;
   int unsigned                  daa_joined_count;
-  int unsigned                  daa_rstart_count;
   i3c_daa_result_e              daa_result;
   bit                           daa_response_valid;
   bit                           daa_dat_valid;
   int unsigned                  daa_start_index;
   i3c_daa_dat_span_e            daa_dat_span;
-  bit                     [4:0] dat_idx;
-  bit                     [6:0] expected_target_addr;
-  bit                     [6:0] observed_target_addr;
-  bit                           expected_rnw;
-  bit                           observed_rnw;
   bit                           broadcast_header_enable;
   bit                           expected_broadcast_header;
   bit                           observed_broadcast_header;
-  bit                     [6:0] observed_first_addr;
   bit                           private_transfer_valid;
   bit                           address_response_valid;
   i3c_resp_addr_phase_e         response_addr_phase;
@@ -178,33 +153,24 @@ class i3c_correlated_item extends uvm_sequence_item;
   bit                           final_t_bit;
   length_outcome_e              length_outcome;
   bit                           nack_position_valid;
-  int                           first_nack_idx;
   nack_position_e               nack_position;
   bit                           short_boundary_valid;
   bit                           sre;
   short_boundary_e              short_boundary;
   bit                           integrity_valid;
-  bit                           integrity_pass;
-  data_pattern_e                data_pattern;
   bit                           abort_valid;
   abort_cause_e                 abort_cause;
   abort_point_e                 abort_point;
   abort_byte_boundary_e         abort_byte_boundary;
-  bit                           abort_response_valid;
   bit                           recovery_valid;
   recovery_source_e             recovery_source;
   reset_point_e                 reset_point;
   i3c_resp_cmd_class_e          interrupted_cmd_class;
   i3c_resp_cmd_class_e          recovery_cmd_class;
-  bit                           recovery_pass;
   bit                           command_boundary_valid;
-  i3c_resp_cmd_class_e          previous_cmd_class;
-  i3c_resp_cmd_class_e          next_cmd_class;
   command_boundary_e            command_boundary;
   bit                           stall_recovery_valid;
   stall_type_e                  stall_type;
-  i3c_resp_cmd_class_e          stall_cmd_class;
-  bit                           stall_recovery_pass;
 
   function new(string name = "i3c_correlated_item");
     super.new(name);

@@ -17,7 +17,9 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     run_ccc_success_case(1'b1, 4'h6);
     run_mixed_wroc_case();
     run_wroc0_continuation_with_resp_full_case();
+    run_wroc1_continuation_with_resp_full_case();
     run_error_override_case();
+    run_ccc_error_override_case();
   endtask
 
   virtual function transfer_stimulus_cfg_t make_write_cfg(string ctxt, string seq_name,
@@ -253,6 +255,99 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     check_all_queues_empty("after ERR_012 full-RESP cleanup reset");
   endtask
 
+  virtual task run_wroc1_continuation_with_resp_full_case();
+    transfer_stimulus_cfg_t cfg0;
+    transfer_stimulus_cfg_t cfg1;
+    regular_trans_desc_t    cmd0;
+    regular_trans_desc_t    cmd1;
+    byte_queue_t            no_read_data;
+    byte_queue_t            exp_data0;
+    byte_queue_t            exp_data1;
+    word_queue_t            tx_words0;
+    word_queue_t            tx_words1;
+    i3c_device_response_seq dev_seq0;
+    i3c_device_response_seq dev_seq1;
+    i3c_response_desc_t     resp_desc;
+    bit              [31:0] resp;
+
+    configure_target();
+    for (int unsigned i = 0; i < RespFifoDepth; i++) begin
+      backdoor_write_fifo_entry(resp_paths, i, 32'hF100_0000 | i);
+    end
+    backdoor_set_fifo_level(resp_paths, RespFifoDepth);
+
+    cfg0 = make_write_cfg("ERR_012 full RESP first toc=0 wroc=1",
+                          "err012_wroc1_full_resp_first_dev_seq", 4'hC);
+    cfg1 = make_write_cfg("ERR_012 full RESP second toc=1 wroc=1",
+                          "err012_wroc1_full_resp_second_dev_seq", 4'hD);
+    cmd0 = build_regular_transfer_cmd(cfg0, 1'b0, 1'b0);
+    cmd1 = build_regular_transfer_cmd(cfg1, 1'b0, 1'b1);
+    cmd0.wroc = 1'b1;
+    cmd1.wroc = 1'b1;
+
+    start_ordered_device_responses(cfg0, 1'b0, no_read_data, dev_seq0,
+                                   cfg1, 1'b0, no_read_data, dev_seq1);
+    build_random_tx_words(cfg0.data_length, exp_data0, tx_words0);
+    build_random_tx_words(cfg1.data_length, exp_data1, tx_words1);
+    write_tx_words(tx_words0);
+    write_tx_words(tx_words1);
+    write_cmd(cmd0[31:0], cmd0[63:32]);
+    write_cmd(cmd1[31:0], cmd1[63:32]);
+
+    begin : wait_wroc1_continuation_stall
+      int          timeout = device_done_timeout_cycles(cfg0);
+      int unsigned remaining_len;
+      for (int i = 0; i < timeout; i++) begin
+        if ((hdl_read_uint_lsb(FLOW_FSM_STATE_PATH, 4) == IssueI3CWrite) &&
+            (hdl_read_uint_lsb(
+                "tb_i3c_top.dut.u_ctrl.u_flow_fsm.remaining_len_q", 16
+            ) == 0) &&
+            !hdl_read_bit(resp_paths.write_ready_path) &&
+            (hdl_read_fifo_depth(cmd_paths.depth_path) == 1)) break;
+        settle_cycles(1);
+      end
+      remaining_len = hdl_read_uint_lsb(
+          "tb_i3c_top.dut.u_ctrl.u_flow_fsm.remaining_len_q", 16);
+      `DV_CHECK_EQ(remaining_len, 0,
+                   "ERR_012 wroc=1 continuation never reached RESP backpressure")
+    end
+    // remaining_len reaches zero before the final bus handshake is idle.
+    // Keep RESP full long enough for sdr_write_done_ready() to become true.
+    settle_cycles(16);
+    `DV_CHECK_EQ(hdl_read_bit(cmd_paths.read_ready_path), 1'b0,
+                 "ERR_012 wroc=1 continuation popped while RESP was full")
+
+    // Release the first response, then drain the remaining prefill entries
+    // and that response so the final toc=1 response also has space.
+    read_response(resp);
+    `DV_CHECK_EQ(resp, 32'hF100_0000,
+                 "ERR_012 wroc=1 first prefilled response changed")
+    for (int unsigned i = 1; i < RespFifoDepth; i++) begin
+      read_response(resp);
+      `DV_CHECK_EQ(resp, 32'hF100_0000 | i,
+                   $sformatf("ERR_012 wroc=1 prefilled response %0d changed", i))
+    end
+    wait_for_device_done(dev_seq0, cfg0.ctxt, device_done_timeout_cycles(cfg0));
+    read_response(resp);
+    resp_desc = i3c_response_desc_t'(resp);
+    `DV_CHECK_EQ(resp_desc.err_status, Success,
+                 "ERR_012 wroc=1 first continuation response status mismatch")
+    `DV_CHECK_EQ(resp_desc.tid, cmd0.tid,
+                 "ERR_012 wroc=1 first continuation response TID mismatch")
+
+    poll_idle();
+    wait_for_device_done(dev_seq1, cfg1.ctxt, device_done_timeout_cycles(cfg1));
+    `DV_CHECK_EQ(dev_seq0.observed_rstart, 1'b1,
+                 "ERR_012 wroc=1 continuation did not resume with RSTART")
+    read_response(resp);
+    resp_desc = i3c_response_desc_t'(resp);
+    `DV_CHECK_EQ(resp_desc.err_status, Success,
+                 "ERR_012 wroc=1 final response status mismatch")
+    `DV_CHECK_EQ(resp_desc.tid, cmd1.tid,
+                 "ERR_012 wroc=1 final response TID mismatch")
+    check_all_queues_empty("after ERR_012 wroc=1 full-RESP continuation");
+  endtask
+
   virtual task run_error_override_case();
     transfer_stimulus_cfg_t     cfg;
     immediate_data_trans_desc_t cmd;
@@ -284,6 +379,50 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
                  "ERR_012 wroc=0 error override must report AddrHeader")
     `DV_CHECK_EQ(resp_desc.tid, cmd.tid, "ERR_012 wroc=0 error override TID mismatch")
     check_all_queues_empty("after ERR_012 wroc=0 error override");
+  endtask
+
+  virtual task run_ccc_error_override_case();
+    immediate_data_trans_desc_t cmd;
+    i3c_device_response_seq     dev_seq;
+    i3c_response_desc_t         resp_desc;
+    bit                  [31:0] resp;
+
+    configure_target();
+    cmd                   = '0;
+    cmd.attr              = ImmediateDataTransfer;
+    cmd.tid               = 4'hE;
+    cmd.cp                = 1'b1;
+    cmd.cmd               = ENEC;
+    cmd.mode              = sdr0;
+    cmd.dtt               = 3'd1;
+    cmd.dev_idx           = 5'd0;
+    cmd.toc               = 1'b1;
+    cmd.wroc              = 1'b0;
+    cmd.def_or_data_byte1 = 8'h01;
+
+    dev_seq = i3c_device_response_seq::type_id::create(
+        "err012_ccc_wroc0_error_override_dev_seq");
+    dev_seq.target_addr = 7'h7e;
+    dev_seq.addr_nack = 1'b1;
+    dev_seq.is_i3c = 1'b1;
+    dev_seq.dir = 1'b0;
+    fork : ccc_error_response
+      dev_seq.start(p_sequencer.m_i3c_sequencer);
+    join_none
+
+    write_cmd(cmd[31:0], cmd[63:32]);
+    poll_idle();
+    wait_for_device_done(dev_seq, "ERR_012 CCC wroc=0 error override", 3000);
+    read_response(resp);
+    resp_desc = i3c_response_desc_t'(resp);
+    `DV_CHECK_EQ(resp_desc.err_status, AddrHeader,
+                 "ERR_012 CCC wroc=0 error must report AddrHeader")
+    `DV_CHECK_EQ(resp_desc.tid, cmd.tid,
+                 "ERR_012 CCC wroc=0 error response TID mismatch")
+    `DV_CHECK_EQ(resp_desc.data_length, 16'h0000,
+                 "ERR_012 CCC wroc=0 error response length mismatch")
+    check_all_queues_empty("after ERR_012 CCC wroc=0 error override");
+    disable ccc_error_response;
   endtask
 
 endclass

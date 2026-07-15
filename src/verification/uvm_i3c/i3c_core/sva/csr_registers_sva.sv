@@ -508,28 +508,14 @@ module csr_registers_sva
                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
                   ##1 !hc_control_cfg_i.sw_reset);
 
-  ap_broadcast_header_enable_does_not_enable_hc :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   hc_control_write && wdata_i[HC_CTRL_IBA_INCLUDE_BIT] &&
-                   !wdata_i[HC_CTRL_BUS_ENABLE_BIT]
-                   |=> (!hc_control_cfg_i.ctrl_enable && !hc_control_cfg_i.i3c_fsm_en &&
-                        hc_control_cfg_i.broadcast_header_enable))
-  else $error("csr_registers_sva: IBA_INCLUDE write must not enable HC");
-
+  // ap_hc_control_write_updates_bits owns the correctness check for these
+  // specialized control writes. The covers retain the independent scenarios.
   cp_broadcast_header_enable_does_not_enable_hc :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   hc_control_write && wdata_i[HC_CTRL_IBA_INCLUDE_BIT] &&
                   !wdata_i[HC_CTRL_BUS_ENABLE_BIT]
                   ##1 (!hc_control_cfg_i.ctrl_enable && !hc_control_cfg_i.i3c_fsm_en &&
                        hc_control_cfg_i.broadcast_header_enable));
-
-  ap_hc_abort_only_write_keeps_disabled :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   hc_control_write && wdata_i[HC_CTRL_ABORT_BIT] &&
-                   !wdata_i[HC_CTRL_BUS_ENABLE_BIT]
-                   |=> (!hc_control_cfg_i.ctrl_enable && !hc_control_cfg_i.i3c_fsm_en &&
-                        hc_control_cfg_i.abort))
-  else $error("csr_registers_sva: HC_CONTROL.ABORT-only write must not enable HC");
 
   cp_hc_abort :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -568,11 +554,8 @@ module csr_registers_sva
   cp_reset_control_readback_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni) reset_control_read ##1 (rdata_o == '0));
 
-  ap_unmapped_020_read_zero :
-  assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                   unmapped_020_read |=> (rdata_o == '0))
-  else $error("csr_registers_sva: 0x020 unmapped read must return zero");
-
+  // ADDR_UNMAPPED_020 is part of invalid_read, so
+  // ap_invalid_reg_read_zero already owns this correctness check.
   cp_unmapped_020_read_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   unmapped_020_read ##1 (rdata_o == '0));
@@ -938,12 +921,8 @@ module csr_registers_sva
   )))
   else $error("csr_registers_sva: reset-default CSR readback mismatch");
 
-  cp_reset_default_readback :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  ren_i && !wen_i && !csr_written_since_reset_q && reset_default_addr_valid
-                  ##1 (rdata_o == $past(
-      reset_default_rdata
-  )));
+  // No aggregate cover: the per-address reset-readback covers below partition
+  // every address accepted by reset_default_addr_valid.
 
   cp_reset_readback_hc_control :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1098,11 +1077,8 @@ module csr_registers_sva
   )))
   else $error("csr_registers_sva: DAT readback mismatch");
 
-  cp_dat_readback :
-  cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
-                  dat_read ##1 (rdata_o == $past(
-      dat_read_data
-  )));
+  // No aggregate cover: gen_dat_reset_default_readback provides the same
+  // readback event per DAT index, which is the meaningful closure dimension.
 
   cp_dat_device_i3c_write :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)

@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -103,33 +104,37 @@ def main():
     expected_schema = None
 
     try:
-        for ucd in ucd_files:
-            test_name = ucd.parent.name
-            rows = run_ucd2json(ucd2json, ucd)
-            file_keys = set()
-            for row in rows:
-                item_kind = "coverpoint" if row["cp"] else "cross"
-                item_name = row["cp"] or row["cr"]
-                key = (row["cg"], item_kind, item_name, row["bs"], row["bin"])
-                if key in file_keys:
-                    raise RuntimeError(f"duplicate functional coverage bin identity in {ucd}: {key}")
-                file_keys.add(key)
-                count = int(row["count"])
-                if count < 0:
-                    raise RuntimeError(f"negative functional coverage count in {ucd}: {key}")
-                totals[key] += count
-                if count > 0:
-                    testers[key].add(test_name)
+        worker_count = min(8, len(ucd_files))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            converted_rows = executor.map(lambda ucd: run_ucd2json(ucd2json, ucd), ucd_files)
+            for ucd, rows in zip(ucd_files, converted_rows):
+                test_name = ucd.parent.name
+                file_keys = set()
+                for row in rows:
+                    item_kind = "coverpoint" if row["cp"] else "cross"
+                    item_name = row["cp"] or row["cr"]
+                    key = (row["cg"], item_kind, item_name, row["bs"], row["bin"])
+                    if key in file_keys:
+                        raise RuntimeError(
+                            f"duplicate functional coverage bin identity in {ucd}: {key}"
+                        )
+                    file_keys.add(key)
+                    count = int(row["count"])
+                    if count < 0:
+                        raise RuntimeError(f"negative functional coverage count in {ucd}: {key}")
+                    totals[key] += count
+                    if count > 0:
+                        testers[key].add(test_name)
 
-            if expected_schema is None:
-                expected_schema = file_keys
-            elif file_keys != expected_schema:
-                missing = len(expected_schema - file_keys)
-                extra = len(file_keys - expected_schema)
-                raise RuntimeError(
-                    f"functional coverage schema mismatch in {ucd}: "
-                    f"{missing} missing, {extra} extra bin(s)"
-                )
+                if expected_schema is None:
+                    expected_schema = file_keys
+                elif file_keys != expected_schema:
+                    missing = len(expected_schema - file_keys)
+                    extra = len(file_keys - expected_schema)
+                    raise RuntimeError(
+                        f"functional coverage schema mismatch in {ucd}: "
+                        f"{missing} missing, {extra} extra bin(s)"
+                    )
     except (OSError, RuntimeError, TypeError, ValueError) as err:
         sys.exit(f"Error: {err}")
 
@@ -140,21 +145,37 @@ def main():
         by_item[(cg, item_kind, item_name)].append(key)
 
     report_lines = []
-    total_bins   = 0
-    covered_bins = 0
+    closure_total = 0
+    closure_covered = 0
+    diagnostic_total = 0
+    diagnostic_covered = 0
+
+    # A cross owns closure for its feature dimensions. Its component
+    # coverpoints remain visible for debug, but are not counted a second time.
+    cross_owned_covergroups = {
+        cg for (cg, item_kind, _item_name) in by_item if item_kind == "cross"
+    }
 
     SEP = '=' * 72
 
     for (cg, item_kind, item_name), keys in sorted(by_item.items()):
         grp_tot = len(keys)
         grp_cov = sum(1 for k in keys if totals[k] > 0)
-        total_bins   += grp_tot
-        covered_bins += grp_cov
+        closure_owner = item_kind == "cross" or cg not in cross_owned_covergroups
+        if closure_owner:
+            closure_total += grp_tot
+            closure_covered += grp_cov
+            ownership = "Closure bins"
+        else:
+            diagnostic_total += grp_tot
+            diagnostic_covered += grp_cov
+            ownership = "Diagnostic bins"
         pct = 100.0 * grp_cov / grp_tot if grp_tot else 0.0
 
         report_lines.append(f"\n{SEP}")
         report_lines.append(f"Covergroup : {cg}")
         report_lines.append(f"{item_kind.title():<11}: {item_name}")
+        report_lines.append(f"Ownership  : {ownership}")
         report_lines.append(f"Coverage   : {grp_cov}/{grp_tot}  ({pct:.1f}%)")
         report_lines.append(SEP)
 
@@ -167,14 +188,16 @@ def main():
             report_lines.append(
                 f"  [{status}] {label:<52} count={cnt:>8}  in {ntests} test(s)")
 
-    overall_pct = 100.0 * covered_bins / total_bins if total_bins else 0.0
+    closure_pct = 100.0 * closure_covered / closure_total if closure_total else 0.0
+    diagnostic_pct = (100.0 * diagnostic_covered / diagnostic_total
+                      if diagnostic_total else 0.0)
 
     header = '\n'.join([
         "I3C Functional Coverage Report",
         f"Tests analysed : {len(ucd_files)}",
-        f"Total bins     : {total_bins}",
-        f"Covered bins   : {covered_bins}",
-        f"Overall        : {overall_pct:.1f}%",
+        f"Closure bins   : {closure_covered}/{closure_total} ({closure_pct:.1f}%)",
+        f"Diagnostic bins: {diagnostic_covered}/{diagnostic_total} ({diagnostic_pct:.1f}%)",
+        "KPI policy     : crosses own closure; component coverpoints are diagnostic",
     ])
 
     report = header + '\n' + '\n'.join(report_lines) + '\n'

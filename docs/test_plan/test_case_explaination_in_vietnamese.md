@@ -1176,7 +1176,7 @@ Test này nằm trong error category, không nằm trong CCC/DAA happy-path, vì
 
 Test này là positive sign-off coverage cho field `wroc` (response on completion) trong command descriptor.
 
-`i3c_wroc_policy_vseq` issue các regular, immediate và immediate-CCC command thành công với cả `wroc=0` và `wroc=1`; trộn hai policy trong cùng command stream; chạy continuation `toc=0,wroc=0`; giữ RESP FIFO full để chứng minh command không phụ thuộc RESP backpressure; và tạo address NACK trên command `wroc=0` để kiểm tra error override.
+`i3c_wroc_policy_vseq` issue các regular, immediate và immediate-CCC command thành công với cả `wroc=0` và `wroc=1`; trộn hai policy trong cùng command stream; chạy continuation `toc=0` cho cả hai giá trị WROC khi RESP FIFO full để phân biệt đường bỏ qua và đường phải chờ backpressure; và tạo address NACK trên command `wroc=0` để kiểm tra error override.
 
 Policy mong đợi là:
 
@@ -1186,7 +1186,7 @@ Policy mong đợi là:
 - Mọi error vẫn ghi RESP bất kể `wroc`, bao gồm address/data NACK, underflow/overflow, short read khi `sre=1`, HC abort, invalid descriptor và missing/unsupported continuation. Early target end khi `sre=0` là completion hợp lệ và tuân theo WROC. Missing/unsupported continuation trả `NotSupported`.
 - `AddressAssignment` không tham gia suppression policy: `wroc=0` vẫn là descriptor không hợp lệ và được cover bởi ERR_011.
 
-Scoreboard lưu `wroc` trong expected transaction và chỉ queue expected response cho success khi `wroc=1`; error luôn queue expected response. Các SVA `ap_wroc0_success_suppresses_resp`, `ap_wroc1_success_enters_write_resp`, `ap_wroc0_error_override_writes_resp`, `ap_wroc0_continuation_ignores_resp_ready` và `ap_wroc1_continuation_waits_for_resp_ready` kiểm tra policy độc lập với vseq.
+Scoreboard lưu `wroc` trong expected transaction và chỉ queue expected response cho success khi `wroc=1`; error luôn queue expected response. Các SVA `ap_wroc0_success_suppresses_resp`, `ap_wroc1_success_enters_write_resp`, `ap_wroc0_error_override_writes_resp`, `ap_sdr_read_toc0_accept_continuation`, `ap_toc0_accept_continuation` và `ap_wroc1_continuation_waits_for_resp_ready` kiểm tra policy độc lập với vseq; `cp_wroc0_continuation_ignores_resp_ready` giữ scenario RESP-not-ready riêng.
 
 Test này quan trọng vì software dùng số RESP để quản lý queue accounting. Suppression sai có thể tạo RESP thừa; suppress nhầm error có thể làm software mất hoàn toàn trạng thái lỗi của transaction.
 

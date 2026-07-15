@@ -26,7 +26,8 @@ class i3c_reset_during_idle_vseq extends bus_base_vseq;
   endtask
 
   virtual task prepare_non_reset_idle_state();
-    bit [31:0] status;
+    bit [31:0]                  status;
+    immediate_data_trans_desc_t queued_cmd;
 
     disable_dut();
     poll_idle();
@@ -35,7 +36,17 @@ class i3c_reset_during_idle_vseq extends bus_base_vseq;
     reg_write(ADDR_T_R, 32'h0000_0015);
     write_dat_entry(3, 7'h52, 7'h0A, 1'b0);
 
-    seed_fifo_for_reset(cmd_paths, 64'h0123_4567_89AB_CDEF);
+    queued_cmd         = '0;
+    queued_cmd.attr    = ImmediateDataTransfer;
+    queued_cmd.tid     = 4'hC;
+    queued_cmd.mode    = sdr0;
+    queued_cmd.dev_idx = 5'd3;
+    queued_cmd.toc     = 1'b1;
+    queued_cmd.wroc    = 1'b1;
+    // Keep the controller disabled so this valid descriptor remains queued.
+    // Frontdoor staging is required for the scoreboard to classify the reset
+    // point as RESET_POINT_QUEUED_COMMAND.
+    write_cmd(queued_cmd[31:0], queued_cmd[63:32]);
     seed_fifo_for_reset(tx_paths, 32'hCAFE_0130);
     seed_fifo_for_reset(rx_paths, 32'hCAFE_0131);
     seed_fifo_for_reset(resp_paths, 32'hCAFE_0132);

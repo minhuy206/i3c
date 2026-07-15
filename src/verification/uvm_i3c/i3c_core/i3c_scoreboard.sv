@@ -58,7 +58,6 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [31:0]     data;
     bit            integrity_candidate;
     bit            integrity_protocol;
-    data_pattern_e integrity_pattern;
   } exp_rx_data_t;
 
   typedef struct {
@@ -385,7 +384,6 @@ class i3c_scoreboard extends uvm_scoreboard;
   extern function nack_position_e classify_nack_position(
       int first_nack_idx, int unsigned requested_length, int unsigned actual_length);
   extern function short_boundary_e classify_short_boundary(int unsigned actual_length);
-  extern function data_pattern_e classify_data_pattern(bit [7:0] bytes[$]);
   extern function i3c_daa_dat_span_e classify_daa_dat_span(int unsigned start_index,
                                                            int unsigned requested_count);
   extern function void fill_private_transfer_coverage(
@@ -395,29 +393,23 @@ class i3c_scoreboard extends uvm_scoreboard;
                                              txn_cov_outcome_t outcome);
   extern function void publish_write_coverage(i3c_item item, exp_txn_t exp,
                                               txn_cov_outcome_t outcome);
-  extern function void publish_integrity_coverage(bit rnw, bit target_is_i3c,
-                                                  data_pattern_e pattern);
+  extern function void publish_integrity_coverage(bit rnw, bit target_is_i3c);
   extern function void publish_command_boundary(i3c_resp_cmd_class_e previous_class,
                                                 i3c_resp_cmd_class_e next_class,
                                                 command_boundary_e boundary);
   extern function void publish_ccc_coverage(exp_txn_t exp, txn_cov_outcome_t outcome,
                                             int unsigned byte_count);
   extern function void publish_entdaa_coverage(
-      exp_txn_t exp, int unsigned joined_count, int unsigned rstart_count, i3c_daa_result_e result,
+      exp_txn_t exp, int unsigned joined_count, i3c_daa_result_e result,
       txn_cov_outcome_t outcome, int unsigned byte_count);
-  extern function void publish_abort_response_coverage(exp_resp_t exp_resp,
-                                                       i3c_response_desc_t resp);
   extern function void publish_recovery_coverage(exp_resp_t exp_resp, bit pass);
   extern function void publish_stall_recovery_coverage(exp_resp_t exp_resp, bit pass);
   extern function void publish_completion_policy_coverage(exp_resp_t exp_resp,
                                                           bit response_present);
   extern function void publish_daa_response_coverage(exp_resp_t exp_resp, i3c_response_desc_t resp);
-  extern function void publish_ccc_response_coverage(exp_resp_t exp_resp, i3c_response_desc_t resp);
   extern function void publish_daa_dat_coverage(
       int unsigned start_index, int unsigned requested_count, i3c_resp_err_status_e resp_status);
   extern function void publish_response_coverage(exp_resp_t exp_resp, i3c_response_desc_t resp);
-  extern function void publish_response_descriptor_coverage(exp_resp_t exp_resp,
-                                                            i3c_response_desc_t resp);
   extern function void publish_address_response_coverage(exp_resp_t exp_resp,
                                                          i3c_response_desc_t resp);
 

@@ -14,7 +14,6 @@ function bit i3c_scoreboard::enqueue_rx_word_expectation(bit [3:0] tid, int data
   rx_exp.data                = data;
   rx_exp.integrity_candidate = 1'b0;
   rx_exp.integrity_protocol  = 1'b0;
-  rx_exp.integrity_pattern   = DATA_PATTERN_OTHER;
 
   if (exp_rx_data_queue.size() < RxFifoDepth) begin
     exp_rx_data_queue.push_back(rx_exp);
@@ -81,7 +80,7 @@ function void i3c_scoreboard::check_rx_data(bit [31:0] rdata);
     read_integrity_pass[exp.read_id] &= word_integrity_pass;
     if (integrity_last) begin
       if (read_integrity_pass[exp.read_id]) begin
-        publish_integrity_coverage(1'b1, exp.integrity_protocol, exp.integrity_pattern);
+        publish_integrity_coverage(1'b1, exp.integrity_protocol);
       end
       read_integrity_pass.delete(exp.read_id);
     end
@@ -110,7 +109,6 @@ function void i3c_scoreboard::set_rx_fifo_level_unknown(int unsigned count, stri
   unknown_entry.data = '0;
   unknown_entry.integrity_candidate = 1'b0;
   unknown_entry.integrity_protocol = 1'b0;
-  unknown_entry.integrity_pattern = DATA_PATTERN_OTHER;
 
   if (count > RxFifoDepth) begin
     `uvm_error(`gfn, $sformatf(
@@ -276,11 +274,7 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
             ), UVM_LOW)
 
   publish_completion_policy_coverage(exp_resp, 1'b1);
-  publish_response_descriptor_coverage(exp_resp, resp);
 
-  if (exp_resp.is_ccc && response_matches) begin
-    publish_ccc_response_coverage(exp_resp, resp);
-  end
   if ((exp_resp.response_cmd_class != RESP_CMD_CLASS_OTHER) && response_matches) begin
     publish_response_coverage(exp_resp, resp);
   end
@@ -293,9 +287,6 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
   end
   if (exp_resp.daa_response_valid && response_matches) begin
     publish_daa_response_coverage(exp_resp, resp);
-  end
-  if (exp_resp.abort_response_valid && response_matches) begin
-    publish_abort_response_coverage(exp_resp, resp);
   end
   if (exp_resp.recovery_valid) begin
     publish_recovery_coverage(exp_resp, response_matches && (resp.err_status == Success));

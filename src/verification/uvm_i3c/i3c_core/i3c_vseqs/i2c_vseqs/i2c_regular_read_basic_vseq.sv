@@ -16,6 +16,10 @@ class i2c_regular_read_basic_vseq extends i3c_base_vseq;
     run_i2c_read_case(1, 4'd1);
     run_i2c_read_case(4, 4'd2);
 
+    // I2C must ignore the I3C broadcast-header enable bit.
+    enable_dut(1'b1);
+    run_i2c_read_case(2, 4'd3);
+
   endtask
 
   virtual task run_i2c_read_case(int unsigned data_length, bit [3:0] tid);

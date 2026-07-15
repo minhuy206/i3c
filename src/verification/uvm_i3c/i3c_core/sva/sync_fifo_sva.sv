@@ -94,24 +94,13 @@ module sync_fifo_sva #(
                   past_valid_q && !flush_i && do_read
                   ##1 (rptr_q == ($past(rptr_q) + 1'b1)));
 
-  ap_read_pointer_wrap_toggles_extra_msb:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   past_valid_q && !flush_i && do_read &&
-                   (rptr_q == {1'b0, {PtrW{1'b1}}})
-                   |=> (rptr_q == {1'b1, {PtrW{1'b0}}}))
-  else $error("sync_fifo_sva: read pointer index wrap did not toggle extra MSB");
-
+  // ap_read_pop_advances_rptr checks the complete pointer increment, including
+  // both wrap transitions. Keep the boundary covers as distinct stimulus bins.
   cp_read_pointer_wrap_toggles_extra_msb:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   past_valid_q && !flush_i && do_read &&
                   (rptr_q == {1'b0, {PtrW{1'b1}}})
                   ##1 (rptr_q == {1'b1, {PtrW{1'b0}}}));
-
-  ap_read_pointer_wrap_reuses_zero:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   past_valid_q && !flush_i && do_read && (rptr_q == '1)
-                   |=> (rptr_q == '0))
-  else $error("sync_fifo_sva: read pointer did not wrap to zero after reuse");
 
   cp_read_pointer_wrap_reuses_zero:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -140,24 +129,13 @@ module sync_fifo_sva #(
                   past_valid_q && !flush_i && do_write
                   ##1 (wptr_q == ($past(wptr_q) + 1'b1)));
 
-  ap_write_pointer_wrap_toggles_extra_msb:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   past_valid_q && !flush_i && do_write &&
-                   (wptr_q == {1'b0, {PtrW{1'b1}}})
-                   |=> (wptr_q == {1'b1, {PtrW{1'b0}}}))
-  else $error("sync_fifo_sva: write pointer index wrap did not toggle extra MSB");
-
+  // ap_write_push_advances_wptr checks the complete pointer increment,
+  // including both wrap transitions. Keep the boundary covers for closure.
   cp_write_pointer_wrap_toggles_extra_msb:
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   past_valid_q && !flush_i && do_write &&
                   (wptr_q == {1'b0, {PtrW{1'b1}}})
                   ##1 (wptr_q == {1'b1, {PtrW{1'b0}}}));
-
-  ap_write_pointer_wrap_reuses_zero:
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   past_valid_q && !flush_i && do_write && (wptr_q == '1)
-                   |=> (wptr_q == '0))
-  else $error("sync_fifo_sva: write pointer did not wrap to zero after reuse");
 
   cp_write_pointer_wrap_reuses_zero:
   cover property (@(posedge clk_i) disable iff (!rst_ni)

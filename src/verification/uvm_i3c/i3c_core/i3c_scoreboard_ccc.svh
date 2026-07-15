@@ -114,8 +114,7 @@ function void i3c_scoreboard::check_ccc_txn(i3c_item item, exp_txn_t exp);
   end
 
   if (is_entdaa) begin
-    publish_entdaa_coverage(exp, joined_count, item.CCC_direct_q.size(), daa_result, outcome,
-                            resp_len);
+    publish_entdaa_coverage(exp, joined_count, daa_result, outcome, resp_len);
   end else begin
     publish_ccc_coverage(exp, outcome, resp_len);
   end

@@ -16,7 +16,7 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     fill_cmd_queue();
     check_queue_status_write_ignored();
     check_queue_state(cmd_paths, QueueDepth, "after writes to read-only QUEUE_STATUS");
-    sw_reset_and_check(1'b0, "after CMD queue reset");
+    check_cmd_queue_backpressure();
 
     fill_tx_queue();
     sw_reset_and_check(1'b0, "after TX queue reset");
@@ -31,6 +31,63 @@ class csr_queue_status_flags_vseq extends csr_base_vseq;
     check_queue_state(tx_paths, 0, "TX at end of CSR_010");
     check_queue_state(rx_paths, 0, "RX at end of CSR_010");
     check_queue_state(resp_paths, 0, "RESP at end of CSR_010");
+  endtask
+
+  task check_cmd_queue_backpressure();
+    regular_trans_desc_t cmd;
+    bit           [63:0] held_wdata;
+    uvm_hdl_data_t        raw_wdata;
+    bit                   reg_ready;
+
+    cmd             = '0;
+    cmd.attr        = RegularTransfer;
+    cmd.rnw         = 1'b1;
+    cmd.mode        = sdr0;
+    cmd.toc         = 1'b1;
+    cmd.wroc        = 1'b1;
+    cmd.dev_idx     = 5'd0;
+    cmd.data_length = 16'd4;
+    cmd.tid         = 4'hF;
+
+    // The ninth command cannot enter a full FIFO. It must remain pending in
+    // the CSR block with stable data until one FIFO slot becomes available.
+    write_cmd(cmd[31:0], cmd[63:32]);
+    settle_cycles(1);
+    `DV_CHECK_EQ(hdl_read_bit(cmd_paths.write_valid_path), 1'b1,
+                 "csr_queue_status_flags_vseq: extra CMD did not remain pending")
+    `DV_CHECK_EQ(hdl_read_bit(cmd_paths.write_ready_path), 1'b0,
+                 "csr_queue_status_flags_vseq: full CMD FIFO unexpectedly ready")
+    raw_wdata  = hdl_read_checked(cmd_paths.write_data_path);
+    held_wdata = raw_wdata[63:0];
+    repeat (3) begin
+      settle_cycles(1);
+      `DV_CHECK_EQ(hdl_read_bit(cmd_paths.write_valid_path), 1'b1,
+                   "csr_queue_status_flags_vseq: pending CMD valid dropped under backpressure")
+      raw_wdata = hdl_read_checked(cmd_paths.write_data_path);
+      `DV_CHECK_EQ(raw_wdata[63:0], held_wdata,
+                   "csr_queue_status_flags_vseq: pending CMD data changed under backpressure")
+    end
+
+    // Present a CMD_QUEUE access while the previous command is still pending
+    // so the CSR ready/backpressure cover observes an active blocked request.
+    hdl_force_checked("tb_i3c_top.reg_bus.addr", ADDR_CMD_QUEUE);
+    hdl_force_checked("tb_i3c_top.reg_bus.wen", 1'b1);
+    hdl_force_checked("tb_i3c_top.reg_bus.ren", 1'b0);
+    settle_cycles(2);
+    reg_ready = hdl_read_bit("tb_i3c_top.reg_bus.ready");
+    `DV_CHECK_EQ(reg_ready, 1'b0,
+                 "csr_queue_status_flags_vseq: blocked CMD access did not lower ready")
+    hdl_release_checked("tb_i3c_top.reg_bus.addr");
+    hdl_release_checked("tb_i3c_top.reg_bus.wen");
+    hdl_release_checked("tb_i3c_top.reg_bus.ren");
+    settle_cycles(1);
+
+    // A software reset is the architectural escape from a full, disabled CMD
+    // queue. It also verifies that reset clears the pending CSR-side valid.
+    request_sw_reset(.keep_enabled(1'b0));
+    `DV_CHECK_EQ(hdl_read_bit(cmd_paths.write_valid_path), 1'b0,
+                 "csr_queue_status_flags_vseq: pending CMD survived software reset")
+    check_queue_state(cmd_paths, 0, "after CMD backpressure reset");
   endtask
 
   task check_queue_status_write_ignored();

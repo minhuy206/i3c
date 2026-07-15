@@ -16,6 +16,10 @@ class i2c_regular_write_basic_vseq extends i3c_base_vseq;
     run_i2c_write_case(7'h50, 4, 4'd3);
     run_i2c_write_case(7'h70, 1, 4'd4);
 
+    // I2C must ignore the I3C broadcast-header enable bit.
+    enable_dut(1'b1);
+    run_i2c_write_case(7'h50, 2, 4'd5);
+
   endtask
 
   virtual task run_i2c_write_case(bit [6:0] static_addr, int unsigned data_length, bit [3:0] tid);

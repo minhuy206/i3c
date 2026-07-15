@@ -444,7 +444,6 @@ function void i3c_scoreboard::build_rx_data_expectation(i3c_item item, exp_txn_t
   rx_exp.data = '0;
   rx_exp.integrity_candidate = (exp.cmd_attr == RegularTransfer) && (item.num_data > 0);
   rx_exp.integrity_protocol = exp.target_is_i3c;
-  rx_exp.integrity_pattern = classify_data_pattern(item.data_q);
 
   for (int unsigned byte_idx = 0; byte_idx < 4; byte_idx++) begin
     int unsigned data_idx;
@@ -500,7 +499,7 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp,
       if ((exp.cmd_attr == RegularTransfer) && (exp.data_length > 0) && write_payload_matches(
               item, exp.data_length
           )) begin
-        publish_integrity_coverage(1'b0, exp.target_is_i3c, classify_data_pattern(item.data_q));
+        publish_integrity_coverage(1'b0, exp.target_is_i3c);
       end
       consume_tx_data_words(exp.data_length);
     end else begin

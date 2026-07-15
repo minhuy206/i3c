@@ -104,7 +104,8 @@ DAA_REGRESSION_SEQS ?= \
 	i3c_daa_fewer_devices_than_count_vseq \
 	i3c_daa_multi_device_dat_loop_vseq \
 	i3c_daa_address_rejected_vseq \
-	i3c_daa_dat_boundary_vseq
+	i3c_daa_dat_boundary_vseq \
+	i3c_daa_reserved_addr_resp_vseq
 
 ERR_REGRESSION_SEQS ?= \
 	i3c_private_addr_nack_resp_vseq \
