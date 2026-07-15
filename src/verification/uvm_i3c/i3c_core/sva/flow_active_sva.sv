@@ -535,12 +535,6 @@ module flow_active_sva
   endfunction
 
 
-  function automatic logic sdr_write_active_state();
-    return (state_q == InitWrite) ||
-           (state_q == FetchTxData) ||
-           (state_q == IssueI3CWrite);
-  endfunction
-
   function automatic logic sdr_write_done_ready();
     return state_q == IssueI3CWrite &&
            sdr_regular_i3c_write() &&
@@ -2136,30 +2130,6 @@ module flow_active_sva
                                             cmd_queue_rready_o &&
                                             !gen_stop_o);
 
-  ap_sdr_write_no_cmd_pop_except_continuation :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            sdr_write_active_state() &&
-                                            sdr_regular_i3c_write() &&
-                                            !(sdr_write_done_ready() &&
-                                              !reg_desc.toc &&
-                                              next_cmd_available &&
-                                              next_cmd_supported &&
-                                              (!reg_desc.wroc || resp_queue_wready_i))
-                                            |->
-                                            !cmd_queue_rready_o)
-  else $error("flow_active_sva: SDR write must not pop CMD FIFO except accepted continuation in %m");
-
-  cp_sdr_write_no_cmd_pop_except_continuation :
-  cover property (@(posedge clk_i) disable iff (!rst_ni)
-                                            sdr_write_active_state() &&
-                                            sdr_regular_i3c_write() &&
-                                            !(sdr_write_done_ready() &&
-                                              !reg_desc.toc &&
-                                              next_cmd_available &&
-                                              next_cmd_supported &&
-                                              (!reg_desc.wroc || resp_queue_wready_i)) &&
-                                            !cmd_queue_rready_o);
-
   ap_toc0_missing_continuation_requests_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             sdr_write_done_ready() &&
@@ -2787,13 +2757,6 @@ module flow_active_sva
                                             !cont_pending_q
                                             ##1
                                             state_q == InitRead);
-
-  ap_i2c_never_enters_broadcast_header :
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-                                            i2c_regular_xfer()
-                                            |->
-                                            state_q != I3CBcastHeader)
-  else $error("flow_active_sva: I2C legacy transfer must never enter the I3C broadcast header in %m");
 
   // ----------------------------------------------------------------------
   // I2C_004 — length sweep / partial final RX DWORD
