@@ -23,7 +23,6 @@
 	\node[st] (dhigh) at (-1.4,-2.4) {\texttt{DriveHigh}};
 
 	% ---- Group C: Repeated START ----
-	\node[st] (rsfall)  at (0.5,0.9)  {\texttt{RstartSda}\\\texttt{Fall}};
 	\node[st] (grstart) at (2.9,1.5)  {\texttt{Generate}\\\texttt{Rstart}};
 	\node[st] (shrstart) at (2.9,-0.2) {\texttt{SclHigh}\\\texttt{ForRstart}};
 
@@ -37,7 +36,7 @@
 	\begin{scope}[on background layer]
 		\node[grp, fit=(gstart)(sfall)(hstart)] (boxA) {};
 		\node[grp, fit=(wcmd)(dlow)(dhigh)] (boxB) {};
-		\node[grp, fit=(rsfall)(grstart)(shrstart)] (boxC) {};
+		\node[grp, fit=(grstart)(shrstart)] (boxC) {};
 		\node[grp, fit=(gstop)(shstop)(srise)(bfree)] (boxD) {};
 	\end{scope}
 	\node[grplb] at (boxA.north) {Tạo START};
@@ -49,7 +48,6 @@
 	\begin{scope}[on background layer]
 		\draw[e] (0,4.0) node[lb, above] {reset} -- (idle);
 		\draw[e] (idle) to[out=180,in=70] node[lb, pos=0.6] {\texttt{gen\_start}} (gstart.north);
-		\draw[e] (idle) to[out=0,in=70] node[lb, pos=0.6] {\texttt{gen\_rstart}} (grstart.north);
 
 		% group A internal
 		\draw[e] (gstart) -- node[lb, right] {t=0} (sfall);
@@ -67,12 +65,11 @@
 		\draw[e] (boxB.south) to[out=-90,in=180] node[lb, pos=0.4, below] {\texttt{gen\_stop}} (gstop.west);
 
 		% fast takeover path
-		\draw[fast] (dhigh) to[out=60,in=-120] node[lb, pos=0.5] {\texttt{gen\_rstart} \& \texttt{takeover}} (rsfall.south);
+		\draw[fast] (dhigh) to[out=120,in=0] node[lb, pos=0.5] {\texttt{gen\_rstart} \& \texttt{takeover}} (sfall.east);
 
 		% group C internal
 		\draw[e] (grstart) -- node[lb, right] {t=0, SCL cao} (shrstart);
-		\draw[e] (shrstart) -- node[lb, above] {t=0} (rsfall);
-		\draw[e] (rsfall) to[out=180,in=90] node[lb, pos=0.4] {} (hstart.north);
+		\draw[e] (shrstart) to[out=180,in=0] node[lb, above] {t=0} (sfall.east);
 
 		% group D internal
 		\draw[e] (gstop) -- node[lb, above] {t=0, SCL cao} (shstop);
@@ -83,6 +80,6 @@
 
 	% ---- global note ----
 	\node[font=\scriptsize\itshape, text=black!60, align=left, anchor=north west]
-		at (-6.9,-5.7) {t=0: bộ đếm timing hết hạn \quad$\bullet$\quad
+		at (-6.9,-5.7) {t=0: bộ đếm định thời hết hạn \quad$\bullet$\quad
 		\texttt{gen\_idle} đưa FSM về \texttt{Idle} từ mọi trạng thái.};
 \end{tikzpicture}

@@ -1,0 +1,65 @@
+% Biểu đồ định thời handshake \texttt{ready}/\texttt{valid} trên đường ghi từ CSR đến Queue.
+% Yêu cầu (khai báo trong report.tex): \usepackage{tikz-timing} và các thư viện
+% tikz calc, arrows.meta, backgrounds, patterns. Đặt trong figure có \centering
+% (không dùng adjustbox: bề rộng tự nhiên đã nhỏ hơn \textwidth).
+% Nhãn/chú thích trong hình để tiếng Anh theo yêu cầu.
+\definecolor{cAcc}{rgb}{0.10,0.10,0.65}   % CSR accepts write
+\definecolor{cXfer}{rgb}{0.10,0.45,0.10}  % FIFO writes D
+\definecolor{cRej}{rgb}{0.70,0.10,0.10}   % new write blocked
+% \evmark{<node-x>}{<màu>}{<số>}: vạch mốc dọc đứt nét + vòng tròn đánh số,
+% đặt phía TRÊN waveform (anchor=south + yshift) để không đè lên tín hiệu.
+% TOP/BOT là hai toạ độ định nghĩa trong \extracode của mỗi bảng.
+\newcommand{\evmark}[3]{%
+  \draw[#2, dashed, line width=0.6pt] (#1 |- TOP) -- (#1 |- BOT);
+  \node[circle, fill=#2, text=white, inner sep=0pt, minimum size=8pt,
+        font=\tiny\bfseries, anchor=south, yshift=6pt] at (#1 |- TOP) {#3};}
+\begingroup
+\sffamily\small
+
+{\footnotesize\bfseries (a) FIFO has free space}\par\smallskip
+\begin{tikztimingtable}[timing/wscale=4.7, timing/rowdist=2.6]
+  \texttt{wen\_i}        & N(Ag0) H N(Ag1) L N(Ag2) L N(Ag3) L N(Ag4) L N(Ag5) \\
+  \texttt{reg\_ready\_o} & 5H \\
+  \texttt{fifo\_wvalid}  & L H 3L \\
+  \texttt{fifo\_wready}  & 5H \\
+  \texttt{fifo\_wdata}   & N(Abot) [fill=black!10]1D{}[fill=white]1D{$D$}[fill=black!10]3D{} \\
+  \extracode
+  \coordinate (TOP) at (0,0.75);
+  \coordinate (BOT) at (Abot);
+  \begin{background}
+    \foreach \k in {0,1,2,3,4,5}
+      \draw[black!18] (Ag\k |- TOP) -- (Ag\k |- BOT);
+  \end{background}
+  \foreach \k [evaluate=\k as \n using int(\k+1)] in {0,1,2,3,4}
+    \node[black!45, font=\tiny, below=4pt] at ($(Ag\k |- BOT)!0.5!(Ag\n |- BOT)$) {$C_{\k}$};
+  \evmark{Ag1}{cAcc}{1}
+  \evmark{Ag2}{cXfer}{2}
+\end{tikztimingtable}\par
+
+\medskip
+{\footnotesize\bfseries (b) FIFO full (backpressure)}\par\smallskip
+\begin{tikztimingtable}[timing/wscale=4.7, timing/rowdist=2.6]
+  \texttt{wen\_i}        & N(Bg0) H N(Bg1) L N(Bg2) 0.5H N(Bg25) 0.5H N(Bg3) L N(Bg4) L N(Bg5) \\
+  \texttt{reg\_ready\_o} & 2H L 2H \\
+  \texttt{fifo\_wvalid}  & L 3H L \\
+  \texttt{fifo\_wready}  & 3L 2H \\
+  \texttt{fifo\_wdata}   & N(Bbot) [fill=black!10]1D{}[fill=white]3D{$D$ (held stable)}[fill=black!10]1D{} \\
+  \extracode
+  \coordinate (TOP) at (0,0.75);
+  \coordinate (BOT) at (Bbot);
+  \begin{background}
+    \foreach \k in {0,1,2,3,4,5}
+      \draw[black!18] (Bg\k |- TOP) -- (Bg\k |- BOT);
+  \end{background}
+  \foreach \k [evaluate=\k as \n using int(\k+1)] in {0,1,2,3,4}
+    \node[black!45, font=\tiny, below=4pt] at ($(Bg\k |- BOT)!0.5!(Bg\n |- BOT)$) {$C_{\k}$};
+  \evmark{Bg1}{cAcc}{1}
+  \evmark{Bg25}{cRej}{3}
+  \evmark{Bg4}{cXfer}{2}
+\end{tikztimingtable}\par
+
+\medskip
+{\scriptsize\color{cAcc}\textbf{1}~CSR accepts write\quad
+ \color{cXfer}\textbf{2}~FIFO writes D\quad
+ \color{cRej}\textbf{3}~New write blocked}\par
+\endgroup

@@ -45,11 +45,10 @@ module scl_generator_sva #(
   localparam logic [3:0] StateWaitCmd           = 4'd6;
   localparam logic [3:0] StateGenerateRstart    = 4'd7;
   localparam logic [3:0] StateSclHighForRstart  = 4'd8;
-  localparam logic [3:0] StateRstartSdaFall     = 4'd9;
-  localparam logic [3:0] StateGenerateStop      = 4'd10;
-  localparam logic [3:0] StateSclHighForStop    = 4'd11;
-  localparam logic [3:0] StateSdaRise           = 4'd12;
-  localparam logic [3:0] StateBusFree           = 4'd13;
+  localparam logic [3:0] StateGenerateStop      = 4'd9;
+  localparam logic [3:0] StateSclHighForStop    = 4'd10;
+  localparam logic [3:0] StateSdaRise           = 4'd11;
+  localparam logic [3:0] StateBusFree           = 4'd12;
 
   logic [CounterWidth-1:0] low_fall_delay;
   logic [CounterWidth-1:0] high_rise_delay;
@@ -427,16 +426,17 @@ module scl_generator_sva #(
                   (state_q == StateSclHighForRstart) &&
                   scl_o && sda_o && sda_ctrl_active_o);
 
-  ap_bus009_rstart_sda_fall_drives_sr :
+  ap_bus009_scl_high_for_rstart_expires_to_sda_fall :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-                   (state_q == StateRstartSdaFall)
-                   |-> (scl_o && !sda_o && sda_ctrl_active_o))
-  else $error("scl_generator_sva: BUS_009 RstartSdaFall did not drive SDA low while SCL high in %m");
+                   (state_q == StateSclHighForRstart) && tcount_expired && !gen_idle_i
+                   |-> (state_d == StateSdaFall))
+  else $error("scl_generator_sva: BUS_009 SclHighForRstart did not transition to SdaFall in %m");
 
-  cp_bus009_rstart_sda_fall_drives_sr :
+  cp_bus009_scl_high_for_rstart_to_sda_fall :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
-                  (state_q == StateRstartSdaFall) &&
-                  scl_o && !sda_o && sda_ctrl_active_o);
+                  (state_q == StateSclHighForRstart) && tcount_expired && !gen_idle_i
+                  ##1 (state_q == StateSdaFall) && scl_o && !sda_o &&
+                  sda_ctrl_active_o);
 
   ap_rstart_state_sequence :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -453,19 +453,19 @@ module scl_generator_sva #(
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateGenerateRstart && tcount_expired && scl_i)
                   ##1 (state_q == StateSclHighForRstart)
-                  ##[1:$] (state_q == StateRstartSdaFall));
+                  ##[1:$] (state_q == StateSdaFall));
 
   ap_rstart_state_done_only_after_hold_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q inside {StateDriveLow, StateWaitCmd, StateGenerateRstart,
-                                    StateSclHighForRstart, StateRstartSdaFall})
+                                    StateSclHighForRstart, StateSdaFall})
                    |-> !done_o)
   else $error("scl_generator_sva: restart path asserted done_o before HoldStart completion in %m");
 
   cp_rstart_state_done_only_after_hold_start :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q inside {StateGenerateRstart, StateSclHighForRstart,
-                                   StateRstartSdaFall}) && !done_o);
+                                   StateSdaFall}) && !done_o);
 
 endmodule
 

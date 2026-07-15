@@ -125,36 +125,26 @@ assertion (`Depth must be a power of 2`) — covered by the RTL parameter contra
 synchronized SCL/SDA using `edge_detector` × N + `stable_high_detector` × N. Interface + the +1 capture
 flop. Spec 02.
 
-## 3.12 SCL generator (`scl_generator`, 14-state FSM)
+## 3.12 SCL generator (`scl_generator`, 13-state FSM)
 
 **Brief.** Purpose: generate SCL plus START / Repeated START (Sr) / STOP / Bus Free Condition timing via
-a single-counter strategy (area win vs N parallel timers). 14 states (Idle…BusFree). Key choice: the DAA
+a single-counter strategy (area win vs N parallel timers). 13 states (Idle…BusFree). Key choice: the DAA
 Repeated START folded into `gen_rstart_i`.
 
 Describe the implemented Repeated START request and handoff through `gen_rstart_i`; do not introduce
 spec-only port names or a future-work item here.
 
-> ┌─ FIGURE F3.7 — scl_generator 14-state FSM ──────────────────────────────────────────────
+> ┌─ FIGURE F3.7 — scl_generator 13-state FSM ──────────────────────────────────────────────
 > │ Shows:  Idle…BusFree; START / Repeated START (Sr) / STOP generation + OD-low / Bus Free Condition timing edges
 > │ Source: src/rtl/ctrl/scl_generator.sv (state_e) · Render: TikZ automata · NOT YET DRAWN
 > └──────────────────────────────────────────────────────────────────────────────────────────
-> [TABLE T-scl (→ App. C) — scl_generator 14-state transition table · source: scl_generator.sv]  (NOT YET FILLED)
+> [TABLE T-scl (→ App. C) — scl_generator 13-state transition table · source: scl_generator.sv]  (NOT YET FILLED)
 
 ## 3.13 TX/RX serializers (`bus_tx`, `bus_tx_flow`, `bus_rx_flow`)
 
 **Brief.** `bus_tx_flow` (4-state byte/bit serializer) feeds `bus_tx` (5-state per-bit timing engine);
 `bus_rx_flow` (4-state) deserializes. Key choice: `bus_rx_flow` emits 7 stored bits + live SDA on cycle 8
 so the aligned byte is valid on `rx_done_o`. Specs 04/05.
-
-> ┌─ FIGURE F3.9a — bus_tx 5-state FSM ─────────────────────────────────────────────────────
-> │ Shows:  Idle…HoldData per-bit timing · Source: ctrl/bus_tx.sv · TikZ · NOT YET DRAWN
-> └──────────────────────────────────────────────────────────────────────────────────────────
-> ┌─ FIGURE F3.9b — bus_tx_flow 4-state FSM ────────────────────────────────────────────────
-> │ Shows:  byte/bit serialization · Source: ctrl/bus_tx_flow.sv · TikZ · NOT YET DRAWN
-> └──────────────────────────────────────────────────────────────────────────────────────────
-> ┌─ FIGURE F3.9c — bus_rx_flow 4-state FSM ────────────────────────────────────────────────
-> │ Shows:  RX deserialize; 7 stored + live SDA on bit 8 · Source: ctrl/bus_rx_flow.sv · TikZ · NOT YET DRAWN
-> └──────────────────────────────────────────────────────────────────────────────────────────
 
 ## 3.14 ENTDAA subsystem (`entdaa_controller` 7-state + `entdaa_fsm` 8-state)
 
@@ -204,11 +194,6 @@ enum, one key `always_comb` case) — not the full source file. Spec 09.
 **Brief.** Integration glue: instantiates the protocol children, arbitrates flow vs DAA for the bus,
 and forms the OD/PP output (wired-AND of `scl_gen_sda & tx_flow_sda` for Open Drain modelling) plus
 `sel_od_pp_o` switching. Spec 10.
-
-> ┌─ FIGURE F3.10 — OD/PP switching logic ──────────────────────────────────────────────────
-> │ Shows:  wired-AND + sel_od_pp_o mux selecting OD (addr/ACK) vs PP (data)
-> │ Source: ctrl/controller_active.sv · Render: TikZ · NOT YET DRAWN
-> └──────────────────────────────────────────────────────────────────────────────────────────
 
 The cross-cutting design decisions are consolidated in §3.5. Full port lists belong in Appendix B/C;
 per-module implementation metrics belong in Ch.5.

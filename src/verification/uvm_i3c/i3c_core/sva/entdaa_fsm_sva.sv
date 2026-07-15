@@ -24,59 +24,59 @@ module entdaa_fsm_sva (
 );
 
   localparam logic [2:0] Idle = 3'd0;
-  localparam logic [2:0] ReadRsvdAck = 3'd2;
-  localparam logic [2:0] ReceiveIDBit = 3'd3;
-  localparam logic [2:0] SendAddr = 3'd4;
-  localparam logic [2:0] ReadAddrAck = 3'd5;
+  localparam logic [2:0] ReceiveHeaderACK = 3'd2;
+  localparam logic [2:0] ReceiveID = 3'd3;
+  localparam logic [2:0] SendDynamicAddr = 3'd4;
+  localparam logic [2:0] ReceiveAddrACK = 3'd5;
   localparam logic [2:0] WaitStop = 3'd6;
   localparam logic [2:0] Done = 3'd7;
 
 
   ap_entdaa_ack_enters_receive_id: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadRsvdAck && bus_rx_done_i &&
+    (state_q == ReceiveHeaderACK && bus_rx_done_i &&
      !bus_rx_data_i[0] && !bus_stop_det_i)
-    |=> (state_q == ReceiveIDBit)
+    |=> (state_q == ReceiveID)
   );
 
   cp_entdaa_ack_enters_receive_id: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadRsvdAck && bus_rx_done_i &&
+    (state_q == ReceiveHeaderACK && bus_rx_done_i &&
      !bus_rx_data_i[0] && !bus_stop_det_i)
-    ##1 (state_q == ReceiveIDBit)
+    ##1 (state_q == ReceiveID)
   );
 
   ap_entdaa_id_complete_sends_addr: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReceiveIDBit && bus_rx_done_i &&
+    (state_q == ReceiveID && bus_rx_done_i &&
      bit_cnt_q == 6'd0 && !stop_pending_i && !bus_stop_det_i)
-    |=> (state_q == SendAddr)
+    |=> (state_q == SendDynamicAddr)
   );
 
   cp_entdaa_id_complete_sends_addr: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReceiveIDBit && bus_rx_done_i &&
+    (state_q == ReceiveID && bus_rx_done_i &&
      bit_cnt_q == 6'd0 && !stop_pending_i && !bus_stop_det_i)
-    ##1 (state_q == SendAddr)
+    ##1 (state_q == SendDynamicAddr)
   );
 
   ap_entdaa_id_complete_with_stop_waits_stop: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReceiveIDBit && bus_rx_done_i &&
+    (state_q == ReceiveID && bus_rx_done_i &&
      bit_cnt_q == 6'd0 && stop_pending_i && !bus_stop_det_i)
     |=> (state_q == WaitStop && stop_req_o)
   );
 
   cp_entdaa_id_complete_with_stop_waits_stop: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReceiveIDBit && bus_rx_done_i &&
+    (state_q == ReceiveID && bus_rx_done_i &&
      bit_cnt_q == 6'd0 && stop_pending_i && !bus_stop_det_i)
     ##1 (state_q == WaitStop && stop_req_o)
   );
 
   ap_entdaa_send_addr_value: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == SendAddr)
+    (state_q == SendDynamicAddr)
     |->
     (bus_tx_req_byte_o &&
      !bus_tx_req_bit_o &&
@@ -86,7 +86,7 @@ module entdaa_fsm_sva (
 
   cp_entdaa_send_addr_value: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == SendAddr &&
+    (state_q == SendDynamicAddr &&
      bus_tx_req_byte_o &&
      !bus_tx_req_bit_o &&
      bus_tx_req_value_o == {daa_addr_i, ~^daa_addr_i} &&
@@ -95,28 +95,28 @@ module entdaa_fsm_sva (
 
   ap_entdaa_addr_ack_sets_done_valid: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadAddrAck && bus_rx_done_i &&
+    (state_q == ReceiveAddrACK && bus_rx_done_i &&
      !bus_rx_data_i[0] && !stop_pending_i && !bus_stop_det_i)
     |=> (state_q == Done && done_daa_o && addr_valid_o && !no_device_o)
   );
 
   cp_entdaa_addr_ack_sets_done_valid: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadAddrAck && bus_rx_done_i &&
+    (state_q == ReceiveAddrACK && bus_rx_done_i &&
      !bus_rx_data_i[0] && !stop_pending_i && !bus_stop_det_i)
     ##1 (state_q == Done && done_daa_o && addr_valid_o && !no_device_o)
   );
 
   ap_entdaa_addr_ack_with_stop_waits_stop: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadAddrAck && bus_rx_done_i &&
+    (state_q == ReceiveAddrACK && bus_rx_done_i &&
      stop_pending_i && !bus_stop_det_i)
     |=> (state_q == WaitStop && stop_req_o)
   );
 
   cp_entdaa_addr_ack_with_stop_waits_stop: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadAddrAck && bus_rx_done_i &&
+    (state_q == ReceiveAddrACK && bus_rx_done_i &&
      stop_pending_i && !bus_stop_det_i)
     ##1 (state_q == WaitStop && stop_req_o)
   );
@@ -140,14 +140,14 @@ module entdaa_fsm_sva (
 
   ap_entdaa_nack_enters_no_device: assert property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadRsvdAck && bus_rx_done_i &&
+    (state_q == ReceiveHeaderACK && bus_rx_done_i &&
      bus_rx_data_i[0] && !bus_stop_det_i)
     |=> (state_q == Done && done_daa_o && no_device_o && !addr_valid_o)
   );
 
   cp_entdaa_nack_enters_no_device: cover property (
     @(posedge clk_i) disable iff (!rst_ni)
-    (state_q == ReadRsvdAck && bus_rx_done_i &&
+    (state_q == ReceiveHeaderACK && bus_rx_done_i &&
      bus_rx_data_i[0] && !bus_stop_det_i)
     ##1 (state_q == Done && done_daa_o && no_device_o && !addr_valid_o)
   );

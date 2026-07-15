@@ -3,24 +3,24 @@
 
 Chương này trình bày phương pháp xây dựng môi trường kiểm chứng cho thiết kế RTL ở
 \cref{ch:architecture} theo các yêu cầu tại \cref{sec:req}: từ mục tiêu và chiến lược, kiến
-trúc môi trường UVM, các cơ chế kiểm tra (\Scoreboard{}, SVA, \FunctionalCoverage{}), đến
+trúc môi trường UVM, các cơ chế kiểm tra (\texttt{i3c\_scoreboard}, SVA, \FunctionalCoverage{}), đến
 cách xây dựng kịch bản và quy trình chạy.
 
 \section{Mục tiêu và phạm vi kiểm chứng}
 \label{sec:ver-scope}
 
 Kiểm chứng trong chương này hướng tới xác nhận thiết kế RTL ở \cref{ch:architecture} đáp ứng
-mười yêu cầu chức năng F1--F10 tại \cref{sec:req}. Phạm vi được tổ chức bám sát hai interface
-mà controller dùng để giao tiếp với bên ngoài: CSR/FIFO và bus SCL/SDA.
+toàn bộ yêu cầu chức năng tại \cref{sec:req}. Phạm vi được tổ chức bám sát hai interface
+mà \Controller{} dùng để giao tiếp với bên ngoài: CSR/FIFO và bus SCL/SDA.
 
-Phía CSR/FIFO là nơi \Host{} điều khiển controller. Tại đây, \Testbench{} kiểm tra các đường
+Phía CSR/FIFO là nơi \Host{} điều khiển \Controller{}. Tại đây, \Testbench{} kiểm tra các đường
 truy cập vào CSR, DAT, \CommandResponseFifo{} và \TxRxFifo{} --- tức toàn bộ cơ chế nạp lệnh,
 cấp dữ liệu và thu kết quả.
 
-Phía bus SCL/SDA là nơi controller thực thi giao thức. Các kịch bản chính gồm I3C Private
-Write/Read trong SDR Mode, Immediate Data, CCC, ENTDAA và giao dịch \iic{} Fast Mode. Ngoài
-các luồng bình thường, phạm vi bao gồm các tình huống lỗi: mỗi tình huống được dựng để kích
-hoạt một mã \texttt{ERR\_STATUS} mà thiết kế thực sự hiện thực (\cref{tab:err-status}), qua
+Phía bus SCL/SDA là nơi \Controller{} thực thi giao thức. Các kịch bản chính gồm I3C
+\PrivateWriteRead{} trong I3C SDR Mode, \ImmediateDataTransfer{}, CCC, ENTDAA và giao dịch
+(transaction) \iic{} Fast Mode. Ngoài các luồng bình thường, phạm vi bao gồm các tình huống lỗi: mỗi tình huống được dựng để kích
+hoạt một mã lỗi mà thiết kế thực sự hiện thực (\cref{tab:err-status}), qua
 đó kiểm chứng cơ chế báo lỗi và phục hồi mô tả ở \cref{sec:arch-err}.
 
 Các tính năng ngoài phạm vi tại \cref{tab:req-oos}, tiêu biểu là IBI và HDR, không được đặt
@@ -30,25 +30,31 @@ những mục tiêu ngoài thiết kế.
 \section{Chiến lược kiểm chứng}
 \label{sec:ver-strategy}
 
-Chiến lược kết hợp directed stimulus và constrained-random stimulus. Directed stimulus dùng
-kịch bản cố định cho những tình huống cần điều khiển chính xác trình tự thao tác, dữ liệu vào
-và phản hồi của \Target{}. Constrained-random stimulus mở rộng không gian kiểm chứng trong
-phạm vi hợp lệ: địa chỉ, độ dài payload, dữ liệu truyền nhận và cách \Target{} phản hồi trên
-bus.
+Chiến lược kết hợp hai loại stimulus:
+\begin{itemize}
+	\item \textbf{Directed stimulus}: dùng kịch bản cố định cho những tình huống cần điều khiển
+	      chính xác trình tự thao tác, dữ liệu vào và phản hồi của \Target{}.
+	\item \textbf{Constrained-random stimulus}: mở rộng không gian kiểm chứng trong phạm vi hợp
+	      lệ --- địa chỉ, độ dài và nội dung TX/RX data, cùng cách \Target{} phản hồi trên bus.
+\end{itemize}
 
 Mỗi \VirtualSequence{} được thiết kế quanh một mục tiêu kiểm chứng cụ thể. Randomization chỉ
 thay đổi dữ liệu và điều kiện bên trong kịch bản, không thay thế tiêu chí pass/fail. Nhờ đó,
 khi test thất bại, nguyên nhân vẫn truy được về một chức năng hoặc một tình huống giao thức
 cụ thể.
 
-Ba cơ chế kiểm tra được sử dụng song song. \Scoreboard{} đối chiếu Descriptor và dữ liệu ghi
-vào CSR/FIFO với giao dịch quan sát trên bus và \ResponseDescriptor{} do RTL trả về. SVA mô
-tả và kiểm tra các điều kiện mà RTL phải thỏa mãn trong một hoặc nhiều chu kỳ clock, như
-handshake valid/ready, hành vi reset, trạng thái FIFO, chuyển tiếp FSM và điều kiện abort.
-\FunctionalCoverage{} ghi nhận các tình huống đã được kích hoạt, đặc biệt là các tổ hợp giữa
-loại command, phản hồi của \Target{} và mã lỗi.
+Ba cơ chế kiểm tra được sử dụng song song:
+\begin{itemize}
+	\item \texttt{i3c\_scoreboard}: đối chiếu \CommandDescriptor{} và dữ liệu ghi vào CSR/FIFO
+	      với giao dịch quan sát trên bus và \ResponseDescriptor{} do RTL trả về.
+	\item \textbf{SVA}: mô tả và kiểm tra các điều kiện mà RTL phải thỏa mãn trong một hoặc
+	      nhiều chu kỳ clock, như handshake \texttt{ready}/\texttt{valid}, hành vi reset, trạng
+	      thái FIFO, chuyển tiếp FSM và điều kiện abort.
+	\item \FunctionalCoverage{}: ghi nhận các tình huống đã được kích hoạt, đặc biệt là các tổ
+	      hợp giữa loại command, phản hồi của \Target{} và mã lỗi.
+\end{itemize}
 
-Cách phân vai này giúp kết quả không phụ thuộc một cơ chế duy nhất: \Scoreboard{} và SVA kiểm
+Cách phân vai này giúp kết quả không phụ thuộc một cơ chế duy nhất: \texttt{i3c\_scoreboard} và SVA kiểm
 tra tính đúng đắn ở hai mức khác nhau, còn \FunctionalCoverage{} cho biết mức độ stimulus đã
 bao phủ các yêu cầu F1--F10.
 
@@ -59,21 +65,22 @@ Module \texttt{tb\_i3c\_top} là top-level của \Testbench{}. Module này tạo
 tạo DUT và hai SystemVerilog interface \texttt{reg\_if}, \texttt{i3c\_if}. Các virtual
 interface được truyền vào những component UVM cần truy cập giao diện thông qua UVM
 Configuration Database. \texttt{reg\_if} nối với giao diện CSR/FIFO, còn \texttt{i3c\_if} nối
-với bus SCL/SDA và được \TargetAgent{} sử dụng để phản hồi giao dịch trên bus.
+với bus SCL/SDA và được \texttt{i3c\_agent} sử dụng để phản hồi giao dịch trên bus.
 
 Bus SCL/SDA được mô hình hóa bằng \texttt{wire} có \texttt{pullup(weak1)} để phản ánh đặc tính
-\OpenDrain{}. Ở pha \OpenDrain{}, DUT và \TargetAgent{} chỉ chủ động kéo bus xuống mức thấp,
+\OpenDrain{}. Ở pha \OpenDrain{}, DUT và \texttt{i3c\_agent} chỉ chủ động kéo bus xuống mức thấp,
 còn mức cao được tạo khi bus được thả. Riêng với SDA, \Testbench{} dùng trạng thái
 \OpenDrain{}/\PushPull{} do DUT cung cấp: thả hoặc kéo xuống ở pha \OpenDrain{} và lái cả hai
 mức logic ở pha \PushPull{}.
 
 Ở lớp UVM, \texttt{i3c\_base\_test} tạo \texttt{i3c\_env}, thiết lập cấu hình và chạy
-\VirtualSequence{} được chọn khi mô phỏng. \texttt{i3c\_env} chứa \RegisterAgent{},
-\TargetAgent{}, \VirtualSequencer{}, \Scoreboard{} và các coverage component.
+\VirtualSequence{} được chọn khi mô phỏng. \texttt{i3c\_env} chứa các component:
+\texttt{reg\_agent}, \texttt{i3c\_agent}, \texttt{i3c\_virtual\_sequencer},
+\texttt{i3c\_scoreboard} và các coverage component.
 
-Các Monitor hoạt động độc lập với Driver và không tự kết luận pass/fail; chúng chuyển hoạt
-động quan sát được trên giao diện thành item và phát qua \TLMAnalysisPort{}. Register Monitor
-đảm nhiệm phía CSR/FIFO, I3C Monitor đảm nhiệm phía bus SCL/SDA; \Scoreboard{} và các coverage
+Các monitor hoạt động độc lập với driver và không tự kết luận pass/fail;
+chúng chuyển hoạt động quan sát được trên giao diện thành item và phát qua \TLMAnalysisPort{}.
+\texttt{reg\_monitor} đảm nhiệm phía CSR/FIFO, \texttt{i3c\_monitor} đảm nhiệm phía bus SCL/SDA; \texttt{i3c\_scoreboard} và các coverage
 component đăng ký nhận các item này. Cơ chế tạo giá trị dự kiến, đối chiếu và thu thập coverage
 được trình bày tại \cref{sec:ver-tlm} và \cref{sec:ver-cov}.
 
@@ -95,73 +102,79 @@ component đăng ký nhận các item này. Cơ chế tạo giá trị dự ki�
 		coordinate (analysis-end);
 		\node[legend text, right=2mm] at (analysis-end) {UVM TLM analysis transaction flow};
 	\end{tikzpicture}
-	\caption{Miền UVM/TLM của môi trường kiểm chứng I3C.}
+	\caption{Kiến trúc tổng thể của môi trường kiểm chứng I3C.}
 	\label{fig:tb-arch}
 \end{figure}
 
-\section{Luồng TLM và cơ chế \Scoreboard{}}
+\section{Cơ chế \texttt{i3c\_scoreboard}}
 \label{sec:ver-tlm}
 
-\Scoreboard{} nhận item từ Register Monitor và I3C Monitor qua \TLMAnalysisPort{}. Các item
-phía CSR/FIFO được đưa vào \ReferenceModel{} để tạo giá trị dự kiến theo
-Specification~\cite{mipi_i3c_basic,mipi_i3c_tcri}. Các item phía bus, cùng dữ liệu đọc từ
+\texttt{i3c\_scoreboard} nhận item từ \texttt{reg\_monitor} và \texttt{i3c\_monitor} qua \TLMAnalysisPort{}. Các item
+phía CSR/FIFO được đưa vào \ReferenceModel{} để tạo giá trị dự kiến theo đặc tả. Các item phía bus, cùng dữ liệu đọc từ
 \RxFifo{} và \ResponseFifo{}, được dùng làm dữ liệu thực tế để đối chiếu với giá trị dự kiến.
 
-\ReferenceModel{} trong \Scoreboard{} lưu các thông tin cần dùng để kiểm tra giao dịch hiện
-tại, gồm bản sao DAT, \CommandDescriptor{}, dữ liệu ghi vào \TxFifo{}, dữ liệu dự kiến trong
-\RxFifo{} và \ResponseDescriptor{} dự kiến. Khi Register Monitor ghi nhận hai lần ghi vào
-\CommandFifo{}, \Scoreboard{} ghép thành \CommandDescriptor{} \CommandDescriptorWidth{}-bit và
+\ReferenceModel{} trong \texttt{i3c\_scoreboard} lưu các thông tin cần dùng để kiểm tra giao
+dịch hiện tại: bản sao DAT, \CommandDescriptor{}, TX data trong \TxFifo{}, RX data dự kiến
+trong \RxFifo{} và \ResponseDescriptor{} dự kiến.
+Khi \texttt{reg\_monitor} ghi nhận hai lần ghi vào
+\CommandFifo{}, \texttt{i3c\_scoreboard} ghép thành \CommandDescriptor{} \CommandDescriptorWidth{}-bit và
 \ReferenceModel{} giải mã các field \texttt{attr}, \texttt{tid}, \texttt{cmd}, \texttt{cp},
 \texttt{dev\_idx}, \texttt{mode}, \texttt{rnw}, \texttt{wroc}, \texttt{toc} và
 \texttt{data\_length} (\cref{app:desc}). Các thao tác ghi DAT được dùng để cập nhật bản sao
-DAT; dữ liệu ghi vào \TxFifo{} được dùng làm dữ liệu truyền dự kiến cho giao dịch write.
+DAT; dữ liệu ghi vào \TxFifo{} được dùng làm TX data dự kiến cho giao dịch ghi.
 
-Khi nhận item của I3C Monitor, \Scoreboard{} lấy giá trị dự kiến tương ứng từ \ReferenceModel{}
-và kiểm tra theo loại giao dịch. Với I3C Private Write/Read, \Scoreboard{} đối chiếu
-\AddressHeader{}, chiều truyền, dữ liệu truyền, ACK/NACK và \TBit{}. Với CCC, \Scoreboard{}
-kiểm tra opcode, dạng Broadcast/Direct, địa chỉ \Target{} và \EventsByte{}. Với ENTDAA,
-\Scoreboard{} kiểm tra thông tin nhận dạng của \Target{}, \DynamicAddress{} được cấp, trường
-hợp \Target{} từ chối địa chỉ và dữ liệu ghi về \RxFifo{}. Sau khi giao dịch kết thúc,
+Khi nhận item từ \texttt{i3c\_monitor}, \texttt{i3c\_scoreboard} lấy giá trị dự kiến tương ứng
+từ \ReferenceModel{} và kiểm tra theo loại giao dịch:
+\begin{itemize}
+	\item \textbf{Giao dịch ghi/đọc dữ liệu} (I3C \PrivateWriteRead{}, \iic{} và
+	      \ImmediateDataTransfer{}): đối chiếu \AddressHeader{}, chiều truyền, TX/RX data và
+	      ACK/NACK. Với pha dữ liệu \PushPull{} của I3C SDR, kiểm tra thêm \TBit{}; với
+	      \ImmediateDataTransfer{}, TX data được lấy trực tiếp từ \CommandDescriptor{}.
+	\item \textbf{CCC}: kiểm tra opcode, dạng Broadcast/Direct, địa chỉ \Target{} và
+	      \EventsByte{}.
+	\item \textbf{ENTDAA}: kiểm tra thông tin nhận dạng của \Target{}, \DynamicAddress{} được
+	      cấp, trường hợp \Target{} từ chối địa chỉ và RX data ghi về \RxFifo{}.
+\end{itemize}
+Sau khi giao dịch kết thúc,
 \ResponseDescriptor{} do phần mềm đọc từ \ResponseFifo{} được so với các field
-\texttt{err\_status}, \texttt{tid} và \texttt{data\_length} (\cref{app:desc}).
+\texttt{err}, \texttt{tid} và \texttt{data\_length} (\cref{app:desc}).
 
-% PLACEHOLDER — ảnh chụp log/transcript của Scoreboard sau khi đối chiếu một giao dịch.
 \begin{figure}[!htbp]
 	\centering
-	\fbox{\parbox[c][5.2cm][c]{0.92\textwidth}{\centering\itshape
-			[Hình chờ bổ sung]\\
-			Log kết quả \Scoreboard{} sau khi một giao dịch hoàn tất\\
-			(so sánh \ResponseDescriptor{} dự kiến với thực tế theo \texttt{err\_status}, \texttt{tid}, \texttt{data\_length};\\
-			thông báo PASS/FAIL tương ứng cho giao dịch).}}
-	\caption{Kết quả đối chiếu của \Scoreboard{} sau khi giao dịch hoàn tất.}
+	\includegraphics[width=\textwidth]{figures/scoreboard_log.jpg}
+	\caption{Kết quả đối chiếu của \texttt{i3c\_scoreboard} sau khi giao dịch hoàn tất.}
 	\label{fig:ver-scb-result}
 \end{figure}
 
 \section{Kiểm tra bằng SVA}
 \label{sec:ver-sva}
 
-SVA kiểm tra các thuộc tính cục bộ theo thời gian mà \Scoreboard{} khó bao quát, như handshake
-valid/ready, chuyển tiếp FSM, bộ đếm và các ràng buộc điện trên bus, đồng thời báo lỗi ngay
-tại chu kỳ vi phạm. Môi trường gồm \SvaCheckerCount{} checker phủ nhiều tầng của RTL, từ
+SVA kiểm tra các thuộc tính cục bộ theo thời gian mà \texttt{i3c\_scoreboard} khó bao quát, đồng
+thời báo lỗi ngay tại chu kỳ vi phạm, gồm handshake \texttt{ready}/\texttt{valid}, chuyển tiếp
+FSM, bộ đếm và các ràng buộc điện trên bus.
+Môi trường gồm \SvaCheckerCount{} checker phủ nhiều tầng của RTL, từ
 \IThreeCPhy{} đến top-level \IThreeCControllerTop{}. Trong đó, \FlowActive{} chứa nhiều property
 nhất vì là FSM lệnh phức tạp nhất (\cref{ch:architecture}).
 
-\BoundSvaCheckerCount{} checker được gắn vào module đích bằng \texttt{bind} để quan sát tín
-hiệu nội bộ mà không sửa RTL. Checker còn lại kiểm tra các ràng buộc điện ở tầng pad nên được
-khởi tạo trực tiếp trong \Testbench{}, vì phải quan sát đồng thời tín hiệu DUT và net của mô
-hình pad.
+Checker được đưa vào môi trường theo hai cách:
+\begin{itemize}
+	\item \textbf{Gắn bằng \texttt{bind}}: \BoundSvaCheckerCount{} checker được gắn vào module
+	      đích để quan sát tín hiệu nội bộ mà không sửa RTL.
+	\item \textbf{Khởi tạo trực tiếp trong \Testbench{}}: checker còn lại kiểm tra các ràng buộc
+	      điện ở tầng pad, vì phải quan sát đồng thời tín hiệu DUT và net của mô hình pad.
+\end{itemize}
 
 Mỗi assertion mang label \texttt{ap\_*}. Trừ các bất biến luôn đúng (kể cả ở idle/reset), mỗi
 assertion có một cover property \texttt{cp\_*} tương ứng để phân biệt pass thực sự với vacuous
 pass. Bằng chứng kiểm chứng dựa trên kết quả kích hoạt và pass/miss, không dựa trên số lượng
 property (\cref{ch:results}).
 
-\Cref{lst:ver-sva-tbit} minh họa property \TBit{} của I3C Private Write, được gắn vào
+\Cref{lst:ver-sva-tbit} minh họa property \TBit{} của I3C \PrivateWrite{}, được gắn vào
 \FlowActive{} bằng \texttt{bind}. Ở pha dữ liệu \PushPull{}, mỗi byte kết thúc bằng \TBit{}
 mang odd parity; khi FSM đến thời điểm phát \TBit{}, assertion yêu cầu DUT phát đúng một bit
 với giá trị parity tương ứng.
 
-\begin{lstlisting}[language=Verilog,caption={SVA kiểm tra T-Bit odd parity của I3C Private Write.},label={lst:ver-sva-tbit}]
+\begin{lstlisting}[language=Verilog,caption={SVA kiểm tra T-Bit odd parity của I3C \PrivateWrite{}.},label={lst:ver-sva-tbit}]
 // SDR Private Write data phase: T-Bit must carry odd parity
 ap_sdr_write_tbit_parity:
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -184,81 +197,87 @@ cp_sdr_write_tbit_parity:
 \section{Chiến lược \FunctionalCoverage{}}
 \label{sec:ver-cov}
 
-\FunctionalCoverage{} được tổ chức thành ba lớp tương ứng ba nguồn quan sát.
-\texttt{reg\_coverage} bao phủ địa chỉ CSR, chiều truy cập, giá trị mặc định, DAT index,
-\CommandResponseDescriptor{}, timing register và các Queue port. \texttt{i3c\_coverage} bao
-phủ giao dịch trên bus: loại \AddressHeader{}, RnW, payload, ACK/NACK, CCC, ENTDAA và \TBit{}.
-\CorrelatedCoverage{} bao phủ các quan hệ xuyên suốt chỉ xác định được sau khi \Scoreboard{}
-đã ghép context hai phía.
+\FunctionalCoverage{} được tổ chức thành ba lớp tương ứng ba nguồn quan sát:
+\begin{itemize}
+	\item \texttt{reg\_coverage}: bao phủ địa chỉ CSR, chiều truy cập, giá trị mặc định, DAT
+	      index, \CommandResponseDescriptor{}, timing register và các Queue port.
+	\item \texttt{i3c\_coverage}: bao phủ giao dịch trên bus --- loại \AddressHeader{}, RnW,
+	      TX/RX data, ACK/NACK, CCC, ENTDAA và \TBit{}.
+	\item \texttt{i3c\_correlated\_coverage}: bao phủ các quan hệ xuyên suốt chỉ xác định được
+	      sau khi \texttt{i3c\_scoreboard} đã ghép context hai phía.
+\end{itemize}
 
-Các bin gom những giá trị cho cùng một hành vi vào một nhóm thay vì liệt kê mọi giá trị.
-Payload chia thành nhóm zero, all-ones, alternating, walking-one và giá trị khác; độ dài chia
-thành zero, một byte, biên DWORD, nhiều DWORD và giá trị lớn; địa chỉ chia theo vùng thấp,
-giữa, cao và reserved. \texttt{err\_status} được cross với loại lệnh để xác nhận mỗi mã lỗi
-xuất hiện trong đúng ngữ cảnh của nó. Illegal bin chỉ dùng cho tình huống giao thức thực sự
-cấm; tính năng ngoài phạm vi không bị đánh dấu illegal chỉ vì RTL không hỗ trợ.
+Thay vì liệt kê mọi giá trị, các bin được thiết kế quanh những tình huống then chốt thể hiện
+trực tiếp mức bao phủ các yêu cầu F1--F10. Trước hết, môi trường theo dõi để bảo đảm mọi loại
+giao dịch trong phạm vi --- I3C \PrivateWriteRead{}, \ImmediateDataTransfer{}, CCC, ENTDAA và
+\iic{} --- đều được kích hoạt ít nhất một lần (F1--F6). Tiếp đó, bằng cách cross \texttt{err}
+với loại lệnh, môi trường xác nhận mỗi mã lỗi mà RTL hiện thực đều xuất hiện đúng trong ngữ
+cảnh lệnh sinh ra nó (F8). Các tình huống biên quan trọng cũng được nhắm riêng: độ dài TX/RX data
+tại biên DWORD, \Target{} từ chối \DynamicAddress{} trong ENTDAA, cùng ACK/NACK và \TBit{} trên
+bus. Illegal bin chỉ dùng cho tình huống giao thức thực sự cấm; tính năng ngoài phạm vi không
+bị đánh dấu illegal chỉ vì RTL không hỗ trợ.
 
 Về hiện thực, mỗi lớp coverage là một \texttt{uvm\_subscriber} gắn vào \TLMAnalysisPort{} của
-Monitor hoặc \Scoreboard{} tương ứng. Các covergroup được sample theo sự kiện giao dịch chứ
+\texttt{reg\_monitor}, \texttt{i3c\_monitor} hoặc \texttt{i3c\_scoreboard} tương ứng. Các covergroup được sample theo sự kiện giao dịch chứ
 không theo clock: một mẫu chỉ được ghi khi một truy cập thanh ghi, một giao dịch bus hoặc một
-item đã ghép đủ context thực sự hoàn tất. Sau khi \Scoreboard{} đối chiếu một giao dịch hợp
-lệ, item đã ghép đủ thông tin được gửi tới \CorrelatedCoverage{}. Tập covergroup, bin và cross
+item đã ghép đủ context thực sự hoàn tất. Sau khi \texttt{i3c\_scoreboard} đối chiếu một giao dịch hợp
+lệ, item đã ghép đủ thông tin được gửi tới \texttt{i3c\_correlated\_coverage}. Tập covergroup, bin và cross
 ở trên định nghĩa các tình huống mà môi trường chủ động nhắm kích hoạt cho
 \FunctionalRequirementCount{} yêu cầu chức năng F1--F10 (\cref{tab:req-func}).
 
-\section{\RegisterAgent{}}
+\section{\texttt{reg\_agent}}
 \label{sec:ver-regagent}
 
-\RegisterAgent{} đóng vai \Host{}, chủ động điều khiển giao diện CSR/FIFO của \Controller{}.
-Driver điều khiển \texttt{addr}, \texttt{wdata}, \texttt{wen}/\texttt{ren} rồi chờ
-\texttt{ready} để thực hiện từng lần đọc hoặc ghi thanh ghi. Monitor phát các truy cập đã hoàn
+\texttt{reg\_agent} đóng vai \Host{}, chủ động điều khiển giao diện CSR/FIFO của \Controller{}.
+\texttt{reg\_driver} điều khiển \texttt{addr}, \texttt{wdata}, \texttt{wen}/\texttt{ren} rồi chờ
+\texttt{ready} để thực hiện từng lần đọc hoặc ghi thanh ghi. \texttt{reg\_monitor} phát các truy cập đã hoàn
 tất qua \TLMAnalysisPort{}.
 
-Vì giao thức thanh ghi đơn giản, Driver chỉ là một engine đọc/ghi đồng bộ theo handshake
-\texttt{ready}, không cần FSM nhiều pha; ngữ nghĩa transaction được hiện thực ở lớp Sequence.
+Vì giao thức thanh ghi đơn giản, \texttt{reg\_driver} chỉ là một engine đọc/ghi đồng bộ theo handshake
+\texttt{ready}, không cần FSM nhiều pha; ngữ nghĩa giao dịch được hiện thực ở lớp Sequence.
 Lớp này cung cấp các thao tác đọc/ghi đơn cùng helper dựng \CommandDescriptor{}
 \CommandDescriptorWidth{}-bit rồi phát thành hai lần ghi 32-bit. \VirtualSequence{} dùng chúng
 để cấu hình DAT, nạp \TxFifo{}, ghi \CommandFifo{}, chờ \Controller{} hoàn tất giao dịch rồi
-đọc \RxFifo{} và \ResponseFifo{}. Nhờ Driver độc lập với protocol semantics, cùng một Agent
-phục vụ cả test CSR thuần túy lẫn các kịch bản giao dịch đầy đủ.
+đọc \RxFifo{} và \ResponseFifo{}.
+Nhờ \texttt{reg\_driver} độc lập với protocol semantics, cùng một Agent phục vụ cả test CSR
+thuần túy lẫn các kịch bản giao dịch đầy đủ.
 
-\section{\TargetAgent{}}
+\section{\texttt{i3c\_agent}}
 \label{sec:ver-i3cagent}
 
-\TargetAgent{} đóng vai một \Target{} có thể lập trình trên bus. Driver phản hồi
-\AddressHeader{}, phát ACK/NACK theo cấu hình, nhận dữ liệu write, phát dữ liệu read và tham
-gia ENTDAA. Monitor tái tạo transaction từ tín hiệu SDA/SCL độc lập với Driver, nên phát hiện
-được cả sai lệch do chính Driver tạo ra.
+\texttt{i3c\_agent} đóng vai một \Target{} có thể lập trình trên bus. \texttt{i3c\_driver} phản hồi
+\AddressHeader{}, phát ACK/NACK theo cấu hình, nhận TX data, phát RX data và tham
+gia ENTDAA. \texttt{i3c\_monitor} tái tạo giao dịch từ tín hiệu SDA/SCL độc lập với \texttt{i3c\_driver}, nên phát hiện
+được cả sai lệch do chính \texttt{i3c\_driver} tạo ra.
 
-Driver hoạt động theo một FSM gồm \DriverPhaseCount{} pha, nhóm theo chức năng trong
-\cref{tab:drv-phase}. Driver không dùng delay tùy ý mà đồng bộ theo cạnh SCL và các event
-trong interface, nhờ đó hành vi không phụ thuộc tần số SCL được cấu hình.
+\texttt{i3c\_driver} hoạt động theo một FSM gồm \DriverPhaseCount{} pha, nhóm theo chức năng trong
+\cref{tab:drv-phase}. \texttt{i3c\_driver} đồng bộ theo cạnh SCL và các event
+trong interface, nên hành vi không phụ thuộc tần số SCL được cấu hình.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Nhóm pha của I3C \Target{} Driver.}
+	\caption{Nhóm pha của \texttt{i3c\_driver}.}
 	\label{tab:drv-phase}
-	\begin{tabular}{L{4.3cm} L{4.8cm} L{4.1cm}}
+	\begin{tabular}{L{3.5cm} L{4.8cm} L{4.9cm}}
 		\toprule
 		\textbf{Nhóm}  & \textbf{Pha}                                                      & \textbf{Chức năng}                                    \\
 		\midrule
 		Chờ và địa chỉ & \texttt{DrvIdle}, \texttt{DrvAddrArbit}, \texttt{DrvAddrPushPull} & Phát hiện START và giải mã \AddressHeader{}.          \\
 		Phản hồi       & \texttt{DrvAck}, \texttt{DrvSelectNext}, \texttt{DrvStop}         & ACK/NACK, chọn nhánh và kết thúc.                     \\
-		Write          & \texttt{DrvWr}, \texttt{DrvWrPushPull}                            & Nhận payload \iic{}/I3C.                              \\
-		Read           & \texttt{DrvRd}, \texttt{DrvRdPushPull}                            & Phát payload \iic{}/I3C.                              \\
+		Write          & \texttt{DrvWr}, \texttt{DrvWrPushPull}                            & Nhận TX data \iic{}/I3C.                              \\
+		Read           & \texttt{DrvRd}, \texttt{DrvRdPushPull}                            & Phát RX data \iic{}/I3C.                              \\
 		ENTDAA         & \texttt{DrvEntdaa}                                                & Phát định danh PID/BCR/DCR và nhận \DynamicAddress{}. \\
-		CCC            & \texttt{DrvBcastDispatch}, \texttt{DrvCccPayload}                 & Giải mã Broadcast/\DirectCCC{} và nhận \EventsByte{}. \\
+		CCC            & \texttt{DrvBcastDispatch}, \texttt{DrvCccData}                    & Giải mã Broadcast/\DirectCCC{} và nhận \EventsByte{}. \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Response sequence của \Target{} cấu hình Static/\DynamicAddress{}, payload, điểm NACK, \TBit{}
+\texttt{i3c\_device\_response\_seq} của \Target{} cấu hình Static/\DynamicAddress{}, RX data, điểm NACK, \TBit{}
 kết thúc và bộ định danh PID/BCR/DCR. Cùng một \IThreeCBroadcastAddress{} mở đầu cho cả ENTDAA,
-\BroadcastCCC{} lẫn \DirectCCC{}; Driver phải nhớ CCC nào vừa đi qua mới biết pha kế tiếp là
-tham gia DAA, nhận payload CCC hay một giao dịch thường. Một biến ngữ cảnh giao thức giữ vai
-trò ghi nhớ đó.
+\BroadcastCCC{} lẫn \DirectCCC{}; \texttt{i3c\_driver} phải nhớ CCC nào vừa đi qua mới biết pha kế tiếp là
+tham gia DAA, nhận \EventsByte{} hay một giao dịch thường.
 
-\section{\VirtualSequencer{} và thư viện \VirtualSequence{}}
+\section{\texttt{i3c\_virtual\_sequencer} và thư viện \VirtualSequence{}}
 \label{sec:ver-vseq}
 
 \VirtualSequence{} là đơn vị kịch bản của môi trường kiểm chứng. Mỗi kịch bản hoàn chỉnh cần
@@ -266,16 +285,16 @@ phối hợp hai phía: \Host{} nạp cấu hình và lệnh qua CSR/FIFO, còn 
 hồi đúng lúc trên SCL/SDA. \VirtualSequence{} điều phối hai phía đó trong một kịch bản, từ
 chuẩn bị DAT và phát \CommandDescriptor{} cho tới chờ giao dịch kết thúc và đọc lại kết quả.
 
-Khả năng điều phối này đến từ \VirtualSequencer{}. \VirtualSequencer{} không sinh stimulus mà
-chỉ giữ handle tới Sequencer của cả hai Agent: \RegisterAgent{} và \TargetAgent{}. Trong cùng
-một \VirtualSequence{}, response sequence của \Target{} được khởi động trên I3C Sequencer và
+Khả năng điều phối này đến từ \texttt{i3c\_virtual\_sequencer}. \texttt{i3c\_virtual\_sequencer} không sinh stimulus mà
+chỉ giữ handle tới Sequencer của cả hai Agent: \texttt{reg\_agent} và \texttt{i3c\_agent}. Trong cùng
+một \VirtualSequence{}, \texttt{i3c\_device\_response\_seq} của \Target{} được khởi động trên I3C Sequencer và
 chạy song song (\texttt{fork}) với các thao tác CSR/FIFO phát trên Register Sequencer. Hai
 Agent vì vậy vẫn độc lập và tái sử dụng được, còn việc bắt nhịp giữa chúng được gói gọn bên
 trong kịch bản.
 
 Nguyên tắc xuyên suốt thư viện là mỗi \VirtualSequence{} định nghĩa một trường hợp kiểm chứng:
 nó chỉ chịu trách nhiệm sinh stimulus cho kịch bản của mình, còn việc đối chiếu đúng/sai được
-giao cho \Scoreboard{}. Chẳng hạn, sequence length sweep quét nhiều độ dài payload nhưng không
+giao cho \texttt{i3c\_scoreboard}. Chẳng hạn, sequence length sweep quét nhiều độ dài TX/RX data nhưng không
 tự so sánh dữ liệu; sequence error chỉ cấu hình điểm lỗi và, nếu cần, kiểm tra thêm điều kiện
 riêng của kịch bản. Cách phân vai này vừa tránh kiểm tra trùng lặp, vừa giúp khi một test thất
 bại thì nguyên nhân truy được về đúng một cơ chế kiểm tra duy nhất.
@@ -290,60 +309,23 @@ nhóm được liệt kê ở \cref{app:regression}.
 	\label{tab:vseq-cat}
 	\begin{tabular}{L{3.0cm} C{1.6cm} L{8.5cm}}
 		\toprule
-		\textbf{Nhóm}  & \textbf{Số lượng}             & \textbf{Mục tiêu chính}                                               \\
+		\textbf{Nhóm}            & \textbf{Số lượng}             & \textbf{Mục tiêu chính}                                                                                                                      \\
 		\midrule
-		Bus            & \BusVseqCount{}               & PHY, START/Sr/STOP, timing, serializer và pad model.                  \\
-		CSR            & \CsrVseqCount{}               & Default, DAT, Command staging, status, reset và unmapped access.      \\
-		FIFO           & \FifoVseqCount{}              & Thứ tự, full/empty, đồng thời read/write, flush và wrap.              \\
-		SDR write      & \SdrWriteVseqCount{}          & Nominal, length sweep, back-to-back, DAT index và \texttt{toc}.       \\
-		SDR read       & \SdrReadVseqCount{}           & Nominal, length, early end, back-to-back, DAT index và \texttt{toc}.  \\
-		Immediate Data & \ImmediateVseqCount{}         & DTT, I3C/\iic{}, \texttt{toc} và payload trong Descriptor.            \\
-		CCC            & \CccVseqCount{}               & Broadcast/Direct ENEC, DISEC và frame mở đầu ENTDAA.                  \\
-		DAA            & \DaaVseqCount{}               & Không \Target{}, một/nhiều \Target{}, address reject và biên DAT.     \\
-		\iic{}         & \IicVseqCount{}               & Read, write và length/partial RX.                                     \\
-		Response/error & \ResponseVseqCount{}          & NACK, overflow, underflow, abort, reset, backpressure và unsupported. \\
+		Bus                      & \BusVseqCount{}               & PHY, START/Sr/STOP, timing, serializer và pad model.                                                                                         \\
+		CSR                      & \CsrVseqCount{}               & Mặc định, DAT, Command staging, status, reset và unmapped access.                                                                            \\
+		FIFO                     & \FifoVseqCount{}              & Thứ tự, đầy/rỗng, đồng thời đọc/ghi, flush và wrap.                                                                                          \\
+		SDR write                & \SdrWriteVseqCount{}          & Giao dịch cơ bản, nhiều độ dài TX data, ghi liên tiếp, DAT index, \texttt{toc} và \texttt{Ovl}.                                              \\
+		SDR read                 & \SdrReadVseqCount{}           & Giao dịch cơ bản, nhiều độ dài RX data, kết thúc đọc sớm (\texttt{I3cShortReadErr}), đọc liên tiếp, DAT index, \texttt{toc} và \texttt{Ovl}. \\
+		\ImmediateDataTransfer{} & \ImmediateVseqCount{}         & \texttt{dtt}, I3C/\iic{}, \texttt{toc}, TX data trong Descriptor và \texttt{I2cDataNack}.                                                    \\
+		CCC                      & \CccVseqCount{}               & Broadcast/Direct ENEC và DISEC.                                                                                                              \\
+		DAA                      & \DaaVseqCount{}               & Không \Target{}, một/nhiều \Target{}, từ chối địa chỉ (\texttt{Nack}), biên DAT, địa chỉ dành riêng, \texttt{Ovl} và \texttt{NotSupported}.  \\
+		\iic{}                   & \IicVseqCount{}               & Read, write, length/partial RX, \texttt{Ovl} và \texttt{I2cDataNack}.                                                                        \\
+		Response/error           & \ResponseVseqCount{}          & \texttt{AddrHeader}, \texttt{HcAborted}, \texttt{NotSupported}, WROC, reset và backpressure.                                                 \\
 		\midrule
-		\textbf{Tổng}  & \textbf{\RunnableVseqCount{}}                                                                         \\
+		\textbf{Tổng}            & \textbf{\RunnableVseqCount{}}                                                                                                                                                \\
 		\bottomrule
 	\end{tabular}
 \end{table}
-
-\section{Quy trình build, run và debug}
-\label{sec:ver-run}
-
-\Testbench{} được viết bằng \SystemVerilog{} theo
-\UVMVersion{}~\cite{ieee1800,uvm12_ug,uvm12_ref} và chạy trên clock chu kỳ 3~ns (xấp xỉ
-333,333~MHz). Chiều sâu FIFO của DUT được thu nhỏ từ mức mặc định \DefaultQueueDepth{} entry
-xuống còn \TestbenchQueueDepth{} entry để dễ đẩy FIFO tới các boundary case (đầy, rỗng,
-backpressure) mà không làm thay đổi hành vi giao thức đang cần kiểm chứng.
-%\CadenceXcelium{} được dùng để compile và simulation; \SimVision{} phục vụ quan sát waveform và debug
-%\cite{cadence_xcelium}.
-
-Các target được chạy từ \texttt{src/verification} vì filelist dùng đường dẫn tương đối. Hai
-lệnh cơ bản là:
-
-\begin{lstlisting}[language=bash]
-make sim TEST=i3c_base_test SEQ=<sequence_name> SEED=<seed>
-make sim TEST=i3c_base_test SEQ=<sequence_name> SEED=<seed> COV=1
-\end{lstlisting}
-
-Môi trường dùng một test class duy nhất; \VirtualSequence{} được chọn qua biến \texttt{SEQ},
-nhờ đó thêm kịch bản mới không đòi hỏi thêm test class. \texttt{make compile} thực hiện compile
-và elaborate. \texttt{make regression} gọi lần lượt các nhóm CSR, FIFO, bus, SDR write/read,
-Immediate Data, \iic{}, CCC, DAA và error. Toàn bộ target cùng quy trình tạo coverage report
-được định nghĩa trong Makefile tại \texttt{src/verification/}.
-
-Quy trình debug bắt đầu từ phần tổng kết UVM và message đầu tiên có mức \texttt{UVM\_ERROR}
-hoặc \texttt{UVM\_FATAL}. Assertion label hoặc \Scoreboard{} mismatch xác định lớp lỗi; khi cần
-waveform, simulation được chạy lại với \texttt{DUMP\_WAVES=1} và \SimVision{} được dùng để lần
-theo chuỗi \VirtualSequence{} $\rightarrow$ Driver $\rightarrow$ DUT $\rightarrow$ Monitor
-$\rightarrow$ \Scoreboard{}. Seed, tên Sequence và command line được lưu cùng log để tái tạo
-lỗi.
-
-Một test chỉ đạt khi process simulation hoàn tất và UVM summary có zero error/fatal. Vì lệnh
-chạy được pipe qua \texttt{tee}, exit code của shell không đủ để kết luận; tiêu chí đạt được
-kiểm tra trên nội dung log. Coverage run có thêm bước kiểm tra database và sinh report; tỷ lệ
-coverage không thay thế điều kiện pass của test.
 
 \section{Ánh xạ yêu cầu và tổng kết chương}
 \label{sec:ver-summary}
@@ -357,22 +339,22 @@ cũng là khung đối chiếu khi đánh giá kết quả ở \cref{ch:results}
 	\label{tab:req-ver-map}
 	\begin{tabular}{C{1.5cm} L{4.0cm} L{7.5cm}}
 		\toprule
-		\textbf{Yêu cầu} & \textbf{Stimulus}                   & \textbf{Cơ chế kiểm tra}                                              \\
+		\textbf{Yêu cầu} & \textbf{Stimulus}                                                      & \textbf{Cơ chế kiểm tra}                                                                                   \\
 		\midrule
-		F1--F3           & SDR write/read, Immediate Data vseq & I3C Monitor, \Scoreboard{}, \TBit{} SVA và correlated coverage.       \\
-		F4               & CCC vseq                            & CCC context trong Driver, \Scoreboard{} opcode/frame và CCC coverage. \\
-		F5               & DAA vseq                            & ENTDAA \Target{} model, DAT/RX model, FSM SVA và DAA coverage.        \\
-		F6               & \iic{} vseq                         & ACK/NACK model, payload \Scoreboard{} và timing SVA.                  \\
-		F7               & CSR/FIFO vseq                       & Register \Scoreboard{}, FIFO/CSR SVA và register coverage.            \\
-		F8               & Response/error vseq                 & Expected response model và status cross coverage.                     \\
-		F9               & Error/reset/abort vseq              & Recovery model, abort SVA và pad-model SVA.                           \\
-		F10              & CSR timing và bus timing vseq       & CSR readback, SCL measurement và timing cover property.               \\
+		F1--F3           & \VirtualSequence{} SDR \PrivateWriteRead{} và \ImmediateDataTransfer{} & \texttt{i3c\_monitor}, \texttt{i3c\_scoreboard}, \TBit{} SVA và \texttt{i3c\_correlated\_coverage}.        \\
+		F4               & \VirtualSequence{} CCC                                                 & Ngữ cảnh CCC trong Driver, \texttt{i3c\_scoreboard} đối chiếu opcode/frame và CCC coverage.                \\
+		F5               & \VirtualSequence{} DAA                                                 & Mô hình \Target{} ENTDAA, mô hình DAT/RX, FSM SVA và DAA coverage.                                         \\
+		F6               & \VirtualSequence{} \iic{}                                              & Mô hình ACK/NACK, \texttt{i3c\_scoreboard} đối chiếu TX/RX data và timing SVA.                             \\
+		F7               & \VirtualSequence{} CSR/FIFO                                            & \texttt{i3c\_scoreboard} phía thanh ghi, FIFO/CSR SVA và register coverage.                                \\
+		F8               & \VirtualSequence{} response/error                                      & Mô hình \ResponseDescriptor{} dự kiến và \texttt{i3c\_correlated\_coverage} \texttt{err}$\times$loại lệnh. \\
+		F9               & \VirtualSequence{} error/reset/abort                                   & Mô hình phục hồi, abort SVA và pad SVA.                                                                    \\
+		F10              & \VirtualSequence{} CSR timing và bus timing                            & Đọc lại CSR, đo chu kỳ SCL và timing cover property.                                                       \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Môi trường kết hợp \RegisterAgent{} và \TargetAgent{} dưới một \VirtualSequencer{}, dùng
-\Scoreboard{} cho các quan hệ xuyên suốt, SVA cho thuộc tính cục bộ và \FunctionalCoverage{}
+Môi trường kết hợp \texttt{reg\_agent} và \texttt{i3c\_agent} dưới một \texttt{i3c\_virtual\_sequencer}, dùng
+\texttt{i3c\_scoreboard} cho các quan hệ xuyên suốt, SVA cho thuộc tính cục bộ và \FunctionalCoverage{}
 ba lớp để đo mức độ exercise. Cấu trúc này bao phủ cả register interface phía phần mềm lẫn hành
 vi giao thức mà không đặt logic kiểm tra trong \VirtualSequence{}. Các số liệu pass/fail,
 uncovered bin và mức closure được trình bày tại \cref{ch:results}.

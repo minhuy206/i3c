@@ -4,6 +4,27 @@
 \RequirePackage[acronym,toc]{glossaries}
 \makeglossaries
 
+% ---- Two-column style for DANH MỤC TỪ VIẾT TẮT ----
+%  left  = abbreviation (narrow, left-aligned)
+%  right = expansion (justified, wraps), with vertical gap between entries
+\newlength{\acrotermwidth}
+\setlength{\acrotermwidth}{0.27\linewidth}
+\newglossarystyle{acrotwocol}{%
+  \renewenvironment{theglossary}%
+    {\begin{longtable}{@{}>{\raggedright\arraybackslash}p{\acrotermwidth}@{\hspace{0.02\linewidth}}p{0.67\linewidth}@{}}}%
+    {\end{longtable}}%
+  \renewcommand*{\glossaryheader}{}%
+  \renewcommand*{\glsgroupheading}[1]{}%
+  \renewcommand*{\glsgroupskip}{}%
+  \renewcommand*{\glossentry}[2]{%
+    \glstarget{##1}{\glossentryname{##1}} &
+    \glossentrydesc{##1}\tabularnewline[1.1ex]%
+  }%
+  \renewcommand*{\subglossentry}[3]{%
+    & \glossentrydesc{##2}\tabularnewline[1.1ex]%
+  }%
+}
+
 % ---- Protocol / bus terms (MIPI I3C Basic v1.1.1) ----
 \DeclareRobustCommand{\iic}{I\textsuperscript{2}C}
 \newacronym{soc}{SoC}{System-on-Chip}
@@ -25,13 +46,36 @@
 \newacronym{dcr}{DCR}{Device Characteristics Register}
 \newacronym{tbit}{T-Bit}{Transition Bit}
 \newacronym{ack}{ACK/NACK}{Acknowledge / Not-Acknowledge}
+\newacronym{mipi}{MIPI}{Mobile Industry Processor Interface}
+\newacronym{scl}{SCL}{Serial Clock Line}
+\newacronym{sda}{SDA}{Serial Data Line}
+\newacronym{enec}{ENEC}{Enable Events Command}
+\newacronym{disec}{DISEC}{Disable Events Command}
+\newacronym{ddr}{DDR}{Double Data Rate}
+\newacronym{tsp}{TSP}{Ternary Symbol Pure-Bus}
+\newacronym{tsl}{TSL}{Ternary Symbol Legacy-inclusive-Bus}
+\newacronym{bcast}{BCAST}{Broadcast}
+\newacronym{da}{DA}{Dynamic Address}
 
 % ---- HCI / interface terms ----
 \newacronym{hci}{HCI}{Host Controller Interface}
+\newacronym{hc}{HC}{Host Controller}
+\newacronym{tcri}{TCRI}{Target Command Response Interface}
 \newacronym{dat}{DAT}{Device Address Table}
 \newacronym{dct}{DCT}{Device Characteristics Table}
 \newacronym{csr}{CSR}{Control and Status Register}
 \newacronym{fifo}{FIFO}{First-In First-Out}
+\newacronym{pio}{PIO}{Programmed Input/Output}
+\newacronym{dma}{DMA}{Direct Memory Access}
+\newacronym{axi}{AXI}{Advanced eXtensible Interface}
+\newacronym{ahb}{AHB}{Advanced High-performance Bus}
+\newacronym{cmd}{CMD}{Command}
+\newacronym{resp}{RESP}{Response}
+\newacronym{dtt}{DTT}{Data Transfer Type}
+\newacronym{tx}{TX}{Transmit}
+\newacronym{rx}{RX}{Receive}
+\newacronym{dword}{DWORD}{Double Word}
+\newacronym{msb}{MSB}{Most Significant Bit}
 
 % ---- Design / verification terms ----
 \newacronym{rtl}{RTL}{Register-Transfer Level}
@@ -40,6 +84,13 @@
 \newacronym{uvm}{UVM}{Universal Verification Methodology}
 \newacronym{tlm}{TLM}{Transaction-Level Modeling}
 \newacronym{sva}{SVA}{SystemVerilog Assertions}
+\newacronym{ucis}{UCIS}{Unified Coverage Interoperability Standard}
+\newacronym{imc}{IMC}{Integrated Metrics Center}
+\newacronym{shm}{SHM}{Simulation History Manager}
+\newacronym{mux}{MUX}{Multiplexer}
+\newacronym{dut}{DUT}{Design Under Test}
 \newacronym{phy}{PHY}{Physical Layer}
+\newacronym{ff}{FF}{Flip-Flop}
+\newacronym{ip}{IP}{Intellectual Property}
 \newacronym{fm}{FM}{Fast Mode}
 \newacronym{fpga}{FPGA}{Field-Programmable Gate Array}

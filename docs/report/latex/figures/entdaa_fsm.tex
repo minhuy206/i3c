@@ -14,11 +14,11 @@
 	]
 	% Main protocol path follows the ordering in compute_next_state.
 	\node[idle]  (idle)  at (-8.0, 2.0) {\texttt{Idle}};
-	\node[state] (sendr) at (-4.7, 2.0) {\texttt{SendRsvdByte}};
-	\node[state] (rack)  at (-1.2, 2.0) {\texttt{ReadRsvdAck}};
-	\node[state] (recv)  at ( 2.7, 2.0) {\texttt{ReceiveIDBit}};
-	\node[state] (senda) at ( 6.8, 2.0) {\texttt{SendAddr}};
-	\node[state] (aack)  at ( 6.8,-1.2) {\texttt{ReadAddrAck}};
+	\node[state] (sendr) at (-4.7, 2.0) {\texttt{SendDAAHeader}};
+	\node[state] (rack)  at (-1.2, 2.0) {\texttt{ReceiveHeaderACK}};
+	\node[state] (recv)  at ( 2.7, 2.0) {\texttt{ReceiveID}};
+	\node[state] (senda) at ( 6.8, 2.0) {\texttt{SendDynamicAddr}};
+	\node[state] (aack)  at ( 6.8,-1.2) {\texttt{ReceiveAddrACK}};
 	\node[stop]  (wstop) at ( 2.7,-1.2) {\texttt{WaitStop}};
 	\node[done]  (done)  at (-1.2,-1.2) {\texttt{Done}};
 
