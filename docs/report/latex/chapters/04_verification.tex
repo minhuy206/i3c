@@ -225,6 +225,17 @@ lệ, item đã ghép đủ thông tin được gửi tới \texttt{i3c\_correla
 ở trên định nghĩa các tình huống mà môi trường chủ động nhắm kích hoạt cho
 \FunctionalRequirementCount{} yêu cầu chức năng F1--F10 (\cref{tab:req-func}).
 
+Khi tổng hợp chỉ tiêu closure, mô hình phân biệt \emph{closure bin} với \emph{diagnostic bin}
+để tránh đếm trùng một chiều quan sát. Với một covergroup mà cross đóng vai trò closure owner cho
+một chức năng, các coverpoint thành phần của cross đó chỉ được xem là diagnostic bin và không cộng
+lại vào mẫu số KPI, vì bản thân cross đã bao hàm các coverpoint ấy. Song song, những chiều mang bản
+chất so khớp --- địa chỉ, chiều truyền, các trường của \CommandResponseDescriptor{} hay tính toàn
+vẹn payload quan sát được có đúng bằng giá trị kỳ vọng hay không --- được giao cho
+\texttt{i3c\_scoreboard} và SVA kiểm tra như điều kiện pass/fail, chứ không đặt thành positive
+coverage bin: một sai khác bắt buộc làm test fail chứ không được để lại thành một bin chưa phủ.
+Nhờ vậy, con số closure phản ánh mức exercise của các tình huống F1--F10, tách bạch khỏi phần kiểm
+tra đúng/sai vốn thuộc trách nhiệm của Scoreboard và SVA.
+
 \section{\texttt{reg\_agent}}
 \label{sec:ver-regagent}
 

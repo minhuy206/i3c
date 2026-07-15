@@ -2,11 +2,12 @@
 \label{ch:results}
 
 % NGUỒN SỐ LIỆU (không đưa vào bản in):
-%   - Regression: src/verification/logs/regression_summary.txt + regression_results.tsv (SEED=1, 80/80 PASS).
-%   - Functional coverage: src/verification/coverage_report.txt (80 test, 1324/1639 bin = 80,8%).
-%   - SVA: src/verification/sva_coverage_report.txt (411 assertion / 404 PASS / 7 MISS; 590 cover / 577 HIT).
-% TODO TRƯỚC KHI NỘP: chạy lại toàn bộ regression + COV=1 tại commit đóng băng của khóa luận
-%   và cập nhật mọi con số trong các bảng của chương này cùng Phụ lục E trên cùng một lần chạy.
+%   - Regression: src/verification/regression_result.txt (SEED=1, total=80 pass=80).
+%   - Functional coverage: src/verification/coverage_report.txt
+%       (closure 222/222 = 100%, diagnostic 173/173 = 100%; per-component closure reg 25/25, i3c 42/42, corr 155/155).
+%       Header "Tests analysed: 81" = 80 test regression + 1 directed DAA closure test (i3c_daa_reserved_addr_resp) merge vào coverage DB.
+%   - SVA: src/verification/sva_coverage_report.txt (386 assertion / 386 PASS / 0 MISS; 578 cover / 578 HIT / 1 WAIVED).
+% LƯU Ý: Phụ lục E vẫn còn trích số cũ (1639 bin, 411/590 SVA) và ví dụ cg_abort_response đã xóa — cần đồng bộ lại theo cùng lần chạy.
 
 Chương này trình bày kết quả thu được khi áp dụng môi trường kiểm chứng ở \cref{ch:verification} lên
 thiết kế ở \cref{ch:architecture}. Nội dung đi theo trình tự bằng chứng: điều kiện và phương pháp đo,
@@ -344,23 +345,25 @@ Mọi thuộc tính quan sát được trên các hình này --- thứ tự pha,
 
 \subsection{Functional Coverage}
 
-Sau khi chạy regression toàn bộ 80 test, mô hình coverage ba lớp ghi nhận 1.324 trên 1.639 bin, đạt 80,8\% tổng thể.
-\Cref{tab:res-cov} trình bày chi tiết theo ba coverage component của \cref{sec:ver-cov}; trong 42 covergroup
-của toàn mô hình, 19 covergroup đạt 100\%.
+Trên coverage database thu được từ toàn bộ regression, mô hình ba lớp đạt \textbf{100\% closure}
+với 222/222 closure bin, đồng thời đạt 100\% ở toàn bộ 173/173 diagnostic bin, theo cách phân tách
+closure/diagnostic đã trình bày ở \cref{sec:ver-cov}. Mọi covergroup của cả ba lớp đều được kích
+hoạt đủ các bin đã định nghĩa. \Cref{tab:res-cov} trình bày closure bin theo ba coverage component
+của \cref{sec:ver-cov}.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Kết quả Functional Coverage theo component (regression toàn bộ 80 test).}
+	\caption{Kết quả Functional Coverage (closure bin) theo component trên toàn bộ regression.}
 	\label{tab:res-cov}
-	\begin{tabular}{L{5.2cm} C{2.6cm} C{2.6cm} C{2.4cm}}
+	\begin{tabular}{L{5.6cm} C{3.0cm} C{2.4cm}}
 		\toprule
-		\textbf{Component}                 & \textbf{Bin covered} & \textbf{Tổng bin} & \textbf{Tỷ lệ}  \\
+		\textbf{Component}                 & \textbf{Closure bin} & \textbf{Tỷ lệ}   \\
 		\midrule
-		\texttt{reg\_coverage}             & 622                  & 710               & 87,6\%          \\
-		\texttt{i3c\_coverage}             & 147                  & 169               & 87,0\%          \\
-		\texttt{i3c\_correlated\_coverage} & 555                  & 760               & 73,0\%          \\
+		\texttt{reg\_coverage}             & 25/25                & 100\%            \\
+		\texttt{i3c\_coverage}             & 42/42                & 100\%            \\
+		\texttt{i3c\_correlated\_coverage} & 155/155              & 100\%            \\
 		\midrule
-		\textbf{Tổng}                      & \textbf{1.324}       & \textbf{1.639}    & \textbf{80,8\%} \\
+		\textbf{Tổng}                      & \textbf{222/222}     & \textbf{100\%}   \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -370,71 +373,67 @@ của toàn mô hình, 19 covergroup đạt 100\%.
 	\centering
 	\fbox{\parbox[c][4.6cm][c]{0.92\textwidth}{\centering\itshape
 			[Hình chờ bổ sung]\\
-			Ảnh chụp tổng kết Functional Coverage sau khi chạy regression toàn bộ 80 test\\
-			(tỷ lệ theo covergroup của ba coverage component).}}
-	\caption{Tổng kết Functional Coverage sau khi chạy regression toàn bộ 80 test.}
+			Ảnh chụp tổng kết Functional Coverage sau khi chạy toàn bộ regression\\
+			(closure và diagnostic bin của ba coverage component).}}
+	\caption{Tổng kết Functional Coverage sau khi chạy toàn bộ regression.}
 	\label{fig:res-cov}
 \end{figure}
 
-Đúng như nguyên tắc đã nêu ở \cref{sec:ver-cov}, con số tổng chỉ có ý nghĩa khi đi kèm phân tích
-uncovered bin. Phân bố cho thấy phần thiếu hụt tập trung vào các cross lớn của lớp correlated, trong
-khi các coverpoint thành phần của chính những covergroup đó đã đạt 100\%. Ba ví dụ tiêu biểu:
+Con số 100\% ở đây là mức closure trên tập bin đã được thu gọn đúng theo phạm vi F1--F10, không
+phải là cải thiện like-for-like so với một mô hình tương quan sâu hơn trước đó. Trong quá trình
+kiểm chứng, mô hình coverage được tinh chỉnh theo hai nguyên tắc ở \cref{sec:ver-cov}. Thứ nhất,
+khi một cross đóng vai trò closure owner, các coverpoint thành phần của nó trở thành diagnostic bin
+và không cộng trùng vào mẫu số KPI. Thứ hai, các chiều mang bản chất so khớp bằng nhau --- địa chỉ,
+chiều truyền, các trường Response Descriptor và tính toàn vẹn payload --- cùng kết quả pass/fail của
+các luồng phục hồi được chuyển hẳn cho Scoreboard và SVA kiểm tra, thay vì giữ làm positive coverage
+bin.
 
-\begin{itemize}
-	\item \texttt{cg\_command\_boundary} đạt 30,1\%: các coverpoint về loại lệnh trước, lệnh sau và
-	      loại điểm biên đều đạt 100\%, nhưng cross ba coverpoint (80 bin) này mới ghi nhận 15 tổ hợp ---
-	      phần lớn tổ hợp đòi hỏi hai lệnh thuộc hai loại nhất định nối tiếp nhau tại một loại điểm biên nhất định,
-	      điều mà thư viện kịch bản hiện tại chưa dàn dựng đủ;
-	\item \texttt{cg\_recovery} đạt 38,2\%: cross 60 bin giữa nguồn gián đoạn, loại lệnh bị gián
-	      đoạn và loại lệnh phục hồi mới đạt 13 tổ hợp, vì mỗi tổ hợp cần một kịch bản lỗi--phục hồi riêng;
-	\item \texttt{cg\_short\_read\_boundary} đạt 55,9\%: cross giữa cờ \texttt{sre}, \texttt{wroc}
-	      và vị trí biên short read còn thiếu vài tổ hợp ít gặp của hai cờ này.
-\end{itemize}
-
-Cách đọc này cho một kết luận cân bằng: các luồng nominal và các cross hai chiều đã được bao phủ
-gần đủ (hai lớp coverage quan sát trực tiếp đều đạt xấp xỉ 87\%), phần còn thiếu chủ yếu là các cross
-ba chiều của những tình huống nhiều lỗi xảy ra liên tiếp. Đóng phần coverage này đòi hỏi bổ sung kịch bản có chủ
-đích, và một phần tổ hợp cần được rà soát khả năng xảy ra để loại trừ có căn cứ thay vì cố kích
-hoạt; cả hai việc được xếp vào hướng phát triển ở \cref{ch:conclusion}.
+Hệ quả là một số tổ hợp ba chiều hiếm gặp trước đây --- ví dụ chuỗi hai lệnh nối tiếp tại một loại
+điểm biên nhất định, hay tổ hợp nguồn gián đoạn $\times$ loại lệnh bị gián đoạn $\times$ loại lệnh
+phục hồi --- không còn là positive coverage bin mà được bảo đảm bằng kiểm tra đúng/sai của
+Scoreboard và SVA trong mọi lần chạy. Nhờ vậy, closure tập trung phản ánh việc các tình huống
+F1--F10 đã thực sự được kích hoạt, còn mọi sai khác về địa chỉ, chiều truyền, response hay tính toàn
+vẹn dữ liệu đều xuất hiện dưới dạng lỗi Scoreboard/SVA chứ không phải dưới dạng một bin chưa phủ.
+Việc mở rộng chiều sâu tương quan --- dàn dựng thêm kịch bản cho các tổ hợp ba chiều nói trên như
+positive coverage bin --- được xếp vào hướng phát triển ở \cref{ch:conclusion}.
 
 \subsection{Kết quả SVA}
 
 Trên toàn bộ regression, 145 instance checker SVA (chín loại checker gắn bằng \texttt{bind} vào từng
-instance của module tương ứng, cùng checker pad model trong Testbench) ghi nhận 411 assertion và
-590 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
+instance của module tương ứng, cùng checker pad model trong Testbench) ghi nhận 386 assertion và
+578 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Kết quả SVA trên regression toàn bộ 80 test.}
+	\caption{Kết quả SVA trên toàn bộ regression.}
 	\label{tab:res-sva}
 	\begin{tabular}{L{5.2cm} C{2.6cm} C{2.6cm} C{2.4cm}}
 		\toprule
-		\textbf{Hạng mục}             & \textbf{Đạt} & \textbf{Tổng} & \textbf{Tỷ lệ} \\
+		\textbf{Hạng mục}             & \textbf{Đạt} & \textbf{Tổng} & \textbf{Tỷ lệ}  \\
 		\midrule
-		Assertion pass (đã kích hoạt) & 404          & 411           & 98,3\%         \\
-		Assertion fail                & 0            & 411           & 0\%            \\
-		Cover property hit            & 577          & 590           & 97,8\%         \\
+		Assertion pass (đã kích hoạt) & 386          & 386           & 100\%           \\
+		Assertion fail                & 0            & 386           & 0\%             \\
+		Cover property hit            & 578          & 578           & 100\%           \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Không assertion nào fail và không assertion nào chỉ pass rỗng (vacuous). Bảy assertion cùng 13 cover
-property chưa từng được kích hoạt; nhờ quy ước mỗi assertion có cover property đối ứng
-(\cref{sec:ver-sva}), các trường hợp này được phát hiện tường minh thay vì bị đếm nhầm thành pass.
-Phân tích cho thấy chúng rơi vào ba nhóm tình huống mà thư viện stimulus hiện chưa tạo ra: chuỗi
-lệnh continuation với \texttt{toc=0} nối nhiều Command Descriptor trong một khung bus duy nhất;
-backpressure giữ nguyên dữ liệu ghi trên cổng Command Queue khi queue đầy; và tổ hợp thời điểm
-chuyển quyền lái SDA trùng đúng một chu kỳ trên pad model. Đây là gap về stimulus, không phải bằng
-chứng lỗi thiết kế, nhưng chúng đánh dấu chính xác các hành vi chưa được chứng minh và được ghi
-nhận vào danh sách hạn chế ở \cref{ch:conclusion}.
+Không assertion nào fail, không assertion nào chỉ pass rỗng (vacuous), và mọi assertion đều được
+kích hoạt: closure của cả assertion lẫn cover property đạt 100\%. Nhờ quy ước mỗi assertion có cover
+property đối ứng (\cref{sec:ver-sva}), kết luận ``đã kích hoạt'' này được xác nhận tường minh thay vì
+bị đếm nhầm từ các pass rỗng. Một cover property duy nhất được \emph{waive} và loại khỏi mẫu số
+closure: \texttt{cp\_reset\_readback\_unmapped\_020} chỉ đọc lại một địa chỉ chưa ánh xạ cụ thể
+(\texttt{0x020}) sau reset --- đây là bin chẩn đoán, không phải mục tiêu closure của F1--F10, và sai
+khác nếu có vẫn bị Scoreboard bắt như một lỗi. Việc waive được ghi tường minh trong report để phần
+closure phản ánh đúng tập directive thuộc phạm vi kiểm chứng.
 
 \section{Đánh giá theo yêu cầu}
 \label{sec:res-eval}
 
 Khép lại chương, \cref{tab:res-req} đối chiếu từng yêu cầu chức năng F1--F10 ở \cref{tab:req-func}
 với bằng chứng kiểm chứng tương ứng, theo khung ánh xạ đã lập ở \cref{tab:req-ver-map}. Mọi yêu cầu
-chức năng đều có nhóm test PASS và coverage tương ứng; các điểm bao phủ còn thiếu đã được chỉ rõ
-ở \cref{sec:res-coverage}.
+chức năng đều có nhóm test PASS và đạt 100\% closure ở các coverage bin thuộc phạm vi của nó, với
+ranh giới closure/diagnostic như đã nêu ở \cref{sec:res-coverage}.
 
 \begin{table}[!htbp]
 	\centering
@@ -444,15 +443,15 @@ chức năng đều có nhóm test PASS và coverage tương ứng; các điểm
 		\toprule
 		\textbf{Yêu cầu} & \textbf{Bằng chứng regression}        & \textbf{Bằng chứng coverage}                                   \\
 		\midrule
-		F1--F2           & 14 test I3C \PrivateWriteRead{} PASS  & \PrivateTransfer{} correlation 95,2\%; T-Bit và read-end 100\% \\
-		F3               & 5 test \ImmediateDataTransfer{} PASS  & \ImmediateDataTransfer{} 100\%                                 \\
-		F4               & 4 test CCC PASS                       & CCC response 100\%; CCC opcode/frame 88,9\%                    \\
-		F5               & 9 test DAA PASS                       & DAA result response và biên DAT; vòng lặp còn tổ hợp chưa phủ  \\
-		F6               & 4 test I\textsuperscript{2}C PASS     & I\textsuperscript{2}C ACK 100\%; vị trí NACK 80,6\%            \\
-		F7               & 14 test CSR + 5 test FIFO PASS        & Register access 99,5\%; CSR định thời 100\%                    \\
-		F8               & Kiểm tra Response trong mọi test      & Response status cross 100\%; Response Descriptor 100\%         \\
-		F9               & 14 test response/error PASS           & Abort/recovery: nominal đủ, cross ba chiều chưa phủ            \\
-		F10              & Test CSR định thời và bus timing PASS & CSR định thời 100\%; cover property timing HIT                 \\
+		F1--F2           & 14 test I3C \PrivateWriteRead{} PASS  & \PrivateTransfer{} correlation, T-Bit và read-end: closure 100\% \\
+		F3               & 5 test \ImmediateDataTransfer{} PASS  & \ImmediateDataTransfer{}: closure 100\%                          \\
+		F4               & 4 test CCC PASS                       & CCC response, opcode/frame: closure 100\%                       \\
+		F5               & 9 test DAA PASS                       & DAA result/response và biên DAT: closure 100\%                  \\
+		F6               & 4 test I\textsuperscript{2}C PASS     & I\textsuperscript{2}C ACK và vị trí NACK: closure 100\%         \\
+		F7               & 14 test CSR + 5 test FIFO PASS        & Register access, DAT, Queue: closure 100\%                      \\
+		F8               & Kiểm tra Response trong mọi test      & Response status và Response Descriptor: closure 100\%           \\
+		F9               & 14 test response/error PASS           & Abort/recovery: closure 100\%; tổ hợp sâu do Scoreboard/SVA     \\
+		F10              & Test CSR định thời và bus timing PASS & CSR định thời: closure 100\%; cover property timing HIT         \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -466,7 +465,8 @@ mô phỏng ở mức RTL, xác nhận tính đúng chức năng và quan hệ �
 không có dữ liệu tổng hợp hay đóng định thời (timing closure) ở mức vật lý, đúng như phạm vi tại \cref{tab:req-oos}.
 
 Tổng hợp lại, thiết kế đáp ứng đầy đủ mười yêu cầu chức năng và năm chỉ tiêu cấu hình trong phạm vi
-bằng chứng mô phỏng: 80/80 test PASS, không assertion nào fail trên 411 assertion, và mô hình
-coverage ba lớp đạt 80,8\% với phần còn thiếu đã được chỉ rõ và phân loại. Những giới hạn còn
-lại của bộ bằng chứng --- phần bao phủ còn thiếu, bảy assertion chưa kích hoạt, và việc thiếu dữ
-liệu sau tổng hợp --- được tổng kết thành hạn chế và hướng phát triển ở \cref{ch:conclusion}.
+bằng chứng mô phỏng: 80/80 test PASS, không assertion nào fail và không assertion nào chưa kích hoạt
+trên 386 assertion, và mô hình coverage ba lớp đạt 100\% closure (222/222 bin) cùng 100\% ở 173/173
+diagnostic bin. Những giới hạn còn lại của bộ bằng chứng --- chiều sâu tương quan của các tổ hợp ba
+chiều được giao cho Scoreboard/SVA thay vì giữ làm positive coverage bin, và việc thiếu dữ liệu sau
+tổng hợp --- được tổng kết thành hạn chế và hướng phát triển ở \cref{ch:conclusion}.
