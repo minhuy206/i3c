@@ -1,7 +1,7 @@
 \chapter{Kiến trúc và thiết kế RTL}
 \label{ch:architecture}
 
-Chương này trình bày cách các yêu cầu tại \cref{sec:req} được cụ thể hóa thành kiến trúc RTL. Nội dung được triển khai từ tổng thể đến chi tiết: kiến trúc phân lớp, kết nối giữa các khối chính, luồng xử lý giao dịch (transaction), sau đó mô tả từng khối chức năng với trọng tâm là FSM điều khiển \FlowActive{}. Các bảng chi tiết như bản đồ CSR, cấu trúc Descriptor và bảng chuyển trạng thái đầy đủ được đặt trong \cref{app:csr,app:desc,app:fsm}, giúp phần thân chương tập trung vào các quyết định thiết kế.
+Chương này trình bày cách các yêu cầu tại \cref{sec:req} được cụ thể hóa thành kiến trúc RTL. Nội dung được triển khai từ tổng thể đến chi tiết: kiến trúc phân lớp, kết nối giữa các khối chính, luồng xử lý giao dịch (transaction), sau đó mô tả từng khối chức năng với trọng tâm là FSM điều khiển \FlowActive{}. Các bảng chi tiết như bản đồ CSR, cấu trúc Descriptor và bảng chuyển trạng thái đầy đủ được đặt trong \cref{app:csr,app:desc,app:fsm}.
 
 \section{Kiến trúc phân lớp}
 \label{sec:arch-layers}
@@ -10,7 +10,7 @@ Thiết kế được tổ chức thành ba lớp chính:
 \begin{itemize}
 	\item \textbf{Lớp giao diện thanh ghi}: gồm khối CSR, DAT, \CommandResponseFifo{} và
 	      \TxRxFifo{}; tiếp nhận truy cập thanh ghi, lưu \CommandDescriptor{} cùng TX data, và
-	      trả RX data từ \Target{} cũng như \ResponseDescriptor{} cho \Host{}.
+	      trả RX data từ \Target{} và \ResponseDescriptor{} cho \Host{}.
 	\item \textbf{Lớp \ActiveController{}}: khối xử lý giao thức chính, giải mã lệnh, tra cứu
 	      \Target{} trong DAT, tạo chuỗi START/Address/Data/STOP và tổng hợp trạng thái lỗi.
 	\item \textbf{Lớp PHY}: nằm ở ranh giới bus, đồng bộ tín hiệu SDA/SCL đi vào và chuyển tiếp
@@ -26,7 +26,7 @@ Giao diện giữa các lớp được chọn theo nguyên tắc phân tách tr�
 	\label{fig:arch-block}
 \end{figure}
 
-Toàn bộ thiết kế hoạt động trong một miền clock duy nhất với reset bất đồng bộ active-low. SCL không tạo thành clock domain nội bộ: nó được sinh bằng bộ đếm (counter) từ các giá trị định thời (timing) trong CSR, nên mọi FSM, FIFO và thanh ghi cùng lấy mẫu theo clock hệ thống. SDA/SCL từ pad là tín hiệu bất đồng bộ và phải qua chuỗi 2-FF synchronizer trước khi được phân tích.
+Toàn bộ thiết kế hoạt động trong một miền clock duy nhất với reset bất đồng bộ active-low. SCL không tạo thành clock domain nội bộ: nó được sinh bằng bộ đếm (counter) từ các giá trị định thời (timing) trong CSR, nên mọi FSM, FIFO và thanh ghi cùng lấy mẫu theo clock hệ thống. SDA/SCL từ chân I/O vật lý (pad, nằm ngoài ranh giới RTL của IP) là tín hiệu bất đồng bộ và phải qua chuỗi 2-FF synchronizer trước khi được phân tích.
 
 \section{Top-level module và kết nối giữa các khối}
 \label{sec:arch-block}
@@ -154,7 +154,7 @@ entry; ENTDAA dùng chỉ số bắt đầu và số \Target{} lấy từ \Addre
 		\CommandDescriptor{}  & \CommandDescriptorWidth{} bit  & Loại lệnh, hướng, chế độ, \texttt{dev\_idx}, transaction ID, độ dài và cờ kết thúc. \\
 		\ResponseDescriptor{} & \ResponseDescriptorWidth{} bit & Error status, transaction ID và số byte đã xử lý.                                   \\
 		DAT entry             & \DatEntryWidth{} bit           & Static/\DynamicAddress{} và thông tin loại \Target{}.                               \\
-		\TxRxFifo{} word      & \DataBufferWordWidth{} bit     & Tối đa bốn byte TX/RX data theo thứ tự little-endian trong word.                \\
+		\TxRxFifo{} word      & \DataBufferWordWidth{} bit     & Tối đa bốn byte TX/RX data theo thứ tự little-endian trong word.                    \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -233,7 +233,8 @@ một chuyển tiếp của SDA chỉ được xem là điều kiện bus khi SC
 \CsrRegisters{} triển khai \CsrRegisterCount{} thanh ghi cùng vùng DAT gồm \DatEntryCount{} entry theo bản đồ thanh ghi tại \cref{app:csr}.
 Khối này lưu các giá trị định thời mặc định, các bit enable/abort/reset và báo trạng thái bận của \Controller{}.
 
-Theo quy tắc \texttt{valid}/\texttt{ready} đã nêu ở \cref{sec:arch-flow}, \CsrRegisters{} hiện thực handshake này trên đường ghi từ phần mềm xuống FIFO bằng một thanh ghi pending. Khi
+Theo quy tắc \texttt{valid}/\texttt{ready} đã nêu ở \cref{sec:arch-flow}, \CsrRegisters{} hiện
+thực handshake trên đường ghi từ phần mềm xuống FIFO bằng một thanh ghi pending. Khi
 \texttt{reg\_ready\_o=1}, CSR nhận lần ghi hiện tại và chốt dữ liệu; từ chu kỳ kế tiếp, CSR đưa
 \texttt{fifo\_wvalid} lên mức 1 và giữ đến khi \HciQueues{} đưa \texttt{fifo\_wready} lên mức 1. Trong thời gian pending,
 một lần ghi CMD/TX mới sẽ làm \texttt{reg\_ready\_o} hạ xuống để tạo backpressure trên bus thanh ghi;
@@ -245,7 +246,7 @@ còn với CMD thì \texttt{cmd\_wvalid} chỉ được tạo sau lần ghi DWOR
 \begin{figure}[!htbp]
 	\centering
 	\input{figures/csr_queue_handshake.tex}
-	\caption{Định thời handshake \texttt{ready}/\texttt{valid} trên đường ghi từ CSR đến Queue: (a) FIFO còn chỗ và (b) FIFO đầy (backpressure).}
+	\caption{Định thời handshake \texttt{ready}/\texttt{valid} trên đường ghi từ CSR đến FIFO: (a) FIFO còn chỗ và (b) FIFO đầy (backpressure).}
 	\label{fig:csr-queue-handshake}
 \end{figure}
 
@@ -266,7 +267,7 @@ Ngoài ra, \SclGenerator{} còn bổ sung hai cơ chế cho các pha định th�
 \begin{itemize}
 	\item \textbf{Đường chuyển nhanh tạo \RepeatedSTART{}}: FSM có đường chuyển nhanh từ
 	      \texttt{DriveHigh} sang \texttt{SdaFall} để tạo \RepeatedSTART{}, dùng khi
-	      \ActiveController{} cần giành lại SDA ngay sau bit ACK hoặc \TBit{} mà không đi qua toàn
+	      \ActiveController{} cần giành lại quyền điều khiển SDA (takeover) ngay sau bit ACK hoặc \TBit{} mà không đi qua toàn
 	      bộ chuỗi tạo \RepeatedSTART{} thông thường.
 	\item \textbf{Chọn định thời mức thấp theo chế độ lái}: \SclGenerator{} chọn thời gian mức
 	      thấp cho SCL theo chế độ lái bus thực tế --- các pha \OpenDrain{} dùng giá trị định thời
@@ -290,10 +291,10 @@ hoàn chỉnh. Bảng trạng thái đầy đủ của ba khối tuần tự hó
 \section{Khối xử lý ENTDAA}
 \label{sec:rtl-entdaa}
 
-Khối xử lý ENTDAA được tổ chức thành hai FSM nhằm tách riêng logic điều phối vòng lặp
+Khối xử lý ENTDAA được tổ chức thành hai FSM nhằm tách riêng logic điều phối quy trình
 khỏi logic cấp phát \DynamicAddress{} cho từng \Target{}:
 \begin{itemize}
-	\item \EntdaaController{}: ở logic điều phối, quản lý vòng lặp qua các entry trong DAT; bắt
+	\item \EntdaaController{}: ở logic điều phối, quản lý quy trình qua các entry trong DAT; bắt
 	      đầu từ entry DAT được Descriptor chỉ định, đọc \DynamicAddress{} từ DAT, yêu cầu
 	      \RepeatedSTART{}, kích hoạt \EntdaaFsm{}, sau đó thu kết quả trả về từ \EntdaaFsm{}.
 	\item \EntdaaFsm{}: ở logic cấp phát, xử lý một \Target{} trong một vòng ENTDAA; phát
@@ -305,17 +306,17 @@ Bảng đầy đủ tên và vai trò
 các trạng thái của hai FSM nằm tại \cref{app:fsm}; sơ đồ chuyển trạng thái của \EntdaaFsm{} cho một
 vòng cấp địa chỉ được trình bày tại \cref{fig:entdaa-fsm}.
 
-Vòng lặp trong \EntdaaController{} chỉ chạy trong số lượng \Target{} mà lệnh
+Quy trình trong \EntdaaController{} chỉ chạy trong số lượng \Target{} mà lệnh
 \DynamicAddressAssignment{} yêu cầu. Nếu \Target{} không ACK \DynamicAddress{} được cấp,
 \Controller{} thử lại với cùng địa chỉ; nếu địa chỉ vẫn bị NACK, giao dịch kết thúc với lỗi
-\texttt{NACK}. Ngược lại, nếu không còn \Target{} nào ACK
+NACK. Ngược lại, nếu không còn \Target{} nào ACK
 \IThreeCBroadcastAddress{}, quá trình kết thúc bình thường. Đây là cơ chế giúp
-vòng lặp phát hiện rằng quá trình \DynamicAddressAssignment{} đã hoàn tất.
+\EntdaaController{} phát hiện rằng quá trình \DynamicAddressAssignment{} đã hoàn tất.
 
 Mỗi kết quả ENTDAA gồm thông tin định danh của \Target{} và \DynamicAddress{} đã cấp. Các kết quả
-này được \FlowActive{} đóng gói và trả về qua \RxFifo{}. \Cref{fig:entdaa-loop-flowchart} trình bày lưu đồ của vòng lặp gán địa chỉ vừa mô tả.
+này được \FlowActive{} đóng gói và trả về qua \RxFifo{}. \Cref{fig:entdaa-loop-flowchart} trình bày lưu đồ của quy trình gán địa chỉ vừa mô tả.
 
-% Lưu đồ thuật toán vòng lặp ENTDAA (nguồn: entdaa_controller.sv, compute_next_state).
+% Lưu đồ thuật toán quy trình ENTDAA (nguồn: entdaa_controller.sv, compute_next_state).
 \begin{figure}[!htbp]
 	\centering
 	\begin{adjustbox}{max width=\textwidth, max totalheight=0.85\textheight}
@@ -382,7 +383,7 @@ này được \FlowActive{} đóng gói và trả về qua \RxFifo{}. \Cref{fig:
 				DA: \DynamicAddress{}; \quad 7E/R: \IThreeCBroadcastAddress{} (0x7E) with Read.};
 		\end{tikzpicture}
 	\end{adjustbox}
-	\caption{Lưu đồ thuật toán vòng lặp ENTDAA cho từng \Target{}.}
+	\caption{Lưu đồ thuật toán quy trình ENTDAA cho từng \Target{}.}
 	\label{fig:entdaa-loop-flowchart}
 \end{figure}
 
@@ -415,23 +416,23 @@ CCC không qua hai bước này mà tách sang nhánh riêng \texttt{IssueDAA} v
 	\label{tab:flow-states}
 	\begin{tabular}{C{1.0cm} L{4.0cm} L{8.0cm}}
 		\toprule
-		\textbf{ID} & \textbf{State}             & \textbf{Vai trò}                                                       \\
+		\textbf{ID} & \textbf{State}             & \textbf{Vai trò}                                                            \\
 		\midrule
-		0           & \texttt{Idle}              & Xóa context giao dịch, giữ bus ở trạng thái nghỉ.                      \\
-		1           & \texttt{WaitForCmd}        & Chờ \CommandFifo{} có Descriptor hợp lệ.                               \\
-		2           & \texttt{FetchDAT}          & Kiểm tra Descriptor, phát yêu cầu đọc DAT.                             \\
-		3           & \texttt{WaitDAT}           & Chờ dữ liệu DAT, quyết định nhánh giao thức.                           \\
-		4           & \texttt{I3CBcastHeader}    & Phát \IThreeCBroadcastAddress{} khi cấu hình yêu cầu.                  \\
-		5           & \texttt{IssueImmediateCcc} & Phát Broadcast/Direct ENEC hoặc DISEC.                                 \\
-		6           & \texttt{FetchTxData}       & Lấy DWORD tiếp theo từ \TxFifo{}.                                      \\
-		7           & \texttt{InitWrite}         & Phát \AddressHeader{} cho giao dịch ghi (I3C/\iic{}).                  \\
-		8           & \texttt{InitRead}          & Phát \AddressHeader{} cho giao dịch đọc (I3C/\iic{}).                  \\
-		9           & \texttt{IssueDAA}          & Chạy vòng ENTDAA.                                                      \\
-		10          & \texttt{IssueI3CWrite}     & Truyền dữ liệu I3C ghi; \TBit{}, continuation.                         \\
-		11          & \texttt{IssueI2CWrite}     & Truyền dữ liệu \iic{} ghi; xác nhận ACK/NACK.                          \\
-		12          & \texttt{IssueI3CRead}      & Nhận dữ liệu I3C đọc; \TBit{} takeover, HC-abort.                      \\
-		13          & \texttt{IssueI2CRead}      & Nhận dữ liệu \iic{} đọc; ACK/NACK, NACK-then-STOP.                     \\
-		14          & \texttt{WriteResp}         & Ghi \ResponseDescriptor{} qua handshake \texttt{ready}/\texttt{valid}. \\
+		0           & \texttt{Idle}              & Xóa context giao dịch, giữ bus ở trạng thái nghỉ.                           \\
+		1           & \texttt{WaitForCmd}        & Chờ \CommandFifo{} có Descriptor hợp lệ.                                    \\
+		2           & \texttt{FetchDAT}          & Kiểm tra Descriptor, phát yêu cầu đọc DAT.                                  \\
+		3           & \texttt{WaitDAT}           & Chờ dữ liệu DAT, quyết định nhánh giao thức.                                \\
+		4           & \texttt{I3CBcastHeader}    & Phát \IThreeCBroadcastAddress{} khi cấu hình yêu cầu.                       \\
+		5           & \texttt{IssueImmediateCcc} & Phát Broadcast/Direct ENEC hoặc DISEC.                                      \\
+		6           & \texttt{FetchTxData}       & Lấy DWORD tiếp theo từ \TxFifo{}.                                           \\
+		7           & \texttt{InitWrite}         & Phát \AddressHeader{} cho giao dịch ghi (I3C/\iic{}).                       \\
+		8           & \texttt{InitRead}          & Phát \AddressHeader{} cho giao dịch đọc (I3C/\iic{}).                       \\
+		9           & \texttt{IssueDAA}          & Chạy vòng ENTDAA.                                                           \\
+		10          & \texttt{IssueI3CWrite}     & Truyền dữ liệu I3C ghi; \TBit{}, continuation.                              \\
+		11          & \texttt{IssueI2CWrite}     & Truyền dữ liệu \iic{} ghi; xác nhận ACK/NACK.                               \\
+		12          & \texttt{IssueI3CRead}      & Nhận dữ liệu I3C đọc; giành lại quyền điều khiển SDA sau \TBit{}, HC-abort. \\
+		13          & \texttt{IssueI2CRead}      & Nhận dữ liệu \iic{} đọc; ACK/NACK, NACK-then-STOP.                          \\
+		14          & \texttt{WriteResp}         & Ghi \ResponseDescriptor{} qua handshake \texttt{ready}/\texttt{valid}.      \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -477,7 +478,7 @@ Sau khi tra cứu DAT, cờ \texttt{device} trong DAT entry quyết định bộ
 (ACK/\TBit{} của I3C hay ACK/NACK của \iic{}). Nếu bit cấu hình phát \IThreeCBroadcastAddress{} được bật,
 I3C \PrivateTransfer{} đi qua \texttt{I3CBcastHeader} để phát \IThreeCBroadcastAddress{} trước, nếu
 không, FSM vào trực tiếp nhóm \texttt{Init}. CCC dạng immediate luôn dùng \IThreeCBroadcastAddress{}. \DynamicAddressAssignment{}
-phát CCC ENTDAA qua \texttt{IssueDAA} rồi trao quyền vòng lặp cho khối ENTDAA mô tả ở
+phát CCC ENTDAA qua \texttt{IssueDAA} rồi trao quyền điều khiển quy trình cho khối ENTDAA mô tả ở
 \cref{sec:rtl-entdaa}.
 
 \subsection{I3C \PrivateTransfer{} Write/Read và \ImmediateDataTransfer{}}
@@ -507,7 +508,7 @@ cần một chuỗi riêng: byte CCC, \RepeatedSTART{}, \AddressHeader{} của \
 
 Trường \texttt{toc} và \texttt{wroc} quy định cách kết thúc sau mỗi giao dịch. Với \texttt{toc=1}, FSM tạo
 STOP; \ResponseDescriptor{} được ghi khi \texttt{wroc=1} hoặc khi giao dịch có lỗi. Với \texttt{toc=0}, FSM giữ bus
-và kiểm tra \CommandDescriptor{} kế tiếp. Trong phạm vi khoá luận này, chỉ I3C \PrivateWriteRead{} trong I3C SDR Mode hợp lệ mới được nối qua \RepeatedSTART{}.
+và kiểm tra \CommandDescriptor{} kế tiếp. Trong phạm vi khóa luận này, chỉ I3C \PrivateWriteRead{} trong I3C SDR Mode hợp lệ mới được nối qua \RepeatedSTART{}.
 Mọi trường hợp khác buộc tạo STOP và ghi \texttt{NotSupported} vào \ResponseDescriptor{}.
 
 Việc hủy giao dịch được xử lý theo pha thay vì nhảy tức thời về \texttt{Idle}. Đây là yêu cầu hủy do phần mềm chủ động gửi
@@ -521,16 +522,22 @@ START hoặc STOP.
 \section{Tích hợp trong \ControllerActive{}}
 \label{sec:rtl-controller-active}
 
-\ControllerActive{} tích hợp \FlowActive{}, \SclGenerator{}, \BusTxFlow{} và \BusRxFlow{}, \BusMonitor{}
-và \EntdaaController{}. Vì \FlowActive{} và \EntdaaController{} dùng chung serializer và bảng DAT, khối tích hợp
-đặt MUX cho cả hai tài nguyên và phân kênh theo khối đang được trao quyền: \FlowActive{} trong giao dịch thường hoặc \EntdaaController{} trong pha ENTDAA. Một latch giữ yêu cầu
-\RepeatedSTART{} của \EntdaaController{} cho đến khi \SclGenerator{} xác nhận, tránh mất xung khi hai FSM không hoàn
-tất trong cùng chu kỳ.
+\ControllerActive{} tích hợp sáu khối:
+\begin{itemize}
+	\item \FlowActive{} và \EntdaaController{};
+	\item \SclGenerator{};
+	\item \BusTxFlow{} và \BusRxFlow{};
+	\item \BusMonitor{}.
+\end{itemize}
+Hai FSM điều phối dùng chung serializer và bảng DAT. Khối tích hợp đặt MUX cho cả hai tài nguyên
+và phân kênh theo luồng đang được trao quyền: giao dịch thường hoặc pha ENTDAA. Một latch giữ
+yêu cầu \RepeatedSTART{} của luồng ENTDAA cho đến khi \SclGenerator{} xác nhận, tránh mất xung
+khi hai FSM không hoàn tất trong cùng chu kỳ.
 
 Đường ra SDA được hợp nhất bằng MUX có thứ tự ưu tiên rõ ràng: khi \SclGenerator{} đang tạo START,
 \RepeatedSTART{} hoặc STOP, giá trị SDA do \SclGenerator{} tạo ra được chọn; trong pha dữ liệu, serializer hoặc \EntdaaController{}
 điều khiển SDA. Tín hiệu chọn chế độ lái chỉ báo \PushPull{} khi nguồn đang điều khiển SDA cần pha
-đó; khi không có nguồn lái, chế độ trở về \OpenDrain{} để nhả bus.
+đó; khi không có nguồn lái, chế độ trở về \OpenDrain{} để nhả bus. Ngoài hai nguồn trên, trong pha phân xử địa chỉ của ENTDAA còn có một nguồn lái SDA thứ ba xen giữa \SclGenerator{} và serializer. Khi nhiều \Target{} đồng thời phát chuỗi định danh trên \OpenDrain{} và kết quả wired-AND tại một bit là mức thấp, \ActiveController{} chủ động kéo SDA xuống thấp ở chế độ \OpenDrain{} trong phần còn lại của bit đó, giúp \Target{} nào lấy mẫu trễ vẫn đọc đúng mức thấp và rút khỏi phân xử. Thứ tự ưu tiên đầy đủ do đó là \SclGenerator{}, rồi nguồn kéo-thấp phân xử ENTDAA, rồi serializer.
 Nhờ cấu trúc ưu tiên này, chỉ một nguồn điều khiển SDA tại mỗi thời điểm. Tính loại trừ đó và việc
 chuyển giao quyền điều khiển giữa các nguồn được kiểm chứng bằng SVA (\cref{sec:ver-sva}), còn hành vi
 xuyên suốt từ Descriptor đến bus do \Scoreboard{} đối chiếu (\cref{sec:ver-tlm}) --- cả hai được trình bày ở chương kiểm chứng.
