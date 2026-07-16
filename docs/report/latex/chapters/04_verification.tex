@@ -207,34 +207,27 @@ cp_sdr_write_tbit_parity:
 	      sau khi \texttt{i3c\_scoreboard} đã ghép context hai phía.
 \end{itemize}
 
-Thay vì liệt kê mọi giá trị, các bin được thiết kế quanh những tình huống then chốt thể hiện
-trực tiếp mức bao phủ các yêu cầu F1--F10. Trước hết, môi trường theo dõi để bảo đảm mọi loại
-giao dịch trong phạm vi --- I3C \PrivateWriteRead{}, \ImmediateDataTransfer{}, CCC, ENTDAA và
-\iic{} --- đều được kích hoạt ít nhất một lần (F1--F6). Tiếp đó, bằng cách cross \texttt{err}
-với loại lệnh, môi trường xác nhận mỗi mã lỗi mà RTL hiện thực đều xuất hiện đúng trong ngữ
-cảnh lệnh sinh ra nó (F8). Các tình huống biên quan trọng cũng được nhắm riêng: độ dài TX/RX data
-tại biên DWORD, \Target{} từ chối \DynamicAddress{} trong ENTDAA, cùng ACK/NACK và \TBit{} trên
-bus. Illegal bin chỉ dùng cho tình huống giao thức thực sự cấm; tính năng ngoài phạm vi không
-bị đánh dấu illegal chỉ vì RTL không hỗ trợ.
+Các bin được thiết kế quanh những tình huống then chốt của \FunctionalRequirementCount{} yêu cầu
+F1--F10 (\cref{tab:req-func}): mọi loại giao dịch trong phạm vi --- I3C \PrivateWriteRead{},
+\ImmediateDataTransfer{}, CCC, ENTDAA và \iic{} --- đều phải được kích hoạt ít nhất một lần
+(F1--F6); cross giữa \texttt{err} và loại lệnh xác nhận mỗi mã lỗi xuất hiện đúng trong ngữ cảnh
+lệnh sinh ra nó (F8); và các tình huống biên --- độ dài TX/RX data tại biên DWORD, \Target{} từ
+chối \DynamicAddress{} trong ENTDAA, cùng ACK/NACK và \TBit{} trên bus --- được nhắm riêng. Illegal
+bin chỉ dùng cho tình huống giao thức thực sự cấm; tính năng ngoài phạm vi không bị đánh dấu illegal
+chỉ vì RTL không hỗ trợ.
 
-Về hiện thực, mỗi lớp coverage là một \texttt{uvm\_subscriber} gắn vào \TLMAnalysisPort{} của
-\texttt{reg\_monitor}, \texttt{i3c\_monitor} hoặc \texttt{i3c\_scoreboard} tương ứng. Các covergroup được sample theo sự kiện giao dịch chứ
-không theo clock: một mẫu chỉ được ghi khi một truy cập thanh ghi, một giao dịch bus hoặc một
-item đã ghép đủ context thực sự hoàn tất. Sau khi \texttt{i3c\_scoreboard} đối chiếu một giao dịch hợp
-lệ, item đã ghép đủ thông tin được gửi tới \texttt{i3c\_correlated\_coverage}. Tập covergroup, bin và cross
-ở trên định nghĩa các tình huống mà môi trường chủ động nhắm kích hoạt cho
-\FunctionalRequirementCount{} yêu cầu chức năng F1--F10 (\cref{tab:req-func}).
+Những tình huống then chốt trên là các \emph{closure bin} --- mục tiêu bắt buộc phải kích hoạt; các
+bin còn lại chỉ mang tính \emph{diagnostic}, dùng để quan sát và không được cộng vào tổng số bin
+dùng tính tỷ lệ closure.
+Coverpoint thành phần của một cross đã đóng vai closure owner được xếp làm diagnostic để tránh cộng
+trùng. Riêng các chiều mang bản chất so khớp --- địa chỉ, chiều truyền, trường
+\CommandResponseDescriptor{}, toàn vẹn payload --- do \texttt{i3c\_scoreboard} và SVA kiểm tra như
+điều kiện pass/fail chứ không đặt thành coverage bin.
 
-Khi tổng hợp chỉ tiêu closure, mô hình phân biệt \emph{closure bin} với \emph{diagnostic bin}
-để tránh đếm trùng một chiều quan sát. Với một covergroup mà cross đóng vai trò closure owner cho
-một chức năng, các coverpoint thành phần của cross đó chỉ được xem là diagnostic bin và không cộng
-lại vào mẫu số KPI, vì bản thân cross đã bao hàm các coverpoint ấy. Song song, những chiều mang bản
-chất so khớp --- địa chỉ, chiều truyền, các trường của \CommandResponseDescriptor{} hay tính toàn
-vẹn payload quan sát được có đúng bằng giá trị kỳ vọng hay không --- được giao cho
-\texttt{i3c\_scoreboard} và SVA kiểm tra như điều kiện pass/fail, chứ không đặt thành positive
-coverage bin: một sai khác bắt buộc làm test fail chứ không được để lại thành một bin chưa phủ.
-Nhờ vậy, con số closure phản ánh mức exercise của các tình huống F1--F10, tách bạch khỏi phần kiểm
-tra đúng/sai vốn thuộc trách nhiệm của Scoreboard và SVA.
+Về hiện thực, mỗi lớp là một \texttt{uvm\_subscriber} gắn vào \TLMAnalysisPort{} của
+\texttt{reg\_monitor}, \texttt{i3c\_monitor} hoặc \texttt{i3c\_scoreboard} tương ứng. Covergroup
+được sample theo sự kiện giao dịch chứ không theo clock: một mẫu chỉ được ghi khi một truy cập thanh
+ghi, một giao dịch bus hoặc một item đã ghép đủ context thực sự hoàn tất.
 
 \section{\texttt{reg\_agent}}
 \label{sec:ver-regagent}

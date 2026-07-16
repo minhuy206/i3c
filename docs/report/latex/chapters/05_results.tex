@@ -379,23 +379,20 @@ của \cref{sec:ver-cov}.
 	\label{fig:res-cov}
 \end{figure}
 
-Con số 100\% ở đây là mức closure trên tập bin đã được thu gọn đúng theo phạm vi F1--F10, không
-phải là cải thiện like-for-like so với một mô hình tương quan sâu hơn trước đó. Trong quá trình
-kiểm chứng, mô hình coverage được tinh chỉnh theo hai nguyên tắc ở \cref{sec:ver-cov}. Thứ nhất,
-khi một cross đóng vai trò closure owner, các coverpoint thành phần của nó trở thành diagnostic bin
-và không cộng trùng vào mẫu số KPI. Thứ hai, các chiều mang bản chất so khớp bằng nhau --- địa chỉ,
-chiều truyền, các trường Response Descriptor và tính toàn vẹn payload --- cùng kết quả pass/fail của
-các luồng phục hồi được chuyển hẳn cho Scoreboard và SVA kiểm tra, thay vì giữ làm positive coverage
-bin.
+Mức 100\% closure này được đo trên tập bin định nghĩa đúng theo phạm vi F1--F10, theo hai nguyên
+tắc phân bổ trách nhiệm ở \cref{sec:ver-cov}. Thứ nhất, khi một cross đóng vai trò closure owner cho
+một chức năng, các coverpoint thành phần của nó được tính là diagnostic bin và không cộng trùng vào
+mẫu số KPI. Thứ hai, các chiều mang bản chất so khớp bằng nhau --- địa chỉ, chiều truyền, các trường
+Response Descriptor và tính toàn vẹn payload --- cùng kết quả pass/fail của các luồng phục hồi thuộc
+trách nhiệm kiểm tra của Scoreboard và SVA, chứ không đặt thành positive coverage bin.
 
-Hệ quả là một số tổ hợp ba chiều hiếm gặp trước đây --- ví dụ chuỗi hai lệnh nối tiếp tại một loại
-điểm biên nhất định, hay tổ hợp nguồn gián đoạn $\times$ loại lệnh bị gián đoạn $\times$ loại lệnh
-phục hồi --- không còn là positive coverage bin mà được bảo đảm bằng kiểm tra đúng/sai của
-Scoreboard và SVA trong mọi lần chạy. Nhờ vậy, closure tập trung phản ánh việc các tình huống
-F1--F10 đã thực sự được kích hoạt, còn mọi sai khác về địa chỉ, chiều truyền, response hay tính toàn
-vẹn dữ liệu đều xuất hiện dưới dạng lỗi Scoreboard/SVA chứ không phải dưới dạng một bin chưa phủ.
-Việc mở rộng chiều sâu tương quan --- dàn dựng thêm kịch bản cho các tổ hợp ba chiều nói trên như
-positive coverage bin --- được xếp vào hướng phát triển ở \cref{ch:conclusion}.
+Nhờ ranh giới này, closure phản ánh việc các tình huống F1--F10 đã thực sự được kích hoạt, còn mọi
+sai khác về địa chỉ, chiều truyền, response hay tính toàn vẹn dữ liệu đều biểu hiện dưới dạng lỗi
+Scoreboard/SVA chứ không phải dưới dạng một bin chưa phủ. Các tổ hợp ba chiều hiếm gặp --- ví dụ
+chuỗi hai lệnh nối tiếp tại một loại điểm biên nhất định, hay tổ hợp nguồn gián đoạn $\times$ loại
+lệnh bị gián đoạn $\times$ loại lệnh phục hồi --- được bảo đảm bằng kiểm tra đúng/sai của Scoreboard
+và SVA trong mọi lần chạy; việc dàn dựng thêm kịch bản để đưa các tổ hợp này thành positive coverage
+bin được xếp vào hướng phát triển ở \cref{ch:conclusion}.
 
 \subsection{Kết quả SVA}
 
@@ -468,5 +465,5 @@ Tổng hợp lại, thiết kế đáp ứng đầy đủ mười yêu cầu ch�
 bằng chứng mô phỏng: 80/80 test PASS, không assertion nào fail và không assertion nào chưa kích hoạt
 trên 386 assertion, và mô hình coverage ba lớp đạt 100\% closure (222/222 bin) cùng 100\% ở 173/173
 diagnostic bin. Những giới hạn còn lại của bộ bằng chứng --- chiều sâu tương quan của các tổ hợp ba
-chiều được giao cho Scoreboard/SVA thay vì giữ làm positive coverage bin, và việc thiếu dữ liệu sau
-tổng hợp --- được tổng kết thành hạn chế và hướng phát triển ở \cref{ch:conclusion}.
+chiều do Scoreboard/SVA đảm nhiệm ở dạng kiểm tra đúng/sai, và việc thiếu dữ liệu sau tổng hợp ---
+được tổng kết thành hạn chế và hướng phát triển ở \cref{ch:conclusion}.
