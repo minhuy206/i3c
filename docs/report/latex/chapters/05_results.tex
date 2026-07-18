@@ -1,34 +1,32 @@
-\chapter{Kết quả và Đánh giá}
+\chapter{Kết quả và đánh giá}
 \label{ch:results}
 
 % NGUỒN SỐ LIỆU (không đưa vào bản in):
-%   - Regression: src/verification/regression_result.txt (SEED=1, total=80 pass=80).
+%   - Regression/coverage database: 81 test, 81 PASS (SEED=1).
 %   - Functional coverage: src/verification/coverage_report.txt
 %       (closure 222/222 = 100%, diagnostic 173/173 = 100%; per-component closure reg 25/25, i3c 42/42, corr 155/155).
-%       Header "Tests analysed: 81" = 80 test regression + 1 directed DAA closure test (i3c_daa_reserved_addr_resp) merge vào coverage DB.
+%       Header "Tests analysed: 81" dùng cùng tập regression 81 test.
 %   - SVA: src/verification/sva_coverage_report.txt (386 assertion / 386 PASS / 0 MISS; 578 cover / 578 HIT / 1 WAIVED).
-% LƯU Ý: Phụ lục E vẫn còn trích số cũ (1639 bin, 411/590 SVA) và ví dụ cg_abort_response đã xóa — cần đồng bộ lại theo cùng lần chạy.
-
 Chương này trình bày kết quả thu được khi áp dụng môi trường kiểm chứng ở \cref{ch:verification} lên
-thiết kế ở \cref{ch:architecture}. Nội dung đi theo trình tự bằng chứng: điều kiện và phương pháp đo,
+thiết kế ở \cref{ch:architecture}. Nội dung đi theo trình tự bằng chứng: điều kiện và phương pháp thu thập số liệu,
 kết quả regression, bằng chứng waveform, kết quả Functional Coverage và SVA, và cuối cùng là đối
 chiếu với các yêu cầu đã phát biểu tại \cref{sec:req}.
 
-\section{Điều kiện và phương pháp đo}
+\section{Điều kiện và phương pháp thu thập số liệu}
 \label{sec:res-baseline}
 
-Mọi số liệu trong chương được đo trên cùng một trạng thái mã nguồn của cả RTL lẫn môi trường kiểm
+Mọi số liệu trong chương được thu thập trên cùng một trạng thái mã nguồn của cả RTL lẫn môi trường kiểm
 chứng để kết quả tái lập được. Mô phỏng dùng Cadence Xcelium với UVM~1.2; mỗi test chạy một
 Virtual Sequence với \texttt{-svseed 1}. Cố định seed bảo đảm bộ kết quả tái lập chính xác;
 constrained-random vẫn sinh ngẫu nhiên stimulus trong từng kịch bản trên seed đó. Một test được tính
 là PASS khi mô phỏng hoàn tất với không có \texttt{UVM\_ERROR} và \texttt{UVM\_FATAL}.
 
-Functional Coverage và SVA được thu bằng cách chạy regression toàn bộ 80 test.
-\Cref{tab:res-baseline} tóm tắt điều kiện đo.
+Kết quả regression gồm 81 test là nguồn thống nhất cho đánh giá đúng/sai, Functional Coverage và SVA.
+\Cref{tab:res-baseline} tóm tắt điều kiện thu thập số liệu.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Điều kiện đo kết quả.}
+	\caption{Điều kiện thu thập số liệu.}
 	\label{tab:res-baseline}
 	\begin{tabular}{L{4.6cm} L{8.7cm}}
 		\toprule
@@ -36,24 +34,23 @@ Functional Coverage và SVA được thu bằng cách chạy regression toàn b�
 		\midrule
 		Công cụ mô phỏng  & Cadence Xcelium, UVM~1.2                                            \\
 		Seed              & \texttt{-svseed 1} cho mọi test                                     \\
-		Bộ test           & 80 Virtual Sequence (\cref{tab:vseq-cat}), một test class duy nhất  \\
+		Bộ test           & 81 test regression, một test class duy nhất                         \\
 		Tiêu chí PASS     & Mô phỏng hoàn tất, không có \texttt{UVM\_ERROR}/\texttt{UVM\_FATAL} \\
-		Coverage          & Regression toàn bộ 80 test                                          \\
+		Coverage/SVA      & Kết quả regression của toàn bộ 81 test                              \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Môi trường kiểm chứng --- gồm thư viện Virtual Sequence và các checker SVA dùng chung --- chiếm
+Môi trường kiểm chứng --- gồm thư viện Virtual Sequence và các module SVA dùng chung --- chiếm
 phần lớn công sức của khóa luận, phản ánh trọng tâm đặt vào việc chứng minh tính đúng của thiết kế,
 bên cạnh việc hiện thực chức năng.
 
 \section{Kết quả regression}
 \label{sec:res-regression}
 
-Cả 80 Virtual Sequence đều PASS với \texttt{-svseed 1}, không ghi nhận assertion fail nào.
+Cả 81 test regression đều PASS với \texttt{-svseed 1}, không ghi nhận assertion fail nào.
 \Cref{tab:res-regression} trình bày số lượng và kết quả PASS theo mười nhóm kịch bản đã mô tả mục
-tiêu kiểm chứng ở \cref{tab:vseq-cat}. Các nhóm I3C \PrivateWriteRead{} được thực hiện
-trong I3C SDR Mode; trích đoạn log và bảng tổng kết regression được đặt tại \cref{app:regression}.
+tiêu kiểm chứng ở \cref{tab:vseq-cat}, cùng một test dành cho coverage closure. Trích đoạn log và bảng tổng kết regression được đặt tại \cref{app:regression}.
 
 \begin{table}[!htbp]
 	\centering
@@ -61,34 +58,34 @@ trong I3C SDR Mode; trích đoạn log và bảng tổng kết regression đư�
 	\label{tab:res-regression}
 	\begin{tabular}{L{5.0cm} C{4.0cm} C{4.0cm}}
 		\toprule
-		\textbf{Nhóm}                & \textbf{Số test} & \textbf{PASS} \\
+		\textbf{Nhóm}            & \textbf{Số test} & \textbf{PASS} \\
 		\midrule
-		Bus                          & 11               & 11            \\
-		CSR                          & 14               & 14            \\
-		FIFO                         & 5                & 5             \\
-		I3C \PrivateWrite{}          & 6                & 6             \\
-		I3C \PrivateRead{}           & 8                & 8             \\
-		Immediate Data Transfer      & 5                & 5             \\
-		CCC                          & 4                & 4             \\
-		DAA                          & 9                & 9             \\
-		Legacy I\textsuperscript{2}C & 4                & 4             \\
-		Response/error               & 14               & 14            \\
+		Bus                      & 11               & 11            \\
+		CSR                      & 14               & 14            \\
+		FIFO                     & 5                & 5             \\
+		I3C \PrivateWrite{}      & 6                & 6             \\
+		I3C \PrivateRead{}       & 8                & 8             \\
+		\ImmediateDataTransfer{} & 5                & 5             \\
+		CCC                      & 4                & 4             \\
+		DAA                      & 9                & 9             \\
+		\LegacyIic{}             & 4                & 4             \\
+		Response/error           & 14               & 14            \\
+		Coverage closure         & 1                & 1             \\
 		\midrule
-		\textbf{Tổng}                & \textbf{80}      & \textbf{80}   \\
+		\textbf{Tổng}            & \textbf{81}      & \textbf{81}   \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Ngoài 80 test trên, ràng buộc độ sâu của \texttt{sync\_fifo} được bảo đảm bằng một assertion tại
-thời điểm elaboration trong chính RTL: cấu hình độ sâu không phải lũy thừa của 2 làm elaboration
-dừng với thông báo fatal định trước, nên mọi lần compile thành công của regression cũng đồng thời
-xác nhận ràng buộc tham số này.
+Ngoài các test regression trên, ràng buộc độ sâu lũy thừa hai của \texttt{sync\_fifo}
+(\cref{sec:arch-desc}) được kiểm bằng immediate assertion ở thời điểm elaboration, nên mọi lần
+compile thành công cũng đồng thời xác nhận ràng buộc tham số này.
 
-Khi diễn giải kết quả 80/80, cần lưu ý hai điểm. Thứ nhất, mỗi kịch bản có đúng một mục tiêu và phần kiểm
-tra nằm ở Scoreboard và SVA dùng chung, nên một lần PASS là kết luận đồng thời của cả ba cơ chế kiểm
-tra chứ không phải của điều kiện tự viết trong test. Thứ hai, PASS với một seed cố định chỉ chứng
-minh các hành vi đã được kích hoạt là đúng; mức độ đầy đủ của việc kích hoạt được đo riêng bằng
-Functional Coverage ở \cref{sec:res-coverage}.
+Khi diễn giải kết quả regression, cần lưu ý hai điểm. Thứ nhất, theo cách phân vai ở
+\cref{sec:ver-vseq} --- mỗi kịch bản chỉ sinh stimulus, còn đối chiếu đúng/sai giao cho Scoreboard
+và SVA --- một lần PASS là kết luận chung của Scoreboard và SVA, không riêng bản thân kịch bản. Thứ
+hai, PASS với một seed cố định chỉ chứng minh các hành vi đã được kích hoạt là đúng; mức độ đầy đủ
+của việc kích hoạt được xác định riêng bằng Functional Coverage ở \cref{sec:res-coverage}.
 
 \section{Bằng chứng waveform}
 \label{sec:res-waveform}
@@ -97,15 +94,15 @@ Các giao dịch tiêu biểu được kiểm tra trực quan bằng SimVision, 
 kiện trên bus khớp với mô tả giao thức ở \cref{ch:background-requirements}: START và
 \AddressHeader{} phát ở pha \OpenDrain{}, TX/RX data truyền ở pha \PushPull{}, T-Bit kết thúc mỗi
 byte, và STOP trả bus về trạng thái nghỉ. Mọi hình trong mục này chụp cùng năm tín hiệu phía
-\ActiveController{}: cặp SCL vào/ra (\texttt{scl\_i}, \texttt{scl\_o}), cặp SDA vào/ra
+\Controller{}: cặp SCL vào/ra (\texttt{scl\_i}, \texttt{scl\_o}), cặp SDA vào/ra
 (\texttt{sda\_i}, \texttt{sda\_o}) và tín hiệu chọn pha \OpenDrain{}/\PushPull{}
 (\texttt{sel\_od\_pp}). Từng đoạn trên bus được khoanh bằng khung nét đứt và chú thích bằng các
 nhãn S, Address, CCC, DATA, Sr, P cùng giá trị byte tương ứng.
 
-Các hình dưới đây trải đủ các nhóm giao dịch trong phạm vi thiết kế: I3C Private Write/Read trong SDR Mode
+Các hình dưới đây trải đủ các nhóm giao dịch trong phạm vi thiết kế: I3C \PrivateWriteRead{} trong SDR Mode
 (\cref{fig:res-wave-write} và \cref{fig:res-wave-read}), \ImmediateDataTransfer{}
 (\cref{fig:res-i3c-imm}). CCC gồm ENEC dạng Broadcast (\cref{fig:res-enec-bcast}) và dạng Direct
-(\cref{fig:res-enec-direct}). Thủ tục DAA (\cref{fig:res-daa}) và giao dịch \LegacyIic{} Fast Mode
+(\cref{fig:res-enec-direct}). Quy trình DAA (\cref{fig:res-daa}) và giao dịch \LegacyIic{} Fast Mode
 gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 
 \begin{figure}[!htbp]
@@ -264,7 +261,7 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 \begin{figure}[!htbp]
 	\centering
 	\includegraphics[width=\textwidth]{daa.png}
-	\caption{Waveform thủ tục Dynamic Address Assignment (DAA).}
+	\caption{Waveform quy trình Dynamic Address Assignment (DAA).}
 	\label{fig:res-daa}
 \end{figure}
 
@@ -324,20 +321,20 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 	\label{fig:res-i2c-read}
 \end{figure}
 
-Ở các giao dịch mà phía \ActiveController{} lái dữ liệu --- \PrivateWrite{},
+Ở các giao dịch mà phía \Controller{} lái dữ liệu --- I3C \PrivateWrite{},
 \ImmediateDataTransfer{} và pha dữ liệu của CCC --- tín hiệu \texttt{sel\_od\_pp} chuyển lên mức
 cao đúng khi bắt đầu pha dữ liệu, thể hiện điểm chuyển \OpenDrain{} sang \PushPull{} mà
 \cref{sec:rtl-controller-active} mô tả ở mức RTL; \cref{fig:res-enec-direct} còn cho thấy một
-\RepeatedSTART{} chèn giữa \BroadcastCCC{} và pha Direct. Ngược lại, trong \PrivateRead{}
+\RepeatedSTART{} chèn giữa \BroadcastCCC{} và pha Direct. Ngược lại, trong I3C \PrivateRead{}
 (\cref{fig:res-wave-read}) pha dữ liệu do \Target{} lái nên \texttt{sel\_od\_pp} giữ mức thấp và
-phía \ActiveController{} để đường SDA ở \OpenDrain{}. Thủ tục DAA (\cref{fig:res-daa}) diễn ra chủ
+phía \Controller{} để đường SDA ở \OpenDrain{}. Quy trình DAA (\cref{fig:res-daa}) diễn ra chủ
 yếu ở \OpenDrain{} do quá trình phân xử địa chỉ, và trải trên trục thời gian dài hơn hẳn vì gán
 địa chỉ cho nhiều \Target{} nối tiếp. Hai giao dịch \LegacyIic{} (\cref{fig:res-i2c-write} và
 \cref{fig:res-i2c-read}) chạy hoàn toàn ở \OpenDrain{} tại Fast Mode 400~kHz, nên trục thời gian
 rộng hơn gần một bậc so với các giao dịch I3C ở 12,5~MHz.
 
 Bằng chứng waveform mang tính minh họa và phục vụ debug; nó không thay thế cơ chế kiểm tra tự động.
-Mọi thuộc tính quan sát được trên các hình này --- thứ tự pha, ACK/NACK, T-Bit, nội dung TX/RX data ---
+Mọi thuộc tính quan sát được trên các hình này --- thứ tự pha, ACK/NACK, T-Bit, giá trị TX/RX data ---
 đều đã được Scoreboard hoặc SVA kiểm tra trong mọi lần chạy.
 
 \section{Kết quả Functional Coverage và SVA}
@@ -345,7 +342,7 @@ Mọi thuộc tính quan sát được trên các hình này --- thứ tự pha,
 
 \subsection{Functional Coverage}
 
-Trên coverage database thu được từ toàn bộ regression, mô hình ba lớp đạt \textbf{100\% closure}
+Trong kết quả regression 81 test, mô hình ba lớp đạt \textbf{100\% closure}
 với 222/222 closure bin, đồng thời đạt 100\% ở toàn bộ 173/173 diagnostic bin, theo cách phân tách
 closure/diagnostic đã trình bày ở \cref{sec:ver-cov}. Mọi covergroup của cả ba lớp đều được kích
 hoạt đủ các bin đã định nghĩa. \Cref{tab:res-cov} trình bày closure bin theo ba coverage component
@@ -353,76 +350,56 @@ của \cref{sec:ver-cov}.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Kết quả Functional Coverage (closure bin) theo component trên toàn bộ regression.}
+	\caption{Kết quả Functional Coverage (closure bin) của regression 81 test.}
 	\label{tab:res-cov}
 	\begin{tabular}{L{5.6cm} C{3.0cm} C{2.4cm}}
 		\toprule
-		\textbf{Component}                 & \textbf{Closure bin} & \textbf{Tỷ lệ}   \\
+		\textbf{Component}                 & \textbf{Closure bin} & \textbf{Tỷ lệ} \\
 		\midrule
-		\texttt{reg\_coverage}             & 25/25                & 100\%            \\
-		\texttt{i3c\_coverage}             & 42/42                & 100\%            \\
-		\texttt{i3c\_correlated\_coverage} & 155/155              & 100\%            \\
+		\texttt{reg\_coverage}             & 25/25                & 100\%          \\
+		\texttt{i3c\_coverage}             & 42/42                & 100\%          \\
+		\texttt{i3c\_correlated\_coverage} & 155/155              & 100\%          \\
 		\midrule
-		\textbf{Tổng}                      & \textbf{222/222}     & \textbf{100\%}   \\
+		\textbf{Tổng}                      & \textbf{222/222}     & \textbf{100\%} \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-% PLACEHOLDER — ảnh chụp phần đầu coverage_report.txt hoặc giao diện IMC trên cov_work.
-\begin{figure}[!htbp]
-	\centering
-	\fbox{\parbox[c][4.6cm][c]{0.92\textwidth}{\centering\itshape
-			[Hình chờ bổ sung]\\
-			Ảnh chụp tổng kết Functional Coverage sau khi chạy toàn bộ regression\\
-			(closure và diagnostic bin của ba coverage component).}}
-	\caption{Tổng kết Functional Coverage sau khi chạy toàn bộ regression.}
-	\label{fig:res-cov}
-\end{figure}
+Mức 100\% closure này được đo trên tập bin định nghĩa theo phạm vi F1--F10, với ranh giới
+closure/diagnostic và quy tắc phân bổ trách nhiệm giữa coverage và Scoreboard/SVA như đã trình bày
+ở \cref{sec:ver-cov}.
 
-Mức 100\% closure này được đo trên tập bin định nghĩa đúng theo phạm vi F1--F10, theo hai nguyên
-tắc phân bổ trách nhiệm ở \cref{sec:ver-cov}. Thứ nhất, khi một cross đóng vai trò closure owner cho
-một chức năng, các coverpoint thành phần của nó được tính là diagnostic bin và không cộng trùng vào
-mẫu số KPI. Thứ hai, các chiều mang bản chất so khớp bằng nhau --- địa chỉ, chiều truyền, các trường
-Response Descriptor và tính toàn vẹn payload --- cùng kết quả pass/fail của các luồng phục hồi thuộc
-trách nhiệm kiểm tra của Scoreboard và SVA, chứ không đặt thành positive coverage bin.
-
-Nhờ ranh giới này, closure phản ánh việc các tình huống F1--F10 đã thực sự được kích hoạt, còn mọi
-sai khác về địa chỉ, chiều truyền, response hay tính toàn vẹn dữ liệu đều biểu hiện dưới dạng lỗi
-Scoreboard/SVA chứ không phải dưới dạng một bin chưa phủ. Các tổ hợp ba chiều hiếm gặp --- ví dụ
-chuỗi hai lệnh nối tiếp tại một loại điểm biên nhất định, hay tổ hợp nguồn gián đoạn $\times$ loại
-lệnh bị gián đoạn $\times$ loại lệnh phục hồi --- được bảo đảm bằng kiểm tra đúng/sai của Scoreboard
-và SVA trong mọi lần chạy; việc dàn dựng thêm kịch bản để đưa các tổ hợp này thành positive coverage
-bin được xếp vào hướng phát triển ở \cref{ch:conclusion}.
+Nhờ ranh giới này, con số closure phản ánh việc các tình huống F1--F10 đã thực sự được kích hoạt,
+chứ không bị pha loãng bởi các chiều so khớp vốn do Scoreboard/SVA đảm nhiệm. Một số tổ hợp tương
+quan sâu, ít gặp chưa được mô hình hóa thành positive coverage bin; tính đúng đắn của chúng vẫn được
+Scoreboard và SVA kiểm tra trong mọi lần chạy, và việc bổ sung chúng được xếp vào hướng phát triển
+ở \cref{ch:conclusion}.
 
 \subsection{Kết quả SVA}
 
-Trên toàn bộ regression, 145 instance checker SVA (chín loại checker gắn bằng \texttt{bind} vào từng
-instance của module tương ứng, cùng checker pad model trong Testbench) ghi nhận 386 assertion và
-578 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
+Trong kết quả regression 81 test, \SvaCheckerCount{} module SVA (\BoundSvaCheckerCount{} module gắn bằng
+\texttt{bind} vào module đích tương ứng, cùng module còn lại kiểm tra ràng buộc điện chân I/O trong
+\Testbench{}) ghi nhận 386 assertion và 578 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Kết quả SVA trên toàn bộ regression.}
+	\caption{Kết quả SVA của regression 81 test.}
 	\label{tab:res-sva}
 	\begin{tabular}{L{5.2cm} C{2.6cm} C{2.6cm} C{2.4cm}}
 		\toprule
-		\textbf{Hạng mục}             & \textbf{Đạt} & \textbf{Tổng} & \textbf{Tỷ lệ}  \\
+		\textbf{Hạng mục}             & \textbf{Đạt} & \textbf{Tổng} & \textbf{Tỷ lệ} \\
 		\midrule
-		Assertion pass (đã kích hoạt) & 386          & 386           & 100\%           \\
-		Assertion fail                & 0            & 386           & 0\%             \\
-		Cover property hit            & 578          & 578           & 100\%           \\
+		Assertion pass (đã kích hoạt) & 386          & 386           & 100\%          \\
+		Assertion fail                & 0            & 386           & 0\%            \\
+		Cover property hit            & 578          & 578           & 100\%          \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Không assertion nào fail, không assertion nào chỉ pass rỗng (vacuous), và mọi assertion đều được
-kích hoạt: closure của cả assertion lẫn cover property đạt 100\%. Nhờ quy ước mỗi assertion có cover
-property đối ứng (\cref{sec:ver-sva}), kết luận ``đã kích hoạt'' này được xác nhận tường minh thay vì
-bị đếm nhầm từ các pass rỗng. Một cover property duy nhất được \emph{waive} và loại khỏi mẫu số
-closure: \texttt{cp\_reset\_readback\_unmapped\_020} chỉ đọc lại một địa chỉ chưa ánh xạ cụ thể
-(\texttt{0x020}) sau reset --- đây là bin chẩn đoán, không phải mục tiêu closure của F1--F10, và sai
-khác nếu có vẫn bị Scoreboard bắt như một lỗi. Việc waive được ghi tường minh trong report để phần
-closure phản ánh đúng tập directive thuộc phạm vi kiểm chứng.
+Không assertion nào fail và không assertion nào chỉ pass rỗng (vacuous): nhờ cover property
+\texttt{cp\_*} đi kèm theo quy ước ở \cref{sec:ver-sva}, mọi assertion đều được xác nhận đã kích
+hoạt, đạt 100\% closure ở cả assertion lẫn cover property. Một cover property chẩn đoán ngoài phạm
+vi F1--F10 được waive khỏi mẫu số closure (chi tiết tại \cref{app:regression}).
 
 \section{Đánh giá theo yêu cầu}
 \label{sec:res-eval}
@@ -438,32 +415,31 @@ ranh giới closure/diagnostic như đã nêu ở \cref{sec:res-coverage}.
 	\label{tab:res-req}
 	\begin{tabular}{C{1.4cm} L{5.4cm} L{6.5cm}}
 		\toprule
-		\textbf{Yêu cầu} & \textbf{Bằng chứng regression}        & \textbf{Bằng chứng coverage}                                   \\
+		\textbf{Yêu cầu} & \textbf{Bằng chứng regression}                 & \textbf{Bằng chứng coverage}                                     \\
 		\midrule
-		F1--F2           & 14 test I3C \PrivateWriteRead{} PASS  & \PrivateTransfer{} correlation, T-Bit và read-end: closure 100\% \\
-		F3               & 5 test \ImmediateDataTransfer{} PASS  & \ImmediateDataTransfer{}: closure 100\%                          \\
-		F4               & 4 test CCC PASS                       & CCC response, opcode/frame: closure 100\%                       \\
-		F5               & 9 test DAA PASS                       & DAA result/response và biên DAT: closure 100\%                  \\
-		F6               & 4 test I\textsuperscript{2}C PASS     & I\textsuperscript{2}C ACK và vị trí NACK: closure 100\%         \\
-		F7               & 14 test CSR + 5 test FIFO PASS        & Register access, DAT, Queue: closure 100\%                      \\
-		F8               & Kiểm tra Response trong mọi test      & Response status và Response Descriptor: closure 100\%           \\
-		F9               & 14 test response/error PASS           & Abort/recovery: closure 100\%; tổ hợp sâu do Scoreboard/SVA     \\
-		F10              & Test CSR định thời và bus timing PASS & CSR định thời: closure 100\%; cover property timing HIT         \\
+		F1--F2           & 14 test I3C \PrivateWriteRead{} PASS           & \PrivateTransfer{} correlation, T-Bit và read-end: closure 100\% \\
+		F3               & 5 test \ImmediateDataTransfer{} PASS           & \ImmediateDataTransfer{}: closure 100\%                          \\
+		F4               & 4 test CCC PASS                                & CCC response, opcode/frame: closure 100\%                        \\
+		F5               & 9 test DAA PASS                                & DAA result/response và biên DAT: closure 100\%                   \\
+		F6               & 4 test I\textsuperscript{2}C PASS              & I\textsuperscript{2}C ACK và vị trí NACK: closure 100\%          \\
+		F7               & 14 test CSR + 5 test FIFO PASS                 & Register access, DAT, FIFO: closure 100\%                        \\
+		F8               & Kiểm tra Response trong mọi test               & Response status và Response Descriptor: closure 100\%            \\
+		F9               & 14 test response/error PASS                    & Abort/recovery: closure 100\%; tổ hợp sâu do Scoreboard/SVA      \\
+		F10              & Test CSR cấu hình định thời và bus timing PASS & CSR cấu hình định thời: closure 100\%; cover property timing HIT \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
 Về các chỉ tiêu P1--P5 ở \cref{tab:req-perf}: Testbench vận hành DUT với clock chu kỳ 3~ns tương
-ứng 333~MHz (P1); tần số SCL cấu hình qua các CSR định thời được kiểm tra bằng nhóm test bus timing đo
+ứng 333~MHz (P1); tần số SCL cấu hình qua các CSR cấu hình định thời được kiểm tra bằng nhóm test bus timing xác định
 trực tiếp độ rộng pha thấp/cao của SCL trên waveform (P2, P3); biên DAT 32 mục được kiểm tra bằng
 kịch bản DAA chạm biên bảng (P4); và mọi truy cập từ phía phần mềm ở tất cả các test đều đi qua giao diện
 thanh ghi dữ liệu 32-bit (P5). Cần lưu ý giới hạn của các bằng chứng này: chúng là kết quả
 mô phỏng ở mức RTL, xác nhận tính đúng chức năng và quan hệ định thời (timing) theo chu kỳ clock; khóa luận
-không có dữ liệu tổng hợp hay đóng định thời (timing closure) ở mức vật lý, đúng như phạm vi tại \cref{tab:req-oos}.
+không có dữ liệu tổng hợp hay triển khai ở mức vật lý, đúng như phạm vi tại \cref{tab:req-oos}.
 
 Tổng hợp lại, thiết kế đáp ứng đầy đủ mười yêu cầu chức năng và năm chỉ tiêu cấu hình trong phạm vi
-bằng chứng mô phỏng: 80/80 test PASS, không assertion nào fail và không assertion nào chưa kích hoạt
-trên 386 assertion, và mô hình coverage ba lớp đạt 100\% closure (222/222 bin) cùng 100\% ở 173/173
-diagnostic bin. Những giới hạn còn lại của bộ bằng chứng --- chiều sâu tương quan của các tổ hợp ba
-chiều do Scoreboard/SVA đảm nhiệm ở dạng kiểm tra đúng/sai, và việc thiếu dữ liệu sau tổng hợp ---
-được tổng kết thành hạn chế và hướng phát triển ở \cref{ch:conclusion}.
+bằng chứng mô phỏng: 81/81 test regression PASS, không assertion nào fail và không assertion nào chưa kích hoạt
+trên 386 assertion, và mô hình coverage ba lớp đạt 100\% closure ở 222/222 bin cùng 100\% ở 173/173
+diagnostic bin. Những giới hạn còn lại của bộ bằng chứng được tổng kết thành hạn chế và hướng phát triển
+ở \cref{ch:conclusion}.

@@ -1,0 +1,44 @@
+% Read takeover timing after a T-Bit of 1, styled after Figure 2.1.
+% Only the controller-facing signals are shown.
+\begingroup
+\sffamily
+\begin{tikzpicture}[
+    font=\small,
+    wave/.style={draw=black, line width=1pt, line join=round},
+    window/.style={draw=black, dashed, line width=0.6pt},
+    hiddenevent/.style={draw=black!55, dotted, line width=0.6pt},
+    siglabel/.style={font=\small\bfseries, anchor=east},
+    condlabel/.style={align=center, font=\scriptsize\bfseries, text=black},
+    note/.style={align=center, font=\scriptsize, text=black},
+  ]
+
+  % Takeover window: SCL is held HIGH while ownership returns to Controller.
+  \draw[window] (1.85,0.55) rectangle (8.85,6.65);
+
+  % scl_i: extended high phase gives the Target time to release SDA.
+  \draw[wave]
+    (0,5.35) -- (2.20,5.35) -- (2.20,6.15)
+    -- (8.50,6.15) -- (8.50,5.35) -- (10.40,5.35);
+
+  % sda_i: T=1 is observed HIGH, then follows the Controller's OD-low drive.
+  \draw[wave]
+    (0,3.05) -- (1.10,3.05) -- (1.10,3.85)
+    -- (4.65,3.85) -- (4.65,3.05) -- (10.40,3.05);
+
+  % sda_o: remain released until after the Target's specified release time.
+  \draw[wave]
+    (0,1.75) -- (4.65,1.75) -- (4.65,0.95) -- (10.40,0.95);
+
+  \node[siglabel] at (-0.15,5.75) {\texttt{scl\_i}};
+  \node[siglabel] at (-0.15,3.45) {\texttt{sda\_i}};
+  \node[siglabel] at (-0.15,1.35) {\texttt{sda\_o}};
+
+  \node[condlabel] at (5.35,6.92) {SDA TAKEOVER / REPEATED START};
+
+  \node[note, anchor=north, text width=10.6cm] at (5.35,0.38)
+    {The Controller samples \texttt{sda\_i=1}, waits for the Target release time, then
+     drives \texttt{sda\_o=0}. Therefore \texttt{sda\_i}: $1\rightarrow0$ while
+     \texttt{scl\_i=1}, forming a Repeated START (Sr).\\[2pt]
+     {\color{black!60}\texttt{sda\_o}: \texttt{1} = release (high-Z)\quad \texttt{0} = open-drain low}};
+\end{tikzpicture}
+\endgroup

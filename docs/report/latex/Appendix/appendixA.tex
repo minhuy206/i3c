@@ -9,12 +9,12 @@ DAT \DatEntryCount{} mục), bổ trợ cho \cref{sec:rtl-csr}. Địa chỉ tí
   \textbf{Thanh ghi} & \textbf{Địa chỉ} & \textbf{Chức năng} \\
   \midrule
   \endhead
-  \texttt{HC\_CONTROL}    & 0x004 & Điều khiển bộ điều khiển (enable, i3c\_fsm\_en, phát \IThreeCBroadcastAddress{}, abort). \\
-  \texttt{RESET\_CONTROL} & 0x010 & Reset mềm (sw\_reset) cho các khối và hàng đợi; chỉ có hiệu lực khi FSM ở Idle. \\
+  \texttt{HC\_CONTROL}    & 0x004 & Điều khiển bộ điều khiển (\texttt{BUS\_ENABLE}, \texttt{IBA\_INCLUDE} bật phát \IThreeCBroadcastAddress{}, \texttt{ABORT}). \\
+  \texttt{RESET\_CONTROL} & 0x010 & Software reset (\texttt{SOFT\_RST}) cho các khối và hàng đợi; chỉ có hiệu lực khi FSM ở \texttt{Idle}. \\
   \texttt{HC\_STATUS}     & 0x014 & Trạng thái của bộ điều khiển. \\
   \texttt{CMD\_QUEUE}     & 0x080 & Cổng ghi \CommandDescriptor{} vào \CommandFifo{}. \\
   \texttt{RESP}           & 0x084 & Cổng đọc \ResponseDescriptor{} từ \ResponseFifo{}. \\
-  \texttt{PIO\_DATA\_PORT} & 0x088 & Cổng ghi TX / đọc \RxFifo{}. \\
+  \texttt{PIO\_DATA\_PORT} & 0x088 & Cổng ghi dữ liệu TX vào \TxFifo{} và đọc dữ liệu RX từ \RxFifo{}. \\
   \texttt{QUEUE\_STATUS}  & 0x0B4 & Cờ đầy/rỗng của các hàng đợi. \\
   \texttt{T\_R}           & 0x32C & Thời gian cạnh lên SCL (I3C). \\
   \texttt{T\_F}           & 0x330 & Thời gian cạnh xuống SCL (I3C). \\
@@ -40,15 +40,15 @@ DAT \DatEntryCount{} mục), bổ trợ cho \cref{sec:rtl-csr}. Địa chỉ tí
 
 Mỗi mục DAT (\texttt{dat\_entry\_t}) rộng \DatEntryWidth{}-bit, bố trí trường như sau:
 
-\begin{longtable}{C{3.2cm} C{2.6cm} L{7.0cm}}
+\begin{longtable}{C{3.8cm} C{2.4cm} L{6.6cm}}
   \toprule
   \textbf{Trường} & \textbf{Bit} & \textbf{Ý nghĩa} \\
   \midrule
   \endhead
   \texttt{device}           & [31]    & Cờ phân loại: 1 = thiết bị \iic{} legacy, 0 = thiết bị I3C. \\
-  (dự trữ)                  & [30:23] & Reserved. \\
+  (reserved)                & [30:23] & Luôn đọc về 0. \\
   \texttt{dynamic\_address} & [22:16] & \DynamicAddress{} I3C. \\
-  (dự trữ)                  & [15:7]  & Reserved. \\
+  (reserved)                & [15:7]  & Luôn đọc về 0. \\
   \texttt{static\_address}  & [6:0]   & \StaticAddress{} \iic{}. \\
   \bottomrule
 \end{longtable}

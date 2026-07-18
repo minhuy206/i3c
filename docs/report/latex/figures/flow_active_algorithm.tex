@@ -24,9 +24,9 @@
 	\node[start] (start) at (0, 0.00) {\texttt{Idle}};
 	\node[proc]  (wait)  at (0,-1.30) {\texttt{WaitForCmd}};
 	\node[proc]  (fetchdat) at (0,-2.60) {\texttt{FetchDAT}};
-	\node[dec]   (valid) at (0,-4.20) {Descriptor valid?};
+	\node[dec]   (valid) at (0,-4.20) {Descriptor hợp lệ?};
 	\node[proc]  (waitdat) at (0,-5.85) {\texttt{WaitDAT}};
-	\node[dec]   (class) at (0,-7.50) {Command class?};
+	\node[dec]   (class) at (0,-7.50) {Loại lệnh?};
 
 	% Three execution classes.
 	\node[busproc] (ccc) at (-5.0,-9.45)
@@ -37,7 +37,7 @@
 	{\texttt{I3CBcastHeader}\\$\downarrow$\\\texttt{IssueDAA}};
 
 	% Private-transfer direction and protocol-specific data handling.
-	\node[dec] (dir) at (0,-11.25) {Direction?};
+	\node[dec] (dir) at (0,-11.25) {Hướng truyền?};
 	\node[busproc] (initwrite) at (-2.65,-12.95) {\texttt{InitWrite}};
 	\node[busproc] (initread) at (2.65,-12.95) {\texttt{InitRead}};
 	\node[busproc] (write) at (-2.65,-14.55)
@@ -47,9 +47,9 @@
 
 	% Completion policy and response handling.
 	\node[dec]  (cont) at (0,-16.75)
-	{\texttt{toc}=0 chained I3C?};
+	{\texttt{toc}=0 nối tiếp I3C?};
 	\node[junction] (finish) at (0,-18.55) {};
-	\node[dec]  (needresp) at (0,-20.35) {Response required?};
+	\node[dec]  (needresp) at (0,-20.35) {Cần phản hồi?};
 	\node[resp] (writeresp) at (5.0,-20.35) {\texttt{WriteResp}};
 	\node[term] (idle) at (0,-22.35) {\texttt{Idle}};
 
@@ -57,40 +57,40 @@
 	\draw[edge] (start) -- (wait);
 	\draw[edge] (wait) -- node[lbl,right]{\texttt{cmd\_valid\_i}} (fetchdat);
 	\draw[edge] (fetchdat) -- (valid);
-	\draw[edge] (valid) -- node[lbl,right]{Yes} (waitdat);
+	\draw[edge] (valid) -- node[lbl,right]{Có} (waitdat);
 	\draw[edge] (waitdat) -- (class);
 	\draw[edge] (class) -- node[lbl,above,sloped]{CCC} (ccc);
 	\draw[edge] (class) -- node[lbl,right]{Private} (private);
 	\draw[edge] (class) -- node[lbl,above,sloped]{ENTDAA} (daa);
 	\draw[edge] (private) -- (dir);
-	\draw[edge] (dir) -- node[lbl,above,sloped]{Write} (initwrite);
-	\draw[edge] (dir) -- node[lbl,above,sloped]{Read} (initread);
+	\draw[edge] (dir) -- node[lbl,above,sloped]{Ghi} (initwrite);
+	\draw[edge] (dir) -- node[lbl,above,sloped]{Đọc} (initread);
 	\draw[edge] (initwrite) -- (write);
 	\draw[edge] (initread) -- (read);
 	\draw[join] (write.south) -- (-2.65,-15.70) -- (0,-15.70);
 	\draw[edge] (read.south) -- (2.65,-15.70) -- (0,-15.70) -- (cont.north);
-	\draw[edge] (cont) -- node[lbl,right]{No} (finish);
+	\draw[edge] (cont) -- node[lbl,right]{Không} (finish);
 	\draw[edge] (finish) -- (needresp);
-	\draw[edge] (needresp) -- node[lbl,right]{No} (idle);
+	\draw[edge] (needresp) -- node[lbl,right]{Không} (idle);
 
 	% CCC and DAA bypass the chained-private-transfer decision.
 	\draw[edge] (ccc.south) -- (-5.0,-18.55)
-	-- node[lbl,above]{complete} (finish.west);
-	\draw[edge] (daa.south) -- node[lbl,right]{complete} (5.0,-18.55)
+	-- node[lbl,above]{hoàn tất} (finish.west);
+	\draw[edge] (daa.south) -- node[lbl,right]{hoàn tất} (5.0,-18.55)
 	-- (finish.east);
 
 	% Invalid descriptors and response-producing completions enter WriteResp.
-	\draw[err] (valid.east) -- node[lbl,above]{No: NotSupported} (8.0,-4.20)
+	\draw[err] (valid.east) -- node[lbl,above]{Không: NotSupported} (8.0,-4.20)
 	-- (8.0,-20.35) -- (writeresp.east);
-	\draw[err] (needresp.east) -- node[lbl,above]{Yes} (writeresp.west);
+	\draw[err] (needresp.east) -- node[lbl,above]{Có} (writeresp.west);
 	\draw[edge] (writeresp.south) -- node[lbl,right]{\texttt{resp\_queue\_wready\_i}}
 	(5.0,-22.35) -- (idle.east);
 
 	% A supported chained I3C command re-enters FetchDAT without releasing the bus.
-	\draw[loop] (cont.west) -- node[lbl,above]{Yes} (-7.0,-16.75)
+	\draw[loop] (cont.west) -- node[lbl,above]{Có} (-7.0,-16.75)
 	-- (-7.0,-2.60) -- (fetchdat.west);
 
 	\node[note, anchor=north west, text width=11.8cm] at (-7.0,-23.25)
-	{Rectangles: \texttt{flow\_active} states; diamonds: transition conditions;
-	dashed paths: response or chained command.};
+	{Hình chữ nhật: trạng thái \texttt{flow\_active}; hình thoi: điều kiện chuyển;
+	đường nét đứt: phản hồi hoặc lệnh nối tiếp.};
 \end{tikzpicture}

@@ -4,52 +4,55 @@
 \section{Động lực và phát biểu bài toán}
 \label{sec:intro-motivation}
 
-SoC (System-on-Chip) hiện đại thường tích hợp nhiều cảm biến, mạch quản lý nguồn và ngoại vi điều khiển.
+\gls{soc} hiện đại thường tích hợp nhiều cảm biến, mạch quản lý nguồn và ngoại vi điều khiển.
 Nhóm ngoại vi này cần một liên kết có số chân thấp, hỗ trợ nhiều \Target{} và có chi phí tích hợp nhỏ. Bus
 \iic{} đáp ứng tốt yêu cầu kết nối hai dây và đã được sử dụng rộng rãi trong hệ thống nhúng.
 Tuy nhiên, cơ chế \OpenDrain{} của \iic{} làm tốc độ phụ thuộc vào điện trở kéo lên và điện
 dung bus; Fast Mode được giới hạn ở 400~kHz. \iic{} cũng sử dụng \StaticAddress{} và không có
-cơ chế quản lý \Target{} tương đương \DynamicAddressAssignment{} của I3C~\cite{nxp_i2c,mipi_i3c_basic}.
+cơ chế quản lý \Target{} tương đương \DynamicAddressAssignment{} của \gls{i3c}~\cite{nxp_i2c,mipi_i3c_basic}.
 
-\MIPIIThreeCBasic{} được xây dựng để duy trì cấu trúc SDA/SCL và khả năng cùng tồn tại với \Target{}
-\iic{}, đồng thời bổ sung truyền SDR bằng \PushPull{}, \DynamicAddressAssignment{} và \CommonCommandCode{}. Với SDR, tần số SCL danh định có thể đạt 12,5~MHz~\cite{mipi_i3c_basic}. Do đó, việc hiện thực
-một I3C \ActiveController{} không chỉ là bài toán tuần tự hóa dữ liệu. Thiết kế còn phải điều phối pha \OpenDrain{} và \PushPull{}, tạo đúng START, \RepeatedSTART{} và STOP, quản lý Descriptor và FIFO, xử lý lỗi,
+\MIPIIThreeCBasic{} được xây dựng để duy trì cấu trúc \gls{sda}/\gls{scl} và khả năng cùng tồn tại với \Target{}
+\iic{}, đồng thời bổ sung truyền \gls{sdr} bằng \PushPull{}, \DynamicAddressAssignment{} và \CommonCommandCode{}. Với SDR, tần số SCL danh định có thể đạt 12,5~MHz~\cite{mipi_i3c_basic}. Do đó, việc hiện thực
+một I3C \Controller{} không chỉ là bài toán tuần tự hóa dữ liệu. Thiết kế còn phải điều phối pha \OpenDrain{} và \PushPull{}, tạo đúng START, \RepeatedSTART{} và STOP, quản lý Descriptor và \gls{fifo}, xử lý lỗi,
 đồng thời cung cấp giao diện thanh ghi cho phần mềm truy cập.
 
-Khóa luận giải quyết bài toán trên ở mức IP số có thể tổng hợp. Điểm xuất phát là dự án mã nguồn mở \CHIPSAlliance{} \IThreeCCore{}, một thiết kế được tích hợp trong hệ sinh thái \Caliptra{}~\cite{chipsalliance_i3c}.
-Thiết kế tham chiếu cung cấp các cấu trúc giao thức và HCI hữu ích, nhưng phạm vi tích hợp của dự án lớn
-hơn nhu cầu của một \ActiveController{} độc lập. Vì vậy, khóa luận lựa chọn lại ranh giới chức năng, xây dựng
-đường điều khiển RTL gọn hơn và hoàn thiện luồng phát lệnh cho tập tính năng mục tiêu. Việc kiểm chứng được
+Khóa luận giải quyết bài toán trên ở mức \gls{ip} số có thể tổng hợp. Điểm xuất phát là dự án mã nguồn mở \CHIPSAlliance{} \IThreeCCore{}, một thiết kế được tích hợp trong hệ sinh thái \Caliptra{}~\cite{chipsalliance_i3c}.
+Thiết kế tham chiếu cung cấp các cấu trúc giao thức và \gls{hci} hữu ích, nhưng phạm vi tích hợp của dự án lớn
+hơn nhu cầu của một \Controller{} độc lập. Vì vậy, khóa luận lựa chọn lại ranh giới chức năng, xây dựng
+đường điều khiển \gls{rtl} gọn hơn và hoàn thiện luồng phát lệnh cho tập tính năng mục tiêu. Việc kiểm chứng được
 thực hiện bằng \SystemVerilog{}, \UVMVersion{} và \CadenceXcelium{}; \SimVision{} được dùng cho waveform
-debugging~\cite{ieee1800,uvm12_ug,cadence_xcelium}.
+debug~\cite{ieee1800,uvm12_ug,cadence_xcelium}.
 
 Kết quả được đánh giá trên ba lớp bằng chứng. Thứ nhất, \Scoreboard{} đối chiếu giao dịch giữa giao diện phần
-mềm và bus. Thứ hai, SVA kiểm tra các thuộc tính cục bộ của RTL. Thứ ba, \FunctionalCoverage{} đo mức độ kích
-hoạt các tình huống đã mô hình hóa. Số liệu của baseline, regression suite và coverage được trình bày tại
+mềm và bus. Thứ hai, \gls{sva} kiểm tra các thuộc tính cục bộ của RTL. Thứ ba, \FunctionalCoverage{} xác định độ bao phủ các tình huống đã mô hình hóa. Số liệu baseline, regression và coverage được trình bày tại
 \cref{ch:results}.
 
 \section{Mục tiêu và phạm vi}
 \label{sec:intro-objective}
 
-Mục tiêu chính của khóa luận là thiết kế và kiểm chứng một I3C \ActiveController{} bằng \SystemVerilog{} RTL.
+Mục tiêu chính của khóa luận là thiết kế và kiểm chứng một I3C \Controller{} bằng \SystemVerilog{} RTL.
 Thiết kế phải cung cấp một luồng xử lý hoàn chỉnh từ \CommandDescriptor{} do phần mềm ghi vào, qua khối điều
 khiển giao thức, đến hoạt động trên SDA/SCL và \ResponseDescriptor{} trả về. Các mục tiêu cụ thể gồm:
 
 \begin{itemize}
-	\item xây dựng kiến trúc phân lớp giữa software-visible register interface, khối \ActiveController{} và
-	      lớp PHY;
-	\item triển khai các luồng SDR \PrivateWrite{}, SDR \PrivateRead{}, \ImmediateDataTransfer{}, một số CCC được lựa chọn, ENTDAA và giao dịch với \Target{} \iic{} Fast Mode;
-	\item xây dựng cấu trúc \CommandFifo{}, \ResponseFifo{}, \TxRxFifo{} và DAT nhằm tách giao tiếp với phần mềm khỏi phần quá trình xử lý trên bus;
-	\item xây dựng môi trường UVM gồm \RegisterAgent{}, \TargetAgent{}, \VirtualSequencer{}, \Scoreboard{},
-	      \FunctionalCoverage{} và SVA;
-	\item đánh giá thiết kế bằng regression test, coverage và các kết quả triển khai có khả năng tái lập.
+	\item Xây dựng kiến trúc phân lớp giữa giao diện thanh ghi mà phần mềm có thể truy cập, khối
+	      \Controller{} và lớp \gls{phy}.
+	\item Triển khai các luồng SDR \PrivateWrite{}, SDR \PrivateRead{}, \ImmediateDataTransfer{}, một số
+	      CCC được lựa chọn, \gls{entdaa} và giao dịch với \Target{} \iic{} Fast Mode.
+	\item Xây dựng cấu trúc \CommandFifo{}, \ResponseFifo{}, \TxRxFifo{} và \gls{dat} nhằm tách giao tiếp với
+	      phần mềm khỏi quá trình xử lý trên bus.
+	\item Xây dựng môi trường \gls{uvm} gồm \RegisterAgent{}, \TargetAgent{}, \VirtualSequencer{}, \Scoreboard{},
+	      \FunctionalCoverage{} và SVA.
+	\item Đánh giá thiết kế bằng các test regression, coverage và bằng chứng kiểm chứng có khả năng tái lập.
 \end{itemize}
 
-Phạm vi của đề tài là một I3C \ActiveController{} hỗ trợ SDR \PrivateTransfer{}, các CCC được chọn, ENTDAA và hỗ trợ
-tương thích \iic{} Fast Mode. HDR, \InBandInterrupt{}, \HotJoin{}, \SecondaryController{}, \Target{} mode và FPGA validation không nằm trong phạm vi triển khai. Các yêu cầu chi tiết, tiêu chí đánh giá, và tiêu chí kiểm chứng được trình bày tại
+Phạm vi của đề tài là một I3C \Controller{} hỗ trợ SDR \PrivateTransfer{}, các CCC được chọn, ENTDAA và hỗ trợ
+tương thích \iic{} Fast Mode. \gls{hdr}, \InBandInterrupt{}, \HotJoin{}, \SecondaryController{}, vai trò
+\Target{} và kiểm chứng trên \gls{fpga} không nằm trong phạm vi triển khai. Các yêu cầu chi tiết, tiêu chí đánh giá
+và tiêu chí kiểm chứng được trình bày tại
 \cref{sec:req}; các giới hạn của thiết kế và kết quả đánh giá được tổng kết tại \cref{ch:conclusion}.
 
 \section{Bố cục khóa luận}
 \label{sec:intro-outline}
 
-Khóa luận gồm sáu chương. \cref{ch:introduction} giới thiệu bối cảnh, mục tiêu, phạm vi và cấu trúc của đề tài. \cref{ch:background-requirements} trình bày cơ sở lý thuyết cần thiết và xác định yêu cầu hệ thống. \cref{ch:architecture} mô tả kiến trúc phân lớp, luồng dữ liệu và các quyết định thiết kế RTL, với trọng tâm là FSM \FlowActive{}. \cref{ch:verification} trình bày chiến lược kiểm chứng và cấu trúc môi trường UVM. \cref{ch:results} trình bày kết quả baseline, kết quả regression, coverage, quy mô triển khai và đánh giá theo yêu cầu. Cuối cùng, \cref{ch:conclusion} tổng kết kết quả, nêu các giới hạn và đề xuất hướng phát triển. Các bảng tra cứu chi tiết về CSR, Descriptor, FSM, CCC, quy trình chạy và \VirtualSequence{} được đặt trong phụ lục nhằm giữ phần nội dung chính tập trung vào các quyết định thiết kế và kết quả kiểm chứng.
+Khóa luận gồm sáu chương. \cref{ch:introduction} giới thiệu bối cảnh, mục tiêu, phạm vi và cấu trúc của đề tài. \cref{ch:background-requirements} trình bày cơ sở lý thuyết cần thiết và xác định yêu cầu hệ thống. \cref{ch:architecture} mô tả kiến trúc phân lớp, luồng dữ liệu và các quyết định thiết kế RTL, với trọng tâm là \gls{fsm} \FlowActive{}. \cref{ch:verification} trình bày chiến lược kiểm chứng và cấu trúc môi trường UVM. \cref{ch:results} trình bày kết quả baseline, kết quả regression, coverage, quy mô triển khai và đánh giá theo yêu cầu. Cuối cùng, \cref{ch:conclusion} tổng kết kết quả, nêu các giới hạn và đề xuất hướng phát triển. Các bảng tra cứu chi tiết về \gls{csr}, Descriptor, FSM, CCC, quy trình chạy và \VirtualSequence{} được đặt trong phụ lục nhằm giữ phần nội dung chính tập trung vào các quyết định thiết kế và kết quả kiểm chứng.

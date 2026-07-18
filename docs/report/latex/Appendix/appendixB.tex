@@ -1,8 +1,8 @@
-\chapter{Định dạng Command, Response và DAT descriptor}
+\chapter{Định dạng \CommandDescriptor{}, \ResponseDescriptor{} và mục DAT}
 \label{app:desc}
 
 Phụ lục này trình bày bố trí trường của các cấu trúc dữ liệu trao đổi giữa phần mềm và phần cứng, định
-nghĩa trong \texttt{i3c\_pkg} và \texttt{controller\_pkg}, bổ trợ cho \cref{sec:arch-desc}. \CommandDescriptor{} rộng \CommandDescriptorWidth{}-bit (hai DWORD); \ResponseDescriptor{} và mục DAT rộng \ResponseDescriptorWidth{}-bit.
+nghĩa trong \texttt{i3c\_pkg} và \texttt{controller\_pkg}, bổ trợ cho \cref{sec:arch-desc}. \CommandDescriptor{} rộng \CommandDescriptorWidth{}-bit (hai DWORD); \ResponseDescriptor{} rộng \ResponseDescriptorWidth{}-bit và mục DAT rộng \DatEntryWidth{}-bit.
 
 \section*{\ResponseDescriptor{} (\ResponseDescriptorWidth{}-bit)}
 
@@ -13,37 +13,38 @@ nghĩa trong \texttt{i3c\_pkg} và \texttt{controller\_pkg}, bổ trợ cho \cre
   \endhead
   \texttt{err}          & [31:28] & Mã trạng thái lỗi (xem \cref{tab:err-status}). \\
   \texttt{tid}          & [27:24] & Transaction ID. \\
-  (dự trữ)              & [23:16] & Reserved. \\
+  (reserved)            & [23:16] & Luôn đọc về 0. \\
   \texttt{data\_length} & [15:0]  & Độ dài dữ liệu thực tế. \\
   \bottomrule
 \end{longtable}
 
 \section*{\ImmediateDataTransfer{} Descriptor (\CommandDescriptorWidth{}-bit)}
 
-Dạng immediate nhúng tối đa bốn byte dữ liệu ngay trong descriptor, tránh phải dùng TX Buffer.
+Dạng \ImmediateDataTransfer{} nhúng tối đa bốn byte dữ liệu ngay trong \CommandDescriptor{}, không dùng
+\TxFifo{}.
 
-\begin{longtable}{C{3.6cm} L{9.0cm}}
+\begin{longtable}{C{4.5cm} L{8.1cm}}
   \toprule
   \textbf{Trường} & \textbf{Ý nghĩa} \\
   \midrule
   \endhead
   \texttt{attr}        & Thuộc tính lệnh = \texttt{ImmediateDataTransfer}. \\
   \texttt{tid}         & Transaction ID. \\
-  \texttt{cmd}         & Mã CCC / HDR (nếu có). \\
-  \texttt{cp}          & Command present (có CCC hay không). \\
+  \texttt{cmd}         & Mã CCC/HDR (nếu có). \\
+  \texttt{cp}          & Cờ cho biết có mã CCC hay không. \\
   \texttt{dev\_idx}    & Chỉ số mục DAT của \Target{} đích. \\
   \texttt{dtt}         & Số byte dữ liệu hợp lệ (0--4). \\
   \texttt{mode}        & Tốc độ/chế độ truyền (\texttt{sdr0}\ldots). \\
   \texttt{rnw}         & Hướng (immediate chỉ ghi). \\
-  \texttt{wroc}        & Response-on-completion. \\
-  \texttt{toc}         & Terminate-on-completion. \\
+  \texttt{wroc}        & Yêu cầu ghi \ResponseDescriptor{} khi hoàn tất. \\
+  \texttt{toc}         & Yêu cầu kết thúc giao dịch khi hoàn tất. \\
   \texttt{def\_or\_data\_byte1} \ldots \texttt{data\_byte4} & Bốn byte dữ liệu nhúng. \\
   \bottomrule
 \end{longtable}
 
 \section*{\RegularTransfer{} Descriptor (\CommandDescriptorWidth{}-bit)}
 
-Dạng regular dùng cho giao dịch có dữ liệu nằm trong TX/RX Buffer.
+Dạng \RegularTransfer{} dùng cho giao dịch có dữ liệu nằm trong \TxRxFifo{}.
 
 \begin{longtable}{C{3.6cm} L{9.0cm}}
   \toprule
@@ -51,13 +52,13 @@ Dạng regular dùng cho giao dịch có dữ liệu nằm trong TX/RX Buffer.
   \midrule
   \endhead
   \texttt{attr}        & Thuộc tính lệnh = \texttt{RegularTransfer}. \\
-  \texttt{tid}, \texttt{cmd}, \texttt{cp} & Transaction ID, mã CCC, cờ command present. \\
+  \texttt{tid}, \texttt{cmd}, \texttt{cp} & Transaction ID, mã CCC và cờ cho biết có mã CCC. \\
   \texttt{dev\_idx}    & Chỉ số mục DAT của \Target{} đích. \\
   \texttt{mode}, \texttt{rnw} & Chế độ truyền và hướng. \\
-  \texttt{sre}         & Báo đọc kết thúc sớm là ShortReadErr. \\
-  \texttt{dbp}         & Defining byte present. \\
-  \texttt{wroc}, \texttt{toc} & Response/terminate-on-completion. \\
-  \texttt{def\_byte}   & Defining byte (nếu có). \\
+  \texttt{sre}         & Báo \texttt{I3cShortReadErr} khi giao dịch đọc kết thúc sớm. \\
+  \texttt{dbp}         & Cờ cho biết có \DefiningByte{}. \\
+  \texttt{wroc}, \texttt{toc} & Yêu cầu ghi \ResponseDescriptor{} và kết thúc giao dịch khi hoàn tất. \\
+  \texttt{def\_byte}   & \DefiningByte{} (nếu có). \\
   \texttt{data\_length} & Độ dài dữ liệu (byte). \\
   \bottomrule
 \end{longtable}

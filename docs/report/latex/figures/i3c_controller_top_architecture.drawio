@@ -24,7 +24,7 @@
         <mxCell id="region_reg" parent="1" style="rounded=0;html=1;fillColor=none;strokeColor=#000000;dashed=1;verticalAlign=top;align=center;spacingTop=6;fontStyle=1;fontSize=12;fontColor=#000000;" value="Register Interface" vertex="1">
           <mxGeometry height="520" width="190" x="222" y="100" as="geometry" />
         </mxCell>
-        <mxCell id="region_ctrl" parent="1" style="rounded=0;html=1;fillColor=none;strokeColor=#000000;dashed=1;verticalAlign=top;align=center;spacingTop=6;fontStyle=1;fontSize=12;fontColor=#000000;" value="Active Controller (controller_active)" vertex="1">
+        <mxCell id="region_ctrl" parent="1" style="rounded=0;html=1;fillColor=none;strokeColor=#000000;dashed=1;verticalAlign=top;align=center;spacingTop=6;fontStyle=1;fontSize=12;fontColor=#000000;" value="Controller (controller_active)" vertex="1">
           <mxGeometry height="520" width="446" x="452" y="100" as="geometry" />
         </mxCell>
         <mxCell id="region_phy" parent="1" style="rounded=0;html=1;fillColor=none;strokeColor=#000000;dashed=1;verticalAlign=top;align=center;spacingTop=6;fontStyle=1;fontSize=12;fontColor=#000000;" value="PHY (i3c_phy)" vertex="1">
