@@ -116,7 +116,7 @@ class csr_sw_reset_clears_cmd_staging_vseq extends csr_base_vseq;
 
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, Success,
+    `DV_CHECK_EQ(resp_desc.err, Success,
                  "csr_sw_reset_clears_cmd_staging_vseq: fresh command RESP status mismatch")
     `DV_CHECK_EQ(resp_desc.tid, fresh_cmd.tid,
                  "csr_sw_reset_clears_cmd_staging_vseq: fresh command RESP TID mismatch")

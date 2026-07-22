@@ -2,7 +2,7 @@
 \label{app:desc}
 
 Phụ lục này trình bày bố trí trường của các cấu trúc dữ liệu trao đổi giữa phần mềm và phần cứng, định
-nghĩa trong \texttt{i3c\_pkg} và \texttt{controller\_pkg}, bổ trợ cho \cref{sec:arch-desc}. \CommandDescriptor{} rộng \CommandDescriptorWidth{}-bit (hai DWORD); \ResponseDescriptor{} rộng \ResponseDescriptorWidth{}-bit và mục DAT rộng \DatEntryWidth{}-bit.
+nghĩa trong \texttt{i3c\_pkg} và \texttt{controller\_pkg}, bổ trợ cho \cref{sec:arch-desc}. \CommandDescriptor{} rộng \CommandDescriptorWidth{}-bit (hai DWORD). \ResponseDescriptor{} rộng \ResponseDescriptorWidth{}-bit và mục DAT rộng \DatEntryWidth{}-bit.
 
 \section*{\ResponseDescriptor{} (\ResponseDescriptorWidth{}-bit)}
 
@@ -34,7 +34,7 @@ Dạng \ImmediateDataTransfer{} nhúng tối đa bốn byte dữ liệu ngay tro
   \texttt{cp}          & Cờ cho biết có mã CCC hay không. \\
   \texttt{dev\_idx}    & Chỉ số mục DAT của \Target{} đích. \\
   \texttt{dtt}         & Số byte dữ liệu hợp lệ (0--4). \\
-  \texttt{mode}        & Tốc độ/chế độ truyền (\texttt{sdr0}\ldots). \\
+  \texttt{mode}        & Tốc độ và chế độ truyền. \\
   \texttt{rnw}         & Hướng (immediate chỉ ghi). \\
   \texttt{wroc}        & Yêu cầu ghi \ResponseDescriptor{} khi hoàn tất. \\
   \texttt{toc}         & Yêu cầu kết thúc giao dịch khi hoàn tất. \\

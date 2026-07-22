@@ -15,7 +15,7 @@ khiển mà bản tham chiếu còn bỏ ngỏ. Bộ điều khiển được m�
 bằng một môi trường Universal Verification Methodology (UVM) 1.2 chạy trên trình mô phỏng \CadenceXcelium{},
 kết hợp \FunctionalCoverage{} và \SystemVerilog{} Assertions (SVA).
 
-Kết quả cho thấy bộ điều khiển thực hiện đúng các luồng truyền SDR \PrivateTransfer{} (ghi, đọc),
+Kết quả cho thấy bộ điều khiển thực hiện đúng I3C Private Write and Read Transfers trong SDR Mode,
 \ImmediateDataTransfer{}, CCC, ENTDAA và truy cập thanh ghi, vượt qua bộ hồi quy phân loại theo nhóm chức năng. Chi tiết định lượng
 về quy mô mã nguồn, độ bao phủ và so sánh với bản tham chiếu được trình bày trong chương Kết quả.
 
@@ -45,7 +45,7 @@ machine that the reference leaves unfinished. The \Controller{} is described in 
 Verification uses UVM 1.2 on the \CadenceXcelium{} simulator. It combines
 \FunctionalCoverage{} with \SystemVerilog{} Assertions (SVA).
 
-The \Controller{} correctly performs the SDR \PrivateTransfer{}s (write, read), \ImmediateDataTransfer{}s, CCC, ENTDAA, and
+The \Controller{} correctly performs the I3C Private Write and Read Transfers in SDR Mode, \ImmediateDataTransfer{}s, CCC, ENTDAA, and
 register-access flows, passing the category-based regression suite. Quantitative results on code size,
 coverage, and comparison with the reference are reported in the Results chapter.
 

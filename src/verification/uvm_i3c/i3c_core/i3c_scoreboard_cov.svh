@@ -212,12 +212,12 @@ function void i3c_scoreboard::publish_daa_response_coverage(exp_resp_t exp_resp,
   correlated_item = i3c_correlated_item::type_id::create("daa_response_correlated_item");
   correlated_item.daa_response_valid = 1'b1;
   correlated_item.daa_result = exp_resp.daa_result;
-  correlated_item.resp_status = resp.err_status;
+  correlated_item.resp_status = resp.err;
   correlated_ap.write(correlated_item);
 endfunction
 
 function void i3c_scoreboard::publish_daa_dat_coverage(int unsigned start_index, int unsigned requested_count,
-                                       i3c_resp_err_status_e resp_status);
+                                       i3c_resp_err_e resp_status);
   i3c_correlated_item correlated_item;
 
   correlated_item = i3c_correlated_item::type_id::create("daa_dat_correlated_item");
@@ -235,7 +235,7 @@ function void i3c_scoreboard::publish_response_coverage(exp_resp_t exp_resp, i3c
   correlated_item.response_valid = exp_resp.response_cmd_class != RESP_CMD_CLASS_OTHER;
   correlated_item.response_cmd_class = exp_resp.response_cmd_class;
   correlated_item.rnw = exp_resp.rnw;
-  correlated_item.resp_status = resp.err_status;
+  correlated_item.resp_status = resp.err;
   correlated_item.response_length_valid = response_length_applicable(exp_resp.response_cmd_class);
   correlated_item.requested_len = exp_resp.requested_length;
   correlated_item.response_len = resp.data_length;
@@ -252,6 +252,6 @@ function void i3c_scoreboard::publish_address_response_coverage(exp_resp_t exp_r
                                         RESP_ADDR_PHASE_BROADCAST_HEADER :
                                         RESP_ADDR_PHASE_TARGET;
   correlated_item.address_acked = exp_resp.address_acked;
-  correlated_item.observed_resp_status = resp.err_status;
+  correlated_item.observed_resp_status = resp.err;
   correlated_ap.write(correlated_item);
 endfunction

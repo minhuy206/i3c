@@ -7,7 +7,7 @@ function void i3c_scoreboard::check_ccc_txn(i3c_item item, exp_txn_t exp);
   bit                   is_entdaa;
   int                   direct_idx;
   i3c_item              direct_item;
-  i3c_resp_err_status_e resp_status;
+  i3c_resp_err_e        resp_status;
   int                   resp_len;
   bit                   daa_response_valid;
   i3c_daa_result_e      daa_result;
@@ -215,7 +215,7 @@ function void i3c_scoreboard::check_ccc_opcode(i3c_item item, exp_txn_t exp);
 endfunction
 
 function void i3c_scoreboard::check_ccc_direct_phase(i3c_item item, exp_txn_t exp,
-                                     ref i3c_resp_err_status_e resp_status, ref int resp_len,
+                                     ref i3c_resp_err_e resp_status, ref int resp_len,
                                      output int direct_idx, output i3c_item direct_item);
   direct_idx = -1;
 
@@ -273,7 +273,7 @@ function void i3c_scoreboard::check_ccc_broadcast_payload(i3c_item item, exp_txn
 endfunction
 
 function void i3c_scoreboard::check_ccc_entdaa(i3c_item item, exp_txn_t exp,
-                               ref i3c_resp_err_status_e resp_status, ref int resp_len,
+                               ref i3c_resp_err_e resp_status, ref int resp_len,
                                ref bit daa_response_valid, ref i3c_daa_result_e daa_result,
                                output int unsigned joined_count);
   daa_scan_state_t st;
@@ -328,7 +328,7 @@ function void i3c_scoreboard::check_ccc_entdaa(i3c_item item, exp_txn_t exp,
 endfunction
 
 function void i3c_scoreboard::check_ccc_entdaa_round(i3c_item item, exp_txn_t exp, int i, ref daa_scan_state_t st,
-                                     ref i3c_resp_err_status_e resp_status, ref int resp_len);
+                                     ref i3c_resp_err_e resp_status, ref int resp_len);
   `DV_CHECK_EQ(item.CCC_direct_q[i].start_from_rstart, 1'b1,
                "ENTDAA DAA round should start after RSTART")
   `DV_CHECK_EQ(item.CCC_direct_q[i].addr, I3C_RSVD_ADDR,
@@ -511,7 +511,7 @@ function void i3c_scoreboard::check_ccc_entdaa_round(i3c_item item, exp_txn_t ex
 endfunction
 
 function i3c_daa_result_e i3c_scoreboard::resolve_daa_result(exp_txn_t exp, daa_scan_state_t st,
-                                             i3c_resp_err_status_e resp_status);
+                                             i3c_resp_err_e resp_status);
   if (resp_status == Ovl) begin
     return DAA_RESULT_OVERFLOW;
   end else if (st.hc_abort_seen || (resp_status == HcAborted)) begin
@@ -530,7 +530,7 @@ function i3c_daa_result_e i3c_scoreboard::resolve_daa_result(exp_txn_t exp, daa_
 endfunction
 
 function void i3c_scoreboard::log_ccc_direct_data(i3c_item item, exp_txn_t exp, int direct_idx,
-                                  i3c_item direct_item, i3c_resp_err_status_e resp_status,
+                                  i3c_item direct_item, i3c_resp_err_e resp_status,
                                   int resp_len);
   string       expected_ccc_name;
   string       observed_ccc_name;
@@ -596,7 +596,7 @@ function void i3c_scoreboard::log_ccc_direct_data(i3c_item item, exp_txn_t exp, 
             ), UVM_LOW)
 endfunction
 
-function void i3c_scoreboard::log_ccc_entdaa_data(i3c_item item, exp_txn_t exp, i3c_resp_err_status_e resp_status,
+function void i3c_scoreboard::log_ccc_entdaa_data(i3c_item item, exp_txn_t exp, i3c_resp_err_e resp_status,
                                   int resp_len);
   string expected_ccc_name;
   string observed_ccc_name;
@@ -632,7 +632,7 @@ function void i3c_scoreboard::log_ccc_entdaa_data(i3c_item item, exp_txn_t exp, 
 endfunction
 
 function void i3c_scoreboard::log_ccc_broadcast_data(i3c_item item, exp_txn_t exp,
-                                     i3c_resp_err_status_e resp_status, int resp_len);
+                                     i3c_resp_err_e resp_status, int resp_len);
   string       expected_ccc_name;
   string       observed_ccc_name;
   bit          payload_present;

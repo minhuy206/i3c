@@ -1,0 +1,55 @@
+\begin{tikzpicture}
+	\tikzstyle{every node}=[font=\fontsize{18.2pt}{23.7pt}\selectfont,align=center,text=black]
+	\draw[color={rgb,255:red,234;green,112;blue,13},fill={rgb,255:red,229;green,185;blue,181},line width=1.5pt] (17.5,15.25) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {I3C BCAST\\7E/W};
+	\draw[fill={rgb,255:red,216;green,216;blue,216},line width=1.5pt] (17.5,18.875) circle (1cm) node[font=\bfseries\fontsize{10pt}{12pt}\selectfont] {START};
+	\draw[color={rgb,255:red,234;green,112;blue,13},fill={rgb,255:red,229;green,185;blue,181},line width=1.5pt] (8.75,14.75) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {I3C Target\\Addr \&\\CMD};
+	\draw[fill={rgb,255:red,229;green,185;blue,181}] (17.5,11.5) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {I3C BCAST\\CCC};
+	\draw (17.5,7.75) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {Bcast CCC\\Event Byte};
+	\draw (12.75,16.125) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {Pvt Msg\\Entry Repeated\\Start};
+	\draw[fill={rgb,255:red,189;green,184;blue,184},fill opacity=1,line width=1.5pt] (17.5,4) circle (1cm) node[font=\bfseries\fontsize{10pt}{12pt}\selectfont] {STOP};
+	\draw[fill={rgb,255:red,255;green,192;blue,247},line width=1.5pt] (17.5,22.75) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {{\bfseries Idle}\\(Bus Free)};
+	\draw[-{Stealth[scale=1.5]}] (17.5,21.75) -- (17.5,19.875);
+	\draw (8.75,11.125) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {Pvt Msg\\Tx/Rx Data};
+	\draw (4,10) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {Pvt Msg\\Repeated\\Start};
+	\draw (21.25,16.375) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {I3C Directed\\CCC};
+	\draw (24.5,14.875) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {Directed CCC\\Repeated\\Start};
+	\draw (24.625,12) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {I3C\\Address};
+	\draw (22.25,8.75) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {Directed CCC\\Event Byte};
+	\draw[color={rgb,255:red,234;green,112;blue,13},fill={rgb,255:red,229;green,185;blue,181},line width=1.5pt] (14.5,21.5) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {I2C Legacy\\mode};
+	\draw[fill={rgb,255:red,204;green,194;blue,217}] (12.75,19.88) circle (1cm) node[font=\fontsize{10pt}{12pt}\selectfont] {start DAA};
+	\draw[color={rgb,255:red,234;green,112;blue,13},line width=1.5pt,-{Stealth[scale=1.5]}] (17.5,17.875) -- (17.5,16.25);
+	\draw[-{Stealth[scale=1.5]}] (17.5,14.25) -- (17.5,12.5) node[pos=.5,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{Bcast CCC};
+	\draw[-{Stealth[scale=1.5]}] (17.5,10.5) -- (17.5,8.75);
+	\draw[-{Stealth[scale=1.5]}] (17.5,6.75) -- (17.5,5)
+		node[pos=.5,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{data complete};
+	\draw[color={rgb,255:red,234;green,112;blue,13},line width=1.5pt,-{Stealth[scale=1.5]}] (16.69,19.5) -- (15.2071,20.7929);
+	\draw[-{Stealth[scale=1.5]}] (16.5,18.88) -- (13.75,19.75);
+	\draw[{Stealth[scale=1.5]}-] (13.5,16.75) arc[start angle=111.68,end angle=43.27,radius=3.0751] node[pos=.5,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{SDR pvt msg};
+	\draw[-{Stealth[scale=1.5]}] (12,15.5) arc[start angle=-45.52,end angle=-86.56,radius=3.5123];
+	\draw[-{Stealth[scale=1.5]}] (8.75,13.75) -- (8.75,12.125) node[pos=.5,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{ACK};
+	\draw[-{Stealth[scale=1.5]}] (8.75,10.125) arc[start angle=-19.27,end angle=-134.74,radius=2.9583] node[pos=.51,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{change device/cmd};
+	\draw[-{Stealth[scale=1.5]}] (3,10) arc[start angle=-163.29,end angle=-282.47,radius=4.1536];
+	\draw[-{Stealth[scale=1.5]}] (18.125,16) arc[start angle=145.56,end angle=80.11,radius=2.3836];
+	\draw[-{Stealth[scale=1.5]}] (22.125,16.875) arc[start angle=95.44,end angle=34.15,radius=2.3037];
+	\draw[-{Stealth[scale=1.5]}] (25.375,14.375) arc[start angle=28.68,end angle=-28.68,radius=1.8233];
+	\draw[{Stealth[scale=1.5]}-] (22.125,9.75) arc[start angle=-172.82,end angle=-257.61,radius=1.9288] node[pos=.42,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{ACK};
+	\draw[-{Stealth[scale=1.5]}] (21.75,7.875) arc[start angle=-22.95,end angle=-64.97,radius=6.7814] node[pos=.38,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{data complete};
+	\draw[-{Stealth[scale=1.5]}] (16.5,4) -- (14,4);
+	\draw[-{Stealth[scale=1.5]}] (9.625,14.25) arc[start angle=50.72,end angle=25.66,radius=27.4952] node[pos=.5,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{NACK};
+	\draw[{Stealth[scale=1.5]}-] (16.5,4.25) arc[start angle=-91.76,end angle=-162.57,radius=8.3938] node[pos=.6,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{T (rd data controller abort $\mid$\\data complete) \& release bus};
+	\draw[-{Stealth[scale=1.5]}] (7.875,10.75) arc[start angle=-43.71,end angle=-330.54,radius=0.8454] node[pos=.46,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{T, more data};
+	\node[font=\bfseries\fontsize{11.9pt}{15.5pt}\selectfont,fill=white] at (12.29,4) {to START or\\Idle (Bus Free)};
+	\draw[-{Stealth[scale=1.5]}] (16,25.125) -- (17,23.625);
+	\node[font=\fontsize{11.9pt}{15.5pt}\selectfont,fill=white] at (16.625,24.25) {reset};
+	\node[font=\fontsize{8pt}{9.6pt}\selectfont,fill=white] at (18.91,16.65) {Directed \\ CCC};
+	\draw[-{Stealth[scale=1.5]}] (25.25,11.25) arc[start angle=-7.15,end angle=-78.76,radius=8.4663] node
+		[pos=.45,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{NACK};
+	\draw[color={rgb,255:red,234;green,112;blue,13},line width=1.5pt,{Stealth[scale=1.5]}-] (9.125,15.625) arc[start angle=142.10,end angle=83.82,radius=8.2243] node[pos=.48,font=\fontsize{8pt}{9.6pt}\selectfont,fill=white]{pvt cmd};
+	\draw[color={rgb,255:red,234;green,112;blue,13},line width=1.5pt] (23.5,24) circle (1cm);
+	\draw[fill={rgb,255:red,229;green,185;blue,181}] (23.5,21.5) circle (1cm);
+	\draw[fill={rgb,255:red,204;green,194;blue,217}] (23.5,19) circle (1cm);
+	\draw[color={rgb,255:red,234;green,112;blue,13},line width=1.5pt,-{Stealth[scale=1.5]}] (21,24) -- (22.5,24);
+	\node at (27.28,24) {SDA arbitration\\happens};
+	\node at (26.99,19) {I3C capability};
+	\node at (27.36,21.5) {I3C transmission\\mode};
+\end{tikzpicture}

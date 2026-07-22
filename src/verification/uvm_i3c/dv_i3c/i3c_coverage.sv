@@ -41,7 +41,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
   start_source_e                  start_source;
 
   int unsigned                    actual_len;
-  int unsigned                    final_remainder;
+  int unsigned                    trailing_bytes;
   bus_op_e                        previous_op;
   bus_op_e                        current_op;
   bit                             previous_private_valid;
@@ -92,7 +92,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
       bins multiple_dwords = {[5 : $]};
     }
 
-    cp_final_remainder: coverpoint final_remainder iff (actual_len > 0) {
+    cp_trailing_bytes: coverpoint trailing_bytes iff (actual_len > 0) {
       bins full_dword = {0}; bins one_byte = {1}; bins two_bytes = {2}; bins three_bytes = {3};
     }
 
@@ -228,7 +228,7 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     protocol = t.i3c;
     bus_op = t.bus_op;
     actual_len = t.num_data;
-    final_remainder = t.num_data % 4;
+    trailing_bytes = t.num_data % 4;
     cg_bus_transfer.sample();
 
   endfunction

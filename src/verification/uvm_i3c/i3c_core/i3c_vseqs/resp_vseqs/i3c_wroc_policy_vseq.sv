@@ -330,7 +330,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq0, cfg0.ctxt, device_done_timeout_cycles(cfg0));
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, Success,
+    `DV_CHECK_EQ(resp_desc.err, Success,
                  "ERR_012 wroc=1 first continuation response status mismatch")
     `DV_CHECK_EQ(resp_desc.tid, cmd0.tid,
                  "ERR_012 wroc=1 first continuation response TID mismatch")
@@ -341,7 +341,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
                  "ERR_012 wroc=1 continuation did not resume with RSTART")
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, Success,
+    `DV_CHECK_EQ(resp_desc.err, Success,
                  "ERR_012 wroc=1 final response status mismatch")
     `DV_CHECK_EQ(resp_desc.tid, cmd1.tid,
                  "ERR_012 wroc=1 final response TID mismatch")
@@ -375,7 +375,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, cfg.ctxt, device_done_timeout_cycles(cfg));
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, AddrHeader,
+    `DV_CHECK_EQ(resp_desc.err, AddrHeader,
                  "ERR_012 wroc=0 error override must report AddrHeader")
     `DV_CHECK_EQ(resp_desc.tid, cmd.tid, "ERR_012 wroc=0 error override TID mismatch")
     check_all_queues_empty("after ERR_012 wroc=0 error override");
@@ -415,7 +415,7 @@ class i3c_wroc_policy_vseq extends i3c_base_vseq;
     wait_for_device_done(dev_seq, "ERR_012 CCC wroc=0 error override", 3000);
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, AddrHeader,
+    `DV_CHECK_EQ(resp_desc.err, AddrHeader,
                  "ERR_012 CCC wroc=0 error must report AddrHeader")
     `DV_CHECK_EQ(resp_desc.tid, cmd.tid,
                  "ERR_012 CCC wroc=0 error response TID mismatch")

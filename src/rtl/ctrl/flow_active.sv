@@ -236,8 +236,8 @@ module flow_active
   assign next_cmd_available = cmd_queue_rvalid_i && !cmd_queue_empty_i;
 
   function automatic logic [31:0] make_resp_word(
-      input i3c_resp_err_status_e err_status, input logic [3:0] tid, input logic [15:0] data_len);
-    make_resp_word = {err_status, tid, 8'h00, data_len};
+      input i3c_resp_err_e err, input logic [3:0] tid, input logic [15:0] data_len);
+    make_resp_word = {err, tid, 8'h00, data_len};
   endfunction
 
   function automatic logic invalid_addr_assign_desc(input addr_assign_desc_t desc);
@@ -310,7 +310,7 @@ module flow_active
         !rx_overflow_q && !read_abort_term_q;
   endfunction
 
-  function automatic i3c_resp_err_status_e map_resp_err_status();
+  function automatic i3c_resp_err_e map_resp_err();
     if (addr_nack_q) begin
       return AddrHeader;
     end else if (data_nack_q) begin
@@ -363,7 +363,7 @@ module flow_active
   endtask
 
   task automatic request_missing_continuation_stop;
-    request_stop(1'b1);
+    request_stop(1'b0);
   endtask
 
   task automatic request_read_takeover;
@@ -412,7 +412,7 @@ module flow_active
   task automatic accept_continuation_cmd(input logic rstart_already_generated);
     if (active_wroc) begin
       resp_queue_wvalid = 1'b1;
-      resp_queue_wdata  = make_resp_word(map_resp_err_status(), cmd_tid, resp_data_len_q);
+      resp_queue_wdata  = make_resp_word(map_resp_err(), cmd_tid, resp_data_len_q);
     end
     cmd_queue_rready  = 1'b1;
     clear_transfer_context();
@@ -1719,7 +1719,7 @@ module flow_active
 
         WriteResp: begin
           resp_queue_wvalid = 1'b1;
-          resp_queue_wdata  = make_resp_word(map_resp_err_status(), cmd_tid, resp_data_len_q);
+          resp_queue_wdata  = make_resp_word(map_resp_err(), cmd_tid, resp_data_len_q);
         end
 
         default: begin

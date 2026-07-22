@@ -1,7 +1,7 @@
 \chapter{Cơ sở lý thuyết và yêu cầu hệ thống}
 \label{ch:background-requirements}
 
-Chương này trình bày cơ sở lý thuyết và yêu cầu hệ thống cho thiết kế. Nội dung lý thuyết tập trung vào các khái niệm được sử dụng trực tiếp trong thiết kế và kiểm chứng, gồm \iic{}, SDR Mode của \MIPIIThreeCBasic{}, điều kiện bus, \OpenDrain{}, \PushPull{}, \gls{daa} và \CommonCommandCode{} (CCC). Từ đó, chương xác định các yêu cầu có thể kiểm chứng, làm cơ sở cho kiến trúc tại \cref{ch:architecture}, môi trường UVM tại \cref{ch:verification} và đánh giá kết quả tại \cref{ch:results}.
+Chương này trình bày cơ sở lý thuyết và yêu cầu hệ thống cho thiết kế. Nội dung lý thuyết tập trung vào các khái niệm được sử dụng trực tiếp trong thiết kế và kiểm chứng, gồm \iic{}, \gls{sdr} Mode của \MIPIIThreeCBasic{}, bus condition, \OpenDrain{}, \PushPull{}, \gls{daa} và \gls{ccc}. Từ đó, chương xác định các yêu cầu có thể kiểm chứng, làm cơ sở cho kiến trúc tại \cref{ch:architecture}, môi trường UVM tại \cref{ch:verification} và đánh giá kết quả tại \cref{ch:results}.
 
 \section{Cơ sở lý thuyết}
 \label{sec:bg-theory}
@@ -9,7 +9,7 @@ Chương này trình bày cơ sở lý thuyết và yêu cầu hệ thống cho 
 \subsection{Tổng quan bus \iic{}}
 \label{sec:bg-i2c}
 
-\iic{} là bus nối tiếp đồng bộ hai dây gồm SDA và SCL. Các thiết bị nối vào bus thông qua ngõ ra \OpenDrain{}, nghĩa là chỉ có thể kéo tín hiệu xuống mức thấp, trong khi mức cao được tạo bởi điện trở kéo lên bên ngoài. Cấu trúc này cho phép nhiều thiết bị cùng chia sẻ bus và hỗ trợ phân xử giữa các \Controller{}: khi nhiều \Controller{} phát đồng thời, mức thấp chiếm ưu thế; \Controller{} lái mức cao nhưng đọc về mức thấp sẽ nhận ra mình thua và tự rút lui, nhờ đó xác định được \Controller{} nào giành bus mà không làm mất dữ liệu~\cite{nxp_i2c}.
+\iic{} là bus nối tiếp đồng bộ hai dây gồm SDA và SCL. Các thiết bị nối vào bus thông qua ngõ ra \OpenDrain{}, nghĩa là chỉ có thể kéo tín hiệu xuống mức thấp, trong khi mức cao được tạo bởi điện trở kéo lên bên ngoài. Cấu trúc này cho phép nhiều thiết bị cùng chia sẻ bus và hỗ trợ phân xử giữa các \Controller{}: khi nhiều \Controller{} phát đồng thời, mức thấp chiếm ưu thế. \Controller{} lái mức cao nhưng đọc về mức thấp sẽ nhận ra mình thua và tự rút lui, nhờ đó xác định được \Controller{} nào giành bus mà không làm mất dữ liệu~\cite{nxp_i2c}.
 
 Một giao dịch \iic{} điển hình bắt đầu bằng điều kiện START, tiếp theo là \AddressHeader{} gồm địa chỉ 7-bit và bit RnW, sau đó là các byte dữ liệu. Mỗi byte được xác nhận bằng bit ACK/NACK, và giao dịch kết thúc bằng điều kiện STOP. Trong Fast Mode, tần số SCL tối đa là 400~kHz~\cite{nxp_i2c}.
 
@@ -18,16 +18,16 @@ Các giới hạn của \iic{} liên quan trực tiếp đến phạm vi khóa l
 \subsection{\MIPIIThreeCBasic{} và I3C SDR Mode}
 \label{sec:bg-sdr}
 
-\MIPIIThreeCBasic{} duy trì cấu trúc hai dây SDA/SCL và cơ chế \emph{\LegacyIicCoexistence{}} cho phép các thiết bị \LegacyIic{} cùng tồn tại trên bus (với một số giới hạn). Trong \SingleDataRateMode{} (SDR), mỗi chu kỳ SCL truyền một bit dữ liệu, và tần số SCL có thể đạt 12,5~MHz khi hệ thống đáp ứng các tham số định thời (timing) tương ứng~\cite{mipi_i3c_basic}.
+\MIPIIThreeCBasic{} duy trì cấu trúc hai dây SDA/SCL và cơ chế \emph{\LegacyIicCoexistence{}} cho phép các thiết bị \LegacyIic{} cùng tồn tại trên bus (với một số giới hạn). Trong \SingleDataRateMode{} (SDR), mỗi chu kỳ SCL truyền một bit dữ liệu, và tần số SCL có thể đạt 12,5~MHz khi hệ thống đáp ứng các tham số thời gian tương ứng~\cite{mipi_i3c_basic}.
 
-Mức cải thiện tốc độ của I3C đến từ việc sử dụng chế độ lái khác nhau theo từng pha. Các pha cần phân xử hoặc phản hồi từ nhiều thiết bị, như \AddressHeader{} và bit ACK/NACK, vẫn sử dụng \OpenDrain{}. Ngược lại, pha dữ liệu thông thường được chuyển sang \PushPull{}, nhờ đó cạnh tín hiệu không còn phụ thuộc vào điện trở kéo lên. Bên cạnh đó, I3C thay bit ACK sau mỗi byte dữ liệu bằng \TBit{}. Khi \Controller{} ghi, \TBit{} mang odd parity của byte vừa phát để \Target{} có thể phát hiện lỗi bit. Khi \Controller{} đọc, \TBit{} được dùng để báo tiếp tục truyền hoặc kết thúc truyền theo quy định của đặc tả~\cite{mipi_i3c_basic}.
+Mức cải thiện tốc độ của I3C đến từ việc sử dụng \OpenDrain{} và \PushPull{} khác nhau theo từng pha để pha dữ liệu không còn phụ thuộc vào điện trở kéo lên (chi tiết ở \cref{sec:bg-odpp}). Bên cạnh đó, I3C thay bit ACK sau mỗi byte dữ liệu bằng \TBit{}. Khi \Controller{} ghi, \TBit{} mang odd parity của byte vừa phát để \Target{} có thể phát hiện lỗi bit. Khi \Controller{} đọc, \TBit{} được dùng để báo tiếp tục truyền hoặc kết thúc truyền theo quy định của đặc tả~\cite{mipi_i3c_basic}.
 
 \subsection{START, \RepeatedSTART{} và STOP}
 \label{sec:bg-conditions}
 
-Các điều kiện bus của I3C được kế thừa từ \iic{}. START (S) xuất hiện khi SDA chuyển từ mức cao xuống mức thấp trong lúc SCL ở mức cao; STOP (P) là chuyển tiếp ngược lại của SDA khi SCL ở mức cao. \gls{sr} có dạng sóng giống START nhưng xuất hiện khi giao dịch chưa có STOP, cho phép \Controller{} tiếp tục một giao dịch mới mà không nhả quyền điều khiển bus.
+Các bus condition của I3C được kế thừa từ \iic{}. START (S) xuất hiện khi SDA chuyển từ mức cao xuống mức thấp trong lúc SCL ở mức cao. STOP (P) là chuyển tiếp ngược lại của SDA khi SCL ở mức cao. \RepeatedSTART{} giống START nhưng xuất hiện khi giao dịch chưa có STOP, cho phép \Controller{} tiếp tục một giao dịch mới mà không nhả quyền điều khiển bus.
 
-Sau STOP, đặc tả còn phân biệt \BusFreeCondition{}, \BusAvailableCondition{} và \BusIdleCondition{} dựa trên khoảng thời gian SDA/SCL cùng duy trì mức cao. Các khái niệm này chủ yếu phục vụ \HotJoin{} và IBI. Do hai tính năng đó nằm ngoài phạm vi khóa luận, thiết kế chỉ cần tạo và phát hiện đúng START, \RepeatedSTART{}, STOP, đồng thời bảo đảm \BusFreeCondition{} trước giao dịch kế tiếp.
+Sau STOP, đặc tả còn phân biệt \BusFreeCondition{}, \BusAvailableCondition{} và \BusIdleCondition{} dựa trên khoảng thời gian SDA/SCL cùng duy trì mức cao. Các khái niệm này chủ yếu phục vụ \HotJoin{} và \gls{ibi}. Do hai tính năng đó nằm ngoài phạm vi khóa luận, thiết kế chỉ cần tạo và phát hiện đúng START, \RepeatedSTART{}, STOP, đồng thời bảo đảm \BusFreeCondition{} trước giao dịch kế tiếp.
 
 \begin{figure}[!htbp]
 	\centering
@@ -86,29 +86,28 @@ Sau STOP, đặc tả còn phân biệt \BusFreeCondition{}, \BusAvailableCondit
 			\node[note, anchor=north] at (9.5,0.45) {SDA low$\to$high};
 		\end{tikzpicture}
 	\end{adjustbox}
-	\caption{Dạng sóng START, \RepeatedSTART{} và STOP trên bus I3C.}
+	\caption{Waveform của START, \RepeatedSTART{} và STOP trên bus I3C.}
 	\label{fig:start-sr-stop}
 \end{figure}
 
 \subsection{\OpenDrain{} và \PushPull{}}
 \label{sec:bg-odpp}
 
-Khác biệt cốt lõi giữa \OpenDrain{} và \PushPull{} nằm ở cách tạo mức
-cao. \OpenDrain{} chỉ kéo SDA xuống thấp rồi nhả bus cho điện trở kéo
-lên, nên nhiều thiết bị cùng lái được nhưng cạnh lên chậm; \PushPull{}
-chủ động đẩy cả hai mức nên nhanh hơn, đổi lại chỉ một thiết bị được lái
-SDA tại một thời điểm. Do đó, I3C dùng \OpenDrain{} cho các pha cần phân
-xử hoặc phản hồi như \AddressHeader{} và ACK/NACK, còn phần dữ liệu được
-truyền bằng \PushPull{} để tăng tốc độ.
+Như đã nêu ở \cref{sec:bg-i2c}, \OpenDrain{} tạo mức cao bằng điện trở
+kéo lên nên cạnh lên chậm, còn \PushPull{} chủ động đẩy cả hai mức nên
+cạnh nhanh hơn, đổi lại chỉ một thiết bị được lái SDA tại một thời điểm.
+Do đó, I3C dùng \OpenDrain{} cho các pha cần phân xử hoặc phản hồi như
+\AddressHeader{} và ACK/NACK, còn phần dữ liệu được truyền bằng \PushPull{}
+để tăng tốc độ.
 
-Tại một số ranh giới bit, quyền lái SDA phải chuyển từ \Target{} sang
-\Controller{} ngay trong một chu kỳ SCL. Quá trình này diễn ra theo
-hai cơ chế là \emph{handoff} và \emph{takeover}. Với
+Việc chuyển đổi giữa pha \OpenDrain{} và \PushPull{} đòi hỏi chuyển
+quyền lái SDA giữa \Target{} và \Controller{} sao cho tránh xung đột,
+nên I3C quy định thêm hai cơ chế là \emph{handoff} và \emph{takeover}. Với
 \emph{handoff}, \Target{} kéo SDA xuống thấp tại cạnh xuống của SCL để
 phát bit ACK. Đến cạnh lên kế tiếp, \Controller{} lấy mẫu thấy SDA ở mức
 thấp và chủ động giữ nguyên mức này, còn \Target{} phát xong ACK thì nhả
 SDA về High-Z. Nhờ vậy, SDA được giữ thấp liên tục suốt quá trình chuyển
-quyền; \Controller{} duy trì mức thấp cho đến cạnh xuống kế tiếp của SCL,
+quyền. \Controller{} duy trì mức thấp cho đến cạnh xuống kế tiếp của SCL,
 như minh họa trong \cref{fig:low-handoff-timing}.
 
 \begin{figure}[!htbp]
@@ -116,7 +115,7 @@ như minh họa trong \cref{fig:low-handoff-timing}.
 	\begin{adjustbox}{max width=\textwidth}
 		\input{figures/i3c_low_handoff_timing.tex}
 	\end{adjustbox}
-	\caption{Định thời cơ chế handoff tại bit ACK \OpenDrain{}.}
+	\caption{Waveform của cơ chế handoff tại bit ACK \OpenDrain{}.}
 	\label{fig:low-handoff-timing}
 \end{figure}
 
@@ -132,14 +131,14 @@ SDA tạo thành một \RepeatedSTART{}, qua đó \Controller{} giành lại quy
 	\begin{adjustbox}{max width=\textwidth}
 		\input{figures/i3c_read_takeover_timing.tex}
 	\end{adjustbox}
-	\caption{Định thời cơ chế takeover sau pha \PushPull{} của giao dịch đọc I3C.}
+	\caption{Waveform của cơ chế takeover sau pha \PushPull{} của giao dịch đọc I3C.}
 	\label{fig:read-takeover-timing}
 \end{figure}
 
-\subsection{I3C \PrivateWriteRead{} trong I3C SDR Mode}
+\subsection{I3C \PrivateWriteRead{} trong SDR Mode}
 \label{sec:bg-frame}
 
-Một I3C \PrivateTransfer{} trong I3C SDR Mode có cấu trúc tuần tự gồm: điều kiện START; \AddressHeader{} chứa \DynamicAddress{} 7-bit và bit RnW được phát ở \OpenDrain{}; bit ACK/NACK từ \Target{}; các byte dữ liệu được truyền ở \PushPull{}, trong đó mỗi byte đi kèm một \TBit{}; cuối cùng là \RepeatedSTART{} nếu tiếp tục giao dịch khác hoặc STOP nếu kết thúc. Với I3C \PrivateWrite{}, \Controller{} phát từng byte dữ liệu cùng \TBit{} odd parity. Với I3C \PrivateRead{}, \Target{} phát dữ liệu và \Controller{} dựa trên \TBit{} do \Target{} gửi để quyết định tiếp tục nhận hay kết thúc quá trình truyền. Từ định dạng này, phần cứng cần đáp ứng ba yêu cầu trực tiếp: bảo toàn thứ tự truyền \gls{msb}-first, đếm chính xác số byte đã truyền hoặc nhận, và tạo STOP hoặc \RepeatedSTART{} theo thông tin kết thúc giao dịch trong \CommandDescriptor{}.
+Một \PrivateTransfer{} trong SDR Mode có cấu trúc tuần tự gồm: điều kiện START, tùy chọn phát \IThreeCBroadcastAddress{} (\texttt{0x7e}) với RnW = Write và \RepeatedSTART{}, \AddressHeader{} chứa \DynamicAddress{} 7-bit và bit RnW (ở \OpenDrain{} nếu sau START, ở \PushPull{} nếu sau \RepeatedSTART{}), bit ACK/NACK từ \Target{}, các byte dữ liệu được truyền ở \PushPull{}, trong đó mỗi byte đi kèm một \TBit{}, cuối cùng là \RepeatedSTART{} nếu tiếp tục giao dịch khác hoặc STOP nếu kết thúc. Với I3C \PrivateWrite{}, \Controller{} phát từng byte dữ liệu cùng \TBit{} odd parity. Với I3C \PrivateRead{}, \Target{} phát dữ liệu và \Controller{} dựa trên \TBit{} do \Target{} gửi để quyết định tiếp tục nhận hay kết thúc quá trình truyền. Từ định dạng này, phần cứng cần đáp ứng ba yêu cầu trực tiếp: bảo toàn thứ tự truyền \gls{msb}-first, đếm chính xác số byte đã truyền hoặc nhận, và tạo STOP hoặc \RepeatedSTART{} theo thông tin kết thúc giao dịch trong \CommandDescriptor{}.
 
 \begin{figure}[!htbp]
 	\centering
@@ -168,7 +167,7 @@ Một I3C \PrivateTransfer{} trong I3C SDR Mode có cấu trúc tuần tự gồ
 				\node[pp,   on chain=w]        {$\cdots$};
 				\node[pp,   on chain=w]        {Data\,$N\!-\!1$};
 				\node[pp,   on chain=w]        {T};
-				\node[cond, on chain=w] (wN)   {P};
+				\node[cond, on chain=w] (wN)   {P/Sr};
 			\end{scope}
 			\node[rowlbl, left=5pt of w0] {Write};
 			\path (w0.south west) -- (wN.south east)
@@ -187,7 +186,7 @@ Một I3C \PrivateTransfer{} trong I3C SDR Mode có cấu trúc tuần tự gồ
 				\node[pp,   on chain=r]        {$\cdots$};
 				\node[pp,   on chain=r]        {Data\,$N\!-\!1$};
 				\node[pp,   on chain=r]        {T$=$0};
-				\node[cond, on chain=r] (rN)   {P};
+				\node[cond, on chain=r] (rN)   {P/Sr};
 			\end{scope}
 			\node[rowlbl, left=5pt of r0] {Read};
 			\path (r0.south west) -- (rN.south east)
@@ -203,14 +202,14 @@ Một I3C \PrivateTransfer{} trong I3C SDR Mode có cấu trúc tuần tự gồ
 			\end{scope}
 		\end{tikzpicture}
 	\end{adjustbox}
-	\caption{Định dạng frame I3C \PrivateWriteRead{} trong I3C SDR Mode.}
+	\caption{Định dạng frame của I3C \PrivateWriteRead{} trong SDR Mode.}
 	\label{fig:sdr-frame}
 \end{figure}
 
 \subsection{\DynamicAddressAssignment{} và ENTDAA}
 \label{sec:bg-daa}
 
-\gls{daa} là quy trình cho phép \Controller{} cấp \DynamicAddress{} cho các I3C \Target{}, thay cho cơ chế địa chỉ tĩnh của \iic{}. Với ENTDAA, \Controller{} phát START, gửi \IThreeCBroadcastAddress{} với RnW = Write, sau đó phát ENTDAA CCC (\texttt{0x07}) sau ACK để đưa các \Target{} chưa có địa chỉ tham gia quá trình cấp phát. Mỗi vòng cấp phát bắt đầu bằng \RepeatedSTART{} và \IThreeCBroadcastAddress{} (\texttt{0x7e}) với RnW = Read. Các \Target{} đủ điều kiện cùng phản hồi ACK, sau đó đồng thời phát chuỗi định danh 64-bit gồm PID 48-bit, BCR 8-bit và DCR 8-bit trên \OpenDrain{}. Nhờ đặc tính wired-AND, thiết bị có chuỗi định danh nhỏ nhất sẽ thắng phân xử mà không cần cơ chế phân xử riêng. \Controller{} thu chuỗi định danh 64-bit của thiết bị thắng, phát \DynamicAddress{} 7-bit kèm bit parity, và \Target{} xác nhận bằng ACK. Quá trình này lặp lại cho \Target{} tiếp theo cho đến khi không còn thiết bị phản hồi \IThreeCBroadcastAddress{} (\texttt{0x7e}) với RnW = Read hoặc đã cấp đủ số lượng yêu cầu; sau đó \Controller{} kết thúc bằng STOP~\cite{mipi_i3c_basic}.
+\acrfull{daa} là quy trình cho phép \Controller{} cấp \DynamicAddress{} cho các I3C \Target{}, thay cho cơ chế địa chỉ tĩnh của \iic{}. Với ENTDAA, \Controller{} phát START, gửi \IThreeCBroadcastAddress{} với RnW = Write, sau đó phát ENTDAA CCC (\texttt{0x07}) sau ACK để đưa các \Target{} chưa có địa chỉ tham gia quá trình cấp phát. Mỗi vòng cấp phát bắt đầu bằng \RepeatedSTART{} và \IThreeCBroadcastAddress{} (\texttt{0x7e}) với RnW = Read. Các \Target{} đủ điều kiện cùng phản hồi ACK, sau đó đồng thời phát chuỗi định danh 64-bit gồm \gls{pid} 48-bit, \gls{bcr} 8-bit và \gls{dcr} 8-bit trên \OpenDrain{}. Nhờ đặc tính wired-AND, thiết bị có chuỗi định danh nhỏ nhất sẽ thắng phân xử. \Controller{} thu chuỗi định danh 64-bit của thiết bị thắng, phát \DynamicAddress{} 7-bit kèm bit parity, và \Target{} xác nhận bằng ACK. Quá trình này lặp lại cho \Target{} tiếp theo cho đến khi không còn thiết bị phản hồi \IThreeCBroadcastAddress{} (\texttt{0x7e}) với RnW = Read hoặc đã cấp đủ số lượng yêu cầu. Sau đó, \Controller{} kết thúc bằng STOP~\cite{mipi_i3c_basic}.
 
 \begin{figure}[!htb]\centering
 	\begin{adjustbox}{max width=\textwidth}
@@ -246,7 +245,7 @@ Một I3C \PrivateTransfer{} trong I3C SDR Mode có cấu trúc tuần tự gồ
 			(ack2.south) .. controls +(0,-1.1) and +(0,-1.1) .. (Sr.south);
 			\node[font=\scriptsize\itshape, text=black!70, align=center]
 			at ($(Sr.south)!0.5!(ack2.south) + (0,-1.35)$)
-			{per \Target{}; loop until a round goes unanswered, then STOP};
+			{per \Target{}, loop until a round goes unanswered, then STOP};
 
 			% ---- legend (centered under the box row) ----
 			\coordinate (legc) at ($(S.center)!0.5!(P.center)$);
@@ -265,13 +264,17 @@ Một I3C \PrivateTransfer{} trong I3C SDR Mode có cấu trúc tuần tự gồ
 	\label{fig:entdaa}
 \end{figure}
 
+Ngoài \gls{entdaa}, MIPI I3C còn định nghĩa SETDASA và SETAASA để cấp \DynamicAddress{} dựa trên
+\StaticAddress{} đã biết, cùng RSTDAA và SETNEWDA để xóa hoặc thay đổi \DynamicAddress{} hiện tại.
+Các CCC này nằm ngoài phạm vi khóa luận.
+
 \subsection{\CommonCommandCode{}}
 \label{sec:bg-ccc}
 
-\CommonCommandCode{} (CCC) là nhóm lệnh điều khiển chuẩn giữa \Controller{} và \Target{}, được phát
-sau \IThreeCBroadcastAddress{} với RnW = Write. \BroadcastCCC{} áp dụng cho mọi \Target{} trên bus; \DirectCCC{} bổ sung
+CCC là nhóm lệnh điều khiển chuẩn giữa \Controller{} và \Target{}, được phát
+sau \IThreeCBroadcastAddress{} với RnW = Write. \BroadcastCCC{} áp dụng cho mọi \Target{} trên bus, còn \DirectCCC{} bổ sung
 một pha \RepeatedSTART{} và \AddressHeader{} của \Target{} cụ thể trước phần dữ liệu. Tập CCC được triển khai
-trong khóa luận gồm \gls{enec}, \gls{disec} ở cả hai dạng và ENTDAA, như \cref{tab:ccc}.
+trong khóa luận gồm \gls{enec}, \gls{disec} ở cả hai dạng và \gls{entdaa}, như \cref{tab:ccc}.
 
 \begin{figure}[!htb]\centering
 	\begin{adjustbox}{max width=\textwidth}
@@ -368,18 +371,18 @@ vào so sánh.
 		Chế độ lái bus                  & \OpenDrain{}              & \OpenDrain{} và \PushPull{}          \\
 		Tần số SCL                      & Tối đa 400~kHz            & Tối đa 12,5~MHz                      \\
 		Địa chỉ                         & \StaticAddress{}          & \DynamicAddress{} qua DAA            \\
-		Xác nhận dữ liệu                & ACK/NACK sau mỗi byte     & \TBit{} theo hướng truyền            \\
-		Lệnh điều khiển chuẩn           & Không có CCC              & \BroadcastCCC{} và \DirectCCC{}      \\
+		Xác nhận dữ liệu                & ACK/NACK                  & \TBit{}                              \\
+		\CommonCommandCode{} (CCC)      & Không có CCC              & \BroadcastCCC{} và \DirectCCC{}      \\
 		Khả năng tương thích với \iic{} & Thiết bị \iic{}           & Có thể cùng bus với \Target{} \iic{} \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
 Vì cả hai giao thức cùng chạy trên một cặp SDA/SCL, thiết kế phải tạo được hai bộ định thời khác nhau từ
-cùng một clock hệ thống. \Cref{tab:timing} liệt kê các tham số chính dùng để xác lập cấu hình mặc định;
-giá trị I3C lấy từ \MIPIIThreeCBasic{} v1.1.1, giá trị \iic{} lấy từ UM10204
+cùng một clock hệ thống. \Cref{tab:timing} liệt kê các tham số chính dùng để xác lập cấu hình mặc định.
+Giá trị I3C lấy từ \MIPIIThreeCBasic{} v1.1.1, giá trị \iic{} lấy từ UM10204
 Rev.~7.0~\cite{mipi_i3c_basic,nxp_i2c}. Trong RTL, mỗi tham số được biểu diễn bằng số chu kỳ clock hệ
-thống và có thể cấu hình qua CSR.
+thống và có thể cấu hình qua \gls{csr}.
 
 \begin{table}[!htbp]
 	\centering
@@ -387,12 +390,12 @@ thống và có thể cấu hình qua CSR.
 	\label{tab:timing}
 	\begin{tabular}{L{5.5cm} C{3.8cm} C{3.8cm}}
 		\toprule
-		\textbf{Tham số}                  & \textbf{I3C SDR Mode} & \textbf{\iic{} FM} \\
+		\textbf{Tham số}                  & \textbf{I3C SDR Mode} & \textbf{\iic{} Fast Mode} \\
 		\midrule
-		Tần số SCL tối đa                 & 12,5~MHz              & 400~kHz            \\
-		Thời gian SCL thấp tối thiểu      & 24~ns                 & 1,3~$\mu$s         \\
-		Thời gian SCL cao tối thiểu       & 24~ns                 & 0,6~$\mu$s         \\
-		Thời gian setup dữ liệu tối thiểu & 3~ns (PP)             & 100~ns             \\
+		Tần số SCL tối đa                 & 12,5~MHz              & 400~kHz                   \\
+		Thời gian SCL thấp tối thiểu      & 24~ns                 & 1,3~$\mu$s                \\
+		Thời gian SCL cao tối thiểu       & 24~ns                 & 0,6~$\mu$s                \\
+		Thời gian setup dữ liệu tối thiểu & 3~ns (PP)             & 100~ns                    \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -411,18 +414,18 @@ Từ cơ sở lý thuyết trên và phạm vi đã xác định ở \cref{ch:in
 	\label{tab:req-func}
 	\begin{tabular}{C{1.4cm} L{11.8cm}}
 		\toprule
-		\textbf{Mã} & \textbf{Yêu cầu}                                                                                                                                                   \\
+		\textbf{Mã} & \textbf{Yêu cầu}                                                                                               \\
 		\midrule
-		F1          & Thực hiện I3C \PrivateWrite{} trong I3C SDR Mode đến I3C \Target{}, gồm \AddressHeader{}, ACK, TX data và \TBit{}.                                                 \\
-		F2          & Thực hiện I3C \PrivateRead{} trong I3C SDR Mode từ I3C \Target{} và kết thúc đúng theo độ dài hoặc \TBit{}.                                                        \\
-		F3          & Hỗ trợ \ImmediateDataTransfer{} với tối đa bốn byte trong \CommandDescriptor{}.                                                                                    \\
-		F4          & Hỗ trợ \BroadcastCCC{} và \DirectCCC{} cho ENEC/DISEC.                                                                                                             \\
-		F5          & Thực hiện ENTDAA, lưu PID/BCR/DCR và cấp \DynamicAddress{} theo các mục DAT được chỉ định.                                                                         \\
-		F6          & Thực hiện ghi/đọc với \iic{} \Target{} Fast Mode.                                                                                                                  \\
-		F7          & Cung cấp \CommandFifo{}, \ResponseFifo{}, \TxRxFifo{} và DAT cho giao tiếp giữa phần mềm và phần cứng.                                                             \\
-		F8          & Ghi \ResponseDescriptor{} chứa \texttt{tid}, \texttt{data\_length} đã xử lý và \texttt{error\_status}.                                                             \\
-		F9          & Hỗ trợ abort do \Host{} yêu cầu, software reset, backpressure (bên nhận chưa sẵn sàng làm bên phát tạm dừng để không mất dữ liệu) và phát hiện tràn/thiếu dữ liệu. \\
-		F10         & Cho phép cấu hình định thời I3C/\iic{} và trạng thái enable qua CSR.                                                                                               \\
+		F1          & Thực hiện I3C \PrivateWrite{} trong SDR Mode đến I3C \Target{}, gồm \AddressHeader{}, ACK, TX data và \TBit{}. \\
+		F2          & Thực hiện I3C \PrivateRead{} trong SDR Mode từ I3C \Target{} và kết thúc đúng theo độ dài hoặc \TBit{}.        \\
+		F3          & Hỗ trợ \ImmediateDataTransfer{} với tối đa bốn byte trong \CommandDescriptor{}.                                \\
+		F4          & Hỗ trợ \BroadcastCCC{} và \DirectCCC{} cho ENEC/DISEC.                                                         \\
+		F5          & Thực hiện ENTDAA, lưu PID/BCR/DCR và cấp \DynamicAddress{} theo các mục DAT được chỉ định.                     \\
+		F6          & Thực hiện ghi/đọc với \iic{} \Target{} Fast Mode.                                                              \\
+		F7          & Cung cấp \CommandFifo{}, \ResponseFifo{}, \TxRxFifo{} và DAT cho giao tiếp giữa phần mềm và phần cứng.         \\
+		F8          & Ghi \ResponseDescriptor{} chứa mã định danh giao dịch, số byte đã xử lý và mã lỗi.                             \\
+		F9          & Hỗ trợ yêu cầu hủy giao dịch và reset từ \Host{}, backpressure và phát hiện tràn/thiếu dữ liệu.                \\
+		F10         & Cho phép cấu hình các tham số thời gian I3C/\iic{} và trạng thái enable qua CSR.                               \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -430,7 +433,7 @@ Từ cơ sở lý thuyết trên và phạm vi đã xác định ở \cref{ch:in
 \subsection{Các tính năng ngoài phạm vi}
 \label{sec:req-oos}
 
-Ranh giới chức năng của thiết kế được trình bày rõ trong \cref{tab:req-oos} nhằm tránh bổ sung ngầm các yêu cầu ngoài thiết kế và làm cơ sở xây dựng coverage. Các tính năng không được triển khai không được đưa vào coverage goal, cũng không được xem là tình huống lỗi chỉ vì RTL không hỗ trợ.
+Phạm vi chức năng của thiết kế được trình bày rõ trong \cref{tab:req-oos} nhằm tránh bổ sung ngầm các yêu cầu ngoài thiết kế và làm cơ sở xây dựng coverage. Các tính năng không được triển khai không được đưa vào mục tiêu coverage, cũng không được xem là tình huống lỗi chỉ vì RTL không hỗ trợ.
 
 \begin{table}[!htbp]
 	\centering
@@ -470,14 +473,22 @@ Ranh giới chức năng của thiết kế được trình bày rõ trong \cref
 	\end{tabular}
 \end{table}
 
-Các yêu cầu P1--P3 xác định ràng buộc về clock và tần số bus của thiết kế. P1 được xác định dựa trên yêu cầu độ phân giải định thời: để biểu diễn các tham số cỡ 24~ns của I3C bằng số nguyên chu kỳ với sai số chấp nhận được, chu kỳ clock hệ thống cần nhỏ hơn đáng kể so với tham số định thời nhỏ nhất; vì vậy thiết kế chọn chu kỳ clock mục tiêu là 3~ns, tương ứng với tần số khoảng 333~MHz. P2 và P3 lần lượt quy định dải cấu hình SCL cho I3C SDR Mode và \iic{} Fast Mode theo giới hạn tốc độ của từng chế độ. Các yêu cầu P4--P5 xác định kích thước các cấu trúc mà phần mềm có thể truy cập, làm cơ sở cho bản đồ thanh ghi tại \cref{app:csr}.
+Các yêu cầu P1--P3 xác định ràng buộc về clock và tần số bus của thiết kế. P1 được xác định từ yêu cầu biểu diễn các tham số thời gian bằng số nguyên chu kỳ clock với sai số chấp nhận được. Đối với các tham số cỡ 24~ns của I3C, chu kỳ clock hệ thống cần nhỏ hơn đáng kể so với tham số thời gian nhỏ nhất. Vì vậy, thiết kế chọn chu kỳ clock mục tiêu là 3~ns, tương ứng với tần số khoảng 333~MHz. P2 và P3 lần lượt quy định dải cấu hình SCL cho I3C \gls{sdr} Mode và \iic{} Fast Mode theo giới hạn tốc độ của từng chế độ. Các yêu cầu P4--P5 xác định kích thước các cấu trúc mà phần mềm có thể truy cập, làm cơ sở cho bản đồ thanh ghi tại \cref{app:csr}.
 
 \subsection{Giao diện phần mềm}
 \label{sec:req-sw}
 
-Giao diện thanh ghi mà phần mềm có thể truy cập sử dụng địa chỉ \RegisterAddressWidth{}-bit, dữ liệu \RegisterDataWidth{}-bit, hai tín hiệu yêu cầu đọc/ghi và một tín hiệu báo hoàn tất. Phần mềm cấu hình enable, abort, software reset và định thời thông qua CSR; ghi hai \gls{dword} liên tiếp vào \CommandFifo{} để tạo \CommandDescriptor{} \CommandDescriptorWidth{}-bit; nạp TX data vào \TxFifo{}; sau khi giao dịch kết thúc, đọc dữ liệu từ \RxFifo{} và kết quả từ \ResponseFifo{}. DAT lưu \StaticAddress{} hoặc \DynamicAddress{} cùng thông tin loại \Target{} của từng thiết bị. Giao diện thanh ghi chỉ hỗ trợ các thao tác đọc/ghi đơn lẻ, không hỗ trợ burst và không gắn transaction ID riêng cho từng yêu cầu ở mức bus thanh ghi. Bản đồ thanh ghi đầy đủ được trình bày tại \cref{app:csr}, còn cấu trúc Descriptor được trình bày tại \cref{app:desc}.
+Giao diện thanh ghi mà phần mềm có thể truy cập sử dụng địa chỉ \RegisterAddressWidth{}-bit, dữ liệu \RegisterDataWidth{}-bit, hai tín hiệu yêu cầu đọc/ghi và một tín hiệu báo hoàn tất. \Host{} cấu hình trạng thái enable và các tham số thời gian, gửi yêu cầu hủy giao dịch hoặc yêu cầu reset thông qua \gls{csr}, ghi hai \gls{dword} liên tiếp vào \CommandFifo{} để tạo \CommandDescriptor{} \CommandDescriptorWidth{}-bit, nạp TX data vào \TxFifo{}, sau khi giao dịch kết thúc, đọc dữ liệu từ \RxFifo{} và kết quả từ \ResponseFifo{}. \gls{dat} lưu \StaticAddress{} hoặc \DynamicAddress{} cùng thông tin loại \Target{} (I3C hoặc \iic{}) của từng thiết bị. Mỗi lần truy cập thanh ghi chỉ thực hiện một thao tác đọc hoặc ghi 32 bit tại một địa chỉ. \Host{} duy trì yêu cầu cho đến khi phần cứng báo hoàn tất. Bản đồ thanh ghi đầy đủ được trình bày tại \cref{app:csr}, còn cấu trúc Descriptor được trình bày tại \cref{app:desc}.
 
 \subsection{Yêu cầu kiểm chứng}
 \label{sec:req-verif}
 
-Môi trường kiểm chứng phải tạo được stimulus cho toàn bộ yêu cầu F1--F10, bao gồm các luồng bình thường và các trường hợp ACK/NACK, độ dài biên, FIFO đầy/rỗng, reset, abort và backpressure. \texttt{i3c\_scoreboard} phải đối chiếu TX/RX data, \AddressHeader{}, hướng truyền, ACK/NACK, \TBit{} và \ResponseDescriptor{}. Component này phối hợp với \texttt{reg\_monitor} để kiểm tra các hoạt động CSR, DAT và FIFO. SVA phải kiểm tra handshake, FSM, bộ đếm, reset, trạng thái FIFO, abort và quy tắc lái bus SDA quan trọng. \FunctionalCoverage{} phải ghi nhận truy cập CSR/DAT/FIFO, loại giao dịch, hướng truyền, ACK/NACK, CCC, ENTDAA, \TBit{}, các độ dài biên, response/error và các tình huống biên thuộc phạm vi F1--F10. Một test chỉ được xem là PASS khi mô phỏng hoàn tất mà không có \texttt{UVM\_ERROR} hoặc \texttt{UVM\_FATAL}; coverage được đánh giá riêng và không thay thế kết quả kiểm tra đúng/sai.
+\begin{itemize}
+	\item Môi trường kiểm chứng phải tạo được stimulus cho toàn bộ yêu cầu F1--F10.
+	\item Các monitor phải ghi nhận các thao tác đọc/ghi \gls{csr}, \gls{dat} và \gls{fifo}. Trên bus, monitor phải theo dõi SDA/SCL để nhận diện START, \RepeatedSTART{} và STOP, đồng thời tái tạo \AddressHeader{}, hướng truyền, TX/RX data, ACK/NACK và \TBit{} của từng giao dịch.
+	\item Scoreboard phải đối chiếu giao dịch quan sát được trên bus với cấu hình, \CommandDescriptor{}, dữ liệu và \ResponseDescriptor{} ghi nhận từ giao diện thanh ghi.
+	\item SVA phải kiểm tra handshake, \gls{fsm}, bộ đếm, hai loại reset, trạng thái \gls{fifo}, yêu cầu hủy giao dịch, quyền điều khiển và chế độ lái SDA.
+	\item \FunctionalCoverage{} phải ghi nhận truy cập \gls{csr}/\gls{dat}/\gls{fifo}, loại giao dịch, hướng truyền, ACK/NACK, CCC, \gls{entdaa}, \TBit{}, \ResponseDescriptor{}, mã lỗi và các corner case về độ dài dữ liệu và quá trình xử lý giao dịch thuộc phạm vi F1--F10.
+\end{itemize}
+
+Một test chỉ được xem là PASS khi mô phỏng hoàn tất mà không có \texttt{UVM\_ERROR} hoặc \texttt{UVM\_FATAL}. Coverage được đánh giá riêng và không thay thế kết quả kiểm tra đúng/sai.

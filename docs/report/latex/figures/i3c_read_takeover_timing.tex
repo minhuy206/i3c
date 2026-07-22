@@ -3,42 +3,46 @@
 \begingroup
 \sffamily
 \begin{tikzpicture}[
+    xscale=0.70,
     font=\small,
     wave/.style={draw=black, line width=1pt, line join=round},
     window/.style={draw=black, dashed, line width=0.6pt},
     hiddenevent/.style={draw=black!55, dotted, line width=0.6pt},
-    siglabel/.style={font=\small\bfseries, anchor=east},
+    siglabel/.style={font=\small\bfseries, anchor=east, align=right},
     condlabel/.style={align=center, font=\scriptsize\bfseries, text=black},
     note/.style={align=center, font=\scriptsize, text=black},
   ]
 
   % Takeover window: SCL is held HIGH while ownership returns to Controller.
-  \draw[window] (1.85,0.55) rectangle (8.85,6.65);
+  \draw[window] (1.85,0.55) rectangle (7.45,6.65);
 
-  % scl_i: extended high phase gives the Target time to release SDA.
+  % SCL: extended high phase gives the Target time to release SDA.
   \draw[wave]
     (0,5.35) -- (2.20,5.35) -- (2.20,6.15)
-    -- (8.50,6.15) -- (8.50,5.35) -- (10.40,5.35);
+    -- (7.10,6.15) -- (7.10,5.35) -- (10.40,5.35);
 
-  % sda_i: T=1 is observed HIGH, then follows the Controller's OD-low drive.
+  % SDA driven by Target: T=1 is HIGH before the Target releases SDA.
   \draw[wave]
     (0,3.05) -- (1.10,3.05) -- (1.10,3.85)
     -- (4.65,3.85) -- (4.65,3.05) -- (10.40,3.05);
 
-  % sda_o: remain released until after the Target's specified release time.
+  % SDA driven by Controller: remains released until the Target release time has elapsed.
   \draw[wave]
     (0,1.75) -- (4.65,1.75) -- (4.65,0.95) -- (10.40,0.95);
 
-  \node[siglabel] at (-0.15,5.75) {\texttt{scl\_i}};
-  \node[siglabel] at (-0.15,3.45) {\texttt{sda\_i}};
-  \node[siglabel] at (-0.15,1.35) {\texttt{sda\_o}};
+  \node[siglabel] at (-0.15,5.75) {SCL};
+  \node[siglabel] at (-0.15,3.45) {SDA\\driven by Target};
+  \node[siglabel] at (-0.15,1.35) {SDA\\driven by Controller};
 
-  \node[condlabel] at (5.35,6.92) {SDA TAKEOVER / REPEATED START};
+  \node[condlabel] at (4.65,6.92) {SDA TAKEOVER / REPEATED START};
 
-  \node[note, anchor=north, text width=10.6cm] at (5.35,0.38)
-    {The Controller samples \texttt{sda\_i=1}, waits for the Target release time, then
-     drives \texttt{sda\_o=0}. Therefore \texttt{sda\_i}: $1\rightarrow0$ while
-     \texttt{scl\_i=1}, forming a Repeated START (Sr).\\[2pt]
-     {\color{black!60}\texttt{sda\_o}: \texttt{1} = release (high-Z)\quad \texttt{0} = open-drain low}};
+  \node[note, anchor=north, text width=10.2cm] at (4.65,0.38)
+    {The Controller samples SDA HIGH, waits until the Target releases SDA, then drives
+     SDA LOW in Open-Drain mode.\\[2pt]
+     {\color{black!60}HIGH: release (High-Z)\quad LOW: Open-Drain Low}};
+
+  % Keep the shortened SCL-high interval centered with safe margins for the labels.
+  \pgfresetboundingbox
+  \path[use as bounding box] (-5.10,-0.90) rectangle (14.40,7.25);
 \end{tikzpicture}
 \endgroup

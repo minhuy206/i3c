@@ -10,7 +10,7 @@ DAT \DatEntryCount{} mục), bổ trợ cho \cref{sec:rtl-csr}. Địa chỉ tí
   \midrule
   \endhead
   \texttt{HC\_CONTROL}    & 0x004 & Điều khiển bộ điều khiển (\texttt{BUS\_ENABLE}, \texttt{IBA\_INCLUDE} bật phát \IThreeCBroadcastAddress{}, \texttt{ABORT}). \\
-  \texttt{RESET\_CONTROL} & 0x010 & Software reset (\texttt{SOFT\_RST}) cho các khối và hàng đợi; chỉ có hiệu lực khi FSM ở \texttt{Idle}. \\
+  \texttt{RESET\_CONTROL} & 0x010 & Yêu cầu reset từ \Host{} (\texttt{SOFT\_RST}) cho các khối và FIFO. Chỉ có hiệu lực khi FSM ở \texttt{Idle}. \\
   \texttt{HC\_STATUS}     & 0x014 & Trạng thái của bộ điều khiển. \\
   \texttt{CMD\_QUEUE}     & 0x080 & Cổng ghi \CommandDescriptor{} vào \CommandFifo{}. \\
   \texttt{RESP}           & 0x084 & Cổng đọc \ResponseDescriptor{} từ \ResponseFifo{}. \\

@@ -1,63 +1,33 @@
-\begin{tikzpicture}[
-		font=\scriptsize,
-		state/.style={ellipse, draw=black!70, fill=blue!4, align=center,
-			minimum width=2.25cm, minimum height=0.86cm, inner sep=1.5pt,
-			font=\scriptsize},
-		idle/.style={state, fill=black!8},
-		stop/.style={state, draw=orange!80!black, fill=orange!10},
-		done/.style={state, draw=green!45!black, fill=green!10, line width=0.9pt},
-		edge/.style={-{Latex[length=1.7mm]}, semithick, draw=black!80},
-		abort/.style={edge, dashed, draw=orange!85!black},
-		label/.style={font=\scriptsize, inner sep=1.2pt, fill=white,
-			align=center, text=black!85},
-		note/.style={font=\scriptsize\itshape, text=black!65, align=left},
-	]
-	% Main protocol path follows the ordering in compute_next_state.
-	\node[idle]  (idle)  at (-8.0, 2.0) {\texttt{Idle}};
-	\node[state] (sendr) at (-4.7, 2.0) {\texttt{SendDAAHeader}};
-	\node[state] (rack)  at (-1.2, 2.0) {\texttt{ReceiveHeaderACK}};
-	\node[state] (recv)  at ( 2.7, 2.0) {\texttt{ReceiveID}};
-	\node[state] (senda) at ( 6.8, 2.0) {\texttt{SendDynamicAddr}};
-	\node[state] (aack)  at ( 6.8,-1.2) {\texttt{ReceiveAddrACK}};
-	\node[stop]  (wstop) at ( 2.7,-1.2) {\texttt{WaitStop}};
-	\node[done]  (done)  at (-1.2,-1.2) {\texttt{Done}};
-
-	\begin{scope}[on background layer]
-		% Reset and normal forward progress.
-		\draw[edge] (-8.0,3.2) node[label, above] {reset} -- (idle);
-		\draw[edge] (idle) -- node[label, above] {\texttt{start\_i}} (sendr);
-		\draw[edge] (sendr) -- node[label, above] {\texttt{bus\_tx}\\\texttt{done\_i}} (rack);
-		\draw[edge] (rack) -- node[label, above] {\texttt{bus\_rx\_done\_i}\\ACK} (recv);
-
-		% Identity arbitration: remain until all 64 bits have been sampled.
-		\draw[edge] (recv.north) to[out=70,in=110,looseness=4.4]
-			node[label, above] {\texttt{bus\_rx\_done\_i}\\$\mathtt{bit\_cnt\_q>0}$} (recv.north);
-		\draw[edge] (recv) -- node[label, below] {\texttt{bus\_rx\_done\_i}\\$\mathtt{bit\_cnt\_q=0}$\\$\mathtt{!stop\_pending\_i}$} (senda);
-
-		% Address assignment and completion.
-		\draw[edge] (senda) -- node[label, right] {\texttt{bus\_tx\_done\_i}} (aack);
-		\draw[edge] (aack) to[out=-145,in=-35]
-			node[label, pos=0.52, below] {\texttt{bus\_rx\_done\_i}\\$\mathtt{!stop\_pending\_i}$\\ACK/NACK chốt \texttt{addr\_valid}} (done);
-
-		% No Target responded to the reserved address byte.
-		\draw[edge] (rack) -- node[label, right] {\texttt{bus\_rx\_done\_i}, NACK\\\texttt{no\_device}=1} (done);
-
-		% A pending external STOP is honored at either protocol boundary.
-		\draw[edge] (recv) to[out=-90,in=90]
-			node[label, right] {\texttt{bus\_rx\_done\_i}\\$\mathtt{bit\_cnt\_q=0}$, \texttt{stop\_pending\_i}} (wstop);
-		\draw[edge] (aack) -- node[label, above] {\texttt{bus\_rx\_done\_i}\\\texttt{stop\_pending\_i}} (wstop);
-		\draw[edge] (wstop) -- node[label, above] {\texttt{bus\_stop}\\\texttt{det\_i}} (done);
-
-		% Done is a one-cycle reporting state.
-		\draw[edge] (done.west) to[out=190,in=-100,looseness=1.15]
-			node[label, pos=0.48, below left] {không điều kiện} (idle.south);
-	\end{scope}
-
-	% Global override in compute_next_state; one annotation avoids seven stacked edges.
-	\node[note, anchor=north west, text width=9.2cm] (override) at (-8.8,-3.7)
-		{\texttt{bus\_stop\_det\_i}: từ mọi trạng thái đang hoạt động
-		đến \texttt{Done}; đặt \texttt{stopped}=1.};
-	\draw[abort] (override.north east) to[out=35,in=-110] (done.south);
-	\node[note, anchor=north east, text width=5.7cm, align=right] at (8.1,-3.7)
-		{Trong \texttt{WaitStop}: \texttt{req\_stop\_o}=1.};
+\begin{tikzpicture}
+	\tikzstyle{every node}=[font=\fontsize{12pt}{14.4pt}\selectfont, align=center]
+	\draw  (18.625,25.625) circle (1.27cm) node[font=\bfseries\fontsize{12pt}{14.4pt}\selectfont, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {Broadcast \\ CCC \\ ENTDAA};
+	\draw[color={rgb,255:red,224; green,122; blue,0}, draw opacity=1, line width=1.5pt] (17.375,30.625) circle (1cm) node[font=\bfseries\fontsize{12pt}{14.4pt}\selectfont, text=black, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {I3C \\ BCAST \\ 7E/W};
+	\draw  (21.875,19.375) circle (1cm) node[inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {BCR \\ Read};
+	\draw  (16.875,22.25) circle (1cm) node[inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {Sr, 7E/R};
+	\draw  (21.125,22.25) circle (1cm) node[inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {Read 48 \\ bit Prov \\ ID};
+	\draw  (17.125,18.875) circle (1cm) node[inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {Dyn Addr \\{} [7:1], \\ Parity};
+	\draw  (19.75,17) circle (1cm) node[inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {DCR \\ Read};
+	\draw[fill={rgb,255:red,189; green,184; blue,184}, fill opacity=1, line width=1.5pt] (18.5,12.625) circle (1cm) node[inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] {STOP};
+	\draw[-{Stealth[scale=1.5]}] (18.14,29.96) arc[start angle=35.28, end angle=-8.29, radius=4.3304]
+		node[pos=0.5, font=\fontsize{8pt}{14.4pt}\selectfont, fill=white,
+		inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm]
+		{Enter Dynamic \\ Address Assign};
+	\draw[{Stealth[scale=1.5]}-] (16.88,23.25) arc[start angle=167.5, end angle=124.04, radius=2.2811];
+	\draw[-{Stealth[scale=1.5]}] (17.625,22.875) arc[start angle=136.51, end angle=43.49, radius=1.8953];
+	\draw[-{Stealth[scale=1.5]}] (21.75,21.5) arc[start angle=71.57, end angle=-18.43, radius=0.9882];
+	\draw[-{Stealth[scale=1.5]}] (21.875,18.375) arc[start angle=2.63, end angle=-86.60, radius=1.1972];
+	\draw[-{Stealth[scale=1.5]}] (18.75,17.125) arc[start angle=-89.04, end angle=-166.71, radius=1.1364];
+	\draw[{Stealth[scale=1.5]}-] (17.625,13.125) arc[start angle=-128.91, end angle=-211.07, radius=6.5677]
+		node[pos=0.55, font=\fontsize{8pt}{9.6pt}\selectfont, fill=white, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm]{NACK};
+	\draw[-{Stealth[scale=1.5]}] (16.5,19.625) arc[start angle=-148.46, end angle=-203.37, radius=1.9028]
+		node[pos=0.34, font=\fontsize{8pt}{9.6pt}\selectfont, fill=white, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm]{ACK};
+	\draw[{Stealth[scale=1.5]}-] (17.5,21.5) arc[start angle=34.54, end angle=-26.37, radius=1.7308]
+		node[pos=0.43, font=\fontsize{8pt}{9.6pt}\selectfont, fill=white, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm]{{\color[RGB]{255,0,0}NACK \#1}};
+	\node[font=\fontsize{8pt}{14.4pt}\selectfont, fill=white, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (19.01,23.71) {Target ACK};
+	\draw[-{Stealth[scale=1.5]}] (17.25,17.875) arc[start angle=39.20, end angle=-3.35, radius=6.1556]
+		node[pos=0.6, font=\fontsize{8pt}{9.6pt}\selectfont, fill=white, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm]{{\color[RGB]{255,0,0}NACK \#2}};
+	\draw[-{Stealth[scale=1.5]}] (20.25,16.125) arc[start angle=4.54, end angle=-37.06, radius=4.3994]
+		node[pos=0.45, font=\fontsize{8pt}{9.6pt}\selectfont, fill=white, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm]{Abort};
+	\draw[-{Stealth[scale=1.5]}] (17.375,33.375) -- (17.375,31.625)
+	node[pos=0, font=\bfseries\fontsize{12pt}{14.4pt}\selectfont, fill=white, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm]{from START};
 \end{tikzpicture}

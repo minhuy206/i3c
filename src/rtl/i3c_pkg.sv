@@ -66,14 +66,14 @@ package i3c_pkg;
     HcAborted                  = 4'b1000,
     I2cDataNackOrI3cBusAborted = 4'b1001,
     NotSupported               = 4'b1010
-  } i3c_resp_err_status_e;
+  } i3c_resp_err_e;
 
   // Response descriptor (See TCRI 7.1.3 Table 11)
   typedef struct packed {
-    i3c_resp_err_status_e err_status;   // [31:28]
-    logic [3:0]           tid;          // [27:24]
-    logic [7:0]           __rsvd23_16;  // [23:16]
-    logic [15:0]          data_length;  // [15:0]
+    i3c_resp_err_e err;          // [31:28]
+    logic [3:0]    tid;          // [27:24]
+    logic [7:0]    __rsvd23_16;  // [23:16]
+    logic [15:0]   data_length;  // [15:0]
   } i3c_response_desc_t;
 
   // Command Descriptor Types

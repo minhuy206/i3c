@@ -45,7 +45,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     i3c_response_desc_t desc;
 
     desc             = '0;
-    desc.err_status  = Success;
+    desc.err         = Success;
     desc.tid         = index[3:0];
     desc.data_length = {case_tag, index[7:0]};
     return desc;
@@ -147,7 +147,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     cmd.wroc = 1'b1;
 
     expected_desc             = '0;
-    expected_desc.err_status  = Success;
+    expected_desc.err         = Success;
     expected_desc.tid         = cmd.tid;
     expected_desc.data_length = cmd.data_length;
 
@@ -186,7 +186,7 @@ class i3c_resp_fifo_full_backpressure_vseq extends i3c_base_vseq;
     randomize_immediate_write_data(cfg.data_length, cmd, random_data);
 
     expected_desc             = '0;
-    expected_desc.err_status  = AddrHeader;
+    expected_desc.err         = AddrHeader;
     expected_desc.tid         = cmd.tid;
     expected_desc.data_length = 16'd0;
 

@@ -2,7 +2,7 @@
 // i3c_scoreboard: Diagnostic formatting
 // -----------------------------------------------------------------------------
 
-function string i3c_scoreboard::resp_status_to_string(i3c_resp_err_status_e status);
+function string i3c_scoreboard::resp_status_to_string(i3c_resp_err_e status);
   string status_name;
 
   status_name = status.name();

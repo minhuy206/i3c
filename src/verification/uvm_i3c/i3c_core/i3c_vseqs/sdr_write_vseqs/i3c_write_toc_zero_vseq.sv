@@ -71,11 +71,11 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     read_rx_words(cfg1.data_length, rx_words);
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, Success, "toc0 write-read write status")
+    `DV_CHECK_EQ(resp_desc.err, Success, "toc0 write-read write status")
     `DV_CHECK_EQ(resp_desc.tid, cfg0.tid, "toc0 write-read write TID")
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, Success, "toc0 write-read read status")
+    `DV_CHECK_EQ(resp_desc.err, Success, "toc0 write-read read status")
     `DV_CHECK_EQ(resp_desc.tid, cfg1.tid, "toc0 write-read read TID")
     `DV_CHECK_EQ(dev_seq0.observed_rstart, 1'b1,
                  "toc0 write-read must transition through repeated START")
@@ -297,7 +297,7 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
 
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, NotSupported,
+    `DV_CHECK_EQ(resp_desc.err, NotSupported,
                  "toc0 unsupported continuation must report NotSupported")
     `DV_CHECK_EQ(resp_desc.tid, first_cmd.tid,
                  "toc0 unsupported continuation response TID mismatch")
@@ -310,7 +310,7 @@ class i3c_write_toc_zero_vseq extends i3c_base_vseq;
     // the retained descriptor is considered later as a new command.
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, Success,
+    `DV_CHECK_EQ(resp_desc.err, Success,
                  "standalone immediate follow-up must succeed")
     `DV_CHECK_EQ(resp_desc.tid, unsupported_cmd.tid,
                  "standalone immediate follow-up response TID mismatch")

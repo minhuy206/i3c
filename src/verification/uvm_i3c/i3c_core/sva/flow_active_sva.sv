@@ -2147,7 +2147,7 @@ module flow_active_sva
                                             !gen_rstart_o &&
                                             !cmd_queue_rready_o);
 
-  ap_toc0_missing_continuation_not_supported_resp :
+  ap_toc0_missing_continuation_success_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_write() &&
@@ -2157,10 +2157,10 @@ module flow_active_sva
                                             !hc_aborted_q &&
                                             !next_cmd_available
                                             |->
-                                            not_supported_resp_matches_current_len())
-  else $error("flow_active_sva: SDRW_003 toc=0 missing continuation response must be NotSupported in %m");
+                                            success_resp_matches_current_len())
+  else $error("flow_active_sva: SDRW_003 toc=0 missing continuation response must be Success in %m");
 
-  cp_toc0_missing_continuation_not_supported_resp :
+  cp_toc0_missing_continuation_success_resp :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                                             state_q == WriteResp &&
                                             sdr_regular_i3c_write() &&
@@ -2169,7 +2169,7 @@ module flow_active_sva
                                             !tx_underflow_q &&
                                             !hc_aborted_q &&
                                             !next_cmd_available &&
-                                            not_supported_resp_matches_current_len());
+                                            success_resp_matches_current_len());
 
   ap_toc0_unsupported_continuation_not_supported_resp :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
