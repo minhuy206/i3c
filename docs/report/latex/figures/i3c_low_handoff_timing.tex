@@ -13,28 +13,28 @@
   ]
 
   % Handoff window: sample at SCL rising edge, release at falling edge.
-  \draw[window] (1.85,0.55) rectangle (7.45,6.65);
+  \draw[window] (1.85,0.75) rectangle (7.45,6.05);
 
   % SCL: ACK/T-bit high phase is bounded by the rising/falling edges.
   \draw[wave]
-    (0,5.35) -- (2.20,5.35) -- (2.20,6.15)
-    -- (7.10,6.15) -- (7.10,5.35) -- (10.40,5.35);
+    (0,4.75) -- (2.20,4.75) -- (2.20,5.55)
+    -- (7.10,5.55) -- (7.10,4.75) -- (10.40,4.75);
 
   % SDA driven by Target: ACK is LOW briefly, then returns HIGH during SCL high.
   \draw[wave]
-    (0,3.85) -- (1.05,3.85) -- (1.05,3.05)
-    -- (4.65,3.05) -- (4.65,3.85) -- (10.40,3.85);
+    (0,3.75) -- (1.05,3.75) -- (1.05,2.95)
+    -- (4.65,2.95) -- (4.65,3.75) -- (10.40,3.75);
 
   % SDA driven by Controller: held LOW through SCL high and released at SCL falling.
   \draw[wave]
-    (0,1.75) -- (2.20,1.75) -- (2.20,0.95)
-    -- (7.10,0.95) -- (7.10,1.75) -- (10.40,1.75);
+    (0,1.95) -- (2.20,1.95) -- (2.20,1.15)
+    -- (7.10,1.15) -- (7.10,1.95) -- (10.40,1.95);
 
-  \node[siglabel] at (-0.15,5.75) {SCL};
-  \node[siglabel] at (-0.15,3.45) {SDA\\driven by Target};
-  \node[siglabel] at (-0.15,1.35) {SDA\\driven by Controller};
+  \node[siglabel] at (-0.15,5.15) {SCL};
+  \node[siglabel] at (-0.15,3.35) {SDA\\driven by Target};
+  \node[siglabel] at (-0.15,1.55) {SDA\\driven by Controller};
 
-  \node[condlabel] at (4.65,6.92) {LOW HANDOFF};
+  \node[condlabel] at (4.65,6.32) {LOW HANDOFF};
   \node[note, anchor=north, text width=10.2cm] at (4.65,0.38)
     {At SCL$\uparrow$, Controller samples LOW from Target and begins driving SDA LOW
      in Open-Drain mode. Target releases SDA after ACK; Controller releases SDA
@@ -43,6 +43,6 @@
 
   % Keep the shortened SCL-high interval centered with safe margins for the labels.
   \pgfresetboundingbox
-  \path[use as bounding box] (-5.10,-1.35) rectangle (14.40,7.25);
+  \path[use as bounding box] (-5.10,-1.35) rectangle (14.40,6.65);
 \end{tikzpicture}
 \endgroup

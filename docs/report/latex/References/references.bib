@@ -1,20 +1,30 @@
 @manual{mipi_i3c_basic,
   title        = {{MIPI I3C Basic Specification, Version 1.1.1}},
   organization = {MIPI Alliance},
-  note         = {Includes Errata 01},
-  year         = {2022}
+  note         = {Includes Errata 01 dated 2022-03-11},
+  date         = {2021-06-09},
+  url          = {https://www.mipi.org/specifications/i3c-sensor-specification}
 }
 
 @manual{mipi_i3c_tcri,
   title        = {{MIPI I3C TCRI Specification, Version 1.0}},
   organization = {MIPI Alliance},
-  year         = {2022}
+  date         = {2022-05-24},
+  url          = {https://www.mipi.org/specifications/i3c-tcri}
+}
+
+@manual{mipi_i3c_hci,
+  title        = {{MIPI I3C Host Controller Interface (HCI) Specification, Version 1.2}},
+  organization = {MIPI Alliance},
+  date         = {2023-02-15},
+  url          = {https://www.mipi.org/specifications/i3c-hci}
 }
 
 @manual{nxp_i2c,
   title        = {{\iic{}-bus Specification and User Manual, UM10204, Rev. 7.0}},
   organization = {NXP Semiconductors},
-  year         = {2021}
+  date         = {2021-10-01},
+  url          = {https://www.nxp.com/docs/en/user-guide/UM10204.pdf}
 }
 
 @manual{ieee1800,
@@ -28,82 +38,33 @@
 @manual{uvm12_ug,
   title        = {{Universal Verification Methodology (UVM) 1.2 User's Guide}},
   organization = {Accellera Systems Initiative},
-  year         = {2015}
+  date         = {2015-10},
+  url          = {https://www.accellera.org/images/downloads/standards/uvm/uvm_users_guide_1.2.pdf}
 }
 
 @manual{uvm12_ref,
   title        = {{Universal Verification Methodology (UVM) 1.2 Class Reference}},
   organization = {Accellera Systems Initiative},
-  year         = {2015}
+  date         = {2014-06},
+  url          = {https://www.accellera.org/images/downloads/standards/uvm/UVM_Class_Reference_Manual_1.2.pdf}
 }
 
 @online{cadence_xcelium,
   author       = {{Cadence Design Systems}},
   title        = {{Xcelium Logic Simulation}},
   url          = {https://www.cadence.com/en_US/home/tools/system-design-and-verification/simulation-and-testbench-verification/xcelium-simulator.html},
-  urldate      = {2026-07-04},
-  year         = {2026}
-}
-
-@book{palnitkar_verilog,
-  author    = {Palnitkar, Samir},
-  title      = {Verilog HDL: A Guide to Digital Design and Synthesis},
-  edition    = {2nd},
-  publisher  = {Prentice Hall},
-  isbn       = {978-0132599702},
-  year       = {2003}
-}
-
-@book{spear_sv,
-  author    = {Spear, Chris and Tumbush, Greg},
-  title      = {SystemVerilog for Verification: A Guide to Learning the Testbench Language Features},
-  edition    = {3rd},
-  publisher  = {Springer},
-  isbn       = {978-1461407140},
-  year       = {2012}
-}
-
-@book{harris_ddca,
-  author    = {Harris, Sarah L. and Harris, David M.},
-  title      = {Digital Design and Computer Architecture},
-  edition    = {2nd},
-  publisher  = {Morgan Kaufmann},
-  isbn       = {978-0123944245},
-  year       = {2012}
+  urldate      = {2026-07-22}
 }
 
 @online{chipsalliance_i3c,
   author       = {{CHIPS Alliance}},
   title        = {{i3c-core}},
   url          = {https://github.com/chipsalliance/i3c-core},
-  urldate      = {2026-06-28},
   year         = {2024}
 }
 
 @online{opentitan_dv,
   author       = {{lowRISC}},
   title        = {{OpenTitan Hardware DV Framework (dv\_macros.svh)}},
-  url          = {https://github.com/lowRISC/opentitan},
-  urldate      = {2026-06-28},
-  year         = {2024}
-}
-
-@inproceedings{chauhan_i3c_uvm,
-  author    = {Chauhan, Rakesh and Kumar, Naresh},
-  title      = {{Design and Verification of MIPI I3C Controller using UVM Methodology}},
-  booktitle  = {Proceedings of the International Conference on Communication and Signal Processing (ICCSP)},
-  publisher  = {IEEE},
-  isbn       = {978-1-6654-0796-4},
-  doi        = {10.1109/ICCSP48568.2020.9182137},
-  year       = {2020}
-}
-
-@article{verma_uvm_fv,
-  author    = {Verma, Shubham and Dabhi, Nishith},
-  title      = {{A Review on Functional Verification of Communication Protocols using UVM}},
-  journal    = {International Journal of Engineering Research \& Technology (IJERT)},
-  volume     = {9},
-  number     = {6},
-  issn       = {2278-0181},
-  year       = {2020}
+  url          = {https://github.com/lowRISC/opentitan/blob/master/hw/dv/sv/dv_utils/dv_macros.svh}
 }

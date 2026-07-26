@@ -4,10 +4,10 @@
 \section{Đánh giá kết quả}
 
 Khóa luận đã hoàn thành các mục tiêu đề ra ở \cref{sec:intro-objective}: thiết kế và kiểm chứng
-một I3C \Controller{} ở mức RTL theo phạm vi yêu cầu tại \cref{sec:req}. Thiết kế tiếp nhận
+một \gls{i3c} \Controller{} ở mức \gls{rtl} theo phạm vi yêu cầu tại \cref{sec:req}. Thiết kế tiếp nhận
 \CommandDescriptor{} từ \Host{}, thực hiện giao dịch trên bus và trả kết quả qua
-\ResponseDescriptor{}. Xuất phát từ \CHIPSAlliance{} \IThreeCCore{}, khóa luận vẽ lại phạm vi
-chức năng cho một \Controller{} độc lập và xây dựng một đường điều khiển RTL gọn hơn
+\ResponseDescriptor{}. Xuất phát từ \CHIPSAlliance{} \IThreeCCore{}, khóa luận xác định lại phạm vi
+chức năng cho một \Controller{} độc lập và xây dựng đường điều khiển \gls{rtl} phù hợp với phạm vi đó
 (\cref{sec:arch-reference}). Phần lớn công sức dành cho môi trường kiểm chứng nhằm chứng minh tính
 đúng của thiết kế.
 
@@ -16,18 +16,18 @@ chức năng cho một \Controller{} độc lập và xây dựng một đườn
 Các kết quả chính của khóa luận gồm:
 
 \begin{itemize}
-    \item Xây dựng kiến trúc RTL phân lớp giữa giao diện thanh ghi, khối xử lý giao thức và lớp vật lý
-    (\cref{ch:architecture}), \linebreak hỗ trợ I3C \PrivateTransfer{}, \ImmediateDataTransfer{}, ENEC,
-    DISEC, \gls{entdaa} và giao dịch với \Target{} \iic{} Fast Mode.
+	\item Xây dựng kiến trúc \gls{rtl} phân lớp giữa giao diện thanh ghi, khối xử lý giao thức và lớp vật lý
+	      (\cref{ch:architecture}), hỗ trợ \gls{i3c} \PrivateTransfer{}, \ImmediateDataTransfer{}, \gls{enec},
+	      \gls{disec}, \gls{entdaa} và giao dịch với \Target{} \gls{iic} Fast Mode.
 
-    \item Xây dựng môi trường kiểm chứng gồm mô hình tham chiếu (\ReferenceModel{}), scoreboard, SVA và
-    \FunctionalCoverage{} để kiểm tra thiết kế ở cả mức giao dịch và mức chu kỳ (\cref{ch:verification}).
+	\item Xây dựng môi trường kiểm chứng gồm mô hình tham chiếu (\ReferenceModel{}), Scoreboard, \gls{sva} và
+	      \FunctionalCoverage{} để kiểm tra thiết kế ở cả mức giao dịch và mức chu kỳ (\cref{ch:verification}).
 
-    \item Hoàn thành 81 test regression với seed cố định (\cref{sec:res-baseline}). Toàn bộ test
-    đều PASS và không có assertion SVA nào fail. Mô hình \FunctionalCoverage{} ba lớp đạt 100\% closure
-    (222/222 bin) và 100\% ở 173/173 diagnostic bin. SVA đạt 100\% closure trên 386 assertion và
-    578 cover property. Các yêu cầu F1--F10 và chỉ tiêu P1--P5 đều có bằng chứng mô phỏng tương ứng
-    tại \cref{sec:res-eval}.
+	\item Hoàn thành 81 test regression với seed cố định (\cref{sec:res-baseline}). Toàn bộ test
+	      đều PASS và không có assertion \gls{sva} nào fail. Mô hình \FunctionalCoverage{} ba lớp đạt 100\% closure
+	      (222/222 bin) và 100\% ở 173/173 diagnostic bin. \Gls{sva} đạt 100\% closure trên 386 assertion và
+	      578 cover property. Các yêu cầu F1--F10 và chỉ tiêu P1--P5 đều có bằng chứng mô phỏng tương ứng
+	      tại \cref{sec:res-eval}.
 \end{itemize}
 
 \subsection{Hạn chế}
@@ -35,16 +35,16 @@ Các kết quả chính của khóa luận gồm:
 Bên cạnh các kết quả đạt được, thiết kế vẫn còn những hạn chế sau:
 
 \begin{itemize}
-    \item Phạm vi giao thức chưa bao gồm \gls{ibi}, Hot-Join, \gls{hdr} và các vai trò
-    \Target{}/Secondary Controller. Mô hình hiện tại chủ yếu kiểm tra một \Controller{}
-    với một \Target{}.
+	\item Phạm vi giao thức chưa bao gồm \gls{ibi}, Hot-Join, \gls{hdr} và các vai trò
+	      \Target{}/Secondary Controller. Mô hình hiện tại chủ yếu kiểm tra một \Controller{}
+	      với một \Target{}.
 
-    \item Không gian kiểm chứng còn giới hạn ở độ sâu \gls{fifo} \TestbenchQueueDepth{} và một seed cố định.
-    Mức closure 100\% chỉ áp dụng cho tập mục tiêu F1--F10 hiện hành. Các tổ hợp tương quan sâu
-    hơn chưa được mô hình hóa thành positive coverage bin.
+	\item Không gian kiểm chứng còn giới hạn ở độ sâu \gls{fifo} \TestbenchQueueDepth{} và một seed cố định.
+	      Mức closure 100\% chỉ áp dụng cho tập mục tiêu F1--F10 hiện hành. Các tổ hợp tương quan sâu
+	      hơn chưa được mô hình hóa thành positive coverage bin.
 
-    \item Thiết kế chưa được tổng hợp, phân tích định thời hoặc triển khai trên FPGA nên chưa có
-    số liệu về tài nguyên, tần số hoạt động và khả năng vận hành trên phần cứng thực.
+	\item Thiết kế chưa được tổng hợp, phân tích định thời hoặc triển khai trên \gls{fpga} nên chưa có
+	      số liệu về tài nguyên, tần số hoạt động và khả năng vận hành trên phần cứng thực.
 \end{itemize}
 
 \section{Định hướng phát triển}
@@ -52,12 +52,12 @@ Bên cạnh các kết quả đạt được, thiết kế vẫn còn những h�
 Từ các hạn chế trên, khóa luận có thể được phát triển theo các hướng sau:
 
 \begin{itemize}
-    \item Bổ sung test, seed và các coverage bin tương quan sâu để mở rộng tập mục tiêu
-    vượt ra ngoài mức closure hiện hành.
+	\item Bổ sung test, seed và các coverage bin tương quan sâu để mở rộng tập mục tiêu
+	      vượt ra ngoài mức closure hiện hành.
 
-    \item Mở rộng độ sâu \gls{fifo}, số lượng \Target{}, đồng thời thực hiện tổng hợp, phân tích định thời và
-    kiểm chứng trên FPGA.
+	\item Mở rộng độ sâu \gls{fifo}, đồng thời thực hiện tổng hợp, phân tích định thời và
+	      kiểm chứng trên \gls{fpga}.
 
-    \item Bổ sung \gls{ibi} và Hot-Join, sau đó mở rộng sang \gls{hdr} và các vai trò
-    \Target{}/Secondary Controller.
+	\item Bổ sung \gls{ibi} và Hot-Join, sau đó mở rộng sang \gls{hdr} và các vai trò
+	      \Target{}/Secondary Controller.
 \end{itemize}

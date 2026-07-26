@@ -19,7 +19,7 @@ mục \gls{dat} và \gls{csr} đã được mô tả tại \cref{app:csr,app:des
   \bottomrule
 \end{longtable}
 
-\section*{Quan sát trên bus (\texttt{i3c\_coverage})}
+\section*{Quan sát trên bus (\IThreeCCoverage{})}
 
 \begin{longtable}{L{4.2cm} L{8.4cm}}
   \toprule
@@ -41,7 +41,7 @@ mục \gls{dat} và \gls{csr} đã được mô tả tại \cref{app:csr,app:des
   \bottomrule
 \end{longtable}
 
-\section*{Tương quan đầu cuối (\texttt{i3c\_correlated\_coverage})}
+\section*{Tương quan đầu cuối (\CorrelatedCoverage{})}
 
 \begin{longtable}{L{4.2cm} L{8.4cm}}
   \toprule
@@ -59,7 +59,7 @@ mục \gls{dat} và \gls{csr} đã được mô tả tại \cref{app:csr,app:des
   \texttt{final\_t\_bit}         & Giá trị \TBit{} cuối trong \PrivateRead{}: \Target{} kết thúc hay còn muốn truyền tiếp. \\
   \texttt{length\_outcome}       & Độ dài đọc thực tế so với yêu cầu: đúng, kết thúc sớm, hoặc vượt quá. \\
   \texttt{nack\_position}        & Vị trí byte bị NACK trong ghi \iic{}: đầu, giữa, cuối, hoặc không có. \\
-  \texttt{short\_boundary}       & Vị trí cắt của giao dịch đọc kết thúc sớm so với ranh giới \gls{dword}. \\
+  \texttt{short\_boundary}       & Vị trí cắt của giao dịch đọc kết thúc sớm so với boundary \gls{dword}. \\
   \texttt{protocol\_direction}   & Tổ hợp giao thức (I3C/\iic{}) và chiều (đọc/ghi). \\
   \texttt{abort\_cause}          & Nguyên nhân giao dịch dừng giữa chừng: \Host{} hủy, reset, hoặc giao thức kết thúc. \\
   \texttt{abort\_point}          & Pha trên bus khi giao dịch dừng (preamble, địa chỉ, TX, RX, CCC, \gls{entdaa}, hoặc \ResponseDescriptor{}). \\

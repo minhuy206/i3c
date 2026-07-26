@@ -17,9 +17,9 @@
 \newcommand{\DefiningByte}{Defining Byte}
 \newcommand{\EventsByte}{Events Byte}
 \newcommand{\CommonCommandCode}{Common Command Code}
-\newcommand{\IThreeCBroadcastAddress}{I3C Broadcast Address}
-\newcommand{\BroadcastCCC}{Broadcast CCC}
-\newcommand{\DirectCCC}{Direct CCC}
+\newcommand{\IThreeCBroadcastAddress}{\acrshort{i3c} Broadcast Address}
+\newcommand{\BroadcastCCC}{Broadcast \acrshort{ccc}}
+\newcommand{\DirectCCC}{Direct \acrshort{ccc}}
 \newcommand{\SingleDataRateMode}{Single Data Rate Mode}
 \newcommand{\HighDataRateMode}{High Data Rate Mode}
 \newcommand{\OpenDrain}{Open-Drain}
@@ -27,12 +27,12 @@
 \newcommand{\RepeatedSTART}{Repeated START}
 \newcommand{\PrivateWrite}{Private Write Transfer}
 \newcommand{\PrivateRead}{Private Read Transfer}
-\newcommand{\PrivateWriteRead}{Private Write and Read Transfers}
+\newcommand{\PrivateWriteRead}{Private Write và Read Transfers}
 \newcommand{\PrivateTransfer}{Private Transfer}
 \newcommand{\BusFreeCondition}{Bus Free Condition}
 \newcommand{\BusAvailableCondition}{Bus Available Condition}
 \newcommand{\BusIdleCondition}{Bus Idle Condition}
-\newcommand{\TBit}{T-Bit}
+\newcommand{\TBit}{\acrshort{tbit}}
 \newcommand{\InBandInterrupt}{In-Band Interrupt}
 \newcommand{\HotJoin}{Hot-Join}
 \newcommand{\ProvisionedID}{Provisioned ID}
@@ -47,12 +47,12 @@
 \newcommand{\ComboTransfer}{Combo Transfer}
 \newcommand{\ResponseDescriptor}{Response Descriptor}
 \newcommand{\CommandResponseDescriptor}{Command/Response Descriptor}
-\newcommand{\CommandFifo}{Command FIFO}
-\newcommand{\ResponseFifo}{Response FIFO}
-\newcommand{\CommandResponseFifo}{Command/Response FIFO}
-\newcommand{\TxFifo}{TX FIFO}
-\newcommand{\RxFifo}{RX FIFO}
-\newcommand{\TxRxFifo}{TX/RX FIFO}
+\newcommand{\CommandFifo}{Command \acrshort{fifo}}
+\newcommand{\ResponseFifo}{Response \acrshort{fifo}}
+\newcommand{\CommandResponseFifo}{Command/Response \acrshort{fifo}}
+\newcommand{\TxFifo}{\acrshort{tx} \acrshort{fifo}}
+\newcommand{\RxFifo}{\acrshort{rx} \acrshort{fifo}}
+\newcommand{\TxRxFifo}{\acrshort{tx}/\acrshort{rx} \acrshort{fifo}}
 \newcommand{\DeviceAddressTable}{Device Address Table}
 \newcommand{\DeviceCharacteristicsTable}{Device Characteristics Table}
 
@@ -63,10 +63,24 @@
 \newcommand{\FunctionalCoverage}{Functional Coverage}
 \newcommand{\VirtualSequence}{Virtual Sequence}
 \newcommand{\VirtualSequencer}{Virtual Sequencer}
+\newcommand{\IThreeCBaseTest}{\acrshort{i3c} Base Test}
+\newcommand{\IThreeCEnvironment}{\acrshort{i3c} Environment}
 \newcommand{\RegisterAgent}{Register Agent}
-\newcommand{\TargetAgent}{I3C Target Agent}
-\newcommand{\TLMAnalysisPort}{TLM Analysis Port}
+\newcommand{\IThreeCAgent}{\acrshort{i3c} Agent}
+\newcommand{\RegisterMonitor}{Register Monitor}
+\newcommand{\IThreeCMonitor}{\acrshort{i3c} Monitor}
+\newcommand{\RegisterDriver}{Register Driver}
+\newcommand{\IThreeCDriver}{\acrshort{i3c} Driver}
+\newcommand{\RegisterSequencer}{Register Sequencer}
+\newcommand{\IThreeCSequencer}{\acrshort{i3c} Sequencer}
+\newcommand{\RegisterInterface}{Register Interface}
+\newcommand{\IThreeCInterface}{\acrshort{i3c} Interface}
+\newcommand{\RegisterCoverage}{Register Coverage}
+\newcommand{\IThreeCCoverage}{\acrshort{i3c} Coverage}
 \newcommand{\CorrelatedCoverage}{Correlated Coverage}
+\newcommand{\TargetAgent}{I3C Target Agent}
+\newcommand{\TLMAnalysisPort}{\acrshort{tlm} Analysis Port}
+\newcommand{\UVMSubscriber}{\acrshort{uvm} Subscriber}
 \newcommand{\Regression}{Regression}
 \newcommand{\Waveform}{Waveform}
 
@@ -121,7 +135,7 @@
 \newcommand{\DriverPhaseCount}{13}
 \newcommand{\SvaCheckerCount}{10}
 \newcommand{\BoundSvaCheckerCount}{9}
-\newcommand{\RunnableVseqCount}{80}
+\newcommand{\RunnableVseqCount}{81}
 \newcommand{\VseqCategoryCount}{10}
 \newcommand{\BusVseqCount}{11}
 \newcommand{\CccVseqCount}{4}
@@ -136,3 +150,6 @@
 \newcommand{\VseqBaseClassCount}{4}
 \newcommand{\VseqHelperCount}{1}
 \newcommand{\TestbenchQueueDepth}{8}
+
+% Cho phép ngắt dòng ở dấu gạch dưới trong tên định danh dài (cột covergroup)
+\newcommand{\brkus}{\def\_{\textunderscore\allowbreak}}
