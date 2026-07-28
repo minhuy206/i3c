@@ -32,9 +32,9 @@ những mục tiêu ngoài thiết kế.
 
 Chiến lược kết hợp hai loại stimulus:
 \begin{itemize}
-	\item Directed stimulus~\cite{uvm12_ug}: dùng kịch bản cố định cho những tình huống cần điều khiển
+	\item Directed stimulus~\cite[Secs.~3.10 and 6.5.2.4]{uvm12_ug}: dùng kịch bản cố định cho những tình huống cần điều khiển
 	      chính xác trình tự thao tác, dữ liệu vào và hành vi của \Target{}.
-	\item Constrained-random stimulus~\cite{uvm12_ug}: mở rộng không gian kiểm chứng trong phạm vi hợp
+	\item Constrained-random stimulus~\cite[Sec.~4.6]{uvm12_ug}: mở rộng không gian kiểm chứng trong phạm vi hợp
 	      lệ --- địa chỉ, độ dài và nội dung \gls{tx}/\gls{rx} data, cùng hành vi của \Target{} trên bus.
 \end{itemize}
 
@@ -45,12 +45,12 @@ cụ thể.
 
 Ba cơ chế kiểm tra được sử dụng song song:
 \begin{itemize}
-	\item Scoreboard~\cite{uvm12_ug}: đối chiếu \CommandDescriptor{} và dữ liệu ghi vào \gls{csr}/\gls{fifo}
+	\item Scoreboard~\cite[Secs.~1.1.4 and 4.9]{uvm12_ug}: đối chiếu \CommandDescriptor{} và dữ liệu ghi vào \gls{csr}/\gls{fifo}
 	      với giao dịch quan sát trên \gls{scl}/\gls{sda}, dữ liệu đọc từ \RxFifo{} và \ResponseDescriptor{} do \gls{rtl} trả về.
-	\item \gls{sva}~\cite{ieee1800}: mô tả và kiểm tra các điều kiện mà \gls{rtl} phải thỏa mãn trong một hoặc
+	\item \gls{sva}~\cite[Clause~16]{ieee1800}: mô tả và kiểm tra các điều kiện mà \gls{rtl} phải thỏa mãn trong một hoặc
 	      nhiều chu kỳ clock, như handshake ready/valid, hành vi của tín hiệu reset ngoài, trạng
 	      thái \gls{fifo}, chuyển tiếp \gls{fsm} và yêu cầu hủy giao dịch.
-	\item \FunctionalCoverage{}~\cite{uvm12_ug}: ghi nhận các tình huống đã được kích hoạt, đặc biệt là các tổ
+	\item \FunctionalCoverage{}~\cite[Sec.~4.10]{uvm12_ug}: ghi nhận các tình huống đã được kích hoạt, đặc biệt là các tổ
 	      hợp giữa loại giao dịch, hành vi của \Target{} và mã lỗi.
 \end{itemize}
 
@@ -63,9 +63,9 @@ tra tính đúng đắn ở hai mức khác nhau, còn \FunctionalCoverage{} cho
 Ở top-level, \Testbench{} tạo clock, tín hiệu reset ngoài, khởi tạo \gls{dut} và hai
 SystemVerilog interface: \RegisterInterface{} và \IThreeCInterface{}. Các virtual
 interface được truyền vào những \gls{uvm} component cần truy cập giao diện thông qua \gls{uvm}
-Configuration Database~\cite{uvm12_ref}. \RegisterInterface{} nối với giao diện \gls{csr}/\gls{fifo}, còn \IThreeCInterface{} nối
+Configuration Database~\cite[Sec.~10.3]{uvm12_ref}. \RegisterInterface{} nối với giao diện \gls{csr}/\gls{fifo}, còn \IThreeCInterface{} nối
 với bus \gls{scl}/\gls{sda} và được \IThreeCAgent{} sử dụng để phản hồi giao dịch trên bus. Một số macro
-trong môi trường kiểm chứng được sử dụng từ dự án OpenTitan~\cite{opentitan_dv}.
+trong môi trường kiểm chứng được kế thừa từ thư viện kiểm chứng của dự án OpenTitan~\cite{opentitan_dv}.
 
 Bus \gls{scl}/\gls{sda} được mô hình hóa bằng \texttt{wire} có \texttt{pullup(weak1)} để phản ánh đặc tính
 \OpenDrain{}. Ở pha \OpenDrain{}, \gls{dut} và \IThreeCAgent{} chỉ chủ động kéo bus xuống mức thấp,
@@ -78,7 +78,7 @@ mức logic ở pha \PushPull{}.
 \IThreeCAgent{}, \VirtualSequencer{}, \Scoreboard{} và \CorrelatedCoverage{}.
 
 Các monitor hoạt động độc lập với driver và không tự kết luận pass/fail. Chúng ghi nhận hoạt động
-trên interface và phát kết quả quan sát qua \TLMAnalysisPort{}~\cite{uvm12_ref}:
+trên interface và phát kết quả quan sát qua \TLMAnalysisPort{}~\cite[Chap.~16]{uvm12_ref}:
 \begin{itemize}
 	\item \RegisterMonitor{} đảm nhiệm phía \gls{csr}/\gls{fifo}.
 	\item \IThreeCMonitor{} đảm nhiệm phía bus \gls{scl}/\gls{sda}.
@@ -103,9 +103,9 @@ Cơ chế mô hình tham chiếu tạo giá trị dự kiến và đối chiếu
 		\coordinate (analysis-start) at ([xshift=9mm]control-label.east);
 		\draw[analysis flow] (analysis-start) -- ++(1.10,0)
 		coordinate (analysis-end);
-		\node[legend text, right=2mm] at (analysis-end) {\acrshort{uvm} \acrshort{tlm} analysis transaction flow};
+		\node[legend text, right=2mm] at (analysis-end) {UVM TLM analysis transaction flow};
 	\end{tikzpicture}
-	\caption{Kiến trúc tổng thể của môi trường kiểm chứng \gls{i3c}.}
+	\caption{Kiến trúc tổng thể của môi trường kiểm chứng I3C.}
 	\label{fig:tb-arch}
 \end{figure}
 
@@ -198,7 +198,7 @@ cp_sdr_write_tbit_parity:
 \section{Chiến lược \FunctionalCoverage{}}
 \label{sec:ver-cov}
 
-\FunctionalCoverage{} được tổ chức thành ba component tương ứng với ba nguồn quan sát~\cite{uvm12_ug}:
+\FunctionalCoverage{} được tổ chức thành ba component tương ứng với ba nguồn quan sát, theo mô hình coverage dựa trên observer của UVM~\cite[Sec.~4.10]{uvm12_ug}:
 \RegisterCoverage{} cho các \CommandDescriptor{} và \gls{tx} data \Host{} ghi vào \gls{csr}/\gls{fifo}, \IThreeCCoverage{} cho
 giao dịch tái tạo trên bus, và \CorrelatedCoverage{} dùng cross coverage cho các quan hệ
 xuyên suốt chỉ xác định được sau khi \Scoreboard{} ghép dữ liệu hai phía.
@@ -239,7 +239,7 @@ coverage chính cũng được xếp vào nhóm diagnostic để tránh tính tr
 tình huống giao thức thực
 sự cấm. Tính năng ngoài phạm vi không bị đánh dấu illegal chỉ vì \gls{rtl} không hỗ trợ.
 
-Về hiện thực, mỗi component là một \UVMSubscriber{}~\cite{uvm12_ref}. Ba component lần lượt nhận dữ liệu đầu vào qua
+Về hiện thực, mỗi component là một \UVMSubscriber{}~\cite[Sec.~17.10]{uvm12_ref}. Ba component lần lượt nhận dữ liệu đầu vào qua
 \TLMAnalysisPort{} của \RegisterMonitor{}, \IThreeCMonitor{} và
 \Scoreboard{}. Covergroup được sample theo sự kiện giao dịch chứ không theo clock:
 một mẫu chỉ được ghi khi một truy cập thanh ghi hoặc giao dịch bus hoàn tất, hoặc khi kết quả
@@ -288,7 +288,7 @@ thuần túy lẫn các kịch bản giao dịch đầy đủ.
 \section{\IThreeCAgent{}}
 \label{sec:ver-i3cagent}
 
-\IThreeCAgent{} được phát triển từ agent của \CHIPSAlliance{} \IThreeCCore{}~\cite{chipsalliance_i3c}, với phần lớn logic được viết lại cho phạm vi của khóa luận. Agent đóng vai một \Target{} có thể lập trình trên bus. \IThreeCDriver{} phản hồi
+\IThreeCAgent{} được phát triển từ agent của dự án \CHIPSAlliance{} \IThreeCCore{}~\cite{chipsalliance_i3c}, với phần lớn logic được viết lại cho phạm vi của khóa luận. Agent đóng vai một \Target{} có thể lập trình trên bus. \IThreeCDriver{} phản hồi
 \AddressHeader{}, phát \gls{ack} theo cấu hình, nhận \gls{tx} data, phát \gls{rx} data và tham
 gia \gls{entdaa}. \IThreeCMonitor{} tái tạo giao dịch từ tín hiệu \gls{sda}/\gls{scl} độc lập với \IThreeCDriver{}, nên phát hiện
 được cả sai lệch do chính \IThreeCDriver{} tạo ra.

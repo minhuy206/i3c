@@ -12,14 +12,9 @@ Chương này trình bày cách các yêu cầu F1--F10 và P1--P5 tại \cref{s
 
 Thiết kế được tổ chức thành ba lớp. Lớp giao diện thanh ghi tiếp nhận cấu hình, \CommandDescriptor{} và \gls{tx} data từ \Host{}, đồng thời cung cấp \acrshort{rx} data cùng \ResponseDescriptor{} sau giao dịch. Lớp xử lý giao thức kiểm tra \CommandDescriptor{}, đọc \gls{dat}, chọn loại giao dịch và điều phối các pha trên bus. Lớp vật lý đồng bộ \gls{sda}/\gls{scl} ở chiều vào và chuyển giá trị cùng chế độ lái do lớp xử lý giao thức lựa chọn ra bus.
 
-Sự phân lớp này tách giao thức thanh ghi khỏi ngữ nghĩa giao dịch và tách quyết định giao thức khỏi lớp vật lý. Thông qua các \gls{fifo}, lớp giao diện thanh ghi đưa \CommandDescriptor{} và \gls{tx} data đến lớp xử lý giao thức, đồng thời tiếp nhận \acrshort{rx} data và \ResponseDescriptor{} theo chiều ngược lại. Các \gls{csr} cung cấp tham số thời gian, trạng thái enable và yêu cầu điều khiển cho thiết kế. \gls{dat} có một cổng ghi từ \Host{} và một cổng đọc phần cứng được sử dụng chung bởi \gls{i3c} Transaction Processor và \acrshort{daa} Processor. Kiến trúc và các kết nối chính được minh họa tại \cref{fig:arch-block}.
+Sự phân lớp này tách giao thức thanh ghi khỏi ngữ nghĩa giao dịch và tách quyết định giao thức khỏi lớp vật lý. Thông qua các \gls{fifo}, lớp giao diện thanh ghi đưa \CommandDescriptor{} và \gls{tx} data đến lớp xử lý giao thức, đồng thời tiếp nhận \acrshort{rx} data và \ResponseDescriptor{} theo chiều ngược lại. Các \gls{csr} cung cấp tham số thời gian, trạng thái enable và yêu cầu điều khiển cho thiết kế. \gls{dat} có một cổng ghi từ \Host{} và một cổng đọc phần cứng được sử dụng chung bởi \gls{i3c} Transaction Processor và \acrshort{daa} Processor.
 
-\begin{figure}[!htbp]
-	\centering
-	\includegraphics[max width=\textwidth, max totalheight=0.6\textheight]{figures/i3c_controller_top_architecture.pdf}
-	\caption{Kiến trúc phân lớp và sơ đồ khối top-level.}
-	\label{fig:arch-block}
-\end{figure}
+\input{figures/i3c_controller_top_architecture_tikz.tex}
 
 \subsection{Ánh xạ yêu cầu sang cơ chế hiện thực}
 \label{sec:arch-flow}
@@ -37,7 +32,7 @@ Sự phân lớp này tách giao thức thanh ghi khỏi ngữ nghĩa giao dịc
 		F1--F2           & \gls{i3c} \PrivateWriteRead{} & Bus TX/RX Handler, xử lý \TBit{} và handoff/takeover                                            \\
 		F3               & \ImmediateDataTransfer{}      & Sử dụng bốn byte dữ liệu trong \CommandDescriptor{}.                                              \\
 		F4               & \gls{enec}/\gls{disec}        & Tái sử dụng Bus TX/RX Handler cùng \gls{scl} Generator cho Broadcast/Direct \gls{ccc}.            \\
-		F5               & \gls{entdaa}                  & \gls{fsm} \gls{entdaa}, cổng giao tiếp \gls{dat} và trình tự cấp phát địa chỉ.                    \\
+		F5               & \acrfull{daa}                 & \gls{daa} Processor thực hiện \gls{entdaa}, truy cập \gls{dat} và điều phối trình tự cấp phát địa chỉ. \\
 		F6               & \gls{iic} Fast Mode           & Bộ tham số thời gian \gls{iic}, chế độ lái \OpenDrain{} và xử lý \gls{ack}.                       \\
 		F7               & \gls{fifo} và \gls{dat}       & \CommandFifo{}, \TxFifo{}, \RxFifo{}, \ResponseFifo{} và \gls{dat}.                               \\
 		F8               & \ResponseDescriptor{}         & Đếm số byte đã xử lý, trạng thái lỗi và logic tạo \ResponseDescriptor{}.                          \\
@@ -60,7 +55,7 @@ Thiết kế tham khảo cách tổ chức module và mô hình Descriptor của
 \subsection{\texorpdfstring{\gls{fifo}, \gls{dat}}{FIFO, DAT} và Descriptor}
 \label{sec:arch-desc}
 
-Host Queue Handler tách quá trình chuẩn bị lệnh khỏi quá trình thực thi trên bus bằng bốn \gls{fifo}, phỏng theo mô hình hàng đợi \gls{pio} của \gls{hci}~\cite{mipi_i3c_hci} và thu gọn cho phạm vi khóa luận. \CommandFifo{} lưu \CommandDescriptor{}, \TxFifo{} lưu dữ liệu cho giao dịch ghi, \RxFifo{} nhận dữ liệu từ giao dịch đọc và \ResponseFifo{} lưu kết quả giao dịch. \gls{dat} gồm \DatEntryCount{} mục, chứa địa chỉ tĩnh/động cùng cờ phân loại \gls{i3c}/\gls{iic} của từng \Target{} và được truy cập bằng chỉ số \Target{} trong \CommandDescriptor{}.
+HCI Queues tách quá trình chuẩn bị lệnh khỏi quá trình thực thi trên bus bằng bốn \gls{fifo}, phỏng theo mô hình hàng đợi \gls{pio} của \gls{hci}~\cite[Secs.~6.5 and 7.5]{mipi_i3c_hci} và thu gọn cho phạm vi khóa luận. \CommandFifo{} lưu \CommandDescriptor{}, \TxFifo{} lưu dữ liệu cho giao dịch ghi, \RxFifo{} nhận dữ liệu từ giao dịch đọc và \ResponseFifo{} lưu kết quả giao dịch. \gls{dat} gồm \DatEntryCount{} mục, chứa địa chỉ tĩnh/động cùng cờ phân loại \gls{i3c}/\gls{iic} của từng \Target{} và được truy cập bằng chỉ số \Target{} trong \CommandDescriptor{}.
 
 \Host{} tạo một \CommandDescriptor{} bằng hai lần ghi \RegisterDataWidth{}-bit liên tiếp. \RegularTransfer{} lấy hoặc trả dữ liệu theo \gls{dword} qua \TxRxFifo{}, còn \ImmediateDataTransfer{} lấy tối đa bốn byte trực tiếp từ \CommandDescriptor{}. Các byte trong một \gls{dword} được xử lý theo thứ tự little-endian ở phía \gls{fifo}, sau đó được truyền tuần tự theo thứ tự \gls{msb}-first trên bus. \Cref{tab:desc-summary} tóm tắt vai trò của các cấu trúc. Bitfield đầy đủ được trình bày tại \cref{app:desc}.
 
@@ -84,8 +79,8 @@ Host Queue Handler tách quá trình chuẩn bị lệnh khỏi quá trình th�
 \label{sec:rtl-csr}
 \label{sec:rtl-queues}
 
-\gls{csr} Request Handler cho \Host{} truy cập các thanh ghi cấu hình và \gls{dat}, còn Host Queue Handler
-xử lý truy cập bốn \gls{fifo} qua handshake ready/valid. Mỗi yêu cầu đọc hoặc ghi giữ nguyên cho
+\textit{Control and Status Registers} cho \Host{} truy cập các thanh ghi điều khiển, trạng thái và \gls{dat}, còn \textit{HCI Queues}
+lưu trữ dữ liệu của bốn \gls{fifo} qua handshake ready/valid. Mỗi yêu cầu đọc hoặc ghi giữ nguyên cho
 đến khi phần cứng báo hoàn tất. Đối với \CommandFifo{} và \TxFifo{}, dữ liệu chỉ được ghi khi valid
 và ready cùng tích cực. Nếu \gls{fifo} đầy, thanh ghi đệm giữ dữ liệu đang chờ và tạo backpressure
 thay vì ghi đè dữ liệu chưa được xử lý. Ở chiều ngược lại, mỗi mục của \RxFifo{} hoặc
@@ -96,7 +91,7 @@ thay vì ghi đè dữ liệu chưa được xử lý. Ở chiều ngược lạ
 \begin{figure}[!htbp]
 	\centering
 	\input{figures/csr_queue_handshake.tex}
-	\caption{Waveform handshake ready/valid trên đường ghi từ Host Queue Handler đến \CommandFifo{} hoặc \TxFifo{}: (a) \gls{fifo} còn chỗ và (b) \gls{fifo} đầy (backpressure).}
+	\caption{Waveform handshake ready/valid trên đường ghi từ \textit{Control and Status Registers} đến \CommandFifo{} hoặc \TxFifo{} trong \textit{HCI Queues}: (a) FIFO còn chỗ và (b) FIFO đầy (backpressure).}
 	\label{fig:csr-queue-handshake}
 \end{figure}
 
@@ -166,12 +161,12 @@ giao dịch bắt đầu và trả về \ResponseDescriptor{} với lỗi \textt
 
 \CommandDescriptor{} hợp lệ sử dụng chỉ số \Target{} để đọc \gls{dat}. Từ thông tin đọc được trong \gls{dat} và \CommandDescriptor{}, \gls{i3c} Transaction Processor chọn loại giao dịch \gls{i3c} \PrivateWrite{}, \gls{i3c} \PrivateRead{}, \ImmediateDataTransfer{}, \gls{ccc}, \gls{entdaa} hoặc \gls{iic}. Nếu cấu hình yêu cầu phát \IThreeCBroadcastAddress{} (\texttt{0x7e}) trước một giao dịch \gls{i3c} mới, \gls{i3c} Transaction Processor phát địa chỉ này và \RepeatedSTART{} trước Address Header của \Target{}.
 
-\Cref{fig:primary-controller-flow} minh họa trình tự trạng thái trên bus cho từng luồng đã chọn, từ khi bắt đầu giao dịch đến khi kết thúc bằng STOP~\cite{mipi_i3c_basic}.
+\Cref{fig:primary-controller-flow} minh họa trình tự trạng thái trên bus cho từng luồng đã chọn, từ khi bắt đầu giao dịch đến khi kết thúc bằng STOP~\cite[Annex~C, Fig.~168]{mipi_i3c_basic}.
 
 \begin{figure}[!htbp]
 	\centering
 	\resizebox{\textwidth}{!}{\input{figures/i3c_primary_controller_fsm.tex}}
-	\caption{Sơ đồ phân luồng giao dịch của \gls{i3c} Transaction Processor.}
+	\caption[Sơ đồ phân luồng giao dịch của I3C Transaction Processor]{Sơ đồ phân luồng giao dịch của I3C Transaction Processor, được rút gọn và ánh xạ lại theo phạm vi thiết kế từ MIPI I3C Basic, Fig.~168~\cite{mipi_i3c_basic}.}
 	\label{fig:primary-controller-flow}
 \end{figure}
 
@@ -230,12 +225,12 @@ không được hiện thực trong thiết kế này.
 \cref{fig:entdaa}. \gls{fsm} điều phối quản lý việc cấp địa chỉ lần lượt cho nhiều \Target{} và kiểm soát
 vòng lặp cấp phát. \gls{fsm} thực thi xử lý từng lượt, gồm phát Address Header, nhận chuỗi định danh
 64-bit \gls{pid}/\gls{bcr}/\gls{dcr}, phát \DynamicAddress{} kèm odd parity và nhận ACK từ
-\Target{}~\cite{mipi_i3c_basic}.
+\Target{}~\cite[Secs.~5.1.4.2 and 5.1.9.3.4]{mipi_i3c_basic}.
 
 \begin{figure}[!htbp]
 	\centering
 	\resizebox{0.3\textwidth}{!}{\input{figures/entdaa_fsm.tex}}
-	\caption{Sơ đồ \acrshort{daa} Processor thực hiện quy trình \gls{entdaa}.}
+	\caption[Sơ đồ \gls{daa} Processor thực hiện ENTDAA]{Sơ đồ \gls{daa} Processor thực hiện quy trình ENTDAA, được rút gọn theo MIPI I3C Basic, Fig.~170~\cite{mipi_i3c_basic}.}
 	\label{fig:entdaa-flow}
 \end{figure}
 
@@ -293,7 +288,7 @@ nhờ đó phản hồi không bị mất khi \Host{} chưa kịp đọc.
 
 Lỗi được chia thành hai nhóm. \gls{i3c} Transaction Processor phát hiện lỗi \CommandDescriptor{} trước
 START nên không tạo hoạt động trên \gls{sda}/\gls{scl}. Các lỗi phát sinh trong giao dịch được khối này ghi
-nhận trước khi tạo phản hồi. Các mã lỗi tuân theo quy ước \gls{mipi} \gls{tcri}~\cite{mipi_i3c_tcri} và được
+nhận trước khi tạo phản hồi. Các mã lỗi tuân theo quy ước \gls{mipi} \gls{tcri}~\cite[Sec.~6.4.1, Table~1]{mipi_i3c_tcri} và được
 liệt kê tại \cref{tab:err-status}.
 
 \begin{table}[!htbp]

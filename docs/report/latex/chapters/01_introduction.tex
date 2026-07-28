@@ -13,16 +13,16 @@ tích hợp nhiều thiết bị cùng loại cần cấu hình địa chỉ th�
 chuẩn để phát hiện và cấp phát địa chỉ khi vận hành~\cite{nxp_i2c,mipi_i3c_basic}.
 
 \MIPIIThreeCBasic{} được xây dựng để duy trì cấu trúc \gls{sda}/\gls{scl} và khả năng tích hợp ngược với \Target{}
-\gls{iic}, đồng thời bổ sung chế độ \gls{sdr}, sử dụng \OpenDrain{} và \PushPull{} theo từng pha, cùng \gls{daa} và \gls{ccc}. Trong \gls{sdr}, tần số \gls{scl} có thể đạt 12,5~MHz~\cite{mipi_i3c_basic}. Do đó, việc hiện thực
+\gls{iic}, đồng thời bổ sung chế độ \gls{sdr}, sử dụng \OpenDrain{} và \PushPull{} theo từng pha, cùng \gls{daa} và \gls{ccc}. Trong \gls{sdr}, tần số \gls{scl} có thể đạt 12,5~MHz~\cite[Secs.~2 and 5.1.2]{mipi_i3c_basic}. Do đó, việc hiện thực
 một \gls{i3c} \Controller{} không chỉ tuần tự hóa dữ liệu. Thiết kế còn phải điều phối pha \OpenDrain{} và \PushPull{}, tạo đúng START, \RepeatedSTART{} và STOP, quản lý Descriptor và \gls{fifo}, xử lý lỗi,
 đồng thời cung cấp giao diện thanh ghi cho phần mềm truy cập.
 
-Khóa luận giải quyết bài toán trên ở mức \gls{ip} số có thể tổng hợp. Điểm xuất phát là dự án mã nguồn mở \CHIPSAlliance{} \IThreeCCore{}, được tích hợp trong hệ sinh thái \Caliptra{}~\cite{chipsalliance_i3c}.
+Khóa luận giải quyết bài toán trên ở mức \gls{ip} số có thể tổng hợp. Điểm xuất phát là dự án mã nguồn mở \CHIPSAlliance{} \IThreeCCore{}, được phát triển cho hệ sinh thái \Caliptra{}~\cite{chipsalliance_i3c}.
 Thiết kế tham chiếu cung cấp cấu trúc giao thức và \gls{hci}, nhưng phạm vi tích hợp của dự án lớn
 hơn nhu cầu của một \Controller{} độc lập. Vì vậy, khóa luận lựa chọn lại phạm vi chức năng, xây dựng
 đường điều khiển \gls{rtl} gọn hơn và hoàn thiện luồng phát lệnh cho tập tính năng mục tiêu. Trong môi trường \gls{uvm}, thiết kế tham chiếu cung cấp \gls{i3c} bus agent nhưng chưa kèm scoreboard và thư viện kịch bản hoàn chỉnh cho \gls{dut}. Khóa luận dựa trên agent này, viết lại phần lớn và phát triển thành một môi trường \gls{uvm} tự kiểm tra đầy đủ. Việc kiểm chứng được
-thực hiện bằng \SystemVerilog{}, \UVMVersion{} và \CadenceXcelium{}. \SimVision{} được dùng cho waveform
-debug~\cite{ieee1800,uvm12_ug,cadence_xcelium}.
+thực hiện bằng \SystemVerilog{}~\cite{ieee1800}, \UVMVersion{}~\cite{uvm12_ug} và
+\CadenceXcelium{}~\cite{cadence_xcelium}. \SimVision{} được dùng cho waveform debug.
 
 Kết quả được đánh giá bằng ba cơ chế kiểm tra. Thứ nhất, \Scoreboard{} đối chiếu giao dịch giữa giao diện phần
 mềm và bus. Thứ hai, \gls{sva} kiểm tra các thuộc tính cục bộ của \gls{rtl}. Thứ ba, \FunctionalCoverage{} xác định độ bao phủ các tình huống đã mô hình hóa. Phương pháp thu thập số liệu và kết quả kiểm chứng được trình bày tại
@@ -45,7 +45,7 @@ Thiết kế phải cung cấp một luồng xử lý hoàn chỉnh từ \Comman
 	\item Đánh giá thiết kế bằng kết quả regression, \FunctionalCoverage{} và \gls{sva}, đồng thời bảo đảm khả năng tái lập của kết quả.
 \end{itemize}
 
-Phạm vi của đề tài là một \gls{i3c} \Controller{} hỗ trợ \gls{i3c} Private Write và Read Transfers trong \gls{sdr} Mode, các \gls{ccc} được chọn, \gls{entdaa} và hỗ trợ
+Phạm vi của đề tài là một \gls{i3c} \Controller{} hỗ trợ \gls{i3c} \PrivateWriteRead{} trong \gls{sdr} Mode, các \gls{ccc} được chọn, \gls{entdaa} và hỗ trợ
 tương thích \gls{iic} \gls{fm}. \gls{hdr}, \gls{ibi}, \HotJoin{}, \SecondaryController{}, vai trò
 \Target{} và kiểm chứng trên \gls{fpga} không nằm trong phạm vi triển khai. Các yêu cầu chi tiết, tiêu chí đánh giá
 và tiêu chí kiểm chứng được trình bày tại
