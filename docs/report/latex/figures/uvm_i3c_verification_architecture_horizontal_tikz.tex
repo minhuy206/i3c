@@ -1,0 +1,96 @@
+% Alternative horizontal UVM verification architecture.
+% DUT and physical interfaces are outside the UVM class hierarchy.
+\resizebox{\textwidth}{!}{%
+	\begin{tikzpicture}
+		\tikzstyle{every node}=[font=\fontsize{12pt}{15.6pt}\selectfont]
+
+		% SystemVerilog testbench top and UVM class hierarchy
+		\draw (-6.5,34) rectangle (30.5,19);
+		\node[anchor=west, font=\fontsize{12pt}{15.6pt}\selectfont\bfseries,
+			inner sep=0pt] at (-6.1,33.55) {Testbench Top};
+
+		\draw (-5.5,33) rectangle (20.25,20);
+		\node[anchor=west, font=\fontsize{12pt}{15.6pt}\selectfont\bfseries,
+			inner sep=0pt] at (-5.1,32.55) {I3C Base Test};
+
+		\draw (1.5,32) rectangle (19.25,21);
+		\node[anchor=west, font=\fontsize{12pt}{15.6pt}\selectfont\bfseries,
+			inner sep=0pt] at (1.9,31.55) {I3C Environment};
+
+		% Virtual sequences remain owned and started by the base test
+		\draw[fill=white] (-4.5,26) -- (-1.25,26) --
+			(-0.75,28.5) -- (-4,28.5) -- cycle;
+		\draw[fill=white] (-3.875,25.375) -- (-0.625,25.375) --
+			(-0.125,27.875) -- (-3.375,27.875) -- cycle;
+		\draw[fill=white] (-3.25,24.75) -- (0,24.75) --
+			(0.5,27.25) -- (-2.75,27.25) -- cycle;
+		\node[align=center, font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+			at (-1.375,26) {Virtual \\ Sequences};
+
+		% UVM environment components
+		\draw (2.5,27.75) rectangle (6.25,25.25);
+		\node[anchor=center, align=center,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+			at (4.375,26.5) {Virtual \\ Sequencer};
+
+		\draw (8.5,31) rectangle (12.25,28.5);
+		\node[anchor=center, align=center] at (10.375,29.75)
+			{{\bfseries Register Agent}\\[-1pt]
+			 {\fontsize{8pt}{10pt}\selectfont Sequencer \textperiodcentered{} Driver}\\[-1pt]
+			 {\fontsize{8pt}{10pt}\selectfont Monitor \textperiodcentered{} Coverage}};
+
+		\draw (8.5,24.5) rectangle (12.25,22);
+		\node[anchor=center, align=center] at (10.375,23.25)
+			{{\bfseries I3C Agent}\\[-1pt]
+			 {\fontsize{8pt}{10pt}\selectfont Sequencer \textperiodcentered{} Driver}\\[-1pt]
+			 {\fontsize{8pt}{10pt}\selectfont Monitor \textperiodcentered{} Coverage}};
+
+		\draw (8.5,27.75) rectangle (12.25,25.25);
+		\node[anchor=center, align=center,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+			at (10.375,26.5) {Scoreboard};
+
+		\draw (14.5,27.75) rectangle (18.25,25.25);
+		\node[anchor=center, align=center,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+			at (16.375,26.5) {Correlated \\ Coverage};
+
+		% Sequence control and TLM analysis flows
+		\draw[-{Stealth[scale=1.5]}] (0.35,26.5) -- (2.5,26.5);
+		\draw (6.25,26.5) -- (7.25,26.5);
+		\draw (7.25,29.75) -- (7.25,23.25);
+		\draw[-{Stealth[scale=1.5]}] (7.25,29.75) -- (8.5,29.75);
+		\draw[-{Stealth[scale=1.5]}] (7.25,23.25) -- (8.5,23.25);
+		\draw[dashed, -{Stealth[scale=1.5]}] (10.375,28.5) -- (10.375,27.75);
+		\draw[dashed, -{Stealth[scale=1.5]}] (10.375,24.5) -- (10.375,25.25);
+		\draw[dashed, -{Stealth[scale=1.5]}] (12.25,26.5) -- (14.5,26.5);
+
+		% Physical interfaces are instances in the HDL testbench top
+		\draw (21.25,31) rectangle (25,28.5);
+		\node[anchor=center, align=center,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+			at (23.125,29.75) {Register \\ Interface};
+
+		\draw (21.25,24.5) rectangle (25,22);
+		\node[anchor=center, align=center,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+			at (23.125,23.25) {I3C \\ Interface};
+
+		% Agent access through virtual-interface handles
+		\draw[{Stealth[scale=1.5]}-{Stealth[scale=1.5]}]
+			(12.25,29.75) -- (21.25,29.75);
+
+		\draw[{Stealth[scale=1.5]}-{Stealth[scale=1.5]}]
+			(12.25,23.25) -- (21.25,23.25);
+
+		% DUT is an HDL module alongside the physical interfaces
+		\draw (27,31) rectangle (29.5,22);
+		\node[anchor=center, align=center,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+			at (28.25,26.5) {DUT};
+		\draw[{Stealth[scale=1.5]}-{Stealth[scale=1.5]}]
+			(25,29.75) -- (27,29.75);
+		\draw[{Stealth[scale=1.5]}-{Stealth[scale=1.5]}]
+			(25,23.25) -- (27,23.25);
+	\end{tikzpicture}%
+}

@@ -89,7 +89,7 @@ Cơ chế mô hình tham chiếu tạo giá trị dự kiến và đối chiếu
 
 \begin{figure}[!htbp]
 	\centering
-	\includegraphics[max width=\textwidth, max totalheight=0.68\textheight]{figures/uvm_i3c_verification_architecture_uvm.pdf}
+	\input{figures/uvm_i3c_verification_architecture_horizontal_tikz.tex}
 	\par\vspace{0.45em}
 	\begin{tikzpicture}[
 			legend text/.style={font=\footnotesize, anchor=west},
@@ -103,7 +103,8 @@ Cơ chế mô hình tham chiếu tạo giá trị dự kiến và đối chiếu
 		\coordinate (analysis-start) at ([xshift=9mm]control-label.east);
 		\draw[analysis flow] (analysis-start) -- ++(1.10,0)
 		coordinate (analysis-end);
-		\node[legend text, right=2mm] at (analysis-end) {UVM TLM analysis transaction flow};
+		\node[legend text, right=2mm] at (analysis-end)
+		{UVM TLM analysis transaction flow};
 	\end{tikzpicture}
 	\caption{Kiến trúc tổng thể của môi trường kiểm chứng I3C.}
 	\label{fig:tb-arch}
@@ -120,8 +121,8 @@ Cơ chế mô hình tham chiếu tạo giá trị dự kiến và đối chiếu
 
 \begin{figure}[!htbp]
 	\centering
-	\includegraphics[max width=\textwidth, max totalheight=0.75\textheight]{figures/i3c_scoreboard_flow.pdf}
-	\caption{Quy trình hoạt động của \Scoreboard{}.}
+	\input{figures/i3c_scoreboard_flow_tikz.tex}
+	\caption{Luồng dữ liệu và cơ chế đối chiếu của \Scoreboard{}.}
 	\label{fig:sb-flow}
 \end{figure}
 

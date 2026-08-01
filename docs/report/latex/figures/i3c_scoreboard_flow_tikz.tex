@@ -1,0 +1,86 @@
+\resizebox{0.8\textwidth}{!}{%
+\begin{tikzpicture}
+	\tikzstyle{every node}=[font=\fontsize{12pt}{15.6pt}\selectfont]
+
+	% Scoreboard boundary
+	\draw[fill={rgb,255:red,250; green,250; blue,250}, fill opacity=0.03]
+		(0,18.75) rectangle (13.75,12.5);
+	\node[anchor=west, font=\fontsize{12pt}{15.6pt}\selectfont\bfseries]
+		at (0.25,18.35) {Scoreboard};
+
+	% Monitor inputs
+	\draw (-5,18.75) rectangle (-1.25,16.25);
+		\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm,
+			rounded corners=0.020cm,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries] at (-3.125,17.5)
+			{Register \\ Monitor};
+
+	\draw (-5,15) rectangle (-1.25,12.5);
+		\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm,
+			rounded corners=0.020cm,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries] at (-3.125,13.75)
+			{I3C Monitor};
+
+	% Internal scoreboard blocks
+	\draw[fill={rgb,255:red,250; green,250; blue,250}, fill opacity=0.03]
+		(1.25,16.875) rectangle (5,14.375);
+		\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm,
+			rounded corners=0.020cm,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries] at (3.125,15.625)
+			{Reference \\ Model};
+
+	\draw[fill={rgb,255:red,250; green,250; blue,250}, fill opacity=0.03]
+		(7.5,16.875) rectangle (11.25,14.375);
+		\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm,
+			rounded corners=0.020cm,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries] at (9.375,15.625)
+			{Comparator};
+
+	% Register-side model input
+		\draw[dashed] (-1.25,17.5) -- (3.125,17.5)
+			node[midway, above=1pt, align=center, fill=white, inner sep=1pt,
+				font=\fontsize{7pt}{8.5pt}\selectfont]
+			{Configuration / Command / TX Data};
+		\draw[dashed, -{Stealth[scale=1.5]}] (3.125,17.5) -- (3.125,16.875);
+
+		% Register-side observed result
+		\draw[dashed] (-3.125,20) -- (-3.125,18.75);
+		\draw[dashed] (-3.125,20) -- (9.375,20)
+			node[midway, above=1pt, fill=white, inner sep=1pt,
+				font=\fontsize{7pt}{8.5pt}\selectfont]
+			{Observed RX Data / Response};
+		\draw[dashed, -{Stealth[scale=1.5]}] (9.375,20) -- (9.375,16.875);
+
+		% I3C bus observation
+		\draw[dashed] (-3.125,12.5) -- (-3.125,11.25);
+		\draw[dashed] (-3.125,11.25) -- (8.75,11.25)
+			node[midway, below=1pt, fill=white, inner sep=1pt,
+				font=\fontsize{7pt}{8.5pt}\selectfont]
+			{Observed Bus Transaction};
+		\draw[dashed, -{Stealth[scale=1.5]}]
+			(8.75,11.25) .. controls (8.75,12.75) and (8.75,12.625) .. (8.75,14.375);
+
+		% Expected result and comparison outcome
+		\draw[-{Stealth[scale=1.5]}] (5,15.625) -- (7.5,15.625)
+		node[midway, above=1pt, fill=white, inner sep=1pt,
+			font=\fontsize{7pt}{8.5pt}\selectfont]
+		{Expected Results};
+		\draw[-{Stealth[scale=1.5]}] (11.25,15.625) -- (13.25,15.625)
+			node[midway, above=1pt, fill=white, inner sep=1pt,
+				font=\fontsize{7pt}{8.5pt}\selectfont]
+			{Pass / Mismatch};
+
+		% Correlated coverage subscriber
+		\draw (15,16.875) rectangle (18.75,14.375);
+		\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm,
+			rounded corners=0.020cm,
+			font=\fontsize{12pt}{15.6pt}\selectfont\bfseries] at (16.875,15.625)
+			{Correlated \\ Coverage};
+		\draw[dashed] (10,14.375) -- (10,11.25);
+		\draw[dashed] (10,11.25) -- (16.875,11.25)
+			node[midway, below=1pt, fill=white, inner sep=1pt,
+				font=\fontsize{7pt}{8.5pt}\selectfont]
+			{Coverage Sample};
+		\draw[dashed, -{Stealth[scale=1.5]}] (16.875,11.25) -- (16.875,14.375);
+	\end{tikzpicture}%
+	}
