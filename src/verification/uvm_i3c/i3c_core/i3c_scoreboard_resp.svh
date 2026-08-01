@@ -7,6 +7,7 @@ function bit i3c_scoreboard::enqueue_rx_word_expectation(bit [3:0] tid, int data
   exp_rx_data_t rx_exp;
 
   rx_exp.known               = 1'b1;
+  rx_exp.result_id           = active_result_id;
   rx_exp.read_id             = -1;
   rx_exp.tid                 = tid;
   rx_exp.data_length         = data_length;
@@ -17,6 +18,7 @@ function bit i3c_scoreboard::enqueue_rx_word_expectation(bit [3:0] tid, int data
 
   if (exp_rx_data_queue.size() < RxFifoDepth) begin
     exp_rx_data_queue.push_back(rx_exp);
+    mark_rx_expected(active_result_id);
     return 1'b0;
   end
 
@@ -65,6 +67,7 @@ function void i3c_scoreboard::check_rx_data(bit [31:0] rdata);
           $sformatf("RX FIFO byte mismatch: tid=0x%0h actual_len=%0d word_idx=%0d byte_lane=%0d",
                     exp.tid, exp.data_length, exp.word_idx, byte_idx))
     end else begin
+      if (act_byte != 8'h00) word_integrity_pass = 1'b0;
       `DV_CHECK_EQ(act_byte, 8'h00, $sformatf(
                    "RX FIFO padding byte should be zero: tid=0x%0h actual_len=%0d word_idx=%0d byte_lane=%0d",
                    exp.tid,
@@ -85,14 +88,11 @@ function void i3c_scoreboard::check_rx_data(bit [31:0] rdata);
       read_integrity_pass.delete(exp.read_id);
     end
   end
-  `uvm_info(`gfn, $sformatf(
-            "RX FIFO DATA: tid=0x%0h word_idx=%0d valid_bytes=%0d expected_from_bus=0x%08h observed_from_controller=0x%08h",
-            exp.tid,
-            exp.word_idx,
-            valid_bytes,
-            exp.data,
-            rdata
-            ), UVM_LOW)
+  `uvm_info("I3C_SCB", $sformatf(
+            "[TXN %04d][RX DATA %s] word=%0d valid_bytes=%0d\n  EXPECTED: 0x%08h\n  OBSERVED: 0x%08h",
+            exp.result_id, word_integrity_pass ? "PASS" : "FAIL", exp.word_idx,
+            valid_bytes, exp.data, rdata), UVM_LOW)
+  mark_rx_observed(exp.result_id, word_integrity_pass);
 endfunction
 
 function void i3c_scoreboard::set_rx_fifo_level_unknown(int unsigned count, string ctxt);
@@ -102,6 +102,7 @@ function void i3c_scoreboard::set_rx_fifo_level_unknown(int unsigned count, stri
   exp_rx_data_queue.delete();
   model_count = count;
   unknown_entry.known = 1'b0;
+  unknown_entry.result_id = 0;
   unknown_entry.read_id = -1;
   unknown_entry.tid = '0;
   unknown_entry.data_length = 0;
@@ -144,6 +145,15 @@ function void i3c_scoreboard::check_resp(bit [31:0] rdata);
   end
 
   resp = i3c_response_desc_t'(rdata);
+  begin
+    int unsigned orphan_id;
+    orphan_id = create_result(resp.tid, "UNEXPECTED RESPONSE", 1'b0);
+    mark_response_model(orphan_id, 1'b1, "No response expected");
+    mark_response_observed(orphan_id, 1'b0,
+                           $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
+                                     resp_status_to_string(resp.err_status), resp.data_length));
+    mark_result_failed(orphan_id, "Observed response had no expected command");
+  end
   `uvm_error(`gfn, $sformatf(
              "Unexpected RESP: tid=0x%0h status=%s (0x%0h) data_length=%0d rdata=0x%08h",
              resp.tid,
@@ -159,6 +169,7 @@ endfunction
 function void i3c_scoreboard::record_exp_resp(exp_resp_seed_t seed);
   exp_resp_t exp_resp;
 
+  exp_resp.result_id = active_result_id;
   exp_resp.rnw = seed.rnw;
   exp_resp.tid = seed.tid;
   exp_resp.data_length = seed.data_length;
@@ -203,6 +214,10 @@ function void i3c_scoreboard::record_exp_resp(exp_resp_seed_t seed);
   end
 
   if (!response_expected(exp_resp.wroc, exp_resp.resp_status)) begin
+    mark_response_model(exp_resp.result_id, 1'b0,
+                        $sformatf("status=%s length=%0d",
+                                  resp_status_to_string(exp_resp.resp_status),
+                                  exp_resp.data_length));
     publish_completion_policy_coverage(exp_resp, 1'b0);
     if (exp_resp.recovery_valid)
       publish_recovery_coverage(exp_resp, exp_resp.resp_status == Success);
@@ -210,7 +225,11 @@ function void i3c_scoreboard::record_exp_resp(exp_resp_seed_t seed);
       publish_stall_recovery_coverage(exp_resp, exp_resp.resp_status == Success);
     `uvm_info(`gfn, $sformatf("RESP suppressed: tid=0x%0h wroc=%0b status=%s", exp_resp.tid,
                               exp_resp.wroc, resp_status_to_string(exp_resp.resp_status)),
-              UVM_MEDIUM)
+              UVM_HIGH)
+    `uvm_info("I3C_SCB", $sformatf(
+              "[TXN %04d][RESP SUPPRESSED] TID=0x%0h WROC=%0b status=%s",
+              exp_resp.result_id, exp_resp.tid, exp_resp.wroc,
+              resp_status_to_string(exp_resp.resp_status)), UVM_LOW)
     return;
   end
 
@@ -222,7 +241,11 @@ function void i3c_scoreboard::record_exp_resp(exp_resp_seed_t seed);
             resp_status_to_string(
                 exp_resp.resp_status
             )
-            ), UVM_MEDIUM)
+            ), UVM_HIGH)
+  mark_response_model(exp_resp.result_id, 1'b1,
+                      $sformatf("status=%s length=%0d",
+                                resp_status_to_string(exp_resp.resp_status),
+                                exp_resp.data_length));
   exp_resp_queue.push_back(exp_resp);
 endfunction
 
@@ -230,11 +253,45 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
   exp_resp_t          exp_resp;
   i3c_response_desc_t resp;
   bit                 response_matches;
+  int                 later_tid_idx;
 
   if (exp_resp_queue.size() == 0) return;
 
-  exp_resp = exp_resp_queue.pop_front();
   resp = i3c_response_desc_t'(rdata);
+  later_tid_idx = -1;
+  if (resp.tid != exp_resp_queue[0].tid) begin
+    foreach (exp_resp_queue[i]) begin
+      if ((i > 0) && (exp_resp_queue[i].tid == resp.tid)) begin
+        later_tid_idx = int'(i);
+        break;
+      end
+    end
+    if (later_tid_idx < 0) begin
+      int unsigned orphan_id;
+      orphan_id = create_result(resp.tid, "UNEXPECTED RESPONSE", 1'b0);
+      mark_response_model(orphan_id, 1'b1, "No response expected");
+      mark_response_observed(orphan_id, 1'b0,
+                             $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
+                                       resp_status_to_string(resp.err_status), resp.data_length));
+      mark_result_failed(orphan_id, "Response TID did not match any pending command");
+      `uvm_error(`gfn, $sformatf(
+                 "Unexpected RESP ordering: expected next tid=0x%0h observed tid=0x%0h rdata=0x%08h",
+                 exp_resp_queue[0].tid, resp.tid, rdata))
+      return;
+    end
+
+    `uvm_error(`gfn, $sformatf(
+               "RESP reordered: expected next tid=0x%0h observed later tid=0x%0h at index %0d",
+               exp_resp_queue[0].tid, resp.tid, later_tid_idx))
+    for (int i = 0; i < later_tid_idx; i++) begin
+      exp_resp_t skipped;
+      skipped = exp_resp_queue.pop_front();
+      mark_result_failed(skipped.result_id,
+                         "Expected response was skipped before a later TID was observed");
+    end
+  end
+
+  exp_resp = exp_resp_queue.pop_front();
   response_matches = (resp.err_status == exp_resp.resp_status) &&
                      (resp.tid == exp_resp.tid) &&
                      (resp.data_length == exp_resp.data_length);
@@ -259,19 +316,19 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
                    exp_resp.data_length, resp.data_length, exp_resp.tid, rdata))
   end
 
-  `uvm_info(`gfn, $sformatf(
-            "RESPONSE: expected_tid=0x%0h observed_tid=0x%0h expected_status=%s observed_status=%s expected_data_length=%0d observed_data_length=%0d",
-            exp_resp.tid,
-            resp.tid,
-            resp_status_to_string(
-                exp_resp.resp_status
-            ),
-            resp_status_to_string(
-                resp.err_status
-            ),
-            exp_resp.data_length,
-            resp.data_length
-            ), UVM_LOW)
+  mark_response_observed(
+      exp_resp.result_id, response_matches,
+      $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
+                resp_status_to_string(resp.err_status), resp.data_length));
+  `uvm_info("I3C_SCB", $sformatf(
+            "[TXN %04d][RESP %s]\n  EXPECTED: %s\n  OBSERVED: %s",
+            exp_resp.result_id, response_matches ? "PASS" : "FAIL",
+            results.exists(exp_resp.result_id) ?
+              $sformatf("TID=0x%0h %s", exp_resp.tid,
+                        results[exp_resp.result_id].expected_response) : "?",
+            $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
+                      resp_status_to_string(resp.err_status), resp.data_length)), UVM_LOW)
+  maybe_report_transaction_flow(exp_resp.result_id);
 
   publish_completion_policy_coverage(exp_resp, 1'b1);
 

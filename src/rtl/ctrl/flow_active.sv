@@ -1523,6 +1523,8 @@ module flow_active
             end else if (next_cmd_available && next_cmd_supported) begin
               if (!active_wroc || resp_queue_wready_i) begin
                 accept_continuation_cmd(1'b0);
+              end else begin
+                gen_clock = 1'b0;
               end
             end else if (!next_cmd_available) begin
               request_missing_continuation_stop();
@@ -1606,6 +1608,8 @@ module flow_active
             end else if (next_cmd_available && next_cmd_supported) begin
               if (!active_wroc || resp_queue_wready_i) begin
                 accept_continuation_cmd(read_takeover_done_q);
+              end else begin
+                gen_clock = 1'b0;
               end
             end else if (!next_cmd_available) begin
               request_missing_continuation_stop();

@@ -1,3 +1,38 @@
+class i3c_scoreboard_result;
+  int unsigned result_id;
+  int unsigned bus_order;
+  bit [3:0]    tid;
+  string       command;
+
+  bit          bus_required;
+  bit          bus_done;
+  bit          bus_pass;
+  bit          flow_reported;
+  string       bus_trace;
+
+  int unsigned rx_expected_words;
+  int unsigned rx_observed_words;
+  bit          rx_pass;
+
+  bit          resp_required;
+  bit          resp_suppressed;
+  bit          resp_done;
+  bit          resp_pass;
+  string       expected_response;
+  string       observed_response;
+
+  bit          forced_fail;
+  bit          reset_cleared;
+  string       failure_reason;
+
+  function new();
+    bus_order = 0;
+    bus_pass = 1'b1;
+    rx_pass = 1'b1;
+    resp_pass = 1'b1;
+  endfunction
+endclass : i3c_scoreboard_result
+
 class i3c_scoreboard extends uvm_scoreboard;
   `uvm_component_utils(i3c_scoreboard)
 
@@ -8,6 +43,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   uvm_analysis_port #(i3c_correlated_item) correlated_ap;
 
   typedef struct {
+    int unsigned    result_id;
     i3c_cmd_attr_e  cmd_attr;
     bit             cmd_present;
     bit [7:0]       cmd_code;
@@ -50,6 +86,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   } dat_model_entry_t;
 
   typedef struct {
+    int unsigned result_id;
     bit            known;
     int            read_id;
     bit [3:0]      tid;
@@ -61,6 +98,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   } exp_rx_data_t;
 
   typedef struct {
+    int unsigned            result_id;
     bit                   rnw;
     bit [3:0]             tid;
     int                   data_length;
@@ -161,6 +199,11 @@ class i3c_scoreboard extends uvm_scoreboard;
   bit                          hc_abort_active;
   bit                          pending_private_transfer;
   int                          next_read_id;
+  int unsigned                 next_result_id;
+  int unsigned                 next_bus_order;
+  int unsigned                 active_result_id;
+  i3c_scoreboard_result        results[int unsigned];
+  int unsigned                 result_order[$];
 
   // --------------------------------------------------------------------------
   // UVM lifecycle and input dispatch
@@ -175,6 +218,9 @@ class i3c_scoreboard extends uvm_scoreboard;
     reg_fifo = new("reg_fifo", this);
     i3c_fifo = new("i3c_fifo", this);
     correlated_ap = new("correlated_ap", this);
+    next_result_id = 1;
+    next_bus_order = 1;
+    active_result_id = 0;
   endfunction
 
   task run_phase(uvm_phase phase);
@@ -238,9 +284,12 @@ class i3c_scoreboard extends uvm_scoreboard;
   function void check_phase(uvm_phase phase);
     int unobserved_count;
 
+    super.check_phase(phase);
     unobserved_count = 0;
     foreach (exp_txn_queue[i]) begin
       unobserved_count++;
+      mark_result_failed(exp_txn_queue[i].result_id,
+                         "Expected command was never observed on the bus");
     end
     if (unobserved_count > 0)
       `uvm_error(`gfn, $sformatf(
@@ -250,11 +299,25 @@ class i3c_scoreboard extends uvm_scoreboard;
     if (exp_resp_queue.size() > 0)
       `uvm_error(`gfn, $sformatf(
                  "%0d expected response model item(s) were not observed", exp_resp_queue.size()))
+    foreach (exp_resp_queue[i]) begin
+      mark_result_failed(exp_resp_queue[i].result_id,
+                         "Expected response descriptor was not observed");
+    end
     if (exp_rx_data_queue.size() > 0)
       `uvm_error(`gfn, $sformatf(
                  "%0d expected RX data word(s) were not observed", exp_rx_data_queue.size()))
+    foreach (exp_rx_data_queue[i]) begin
+      if (exp_rx_data_queue[i].known)
+        mark_result_failed(exp_rx_data_queue[i].result_id, "Expected RX FIFO word was not observed");
+    end
     `DV_EOT_PRINT_TLM_FIFO_CONTENTS(reg_seq_item, reg_fifo)
     `DV_EOT_PRINT_TLM_FIFO_CONTENTS(i3c_item, i3c_fifo)
+  endfunction
+
+  function void report_phase(uvm_phase phase);
+    super.report_phase(phase);
+    print_pending_transaction_flows();
+    print_scoreboard_summary();
   endfunction
 
   // --------------------------------------------------------------------------
@@ -426,21 +489,40 @@ class i3c_scoreboard extends uvm_scoreboard;
   extern function string format_token_list(string tokens[$], int data_length, string missing_token);
   extern function string format_byte_list(bit [7:0] bytes[$], int data_length);
   extern function string format_bit_list(bit bits[$], int data_length);
-  extern function string format_ack_list(bit acks[$], int data_length);
   extern function string format_ack_or_t_bit_list(bit target_is_i3c, bit bits[$], int data_length);
   extern function string format_observed_bytes(bit [7:0] bytes[$], int data_length);
   extern function string format_expected_tx_bytes(int data_length);
-  extern function string format_observed_t_bits(bit t_bits[$], int data_length);
   extern function string format_observed_ack_or_t_bits(bit target_is_i3c, bit t_bits[$],
                                                        int data_length);
   extern function string format_optional_byte(bit present, bit [7:0] value);
-  extern function string format_optional_addr(bit present, bit [6:0] value);
   extern function string format_optional_bit(bit present, bit value);
   extern function string format_expected_tx_ack_or_t_bits(int data_length, bit target_is_i3c,
                                                           bit allow_i2c_final_data_nack = 1'b0);
   extern function string format_expected_rx_ack_or_t_bits(i3c_item item, exp_txn_t exp);
   extern function string format_expected_imm_bytes(exp_txn_t exp, int data_length);
-  extern function string format_expected_imm_t_bits(exp_txn_t exp, int data_length);
+  extern function string format_expected_imm_t_bits(exp_txn_t exp, int data_length,
+                                                     bit allow_i2c_final_data_nack = 1'b0);
+
+  // Correlated transaction reporting
+  extern function int unsigned create_result(bit [3:0] tid, string command,
+                                               bit bus_required = 1'b1);
+  extern function string format_command(exp_txn_t exp);
+  extern function string format_bus_trace(i3c_item item);
+  extern function int scoreboard_error_count();
+  extern function void finish_bus_result(int unsigned result_id, i3c_item item,
+                                         int errors_before);
+  extern function void maybe_report_transaction_flow(int unsigned result_id,
+                                                      bit force_report = 1'b0);
+  extern function void print_pending_transaction_flows();
+  extern function void mark_result_failed(int unsigned result_id, string reason);
+  extern function void mark_results_reset_cleared(string reset_kind);
+  extern function void mark_rx_expected(int unsigned result_id);
+  extern function void mark_rx_observed(int unsigned result_id, bit pass);
+  extern function void mark_response_model(int unsigned result_id, bit required,
+                                           string expected);
+  extern function void mark_response_observed(int unsigned result_id, bit pass, string observed);
+  extern function string result_status(i3c_scoreboard_result result);
+  extern function void print_scoreboard_summary();
 
 endclass : i3c_scoreboard
 
@@ -450,3 +532,4 @@ endclass : i3c_scoreboard
 `include "i3c_scoreboard_resp.svh"
 `include "i3c_scoreboard_cov.svh"
 `include "i3c_scoreboard_fmt.svh"
+`include "i3c_scoreboard_report.svh"

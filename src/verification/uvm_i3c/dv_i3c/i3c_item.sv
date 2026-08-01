@@ -1,3 +1,44 @@
+typedef enum {
+  I3cBusEventStart,
+  I3cBusEventRStart,
+  I3cBusEventAddress,
+  I3cBusEventAck,
+  I3cBusEventNack,
+  I3cBusEventCcc,
+  I3cBusEventData,
+  I3cBusEventTBit,
+  I3cBusEventStop
+} i3c_bus_event_kind_e;
+
+typedef enum {
+  I3cBusRoleGeneric,
+  I3cBusRoleDaaPid,
+  I3cBusRoleDaaBcr,
+  I3cBusRoleDaaDcr,
+  I3cBusRoleDaaAssign
+} i3c_bus_event_role_e;
+
+class i3c_bus_event extends uvm_object;
+  i3c_bus_event_kind_e kind;
+  i3c_bus_event_role_e role;
+  bit [7:0]            value;
+  int unsigned         index;
+  bus_op_e             bus_op;
+
+  `uvm_object_utils_begin(i3c_bus_event)
+    `uvm_field_enum(i3c_bus_event_kind_e, kind, UVM_DEFAULT)
+    `uvm_field_enum(i3c_bus_event_role_e, role, UVM_DEFAULT)
+    `uvm_field_int(value, UVM_DEFAULT)
+    `uvm_field_int(index, UVM_DEFAULT)
+    `uvm_field_enum(bus_op_e, bus_op, UVM_DEFAULT)
+  `uvm_object_utils_end
+
+  function new(string name = "");
+    super.new(name);
+    role = I3cBusRoleGeneric;
+  endfunction : new
+endclass : i3c_bus_event
+
 class i3c_item extends uvm_sequence_item;
 
   // transaction data part
@@ -22,6 +63,7 @@ class i3c_item extends uvm_sequence_item;
   bit start_from_rstart;
   bit rstart;
   bit stop;
+  i3c_bus_event bus_event_q[$];
 
   // Use for debug print
   string pname = "";
@@ -46,6 +88,7 @@ class i3c_item extends uvm_sequence_item;
     `uvm_field_int(i3c, UVM_DEFAULT | UVM_NOPRINT | UVM_NOCOMPARE)
     `uvm_field_int(addr_nack, UVM_DEFAULT | UVM_NOCOMPARE | UVM_NOPRINT)
     `uvm_field_queue_int(data_nack_q, UVM_DEFAULT | UVM_NOCOMPARE | UVM_NOPRINT)
+    `uvm_field_queue_object(bus_event_q, UVM_DEFAULT | UVM_NOCOMPARE | UVM_NOPRINT)
   `uvm_object_utils_end
 
   function new(string name = "");
@@ -65,6 +108,7 @@ class i3c_item extends uvm_sequence_item;
     ccc_t_bit_valid = 0;
     ccc_t_bit = 0;
     i3c_direct = 0;
+    bus_event_q.delete();
   endfunction : clear_data
 
   function void clear_flag();

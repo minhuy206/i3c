@@ -507,6 +507,7 @@ class i3c_driver extends uvm_driver #(
       `uvm_info(`gfn, $sformatf(
                 "Device drive data[%0d]=0x%h, T_bit=%b", i, req.data[i], req.t_bit_q[i]),
                 UVM_MEDIUM)
+      if (!req.t_bit_q[i]) break;
     end
     set_drv_state(DrvStop);
   endtask : do_i3c_read

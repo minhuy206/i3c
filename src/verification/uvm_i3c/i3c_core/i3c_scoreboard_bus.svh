@@ -9,20 +9,49 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
   bit                     expected_stop;
   i3c_resp_cmd_class_e    cmd_class;
   txn_cov_outcome_t       outcome;
+  int                     errors_before;
 
   if (exp_txn_queue.size() == 0) begin
+    exp = '{cmd_attr: RegularTransfer, default: '0};
+    exp.target_is_i3c = item.i3c;
+    exp.rnw = item.bus_op == BusOpRead;
+    exp.data_length = item.num_data;
+    exp.result_id = create_result('0, "UNEXPECTED BUS TRANSACTION", 1'b1);
+    errors_before = scoreboard_error_count();
     `uvm_error(`gfn, $sformatf("Unexpected I3C txn: addr=0x%02h op=%s", item.addr,
                                item.bus_op.name()))
+    mark_result_failed(exp.result_id, "No expected command for observed bus transaction");
+    finish_bus_result(exp.result_id, item, errors_before);
     return;
   end
 
   exp = exp_txn_queue[0];
   if (!exp_matches_item(exp, item, 0)) begin
+    int later_match_idx;
+
+    later_match_idx = find_matching_exp_idx(item);
+    errors_before = scoreboard_error_count();
     report_i3c_txn_mismatch(item, exp);
-    return;
+    if (later_match_idx > 0) begin
+      for (int i = 0; i < later_match_idx; i++) begin
+        exp_txn_t skipped;
+        skipped = exp_txn_queue.pop_front();
+        mark_result_failed(skipped.result_id,
+                           "Command was skipped before a later bus transaction was observed");
+        if (!skipped.rnw && skipped.uses_tx_queue)
+          consume_tx_data_words(skipped.data_length);
+      end
+      exp = exp_txn_queue[0];
+    end else begin
+      mark_result_failed(exp.result_id, "Observed bus transaction did not match the next command");
+      finish_bus_result(exp.result_id, item, errors_before);
+      return;
+    end
   end
 
   exp = exp_txn_queue.pop_front();
+  active_result_id = exp.result_id;
+  errors_before = scoreboard_error_count();
   txn_aborted = 1'b0;
   outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
               resp_status: Success};
@@ -33,6 +62,8 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
     print_ccc_end(item, exp, 1'b0, 1'b1);
     advance_private_transfer(exp);
     record_command_history(exp, item);
+    finish_bus_result(exp.result_id, item, errors_before);
+    active_result_id = 0;
     return;
   end
 
@@ -89,6 +120,8 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
     record_command_history(exp, item, 1'b1);
     `uvm_info(`gfn, $sformatf("AddrHeader RESP inferred: tid=0x%0h rnw=%0b requested_len=%0d",
                               exp.tid, exp.rnw, exp.data_length), UVM_MEDIUM)
+    finish_bus_result(exp.result_id, item, errors_before);
+    active_result_id = 0;
     return;
   end
 
@@ -110,6 +143,8 @@ function void i3c_scoreboard::check_i3c_txn(i3c_item item);
   print_i3c_end(item, exp, expected_rstart, expected_stop);
   advance_private_transfer(exp, txn_aborted);
   record_command_history(exp, item, txn_aborted);
+  finish_bus_result(exp.result_id, item, errors_before);
+  active_result_id = 0;
 endfunction
 
 function bit i3c_scoreboard::exp_matches_item(exp_txn_t exp, i3c_item item, int word_offset);
@@ -207,6 +242,8 @@ function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, outpu
   int                      read_id;
   i3c_resp_err_status_e    resp_status;
   i3c_resp_cmd_class_e     cmd_class;
+  bit                      ack_or_t_bit_matches;
+  string                   ack_or_t_bit_name;
 
   read_id = next_read_id++;
   resp_status = Success;
@@ -224,7 +261,6 @@ function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, outpu
 
   check_read_ack_or_t_bits(item, exp);
 
-  `uvm_info(`gfn, $sformatf("CHECK READ DATA"), UVM_MEDIUM)
   if (enqueue_rx_word_expectations(item, exp, read_id)) resp_status = Ovl;
   handle_read_end(item, exp, resp_status, expected_rstart, expected_stop, txn_aborted);
   if ((resp_status == Success) && !exp.toc && item.stop && !txn_aborted) begin
@@ -278,22 +314,22 @@ function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, outpu
             format_observed_bytes(
                 item.data_q, item.num_data
             )
-            ), UVM_LOW)
-  `uvm_info(`gfn, $sformatf(
-            "RX %s: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
-            rx_ack_or_t_bit_label(
-                exp.target_is_i3c
-            ),
-            exp.tid,
-            exp.data_length,
-            item.data_nack_q.size(),
-            format_expected_rx_ack_or_t_bits(
-                item, exp
-            ),
-            format_observed_ack_or_t_bits(
-                exp.target_is_i3c, item.data_nack_q, item.num_data
-            )
-            ), UVM_LOW)
+            ), UVM_HIGH)
+  ack_or_t_bit_matches = item.data_nack_q.size() == item.num_data;
+  if (exp.target_is_i3c) ack_or_t_bit_name = "T-BIT";
+  else                   ack_or_t_bit_name = "ACK/NACK";
+  for (int i = 0; i < item.num_data; i++) begin
+    if ((i >= item.data_nack_q.size()) ||
+        (item.data_nack_q[i] != expected_rx_ack_or_t_bit(exp.target_is_i3c, item, i)))
+      ack_or_t_bit_matches = 1'b0;
+  end
+  `uvm_info("I3C_SCB", $sformatf(
+            "[TXN %04d][RX %s %s] expected_length=%0d observed_length=%0d\n  EXPECTED: %s\n  OBSERVED: %s",
+            exp.result_id, ack_or_t_bit_name,
+            ack_or_t_bit_matches ? "PASS" : "FAIL", item.num_data,
+            item.data_nack_q.size(), format_expected_rx_ack_or_t_bits(item, exp),
+            format_observed_ack_or_t_bits(exp.target_is_i3c, item.data_nack_q,
+                                          item.num_data)), UVM_LOW)
 endfunction
 
 function void i3c_scoreboard::check_read_ack_or_t_bits(i3c_item item, exp_txn_t exp);
@@ -415,6 +451,7 @@ function bit i3c_scoreboard::enqueue_rx_word_expectations(i3c_item item, exp_txn
     build_rx_data_expectation(item, exp, read_id, word_idx, rx_exp);
     if (!rx_overflow && (exp_rx_data_queue.size() < RxFifoDepth)) begin
       exp_rx_data_queue.push_back(rx_exp);
+      mark_rx_expected(exp.result_id);
     end else begin
       if (!rx_overflow) begin
         `uvm_info(
@@ -437,6 +474,7 @@ endfunction
 function void i3c_scoreboard::build_rx_data_expectation(i3c_item item, exp_txn_t exp, int read_id,
                                         int unsigned word_idx, output exp_rx_data_t rx_exp);
   rx_exp.known = 1'b1;
+  rx_exp.result_id = exp.result_id;
   rx_exp.read_id = read_id;
   rx_exp.tid = exp.tid;
   rx_exp.data_length = item.num_data;
@@ -570,11 +608,16 @@ function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t 
                                                        output txn_cov_outcome_t outcome);
   bit                      inferred_hc_abort;
   bit                      inferred_data_nack;
+  bit                      data_matches;
+  bit                      ack_or_t_bit_matches;
+  string                   ack_or_t_bit_name;
   i3c_resp_err_status_e    resp_status;
   i3c_resp_cmd_class_e     cmd_class;
 
   inferred_hc_abort  = 1'b0;
   inferred_data_nack = 1'b0;
+  data_matches = (item.num_data == exp.data_length) &&
+                 (item.data_q.size() == exp.data_length);
   cmd_class = classify_response_cmd(exp.cmd_attr, exp.is_ccc);
   outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
               resp_status: Success};
@@ -602,9 +645,11 @@ function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t 
   end
 
   for (int i = 0; i < item.num_data; i++) begin
-    if (i < item.data_q.size())
+    if (i < item.data_q.size()) begin
+      if (item.data_q[i] != exp.imm_data_byte[i]) data_matches = 1'b0;
       `DV_CHECK_EQ(item.data_q[i], exp.imm_data_byte[i], $sformatf(
                    "Immediate inline byte[%0d] mismatch (tid=0x%0h)", i, exp.tid))
+    end
     if (exp.target_is_i3c && (i < item.data_nack_q.size()))
       `DV_CHECK_EQ(item.data_nack_q[i], ~^exp.imm_data_byte[i], $sformatf(
                    "Immediate T-bit[%0d] mismatch (tid=0x%0h)", i, exp.tid))
@@ -659,33 +704,30 @@ function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t 
     start_recovery_context(RECOVERY_PROTOCOL_TERMINATION, cmd_class);
   end
 
-  `uvm_info(`gfn, $sformatf(
-            "IMM DATA: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
-            exp.tid,
-            exp.data_length,
-            item.num_data,
-            format_expected_imm_bytes(
-                exp, exp.data_length
-            ),
-            format_observed_bytes(
-                item.data_q, item.num_data
-            )
-            ), UVM_LOW)
-  `uvm_info(`gfn, $sformatf(
-            "IMM %s: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
-            tx_ack_or_t_bit_label(
-                exp.target_is_i3c
-            ),
-            exp.tid,
-            exp.data_length,
+  ack_or_t_bit_matches = item.data_nack_q.size() == exp.data_length;
+  if (exp.target_is_i3c) ack_or_t_bit_name = "T-BIT";
+  else                   ack_or_t_bit_name = "ACK";
+  for (int i = 0; i < exp.data_length; i++) begin
+    if ((i >= item.data_nack_q.size()) ||
+        (item.data_nack_q[i] != expected_tx_ack_or_t_bit(
+            exp.target_is_i3c, exp.imm_data_byte[i],
+            inferred_data_nack && !exp.target_is_i3c && (i == (exp.data_length - 1)))))
+      ack_or_t_bit_matches = 1'b0;
+  end
+  if ((exp.data_length > 0) || (item.num_data > 0))
+    `uvm_info("I3C_SCB", $sformatf(
+              "[TXN %04d][IMM DATA %s] expected_length=%0d observed_length=%0d\n  EXPECTED: %s\n  OBSERVED: %s",
+              exp.result_id, data_matches ? "PASS" : "FAIL", exp.data_length, item.num_data,
+              format_expected_imm_bytes(exp, exp.data_length),
+              format_observed_bytes(item.data_q, item.num_data)), UVM_LOW)
+  `uvm_info("I3C_SCB", $sformatf(
+            "[TXN %04d][IMM %s %s] expected_length=%0d observed_length=%0d\n  EXPECTED: %s\n  OBSERVED: %s",
+            exp.result_id, ack_or_t_bit_name,
+            ack_or_t_bit_matches ? "PASS" : "FAIL", exp.data_length,
             item.data_nack_q.size(),
-            format_expected_imm_t_bits(
-                exp, exp.data_length
-            ),
-            format_observed_ack_or_t_bits(
-                exp.target_is_i3c, item.data_nack_q, item.num_data
-            )
-            ), UVM_LOW)
+            format_expected_imm_t_bits(exp, exp.data_length, inferred_data_nack),
+            format_observed_ack_or_t_bits(exp.target_is_i3c, item.data_nack_q,
+                                          item.num_data)), UVM_LOW)
   if (!exp.toc)
     `uvm_info(`gfn, $sformatf(
               "IMM toc=0 REJECT: tid=0x%0h dtt=%0d - data phase completed, STOP + NotSupported",
@@ -698,6 +740,13 @@ endfunction
 
 function void i3c_scoreboard::check_tx_data_bytes(i3c_item item, exp_txn_t exp, int data_length, string ctxt,
                                   bit allow_i2c_final_data_nack);
+  bit data_matches;
+  bit ack_or_t_bit_matches;
+  string ack_or_t_bit_name;
+
+  data_matches = (item.num_data == data_length) &&
+                 (item.data_q.size() == data_length) &&
+                 (data_length <= tx_fifo_available_bytes());
   `DV_CHECK_EQ(item.num_data, data_length, $sformatf(
                "%s write byte count on bus does not match expected length", ctxt))
   `DV_CHECK_EQ(item.data_q.size(), data_length, $sformatf(
@@ -716,6 +765,7 @@ function void i3c_scoreboard::check_tx_data_bytes(i3c_item item, exp_txn_t exp, 
     int byte_off = (i % 4) * 8;
     if (word_idx < tx_data_queue.size()) begin
       bit [7:0] exp_byte = tx_data_queue[word_idx][byte_off+:8];
+      if (item.data_q[i] != exp_byte) data_matches = 1'b0;
       `DV_CHECK_EQ(item.data_q[i], exp_byte, $sformatf("%s data mismatch at byte[%0d]", ctxt, i))
       if (i < item.data_nack_q.size()) begin
         bit i2c_data_nack_byte;
@@ -729,33 +779,39 @@ function void i3c_scoreboard::check_tx_data_bytes(i3c_item item, exp_txn_t exp, 
       end
     end
   end
-  `uvm_info(`gfn, $sformatf(
-            "TX DATA: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
-            exp.tid,
-            data_length,
-            item.num_data,
-            format_expected_tx_bytes(
-                data_length
-            ),
-            format_observed_bytes(
-                item.data_q, data_length
-            )
-            ), UVM_LOW)
-  `uvm_info(`gfn, $sformatf(
-            "TX %s: tid=0x%0h expected_len=%0d observed_len=%0d expected=%s observed=%s",
-            tx_ack_or_t_bit_label(
-                exp.target_is_i3c
-            ),
-            exp.tid,
-            data_length,
+  ack_or_t_bit_matches = item.data_nack_q.size() == data_length;
+  if (exp.target_is_i3c) ack_or_t_bit_name = "T-BIT";
+  else                   ack_or_t_bit_name = "ACK";
+  for (int i = 0; i < data_length; i++) begin
+    bit [7:0] expected_byte;
+    bit       expected_bit;
+
+    if ((i / 4) >= tx_data_queue.size()) begin
+      ack_or_t_bit_matches = 1'b0;
+    end else begin
+      expected_byte = tx_data_queue[i / 4][(i % 4) * 8+:8];
+      expected_bit = expected_tx_ack_or_t_bit(
+          exp.target_is_i3c, expected_byte,
+          allow_i2c_final_data_nack && !exp.target_is_i3c && (i == (data_length - 1)));
+      if ((i >= item.data_nack_q.size()) || (item.data_nack_q[i] != expected_bit))
+        ack_or_t_bit_matches = 1'b0;
+    end
+  end
+  if ((data_length > 0) || (item.num_data > 0))
+    `uvm_info("I3C_SCB", $sformatf(
+              "[TXN %04d][TX DATA %s] expected_length=%0d observed_length=%0d\n  EXPECTED: %s\n  OBSERVED: %s",
+              exp.result_id, data_matches ? "PASS" : "FAIL", data_length, item.num_data,
+              format_expected_tx_bytes(data_length),
+              format_observed_bytes(item.data_q, item.num_data)), UVM_LOW)
+  `uvm_info("I3C_SCB", $sformatf(
+            "[TXN %04d][TX %s %s] expected_length=%0d observed_length=%0d\n  EXPECTED: %s\n  OBSERVED: %s",
+            exp.result_id, ack_or_t_bit_name,
+            ack_or_t_bit_matches ? "PASS" : "FAIL", data_length,
             item.data_nack_q.size(),
-            format_expected_tx_ack_or_t_bits(
-                data_length, exp.target_is_i3c, allow_i2c_final_data_nack
-            ),
-            format_observed_ack_or_t_bits(
-                exp.target_is_i3c, item.data_nack_q, data_length
-            )
-            ), UVM_LOW)
+            format_expected_tx_ack_or_t_bits(data_length, exp.target_is_i3c,
+                                             allow_i2c_final_data_nack),
+            format_observed_ack_or_t_bits(exp.target_is_i3c, item.data_nack_q,
+                                          data_length)), UVM_LOW)
 endfunction
 
 function void i3c_scoreboard::check_short_write_tx_data(i3c_item item, exp_txn_t exp, string cause,
