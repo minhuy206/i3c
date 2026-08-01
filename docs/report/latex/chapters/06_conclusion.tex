@@ -8,8 +8,8 @@ một \gls{i3c} \Controller{} ở mức \gls{rtl} theo phạm vi yêu cầu tạ
 \CommandDescriptor{} từ \Host{}, thực hiện giao dịch trên bus và trả kết quả qua
 \ResponseDescriptor{}. Xuất phát từ \CHIPSAlliance{} \IThreeCCore{}, khóa luận xác định lại phạm vi
 chức năng cho một \Controller{} độc lập và xây dựng đường điều khiển \gls{rtl} phù hợp với phạm vi đó
-(\cref{sec:arch-reference}). Phần lớn công sức dành cho môi trường kiểm chứng nhằm chứng minh tính
-đúng của thiết kế.
+(\cref{sec:arch-reference}). Phần lớn công sức dành cho môi trường kiểm chứng nhằm đánh giá tính
+đúng của thiết kế trong phạm vi các yêu cầu và kịch bản kiểm chứng đã xác định.
 
 \subsection{Kết quả đạt được}
 
@@ -20,8 +20,10 @@ Các kết quả chính của khóa luận gồm:
 	      (\cref{ch:architecture}), hỗ trợ \gls{i3c} \PrivateTransfer{}, \ImmediateDataTransfer{}, \gls{enec},
 	      \gls{disec}, \gls{entdaa} và giao dịch với \Target{} \gls{iic} Fast Mode.
 
-	\item Xây dựng môi trường kiểm chứng gồm mô hình tham chiếu (\ReferenceModel{}), Scoreboard, \gls{sva} và
-	      \FunctionalCoverage{} để kiểm tra thiết kế ở cả mức giao dịch và mức chu kỳ (\cref{ch:verification}).
+	\item Phát triển môi trường \gls{uvm} tự kiểm tra ở cấp \Controller{}, bổ sung \RegisterAgent{},
+	      \Scoreboard{}, \ReferenceModel{}, \CorrelatedCoverage{} và \gls{sva} so với môi trường kiểm chứng
+	      của thiết kế tham chiếu, qua đó kiểm tra thiết kế ở mức giao dịch và kiểm tra các hành vi cục bộ theo thời gian
+	      (\cref{ch:verification}).
 
 	\item Hoàn thành 81 test regression với seed cố định (\cref{sec:res-baseline}). Toàn bộ test
 	      đều PASS và không có assertion \gls{sva} nào fail. Mô hình \FunctionalCoverage{} ba lớp đạt 100\% closure

@@ -498,6 +498,11 @@ trong khóa luận theo chức năng, kiến trúc giao tiếp và phương phá
 	\end{tabular}
 \end{table}
 
+Kết quả regression và coverage cho thấy môi trường \gls{uvm} tự kiểm tra đã vận hành xuyên suốt
+các nhóm chức năng trong phạm vi đề tài. So với môi trường kiểm chứng của thiết kế tham chiếu,
+việc bổ sung \Scoreboard{}, \ReferenceModel{}, \CorrelatedCoverage{} và \gls{sva} cho phép tự động
+đối chiếu hành vi của \Controller{} từ lệnh phía \Host{} đến giao dịch trên bus và kết quả phản hồi.
+
 \section{Đánh giá theo yêu cầu}
 \label{sec:res-eval}
 
@@ -532,7 +537,8 @@ Về các chỉ tiêu P1--P5 ở \cref{tab:req-perf}, Testbench vận hành \gls
 trực tiếp độ rộng pha thấp/cao của \gls{scl} trên waveform (P2, P3). \gls{dat} 32 mục được kiểm tra bằng
 kịch bản \gls{daa} đạt giới hạn dung lượng bảng (P4). Mọi truy cập từ phía phần mềm ở tất cả các test đều đi qua giao diện
 thanh ghi dữ liệu 32-bit (P5). Cần lưu ý giới hạn của các bằng chứng này: chúng là kết quả
-mô phỏng ở mức \gls{rtl}, xác nhận tính đúng chức năng và quan hệ định thời theo chu kỳ clock. Khóa luận
+mô phỏng ở mức \gls{rtl}, cung cấp bằng chứng về hành vi chức năng và quan hệ định thời theo chu kỳ clock
+trong phạm vi kiểm chứng đã xác định. Khóa luận
 không có dữ liệu tổng hợp hay triển khai ở mức vật lý, đúng như phạm vi tại \cref{tab:req-oos}.
 
 Tổng hợp lại, thiết kế đáp ứng đầy đủ mười yêu cầu chức năng và năm chỉ tiêu cấu hình trong phạm vi

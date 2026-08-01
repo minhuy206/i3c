@@ -110,6 +110,20 @@ Cơ chế mô hình tham chiếu tạo giá trị dự kiến và đối chiếu
 	\label{fig:tb-arch}
 \end{figure}
 
+\subsection{Khác biệt so với môi trường kiểm chứng tham chiếu}
+
+Môi trường kiểm chứng của thiết kế tham chiếu cung cấp \IThreeCAgent{} cùng driver, monitor,
+sequencer và các sequence cơ bản, nhưng chưa có cơ chế tự động đối chiếu toàn bộ hành vi của
+\Controller{} ở cấp hệ thống. Trên cơ sở đó, khóa luận phát triển một môi trường \gls{uvm} tự kiểm tra,
+bổ sung \RegisterAgent{}, \Scoreboard{}, \ReferenceModel{}, \CorrelatedCoverage{} và các nhóm \gls{sva}.
+
+\ReferenceModel{} tái tạo trạng thái dự kiến từ cấu hình, \CommandDescriptor{} và dữ liệu do
+\Host{} cung cấp. \Scoreboard{} đối chiếu kết quả dự kiến với giao dịch quan sát trên bus, dữ liệu
+trong \RxFifo{} và \ResponseDescriptor{} do \gls{dut} tạo ra. Đồng thời, \CorrelatedCoverage{} liên kết
+lệnh đầu vào, hành vi của \Target{} và kết quả giao dịch. Nhờ đó, môi trường hình thành một luồng
+tự kiểm tra khép kín cho phạm vi chức năng đã hiện thực, thay vì chỉ cung cấp stimulus và ghi nhận
+hoạt động trên bus.
+
 \section{Cơ chế \Scoreboard{}}
 \label{sec:ver-tlm}
 
@@ -264,7 +278,7 @@ chức năng F1--F10 như thế nào. Đây cũng là khung đối chiếu khi �
 		F7               & \RegisterMonitor{} và \Scoreboard{} kiểm tra \gls{csr}/\gls{fifo}. \Gls{sva} kiểm tra cơ chế bắt tay và trạng thái \gls{fifo}. Coverage ghi nhận truy cập và cấu hình thanh ghi.         \\
 		F8               & Mô hình tham chiếu tạo \ResponseDescriptor{} dự kiến. \Scoreboard{} đối chiếu mã lỗi, mã giao dịch và số byte đã xử lý. \CorrelatedCoverage{} ghi nhận các tổ hợp giữa mã lỗi và loại lệnh. \\
 		F9               & \Scoreboard{} theo dõi yêu cầu hủy giao dịch từ \Host{}. \Gls{sva} kiểm tra việc hủy giao dịch, kết thúc ở pha hợp lệ và quy tắc lái bus \gls{sda}.                                          \\
-		F10              & \RegisterMonitor{} đối chiếu \gls{csr} cấu hình các tham số thời gian. Monitor xác định chu kỳ \gls{scl}. Cover property định thời được kích hoạt cho các tình huống sau reset ngoài, ghi và đọc lại. \\
+		F10              & \RegisterMonitor{} đối chiếu các \gls{csr} cấu hình tham số thời gian. \IThreeCMonitor{} kiểm tra các khoảng thời gian của START, \RepeatedSTART{}, STOP và \BusFreeCondition{}. \Gls{sva} kiểm tra chu kỳ \gls{scl} và hoạt động của \gls{scl} Generator theo các tham số đã cấu hình. \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -291,7 +305,7 @@ thuần túy lẫn các kịch bản giao dịch đầy đủ.
 
 \IThreeCAgent{} được phát triển từ agent của dự án \CHIPSAlliance{} \IThreeCCore{}~\cite{chipsalliance_i3c}, với phần lớn logic được viết lại cho phạm vi của khóa luận. Agent đóng vai một \Target{} có thể lập trình trên bus. \IThreeCDriver{} phản hồi
 \AddressHeader{}, phát \gls{ack} theo cấu hình, nhận \gls{tx} data, phát \gls{rx} data và tham
-gia \gls{entdaa}. \IThreeCMonitor{} tái tạo giao dịch từ tín hiệu \gls{sda}/\gls{scl} độc lập với \IThreeCDriver{}, nên phát hiện
+gia \gls{entdaa}. \IThreeCMonitor{} tái tạo giao dịch và kiểm tra các khoảng thời gian của bus condition từ tín hiệu \gls{sda}/\gls{scl} độc lập với \IThreeCDriver{}, nên phát hiện
 được cả sai lệch do chính \IThreeCDriver{} tạo ra.
 
 \IThreeCDriver{} hoạt động theo một \gls{fsm} gồm \DriverPhaseCount{} trạng thái. Vai trò của từng
@@ -388,7 +402,7 @@ bại thì nguyên nhân truy được về đúng một cơ chế kiểm tra du
 \label{sec:ver-summary}
 
 Môi trường kết hợp \RegisterAgent{} và \IThreeCAgent{} dưới một \VirtualSequencer{}, dùng
-\Scoreboard{} để đối chiếu tính đúng đắn ở mức giao dịch, \gls{sva} cho thuộc tính cục bộ và \FunctionalCoverage{}
+\Scoreboard{} để đối chiếu tính đúng đắn ở mức giao dịch, \gls{sva} cho hành vi cục bộ và \FunctionalCoverage{}
 để xác định độ bao phủ. Cấu trúc này bao phủ cả giao diện thanh ghi phía phần mềm lẫn hành
 vi giao thức mà không đặt logic kiểm tra trong \VirtualSequence{}. Kết quả áp dụng môi trường
 này --- pass/fail, coverage và \gls{sva} --- được trình bày tại \cref{ch:results}.

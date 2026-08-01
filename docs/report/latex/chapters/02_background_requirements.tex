@@ -6,10 +6,10 @@ Chương này trình bày cơ sở lý thuyết và yêu cầu hệ thống cho 
 \section{Cơ sở lý thuyết}
 \label{sec:bg-theory}
 
-\subsection{Tổng quan bus \texorpdfstring{\gls{iic}}{I2C}}
+\subsection{Tổng quan giao thức \texorpdfstring{\gls{iic}}{I2C}}
 \label{sec:bg-i2c}
 
-\gls{iic} là giao thức giao tiếp nối tiếp đồng bộ sử dụng hai đường tín hiệu gồm đường dữ liệu nối tiếp \gls{sda} và đường xung nhịp \gls{scl}. Các thiết bị kết nối với bus thông qua ngõ ra \OpenDrain{}, chỉ chủ động kéo tín hiệu xuống mức thấp, còn mức cao được tạo bởi điện trở kéo lên bên ngoài. Cấu trúc này cho phép nhiều thiết bị cùng chia sẻ bus và hỗ trợ phân xử giữa các \Controller{}. Khi nhiều \Controller{} phát đồng thời, mức thấp chiếm ưu thế. \Controller{} nhả đường truyền nhưng đọc được mức thấp sẽ xác định rằng mình thua phân xử và dừng phát, nhờ đó tránh làm sai dữ liệu trên bus~\cite[Secs.~3.1.1 and 3.1.8]{nxp_i2c}.
+\gls{iic} là giao thức giao tiếp nối tiếp đồng bộ sử dụng hai đường tín hiệu gồm đường dữ liệu nối tiếp \acrfull{sda} và đường xung nhịp \acrfull{scl}. Các thiết bị kết nối với bus thông qua ngõ ra \OpenDrain{}, chỉ chủ động kéo tín hiệu xuống mức thấp, còn mức cao được tạo bởi điện trở kéo lên bên ngoài. Cấu trúc này cho phép nhiều thiết bị cùng chia sẻ bus và hỗ trợ phân xử giữa các \Controller{}. Khi nhiều \Controller{} phát đồng thời, mức thấp chiếm ưu thế. \Controller{} nhả đường truyền nhưng đọc được mức thấp sẽ xác định rằng mình thua phân xử và dừng phát, nhờ đó tránh làm sai dữ liệu trên bus~\cite[Secs.~3.1.1 and 3.1.8]{nxp_i2c}.
 
 Một giao dịch \gls{iic} bắt đầu bằng điều kiện START, tiếp theo là \AddressHeader{} gồm địa chỉ 7-bit và bit \gls{rnw}, sau đó là các byte dữ liệu. Sau mỗi byte là một bit \gls{ack} để xác nhận kết quả truyền, và giao dịch kết thúc bằng điều kiện STOP. Trong \gls{fm}, tốc độ truyền tối đa là 400~kbit/s~\cite[Secs.~3.1.4--3.1.6 and 5.1]{nxp_i2c}.
 
@@ -84,7 +84,7 @@ Sau STOP, đặc tả còn phân biệt \BusFreeCondition{}, \BusAvailableCondit
 			\node[note, anchor=north] at (9.5,0.45) {SDA low$\to$high};
 		\end{tikzpicture}
 	\end{adjustbox}
-	\caption[Waveform của START, Repeated START và STOP]{Waveform của START, \RepeatedSTART{} và STOP; tác giả vẽ theo định nghĩa bus condition của MIPI I3C Basic và NXP I\textsuperscript{2}C~\cites[Sec.~5.1.2]{mipi_i3c_basic}[Sec.~3.1.4]{nxp_i2c}.}
+	\caption[Waveform của START, Repeated START và STOP]{Waveform của START, \RepeatedSTART{} và STOP. Vẽ theo định nghĩa bus condition của MIPI I3C Basic và NXP I\textsuperscript{2}C~\cites[Sec.~5.1.2]{mipi_i3c_basic}[Sec.~3.1.4]{nxp_i2c}.}
 	\label{fig:start-sr-stop}
 \end{figure}
 
@@ -113,7 +113,7 @@ như minh họa trong \cref{fig:low-handoff-timing}~\cite[Sec.~5.1.2.3.1]{mipi_i
 	\begin{adjustbox}{max width=\textwidth}
 		\input{figures/i3c_low_handoff_timing.tex}
 	\end{adjustbox}
-	\caption[Waveform handoff tại bit ACK Open-Drain]{Waveform của cơ chế handoff tại bit ACK \OpenDrain{}; tác giả vẽ theo MIPI I3C Basic, Sec.~5.1.2.3.1~\cite{mipi_i3c_basic}.}
+	\caption[Waveform handoff tại bit ACK Open-Drain]{Waveform của cơ chế handoff tại bit ACK \OpenDrain{}. Vẽ theo MIPI I3C Basic, Sec.~5.1.2.3.1~\cite{mipi_i3c_basic}.}
 	\label{fig:low-handoff-timing}
 \end{figure}
 
@@ -129,7 +129,7 @@ cao rồi buông về \gls{highz} sau một khoảng trễ kể từ cạnh lên
 	\begin{adjustbox}{max width=\textwidth}
 		\input{figures/i3c_read_takeover_timing.tex}
 	\end{adjustbox}
-	\caption[Waveform takeover của giao dịch đọc I3C]{Waveform của cơ chế takeover sau pha \PushPull{} của giao dịch đọc I3C; tác giả vẽ theo MIPI I3C Basic, Sec.~5.1.2.3.4~\cite{mipi_i3c_basic}.}
+	\caption[Waveform takeover của giao dịch đọc I3C]{Waveform của cơ chế takeover sau pha \PushPull{} của giao dịch đọc I3C. Vẽ theo MIPI I3C Basic, Sec.~5.1.2.3.4~\cite{mipi_i3c_basic}.}
 	\label{fig:read-takeover-timing}
 \end{figure}
 
@@ -208,7 +208,7 @@ Một \PrivateTransfer{} trong \gls{sdr} Mode có cấu trúc tuần tự gồm:
 			\end{scope}
 		\end{tikzpicture}
 	\end{adjustbox}
-	\caption[Định dạng frame I3C Private Write/Read]{Định dạng frame của I3C \PrivateWriteRead{} trong SDR Mode; tác giả vẽ theo MIPI I3C Basic, Annex~A.2~\cite{mipi_i3c_basic}.}
+	\caption[Định dạng frame I3C Private Write/Read]{Định dạng frame của I3C \PrivateWriteRead{} trong SDR Mode. Vẽ theo MIPI I3C Basic, Annex~A.2~\cite{mipi_i3c_basic}.}
 	\label{fig:sdr-frame}
 \end{figure}
 
@@ -267,11 +267,11 @@ Một \PrivateTransfer{} trong \gls{sdr} Mode có cấu trúc tuần tự gồm:
 			};
 		\end{tikzpicture}
 	\end{adjustbox}
-	\caption[Định dạng ENTDAA]{Định dạng ENTDAA; tác giả vẽ theo MIPI I3C Basic, Fig.~37 và Sec.~5.1.9.3.4~\cite{mipi_i3c_basic}.}
+	\caption[Định dạng ENTDAA]{Định dạng ENTDAA. Vẽ theo MIPI I3C Basic, Fig.~37 và Sec.~5.1.9.3.4~\cite{mipi_i3c_basic}.}
 	\label{fig:entdaa}
 \end{figure}
 
-Ngoài \gls{entdaa}, \gls{mipi} \gls{i3c} còn định nghĩa SETDASA và SETAASA để cấp \DynamicAddress{} dựa trên
+Ngoài \gls{entdaa}, \acrshort{mipi} \gls{i3c} còn định nghĩa SETDASA và SETAASA để cấp \DynamicAddress{} dựa trên
 \StaticAddress{} đã biết, cùng RSTDAA và SETNEWDA để xóa hoặc thay đổi \DynamicAddress{} hiện tại~\cite[Secs.~5.1.9.3.3 and 5.1.9.3.10--5.1.9.3.11]{mipi_i3c_basic}.
 Các \gls{ccc} này nằm ngoài phạm vi khóa luận.
 
@@ -338,7 +338,7 @@ trong khóa luận gồm \gls{enec}, \gls{disec} ở cả hai dạng và \gls{en
 			};
 		\end{tikzpicture}
 	\end{adjustbox}
-	\caption[Định dạng frame ENEC và DISEC]{Định dạng frame của ENEC và DISEC ở hai dạng Broadcast và Direct; tác giả vẽ theo MIPI I3C Basic, Figs.~32--33~\cite{mipi_i3c_basic}.}
+	\caption[Định dạng frame ENEC và DISEC]{Định dạng frame của ENEC và DISEC ở hai dạng Broadcast và Direct. Vẽ theo MIPI I3C Basic, Figs.~32--33~\cite{mipi_i3c_basic}.}
 	\label{fig:ccc-frames}
 \end{figure}
 
@@ -387,7 +387,7 @@ vào so sánh.
 
 Vì cả hai giao thức cùng chạy trên một cặp \gls{sda}/\gls{scl}, thiết kế phải tạo được hai bộ định thời khác nhau từ
 cùng một clock hệ thống. \Cref{tab:timing} liệt kê các tham số chính dùng để xác lập cấu hình mặc định.
-Giá trị \gls{i3c} lấy từ \MIPIIThreeCBasic{} v1.1.1, giá trị \gls{iic} lấy từ UM10204
+Giá trị \gls{i3c} lấy từ \MIPIIThreeCBasic{}, giá trị \gls{iic} lấy từ UM10204
 Rev.~7.0~\cites[Tables~86--87]{mipi_i3c_basic}[Table~11]{nxp_i2c}. Trong \gls{rtl}, mỗi tham số được biểu diễn bằng số chu kỳ clock hệ
 thống và có thể cấu hình qua \gls{csr}.
 
@@ -440,7 +440,7 @@ Từ cơ sở lý thuyết trên và phạm vi đã xác định ở \cref{ch:in
 \subsection{Các tính năng ngoài phạm vi}
 \label{sec:req-oos}
 
-Phạm vi chức năng của thiết kế được trình bày rõ trong \cref{tab:req-oos} nhằm tránh bổ sung ngầm các yêu cầu ngoài thiết kế và làm cơ sở xây dựng \FunctionalCoverage{}. Các tính năng không được triển khai không thuộc phạm vi đánh giá, cũng không được xem là tình huống lỗi chỉ vì \gls{rtl} không hỗ trợ.
+Phạm vi chức năng của thiết kế được trình bày rõ trong \cref{tab:req-oos} nhằm tránh bổ sung các yêu cầu ngoài thiết kế làm cơ sở xây dựng \FunctionalCoverage{}. Các tính năng không được triển khai không thuộc phạm vi đánh giá, cũng không được xem là tình huống lỗi chỉ vì \gls{rtl} không hỗ trợ.
 
 \begin{table}[!htbp]
 	\centering
@@ -448,14 +448,14 @@ Phạm vi chức năng của thiết kế được trình bày rõ trong \cref{t
 	\label{tab:req-oos}
 	\begin{tabular}{L{4.0cm} L{9.1cm}}
 		\toprule
-		\textbf{Tính năng}        & \textbf{Giới hạn triển khai}                                                               \\
+		\textbf{Tính năng}        & \textbf{Giới hạn triển khai}                                                                         \\
 		\midrule
 		\gls{hdr}                 & Không hỗ trợ các chế độ \gls{hdr}-\gls{ddr}, \gls{hdr}-\acrshort{tsp} hoặc \gls{hdr}-\acrshort{tsl}. \\
-		\InBandInterrupt{}        & Không xử lý yêu cầu ngắt \gls{ibi} từ \Target{}.                                           \\
-		\HotJoin{}                & Không hỗ trợ cơ chế cho \Target{} tham gia bus khi hệ thống đang hoạt động.                \\
-		\SecondaryController{}    & Không hỗ trợ chuyển giao vai trò \Controller{} cho \Controller{} khác.                     \\
-		Vai trò \Target{}         & \gls{ip} chỉ hoạt động ở vai trò \Controller{}.                                            \\
-		Tuân thủ \gls{hci} đầy đủ & Chỉ giữ các Descriptor, \gls{fifo} và \gls{csr} cần cho tập chức năng đã chọn.             \\
+		\InBandInterrupt{}        & Không xử lý yêu cầu ngắt \gls{ibi} từ \Target{}.                                                     \\
+		\HotJoin{}                & Không hỗ trợ cơ chế cho \Target{} tham gia bus khi hệ thống đang hoạt động.                          \\
+		\SecondaryController{}    & Không hỗ trợ chuyển giao vai trò \Controller{} cho \Controller{} khác.                               \\
+		Vai trò \Target{}         & \gls{ip} chỉ hoạt động ở vai trò \Controller{}.                                                      \\
+		Tuân thủ \gls{hci} đầy đủ & Chỉ giữ các Descriptor, \gls{fifo} và \gls{csr} cần cho tập chức năng đã chọn.                       \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -482,7 +482,7 @@ Phạm vi chức năng của thiết kế được trình bày rõ trong \cref{t
 
 Các yêu cầu P1--P3 xác định ràng buộc về clock và tần số bus của thiết kế. P1 được xác định từ yêu cầu biểu diễn các tham số thời gian bằng số nguyên chu kỳ clock với sai số chấp nhận được. Đối với các tham số cỡ 24~ns của \gls{i3c}, chu kỳ clock hệ thống cần nhỏ hơn đáng kể so với tham số thời gian nhỏ nhất. Vì vậy, thiết kế chọn chu kỳ clock mục tiêu là 3~ns, tương ứng với tần số khoảng 333~MHz. P2 và P3 lần lượt quy định dải cấu hình \gls{scl} cho \gls{i3c} \gls{sdr} Mode và \gls{iic} \gls{fm} theo giới hạn tốc độ của từng chế độ. Các yêu cầu P4--P5 xác định kích thước các cấu trúc mà phần mềm có thể truy cập, làm cơ sở cho bản đồ thanh ghi tại \cref{app:csr}.
 
-\subsection{Giao diện phần mềm}
+\subsection{Yêu cầu giao diện thanh ghi}
 \label{sec:req-sw}
 
 Giao diện thanh ghi mà phần mềm có thể truy cập sử dụng địa chỉ \RegisterAddressWidth{}-bit, dữ liệu \RegisterDataWidth{}-bit, hai tín hiệu yêu cầu đọc/ghi và một tín hiệu báo hoàn tất. \Host{} cấu hình trạng thái enable và các tham số thời gian, gửi yêu cầu hủy giao dịch hoặc yêu cầu reset thông qua \gls{csr}, ghi hai \gls{dword} liên tiếp vào \CommandFifo{} để tạo \CommandDescriptor{} \CommandDescriptorWidth{}-bit, nạp \gls{tx} data vào \TxFifo{}, sau khi giao dịch kết thúc, đọc dữ liệu từ \RxFifo{} và kết quả từ \ResponseFifo{}. \gls{dat} lưu \StaticAddress{} hoặc \DynamicAddress{} cùng thông tin loại \Target{} (\gls{i3c} hoặc \gls{iic}) của từng thiết bị. Mỗi lần truy cập thanh ghi chỉ thực hiện một thao tác đọc hoặc ghi 32 bit tại một địa chỉ. \Host{} duy trì yêu cầu cho đến khi phần cứng báo hoàn tất. Bản đồ thanh ghi đầy đủ được trình bày tại \cref{app:csr}, còn cấu trúc Descriptor được trình bày tại \cref{app:desc}.
@@ -492,7 +492,7 @@ Giao diện thanh ghi mà phần mềm có thể truy cập sử dụng địa c
 
 \begin{itemize}
 	\item Môi trường kiểm chứng phải tạo được stimulus cho toàn bộ yêu cầu F1--F10.
-	\item Các monitor phải ghi nhận các thao tác đọc/ghi \gls{csr}, \gls{dat} và \gls{fifo}. Trên bus, monitor phải theo dõi \gls{sda}/\gls{scl} để nhận diện START, \RepeatedSTART{} và STOP, đồng thời tái tạo \AddressHeader{}, hướng truyền, \gls{tx}/\acrshort{rx} data, \gls{ack} và \gls{tbit} của từng giao dịch.
+	\item Các monitor phải ghi nhận các thao tác đọc/ghi \gls{csr}, \gls{dat} và \gls{fifo}. Trên bus, monitor phải theo dõi \gls{sda}/\gls{scl} để nhận diện START, \RepeatedSTART{} và STOP, kiểm tra các khoảng thời gian liên quan, đồng thời tái tạo \AddressHeader{}, hướng truyền, \gls{tx}/\acrshort{rx} data, \gls{ack} và \gls{tbit} của từng giao dịch.
 	\item Scoreboard phải đối chiếu giao dịch quan sát được trên bus với cấu hình, \CommandDescriptor{}, dữ liệu và \ResponseDescriptor{} ghi nhận từ giao diện thanh ghi.
 	\item \gls{sva} phải kiểm tra handshake, \gls{fsm}, bộ đếm, hai loại reset, trạng thái \gls{fifo}, yêu cầu hủy giao dịch, quyền điều khiển và chế độ lái \gls{sda}.
 	\item \FunctionalCoverage{} phải ghi nhận truy cập \gls{csr}/\gls{dat}/\gls{fifo}, loại giao dịch, hướng truyền, \gls{ack}, \gls{ccc}, \gls{entdaa}, \gls{tbit}, \ResponseDescriptor{}, mã lỗi và các boundary case về độ dài dữ liệu và quá trình xử lý giao dịch thuộc phạm vi F1--F10.

@@ -10,7 +10,7 @@ Chương này trình bày cách các yêu cầu F1--F10 và P1--P5 tại \cref{s
 \label{sec:arch-layers}
 \label{sec:arch-block}
 
-Thiết kế được tổ chức thành ba lớp. Lớp giao diện thanh ghi tiếp nhận cấu hình, \CommandDescriptor{} và \gls{tx} data từ \Host{}, đồng thời cung cấp \acrshort{rx} data cùng \ResponseDescriptor{} sau giao dịch. Lớp xử lý giao thức kiểm tra \CommandDescriptor{}, đọc \gls{dat}, chọn loại giao dịch và điều phối các pha trên bus. Lớp vật lý đồng bộ \gls{sda}/\gls{scl} ở chiều vào và chuyển giá trị cùng chế độ lái do lớp xử lý giao thức lựa chọn ra bus.
+Thiết kế được tổ chức thành ba lớp. Lớp giao diện thanh ghi tiếp nhận cấu hình, \CommandDescriptor{} và \gls{tx} data từ \Host{}, đồng thời trả \acrshort{rx} data cùng \ResponseDescriptor{} sau giao dịch. Lớp xử lý giao thức kiểm tra \CommandDescriptor{}, đọc \gls{dat}, chọn loại giao dịch và điều phối các pha trên bus. Lớp vật lý đồng bộ \gls{sda}/\gls{scl} ở chiều vào và chuyển giá trị cùng chế độ lái do lớp xử lý giao thức lựa chọn ra bus.
 
 Sự phân lớp này tách giao thức thanh ghi khỏi ngữ nghĩa giao dịch và tách quyết định giao thức khỏi lớp vật lý. Thông qua các \gls{fifo}, lớp giao diện thanh ghi đưa \CommandDescriptor{} và \gls{tx} data đến lớp xử lý giao thức, đồng thời tiếp nhận \acrshort{rx} data và \ResponseDescriptor{} theo chiều ngược lại. Các \gls{csr} cung cấp tham số thời gian, trạng thái enable và yêu cầu điều khiển cho thiết kế. \gls{dat} có một cổng ghi từ \Host{} và một cổng đọc phần cứng được sử dụng chung bởi \gls{i3c} Transaction Processor và \acrshort{daa} Processor.
 
@@ -19,7 +19,7 @@ Sự phân lớp này tách giao thức thanh ghi khỏi ngữ nghĩa giao dịc
 \subsection{Ánh xạ yêu cầu sang cơ chế hiện thực}
 \label{sec:arch-flow}
 
-\Cref{tab:req-impl-map} xác định vị trí hiện thực của từng nhóm yêu cầu. Các cơ chế nền tảng, như tạo định thời, tuần tự hóa dữ liệu và điều khiển \gls{sda}, được trình bày trước các luồng giao dịch cụ thể.
+\Cref{tab:req-impl-map} trình bày cơ chế hiện thực tương ứng với từng nhóm yêu cầu.
 
 \begin{table}[!htbp]
 	\centering
@@ -27,19 +27,19 @@ Sự phân lớp này tách giao thức thanh ghi khỏi ngữ nghĩa giao dịc
 	\label{tab:req-impl-map}
 	\begin{tabular}{C{1.8cm} L{5.0cm} L{6.2cm}}
 		\toprule
-		\textbf{Yêu cầu} & \textbf{Chức năng}            & \textbf{Cơ chế hiện thực chính}                                                                   \\
+		\textbf{Yêu cầu} & \textbf{Chức năng}            & \textbf{Cơ chế hiện thực chính}                                                                        \\
 		\midrule
-		F1--F2           & \gls{i3c} \PrivateWriteRead{} & Bus TX/RX Handler, xử lý \TBit{} và handoff/takeover                                            \\
-		F3               & \ImmediateDataTransfer{}      & Sử dụng bốn byte dữ liệu trong \CommandDescriptor{}.                                              \\
-		F4               & \gls{enec}/\gls{disec}        & Tái sử dụng Bus TX/RX Handler cùng \gls{scl} Generator cho Broadcast/Direct \gls{ccc}.            \\
+		F1--F2           & \gls{i3c} \PrivateWriteRead{} & Bus TX/RX Handler, xử lý \TBit{} và handoff/takeover                                                   \\
+		F3               & \ImmediateDataTransfer{}      & Sử dụng bốn byte dữ liệu trong \CommandDescriptor{}.                                                   \\
+		F4               & \gls{enec}/\gls{disec}        & Tái sử dụng Bus TX/RX Handler cùng \gls{scl} Generator cho Broadcast/Direct \gls{ccc}.                 \\
 		F5               & \acrfull{daa}                 & \gls{daa} Processor thực hiện \gls{entdaa}, truy cập \gls{dat} và điều phối trình tự cấp phát địa chỉ. \\
-		F6               & \gls{iic} Fast Mode           & Bộ tham số thời gian \gls{iic}, chế độ lái \OpenDrain{} và xử lý \gls{ack}.                       \\
-		F7               & \gls{fifo} và \gls{dat}       & \CommandFifo{}, \TxFifo{}, \RxFifo{}, \ResponseFifo{} và \gls{dat}.                               \\
-		F8               & \ResponseDescriptor{}         & Đếm số byte đã xử lý, trạng thái lỗi và logic tạo \ResponseDescriptor{}.                          \\
-		F9               & Hủy, reset và backpressure    & Logic xử lý yêu cầu hủy/reset, trạng thái đầy/rỗng \gls{fifo} và phát hiện tràn/thiếu dữ liệu.    \\
-		F10              & \gls{csr} cấu hình            & Bit enable và tham số thời gian \gls{i3c}/\gls{iic} lưu trong \gls{csr}.                          \\
-		P1--P3           & Clock và \gls{scl}            & Clock hệ thống, \gls{scl} Generator và hai bộ tham số thời gian \gls{i3c}/\gls{iic}.              \\
-		P4--P5           & Kích thước giao diện          & \gls{dat} \DatEntryCount{} mục và giao diện thanh ghi \RegisterDataWidth{}-bit.                   \\
+		F6               & \gls{iic} Fast Mode           & Bộ tham số thời gian \gls{iic}, chế độ lái \OpenDrain{} và xử lý \gls{ack}.                            \\
+		F7               & \gls{fifo} và \gls{dat}       & \CommandFifo{}, \TxFifo{}, \RxFifo{}, \ResponseFifo{} và \gls{dat}.                                    \\
+		F8               & \ResponseDescriptor{}         & Đếm số byte đã xử lý, trạng thái lỗi và logic tạo \ResponseDescriptor{}.                               \\
+		F9               & Hủy, reset và backpressure    & Logic xử lý yêu cầu hủy/reset, trạng thái đầy/rỗng \gls{fifo} và phát hiện tràn/thiếu dữ liệu.         \\
+		F10              & \gls{csr} cấu hình            & Bit enable và tham số thời gian \gls{i3c}/\gls{iic} lưu trong \gls{csr}.                               \\
+		P1--P3           & Clock và \gls{scl}            & Clock hệ thống, \gls{scl} Generator và hai bộ tham số thời gian \gls{i3c}/\gls{iic}.                   \\
+		P4--P5           & Kích thước giao diện          & \gls{dat} \DatEntryCount{} mục và giao diện thanh ghi \RegisterDataWidth{}-bit.                        \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -79,7 +79,7 @@ HCI Queues tách quá trình chuẩn bị lệnh khỏi quá trình thực thi t
 \label{sec:rtl-csr}
 \label{sec:rtl-queues}
 
-\textit{Control and Status Registers} cho \Host{} truy cập các thanh ghi điều khiển, trạng thái và \gls{dat}, còn \textit{HCI Queues}
+Control and Status Registers cho \Host{} truy cập các thanh ghi điều khiển, trạng thái và \gls{dat}, còn HCI Queues
 lưu trữ dữ liệu của bốn \gls{fifo} qua handshake ready/valid. Mỗi yêu cầu đọc hoặc ghi giữ nguyên cho
 đến khi phần cứng báo hoàn tất. Đối với \CommandFifo{} và \TxFifo{}, dữ liệu chỉ được ghi khi valid
 và ready cùng tích cực. Nếu \gls{fifo} đầy, thanh ghi đệm giữ dữ liệu đang chờ và tạo backpressure
@@ -91,7 +91,7 @@ thay vì ghi đè dữ liệu chưa được xử lý. Ở chiều ngược lạ
 \begin{figure}[!htbp]
 	\centering
 	\input{figures/csr_queue_handshake.tex}
-	\caption{Waveform handshake ready/valid trên đường ghi từ \textit{Control and Status Registers} đến \CommandFifo{} hoặc \TxFifo{} trong \textit{HCI Queues}: (a) FIFO còn chỗ và (b) FIFO đầy (backpressure).}
+	\caption{Waveform handshake ready/valid trên đường ghi từ Control and Status Registers đến \CommandFifo{} hoặc \TxFifo{} trong HCI Queues: (a) FIFO còn chỗ và (b) FIFO đầy (backpressure).}
 	\label{fig:csr-queue-handshake}
 \end{figure}
 
