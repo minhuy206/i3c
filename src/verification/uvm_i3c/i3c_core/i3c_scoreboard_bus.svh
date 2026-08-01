@@ -240,7 +240,7 @@ function void i3c_scoreboard::check_read_txn(i3c_item item, exp_txn_t exp, outpu
                              output bit expected_stop, output bit txn_aborted,
                              output txn_cov_outcome_t outcome);
   int                      read_id;
-  i3c_resp_err_status_e    resp_status;
+  i3c_resp_err_e           resp_status;
   i3c_resp_cmd_class_e     cmd_class;
   bit                      ack_or_t_bit_matches;
   string                   ack_or_t_bit_name;
@@ -364,7 +364,7 @@ function void i3c_scoreboard::check_i2c_read_ack_sequence(i3c_item item);
   end
 endfunction
 
-function void i3c_scoreboard::handle_read_end(i3c_item item, exp_txn_t exp, ref i3c_resp_err_status_e resp_status,
+function void i3c_scoreboard::handle_read_end(i3c_item item, exp_txn_t exp, ref i3c_resp_err_e resp_status,
                               output bit expected_rstart, output bit expected_stop,
                               output bit txn_aborted);
   bit short_read;
@@ -502,14 +502,12 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp,
   bit                      inferred_tx_underflow;
   bit                      inferred_hc_abort;
   bit                      inferred_data_nack;
-  bit                      missing_continuation;
-  i3c_resp_err_status_e    resp_status;
+  i3c_resp_err_e           resp_status;
   i3c_resp_cmd_class_e     cmd_class;
 
   inferred_tx_underflow = 1'b0;
   inferred_hc_abort     = 1'b0;
   inferred_data_nack    = 1'b0;
-  missing_continuation  = 1'b0;
   cmd_class = classify_response_cmd(exp.cmd_attr, exp.is_ccc);
   outcome = '{abort_valid: 1'b0, abort_cause: HC_ABORT, abort_point: PREAMBLE,
               resp_status: Success};
@@ -547,13 +545,9 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp,
                  exp.data_length
                  ))
     end
-    missing_continuation = exp.target_is_i3c && !exp.toc && item.stop && !item.rstart &&
-                           !inferred_data_nack && !inferred_tx_underflow &&
-                           !inferred_hc_abort;
     resp_status = inferred_data_nack    ? I2cDataNackOrI3cBusAborted :
                   inferred_tx_underflow ? Ovl :
-                  inferred_hc_abort     ? HcAborted :
-                  missing_continuation  ? NotSupported : Success;
+                  inferred_hc_abort     ? HcAborted : Success;
     if (inferred_hc_abort) begin
       prepare_abort_response(HC_ABORT, TX_DATA, item.num_data);
       outcome.abort_valid = 1'b1;
@@ -564,11 +558,6 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp,
       outcome.abort_valid = 1'b1;
       outcome.abort_cause = PROTOCOL_TERMINATION;
       outcome.abort_point = TX_DATA;
-    end else if (missing_continuation) begin
-      prepare_abort_response(PROTOCOL_TERMINATION, RESPONSE, item.num_data);
-      outcome.abort_valid = 1'b1;
-      outcome.abort_cause = PROTOCOL_TERMINATION;
-      outcome.abort_point = RESPONSE;
     end
     outcome.resp_status = resp_status;
     record_exp_resp('{
@@ -593,7 +582,7 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp,
     });
     if (inferred_hc_abort) begin
       start_recovery_context(RECOVERY_HC_ABORT, cmd_class);
-    end else if (inferred_data_nack || missing_continuation) begin
+    end else if (inferred_data_nack) begin
       start_recovery_context(RECOVERY_PROTOCOL_TERMINATION, cmd_class);
     end
     if (inferred_tx_underflow) begin
@@ -601,7 +590,7 @@ function bit i3c_scoreboard::check_write_txn(i3c_item item, exp_txn_t exp,
     end
   end
 
-  return inferred_tx_underflow || inferred_hc_abort || inferred_data_nack || missing_continuation;
+  return inferred_tx_underflow || inferred_hc_abort || inferred_data_nack;
 endfunction
 
 function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t exp,
@@ -611,7 +600,7 @@ function bit i3c_scoreboard::check_immediate_write_txn(i3c_item item, exp_txn_t 
   bit                      data_matches;
   bit                      ack_or_t_bit_matches;
   string                   ack_or_t_bit_name;
-  i3c_resp_err_status_e    resp_status;
+  i3c_resp_err_e           resp_status;
   i3c_resp_cmd_class_e     cmd_class;
 
   inferred_hc_abort  = 1'b0;

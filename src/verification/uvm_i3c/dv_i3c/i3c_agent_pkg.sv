@@ -29,7 +29,7 @@ package i3c_agent_pkg;
 
   typedef enum int {
     DrvIdle,
-    DrvAddrArbit,
+    DrvAddr,
     DrvAddrPushPull,
     DrvAck,
     DrvSelectNext,

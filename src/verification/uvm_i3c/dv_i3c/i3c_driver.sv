@@ -30,7 +30,7 @@ class i3c_driver extends uvm_driver #(
   function string drv_phase_name(i3c_drv_phase_e state);
     case (state)
       DrvIdle:          return "DrvIdle";
-      DrvAddrArbit:     return "DrvAddrArbit";
+      DrvAddr:          return "DrvAddr";
       DrvAddrPushPull:  return "DrvAddrPushPull";
       DrvAck:           return "DrvAck";
       DrvSelectNext:    return "DrvSelectNext";
@@ -436,15 +436,15 @@ class i3c_driver extends uvm_driver #(
 
   task automatic do_idle();
     cfg.vif.wait_for_host_start(cfg.tc.i3c_tc);
-    set_drv_state(DrvAddrArbit);
+    set_drv_state(DrvAddr);
   endtask : do_idle
 
-  task automatic do_addr_arbit(i3c_seq_item req, ref i3c_seq_item rsp);
+  task automatic do_addr(i3c_seq_item req, ref i3c_seq_item rsp);
     sample_addr(rsp, "started addr");
     rsp.start_with_broadcast_header = req.start_with_broadcast_header &&
         is_broadcast_header(rsp.addr);
     set_drv_state(DrvAck);
-  endtask : do_addr_arbit
+  endtask : do_addr
 
   task automatic do_addr_push_pull(ref i3c_seq_item rsp);
     sample_addr(rsp, "device addr");
@@ -565,7 +565,7 @@ class i3c_driver extends uvm_driver #(
       case (bus_state)
         DrvIdle: do_idle();
 
-        DrvAddrArbit: do_addr_arbit(req, rsp);
+        DrvAddr: do_addr(req, rsp);
 
         DrvAddrPushPull: do_addr_push_pull(rsp);
 

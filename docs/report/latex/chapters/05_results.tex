@@ -1,59 +1,73 @@
-\chapter{Kết quả và Đánh giá}
+\chapter{Kết quả và đánh giá}
 \label{ch:results}
 
 % NGUỒN SỐ LIỆU (không đưa vào bản in):
-%   - Regression: src/verification/regression_result.txt (SEED=1, total=80 pass=80).
+%   - Regression/coverage database: 81 test, 81 PASS (SEED=1).
 %   - Functional coverage: src/verification/coverage_report.txt
 %       (closure 222/222 = 100%, diagnostic 173/173 = 100%; per-component closure reg 25/25, i3c 42/42, corr 155/155).
-%       Header "Tests analysed: 81" = 80 test regression + 1 directed DAA closure test (i3c_daa_reserved_addr_resp) merge vào coverage DB.
+%       Header "Tests analysed: 81" dùng cùng tập regression 81 test.
 %   - SVA: src/verification/sva_coverage_report.txt (386 assertion / 386 PASS / 0 MISS; 578 cover / 578 HIT / 1 WAIVED).
-% LƯU Ý: Phụ lục E vẫn còn trích số cũ (1639 bin, 411/590 SVA) và ví dụ cg_abort_response đã xóa — cần đồng bộ lại theo cùng lần chạy.
+% #1: folder, #2: transaction log, #3: scoreboard log, #4: transaction name, #5: label suffix.
+\newcommand{\WaveformLogs}[5]{%
+	\begin{figure}[!htbp]
+		\centering
+		\includegraphics[width=\textwidth]{#1/#2}
+		\caption{Kết quả đối chiếu chi tiết giao dịch #4 của Scoreboard.}
+		\label{fig:res-log-#5-transaction}
+	\end{figure}
+	\begin{figure}[!htbp]
+		\centering
+		\includegraphics[width=\textwidth]{#1/#3}
+		\caption{Tổng kết Scoreboard và Functional Coverage sau \VirtualSequence{} #4.}
+		\label{fig:res-log-#5-scoreboard}
+	\end{figure}%
+}
 
 Chương này trình bày kết quả thu được khi áp dụng môi trường kiểm chứng ở \cref{ch:verification} lên
-thiết kế ở \cref{ch:architecture}. Nội dung đi theo trình tự bằng chứng: điều kiện và phương pháp đo,
-kết quả regression, bằng chứng waveform, kết quả Functional Coverage và SVA, và cuối cùng là đối
-chiếu với các yêu cầu đã phát biểu tại \cref{sec:req}.
+thiết kế ở \cref{ch:architecture}. Nội dung đi theo trình tự bằng chứng: điều kiện và phương pháp thu thập số liệu,
+kết quả regression, kết quả simulation, kết quả \FunctionalCoverage{} và \gls{sva}, đối chiếu phạm vi với thiết kế
+tham chiếu, và cuối cùng là đối chiếu với các yêu cầu đã phát biểu tại \cref{sec:req}.
 
-\section{Điều kiện và phương pháp đo}
+\section{Điều kiện và phương pháp thu thập số liệu}
 \label{sec:res-baseline}
 
-Mọi số liệu trong chương được đo trên cùng một trạng thái mã nguồn của cả RTL lẫn môi trường kiểm
-chứng để kết quả tái lập được. Mô phỏng dùng Cadence Xcelium với UVM~1.2; mỗi test chạy một
-Virtual Sequence với \texttt{-svseed 1}. Cố định seed bảo đảm bộ kết quả tái lập chính xác;
-constrained-random vẫn sinh ngẫu nhiên stimulus trong từng kịch bản trên seed đó. Một test được tính
+Mọi số liệu trong chương được thu thập trên cùng một trạng thái mã nguồn của cả \gls{rtl} lẫn môi trường kiểm
+chứng để kết quả tái lập được. Mô phỏng dùng Cadence Xcelium với \gls{uvm}~1.2. Mỗi test chạy một
+\VirtualSequence{} với \texttt{-svseed 1}. Seed này được cố định nhằm hỗ trợ tái lập kết quả trong cùng
+phiên bản mã nguồn, công cụ và tùy chọn mô phỏng.
+Constrained-random vẫn sinh ngẫu nhiên stimulus trong từng kịch bản trên seed đó. Một test được tính
 là PASS khi mô phỏng hoàn tất với không có \texttt{UVM\_ERROR} và \texttt{UVM\_FATAL}.
 
-Functional Coverage và SVA được thu bằng cách chạy regression toàn bộ 80 test.
-\Cref{tab:res-baseline} tóm tắt điều kiện đo.
+Kết quả regression gồm 81 test là nguồn thống nhất cho đánh giá đúng/sai, \FunctionalCoverage{} và \gls{sva}.
+\Cref{tab:res-baseline} tóm tắt điều kiện thu thập số liệu.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Điều kiện đo kết quả.}
+	\caption{Điều kiện thu thập số liệu.}
 	\label{tab:res-baseline}
 	\begin{tabular}{L{4.6cm} L{8.7cm}}
 		\toprule
-		\textbf{Hạng mục} & \textbf{Giá trị / quy tắc}                                          \\
+		\textbf{Hạng mục}  & \textbf{Giá trị / quy tắc}                                          \\
 		\midrule
-		Công cụ mô phỏng  & Cadence Xcelium, UVM~1.2                                            \\
-		Seed              & \texttt{-svseed 1} cho mọi test                                     \\
-		Bộ test           & 80 Virtual Sequence (\cref{tab:vseq-cat}), một test class duy nhất  \\
-		Tiêu chí PASS     & Mô phỏng hoàn tất, không có \texttt{UVM\_ERROR}/\texttt{UVM\_FATAL} \\
-		Coverage          & Regression toàn bộ 80 test                                          \\
+		Công cụ mô phỏng   & Cadence Xcelium, \gls{uvm}~1.2                                      \\
+		Seed               & \texttt{-svseed 1} cho mọi test                                     \\
+		Bộ test            & 81 test regression, một test class duy nhất                         \\
+		Tiêu chí PASS      & Mô phỏng hoàn tất, không có \texttt{UVM\_ERROR}/\texttt{UVM\_FATAL} \\
+		Coverage/\gls{sva} & Kết quả regression của toàn bộ 81 test                              \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Môi trường kiểm chứng --- gồm thư viện Virtual Sequence và các checker SVA dùng chung --- chiếm
+Môi trường kiểm chứng --- gồm thư viện \VirtualSequence{} và các module \gls{sva} --- chiếm
 phần lớn công sức của khóa luận, phản ánh trọng tâm đặt vào việc chứng minh tính đúng của thiết kế,
 bên cạnh việc hiện thực chức năng.
 
 \section{Kết quả regression}
 \label{sec:res-regression}
 
-Cả 80 Virtual Sequence đều PASS với \texttt{-svseed 1}, không ghi nhận assertion fail nào.
+Cả 81 test regression đều PASS với \texttt{-svseed 1}, không ghi nhận assertion fail nào.
 \Cref{tab:res-regression} trình bày số lượng và kết quả PASS theo mười nhóm kịch bản đã mô tả mục
-tiêu kiểm chứng ở \cref{tab:vseq-cat}. Các nhóm I3C \PrivateWriteRead{} được thực hiện
-trong I3C SDR Mode; trích đoạn log và bảng tổng kết regression được đặt tại \cref{app:regression}.
+tiêu kiểm chứng ở \cref{tab:vseq-cat}, cùng một test dành cho coverage closure.
 
 \begin{table}[!htbp]
 	\centering
@@ -64,49 +78,53 @@ trong I3C SDR Mode; trích đoạn log và bảng tổng kết regression đư�
 		\textbf{Nhóm}                & \textbf{Số test} & \textbf{PASS} \\
 		\midrule
 		Bus                          & 11               & 11            \\
-		CSR                          & 14               & 14            \\
-		FIFO                         & 5                & 5             \\
-		I3C \PrivateWrite{}          & 6                & 6             \\
-		I3C \PrivateRead{}           & 8                & 8             \\
-		Immediate Data Transfer      & 5                & 5             \\
-		CCC                          & 4                & 4             \\
-		DAA                          & 9                & 9             \\
-		Legacy I\textsuperscript{2}C & 4                & 4             \\
-		Response/error               & 14               & 14            \\
+		\gls{csr}                    & 14               & 14            \\
+		\gls{fifo}                   & 5                & 5             \\
+		\gls{i3c} \PrivateWrite{}    & 6                & 6             \\
+		\gls{i3c} \PrivateRead{}     & 8                & 8             \\
+		\ImmediateDataTransfer{}     & 5                & 5             \\
+		\gls{ccc}                    & 4                & 4             \\
+		\gls{daa}                    & 9                & 9             \\
+		\LegacyIic{}                 & 4                & 4             \\
+		\ResponseDescriptor{} và lỗi & 14               & 14            \\
+		Coverage closure             & 1                & 1             \\
 		\midrule
-		\textbf{Tổng}                & \textbf{80}      & \textbf{80}   \\
+		\textbf{Tổng}                & \textbf{81}      & \textbf{81}   \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Ngoài 80 test trên, ràng buộc độ sâu của \texttt{sync\_fifo} được bảo đảm bằng một assertion tại
-thời điểm elaboration trong chính RTL: cấu hình độ sâu không phải lũy thừa của 2 làm elaboration
-dừng với thông báo fatal định trước, nên mọi lần compile thành công của regression cũng đồng thời
-xác nhận ràng buộc tham số này.
+Ngoài các test regression trên, ràng buộc độ sâu lũy thừa hai của \gls{fifo}
+(\cref{sec:arch-desc}) được kiểm bằng immediate assertion ở thời điểm elaboration, nên mọi lần
+compile thành công cũng đồng thời xác nhận ràng buộc tham số này.
 
-Khi diễn giải kết quả 80/80, cần lưu ý hai điểm. Thứ nhất, mỗi kịch bản có đúng một mục tiêu và phần kiểm
-tra nằm ở Scoreboard và SVA dùng chung, nên một lần PASS là kết luận đồng thời của cả ba cơ chế kiểm
-tra chứ không phải của điều kiện tự viết trong test. Thứ hai, PASS với một seed cố định chỉ chứng
-minh các hành vi đã được kích hoạt là đúng; mức độ đầy đủ của việc kích hoạt được đo riêng bằng
-Functional Coverage ở \cref{sec:res-coverage}.
+Theo cách phân vai tại \cref{sec:ver-vseq}, mỗi kịch bản chỉ sinh stimulus, còn \Scoreboard{} và
+\Gls{sva} thực hiện đối chiếu đúng/sai. Vì vậy, kết quả PASS phản ánh kết luận chung của các cơ chế kiểm
+tra. Với một seed cố định, PASS chỉ xác nhận các hành vi đã
+được kích hoạt là đúng; mức độ đầy đủ được đánh giá riêng bằng \FunctionalCoverage{} tại
+\cref{sec:res-coverage}.
 
-\section{Bằng chứng waveform}
+\section{Kết quả simulation}
 \label{sec:res-waveform}
 
-Các giao dịch tiêu biểu được kiểm tra trực quan bằng SimVision, nhằm xác nhận rằng chuỗi sự
-kiện trên bus khớp với mô tả giao thức ở \cref{ch:background-requirements}: START và
-\AddressHeader{} phát ở pha \OpenDrain{}, TX/RX data truyền ở pha \PushPull{}, T-Bit kết thúc mỗi
-byte, và STOP trả bus về trạng thái nghỉ. Mọi hình trong mục này chụp cùng năm tín hiệu phía
-\ActiveController{}: cặp SCL vào/ra (\texttt{scl\_i}, \texttt{scl\_o}), cặp SDA vào/ra
-(\texttt{sda\_i}, \texttt{sda\_o}) và tín hiệu chọn pha \OpenDrain{}/\PushPull{}
-(\texttt{sel\_od\_pp}). Từng đoạn trên bus được khoanh bằng khung nét đứt và chú thích bằng các
-nhãn S, Address, CCC, DATA, Sr, P cùng giá trị byte tương ứng.
+Trong mục này, mỗi giao dịch tiêu biểu được trình bày bằng waveform, kết quả đối chiếu của
+\Scoreboard{} và kết quả tổng hợp sau khi \VirtualSequence{} hoàn tất. Waveform được kiểm tra bằng
+\SimVision{} để xác nhận trình tự trên bus khớp với mô tả giao thức ở
+\cref{ch:background-requirements}. \Scoreboard{} đối chiếu giao dịch tái tạo trên bus, dữ liệu
+đọc từ \RxFifo{} và \ResponseDescriptor{} với giá trị dự kiến do \ReferenceModel{} xây dựng.
+\FunctionalCoverage{} ghi nhận các tình huống đã được kích hoạt trong \VirtualSequence{} tương ứng.
 
-Các hình dưới đây trải đủ các nhóm giao dịch trong phạm vi thiết kế: I3C Private Write/Read trong SDR Mode
-(\cref{fig:res-wave-write} và \cref{fig:res-wave-read}), \ImmediateDataTransfer{}
-(\cref{fig:res-i3c-imm}). CCC gồm ENEC dạng Broadcast (\cref{fig:res-enec-bcast}) và dạng Direct
-(\cref{fig:res-enec-direct}). Thủ tục DAA (\cref{fig:res-daa}) và giao dịch \LegacyIic{} Fast Mode
-gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
+Các waveform chụp cùng năm tín hiệu phía \Controller{}: cặp \gls{scl} vào/ra
+(\texttt{scl\_i}, \texttt{scl\_o}), cặp \gls{sda} vào/ra (\texttt{sda\_i}, \texttt{sda\_o}) và tín
+hiệu chọn pha \OpenDrain{}/\PushPull{} (\texttt{sel\_od\_pp}). Từng đoạn trên bus được khoanh bằng
+khung nét đứt và chú thích bằng các nhãn S, Address, \gls{ccc}, DATA, Sr, P cùng giá trị byte tương ứng.
+
+Các kết quả dưới đây gồm \gls{i3c} \PrivateTransfer{} trong \gls{sdr} Mode
+(\cref{fig:res-wave-write} và \cref{fig:res-wave-read}), \gls{enec} dạng Broadcast
+(\cref{fig:res-enec-bcast}) và dạng Direct
+(\cref{fig:res-enec-direct}), quy trình \gls{daa}
+(\cref{fig:res-daa-1,fig:res-daa-2,fig:res-daa-3}), cùng waveform giao dịch
+\LegacyIic{} Fast Mode Write (\cref{fig:res-i2c-write}).
 
 \begin{figure}[!htbp]
 	\centering
@@ -116,7 +134,7 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 					font=\scriptsize, text=black, align=center,
 					text height=1.5ex, text depth=0.25ex}
 		]
-		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i3c_write.png}};
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i3c_write/i3c_write.png}};
 		% Toa do chuan hoa theo anh: (0,0) la goc trai duoi, (1,1) la goc phai tren.
 		\begin{scope}[shift={(wave.south west)},
 				x={($(wave.south east)-(wave.south west)$)},
@@ -126,9 +144,9 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 			\draw[window] (0.4885,-0.14) rectangle (0.963,1.14);
 			\draw[window] (0.968,-0.14) rectangle (1.000,1.14);
 			\node[condtag, anchor=south] at (0.200,1.16) {S};
-			\node[condtag, anchor=south] at (0.35175,1.16) {Address};
-			\node[condtag, anchor=north] at (0.35175,-0.16) {0x53};
-			\node[condtag, anchor=south] at (0.72575,1.16) {DATA};
+			\node[condtag, anchor=south] at (0.35175,1.16) {Address Phase};
+			\node[condtag, anchor=north] at (0.35175,-0.16) {0x53, RnW = Write};
+			\node[condtag, anchor=south] at (0.72575,1.16) {Data Phase};
 			\node[condtag, anchor=north] at (0.72575,-0.16) {FA 8F A2 66};
 			\node[condtag, anchor=south] at (0.984,1.16) {P};
 		\end{scope}
@@ -136,6 +154,7 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 	\caption{Waveform giao dịch I3C \PrivateWrite{}.}
 	\label{fig:res-wave-write}
 \end{figure}
+\WaveformLogs{i3c_write}{i3c_write_transaction.jpg}{i3c_write_scoreboard.jpg}{\acrshort{i3c} Private Write}{i3c-write}
 
 \begin{figure}[!htbp]
 	\centering
@@ -145,26 +164,27 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 					font=\scriptsize, text=black, align=center,
 					text height=1.5ex, text depth=0.25ex}
 		]
-		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i3c_read.png}};
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i3c_read/i3c_read.png}};
 		% Toa do chuan hoa theo anh: (0,0) la goc trai duoi, (1,1) la goc phai tren.
 		\begin{scope}[shift={(wave.south west)},
 				x={($(wave.south east)-(wave.south west)$)},
 				y={($(wave.north west)-(wave.south west)$)}]
-			\draw[window] (0.185,-0.14) rectangle (0.215,1.14);
-			\draw[window] (0.220,-0.14) rectangle (0.4835,1.14);
-			\draw[window] (0.4885,-0.14) rectangle (0.963,1.14);
-			\draw[window] (0.968,-0.14) rectangle (1.000,1.14);
-			\node[condtag, anchor=south] at (0.200,1.16) {S};
-			\node[condtag, anchor=south] at (0.35175,1.16) {Address};
-			\node[condtag, anchor=north] at (0.35175,-0.16) {0x53};
-			\node[condtag, anchor=south] at (0.72575,1.16) {DATA};
-			\node[condtag, anchor=north] at (0.72575,-0.16) {FA 8F A2 66};
-			\node[condtag, anchor=south] at (0.984,1.16) {P};
+			\draw[window] (0.222,-0.14) rectangle (0.245,1.14);
+			\draw[window] (0.250,-0.14) rectangle (0.6845,1.14);
+			\draw[window] (0.6895,-0.14) rectangle (0.890,1.14);
+			\draw[window] (0.895,-0.14) rectangle (1.000,1.14);
+			\node[condtag, anchor=south] at (0.2335,1.16) {S};
+			\node[condtag, anchor=south] at (0.46725,1.16) {Address Phase};
+			\node[condtag, anchor=north] at (0.46725,-0.16) {0x53, RnW = Read};
+			\node[condtag, anchor=south] at (0.78975,1.16) {Data Phase};
+			\node[condtag, anchor=north] at (0.78975,-0.16) {FA};
+			\node[condtag, anchor=south] at (0.9475,1.16) {P};
 		\end{scope}
 	\end{tikzpicture}
-	\caption{Waveform giao dịch I3C \PrivateRead{}.}
+	\caption{Waveform trường hợp \texttt{HC\_ABORT} của giao dịch I3C \PrivateRead{}.}
 	\label{fig:res-wave-read}
 \end{figure}
+\WaveformLogs{i3c_read}{i3c_read_transaction.jpg}{i3c_read_scoreboard.jpg}{\acrshort{i3c} Private Read}{i3c-read}
 
 \begin{figure}[!htbp]
 	\centering
@@ -174,35 +194,7 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 					font=\scriptsize, text=black, align=center,
 					text height=1.5ex, text depth=0.25ex}
 		]
-		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i3c_imm.png}};
-		\begin{scope}[shift={(wave.south west)},
-				x={($(wave.south east)-(wave.south west)$)},
-				y={($(wave.north west)-(wave.south west)$)}]
-			\draw[window] (0.203,-0.14) rectangle (0.238,1.14);
-			\draw[window] (0.243,-0.14) rectangle (0.6095,1.14);
-			\draw[window] (0.6145,-0.14) rectangle (0.948,1.14);
-			\draw[window] (0.953,-0.14) rectangle (1.000,1.14);
-			\node[condtag, anchor=south] at (0.2205,1.16) {S};
-			\node[condtag, anchor=south] at (0.42625,1.16) {Address};
-			\node[condtag, anchor=north] at (0.42625,-0.16) {0x08};
-			\node[condtag, anchor=south] at (0.78125,1.16) {Immediate DATA};
-			\node[condtag, anchor=north] at (0.78125,-0.16) {A2 FA};
-			\node[condtag, anchor=south] at (0.9765,1.16) {P};
-		\end{scope}
-	\end{tikzpicture}
-	\caption{Waveform giao dịch I3C Immediate Command.}
-	\label{fig:res-i3c-imm}
-\end{figure}
-
-\begin{figure}[!htbp]
-	\centering
-	\begin{tikzpicture}[
-			window/.style={draw=red, dashed, line width=0.6pt},
-			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
-					font=\scriptsize, text=black, align=center,
-					text height=1.5ex, text depth=0.25ex}
-		]
-		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{enec_bcast.png}};
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{enec/enec_bcast.png}};
 		\begin{scope}[shift={(wave.south west)},
 				x={($(wave.south east)-(wave.south west)$)},
 				y={($(wave.north west)-(wave.south west)$)}]
@@ -213,7 +205,7 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 			\draw[window] (0.953,-0.14) rectangle (1.000,1.14);
 			\node[condtag, anchor=south] at (0.218,1.16) {S};
 			\node[condtag, anchor=south] at (0.42625,1.16) {Broadcast Address};
-			\node[condtag, anchor=north] at (0.42625,-0.16) {0x7E};
+			\node[condtag, anchor=north] at (0.42625,-0.16) {0x7E, RnW = Write};
 			\node[condtag, anchor=south] at (0.6932,1.16) {CCC};
 			\node[condtag, anchor=north] at (0.6932,-0.16) {0x00};
 			\node[condtag, anchor=south] at (0.86245,1.16) {Event Byte};
@@ -224,6 +216,7 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 	\caption{Waveform lệnh ENEC dạng Broadcast.}
 	\label{fig:res-enec-bcast}
 \end{figure}
+\WaveformLogs{enec}{enec_transaction.jpg}{enec_scoreboard.jpg}{\acrshort{enec} Broadcast}{enec-bcast}
 
 \begin{figure}[!htbp]
 	\centering
@@ -233,7 +226,7 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 					font=\scriptsize, text=black, align=center,
 					text height=1.5ex, text depth=0.25ex}
 		]
-		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{enec_direct.png}};
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{dir_enec/enec_direct.png}};
 		\begin{scope}[shift={(wave.south west)},
 				x={($(wave.south east)-(wave.south west)$)},
 				y={($(wave.north west)-(wave.south west)$)}]
@@ -246,12 +239,12 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 			\draw[window] (0.962,-0.14) rectangle (1.000,1.14);
 			\node[condtag, anchor=south] at (0.203,1.16) {S};
 			\node[condtag, anchor=south] at (0.36425,1.16) {Broadcast Address};
-			\node[condtag, anchor=north] at (0.36425,-0.16) {0x7E};
+			\node[condtag, anchor=north] at (0.36425,-0.16) {0x7E, RnW = Write};
 			\node[condtag, anchor=south] at (0.57525,1.16) {CCC};
 			\node[condtag, anchor=north] at (0.57525,-0.16) {0x80};
 			\node[condtag, anchor=south] at (0.6675,1.16) {Sr};
 			\node[condtag, anchor=south] at (0.758,1.16) {Direct Address};
-			\node[condtag, anchor=north] at (0.758,-0.16) {0x08};
+			\node[condtag, anchor=north] at (0.758,-0.16) {0x08, RnW = Write};
 			\node[condtag, anchor=south] at (0.8915,1.16) {Event Byte};
 			\node[condtag, anchor=north] at (0.8915,-0.16) {0x01};
 			\node[condtag, anchor=south] at (0.981,1.16) {P};
@@ -260,12 +253,37 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 	\caption{Waveform lệnh ENEC dạng Direct.}
 	\label{fig:res-enec-direct}
 \end{figure}
+\WaveformLogs{dir_enec}{enec_transaction.jpg}{enec_scoreboard.jpg}{\acrshort{enec} Direct}{enec-direct}
 
 \begin{figure}[!htbp]
 	\centering
-	\includegraphics[width=\textwidth]{daa.png}
-	\caption{Waveform thủ tục Dynamic Address Assignment (DAA).}
-	\label{fig:res-daa}
+	\begin{tikzpicture}[
+			window/.style={draw=red, dashed, line width=0.6pt},
+			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
+					font=\scriptsize, text=black, align=center,
+					text height=1.5ex, text depth=0.25ex}
+		]
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{entdaa/daa1_png.png}};
+		\begin{scope}[shift={(wave.south west)},
+				x={($(wave.south east)-(wave.south west)$)},
+				y={($(wave.north west)-(wave.south west)$)}]
+			\draw[window] (0.195,-0.14) rectangle (0.215,1.14);
+			\draw[window] (0.220,-0.14) rectangle (0.507,1.14);
+			\draw[window] (0.512,-0.14) rectangle (0.640,1.14);
+			\draw[window] (0.645,-0.14) rectangle (0.690,1.14);
+			\draw[window] (0.695,-0.14) rectangle (1.000,1.14);
+			\node[condtag, anchor=south] at (0.205,1.16) {S};
+			\node[condtag, anchor=south] at (0.3635,1.16) {Broadcast Address};
+			\node[condtag, anchor=north] at (0.3635,-0.16) {0x7E, RnW = Write};
+			\node[condtag, anchor=south] at (0.576,1.16) {CCC};
+			\node[condtag, anchor=north] at (0.576,-0.16) {0x07};
+			\node[condtag, anchor=south] at (0.6675,1.16) {Sr};
+			\node[condtag, anchor=south] at (0.8475,1.16) {Broadcast Address};
+			\node[condtag, anchor=north] at (0.8475,-0.16) {0x7E, RnW = Read};
+		\end{scope}
+	\end{tikzpicture}
+	\caption{Waveform quy trình DAA -- phần 1/3.}
+	\label{fig:res-daa-1}
 \end{figure}
 
 \begin{figure}[!htbp]
@@ -276,76 +294,109 @@ gồm Write (\cref{fig:res-i2c-write}) và Read (\cref{fig:res-i2c-read}).
 					font=\scriptsize, text=black, align=center,
 					text height=1.5ex, text depth=0.25ex}
 		]
-		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i2c_write.png}};
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{entdaa/daa5_png.png}};
+		\begin{scope}[shift={(wave.south west)},
+				x={($(wave.south east)-(wave.south west)$)},
+				y={($(wave.north west)-(wave.south west)$)}]
+			\draw[window] (0.152,-0.14) rectangle (1.000,1.14);
+			\node[condtag, anchor=south] at (0.576,1.16) {PID 48 bit};
+			\node[condtag, anchor=north] at (0.576,-0.16) {PID[47:0] = 0x7B AF D6 9E 1C 7B};
+		\end{scope}
+	\end{tikzpicture}
+	\caption{Waveform quy trình DAA -- phần 2/3.}
+	\label{fig:res-daa-2}
+\end{figure}
+
+\begin{figure}[!htbp]
+	\centering
+	\begin{tikzpicture}[
+			window/.style={draw=red, dashed, line width=0.6pt},
+			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
+					font=\scriptsize, text=black, align=center,
+					text height=1.5ex, text depth=0.25ex}
+		]
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{entdaa/daa4_png.png}};
+		\begin{scope}[shift={(wave.south west)},
+				x={($(wave.south east)-(wave.south west)$)},
+				y={($(wave.north west)-(wave.south west)$)}]
+			\draw[window] (0.154,-0.14) rectangle (0.413,1.14);
+			\draw[window] (0.418,-0.14) rectangle (0.671,1.14);
+			\draw[window] (0.676,-0.14) rectangle (0.967,1.14);
+			\draw[window] (0.972,-0.14) rectangle (1.000,1.14);
+			\node[condtag, anchor=south] at (0.2835,1.16) {BCR};
+			\node[condtag, anchor=north] at (0.2835,-0.16) {0x35};
+			\node[condtag, anchor=south] at (0.5445,1.16) {DCR};
+			\node[condtag, anchor=north] at (0.5445,-0.16) {0xEA};
+			\node[condtag, anchor=south] at (0.8215,1.16) {Dynamic Address};
+			\node[condtag, anchor=north] at (0.8215,-0.16) {0x24 + parity};
+			\node[condtag, anchor=south] at (0.986,1.16) {P};
+		\end{scope}
+	\end{tikzpicture}
+	\caption{Waveform quy trình DAA -- phần 3/3.}
+	\label{fig:res-daa-3}
+\end{figure}
+\WaveformLogs{entdaa}{daa_transaction.jpg}{daa_scoreboard.jpg}{\acrshort{entdaa}}{entdaa}
+
+\begin{figure}[!htbp]
+	\centering
+	\begin{tikzpicture}[
+			window/.style={draw=red, dashed, line width=0.6pt},
+			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
+					font=\scriptsize, text=black, align=center,
+					text height=1.5ex, text depth=0.25ex}
+		]
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i2c_write/i2c_write.png}};
 		\begin{scope}[shift={(wave.south west)},
 				x={($(wave.south east)-(wave.south west)$)},
 				y={($(wave.north west)-(wave.south west)$)}]
 			\draw[window] (0.154,-0.14) rectangle (0.191,1.14);
-			\draw[window] (0.196,-0.14) rectangle (0.558,1.14);
-			\draw[window] (0.563,-0.14) rectangle (0.942,1.14);
+			\draw[window] (0.196,-0.14) rectangle (0.570,1.14);
+			\draw[window] (0.575,-0.14) rectangle (0.942,1.14);
 			\draw[window] (0.947,-0.14) rectangle (1.000,1.14);
 			\node[condtag, anchor=south] at (0.1725,1.16) {S};
-			\node[condtag, anchor=south] at (0.377,1.16) {Address};
-			\node[condtag, anchor=north] at (0.377,-0.16) {0x50};
-			\node[condtag, anchor=south] at (0.7525,1.16) {DATA};
-			\node[condtag, anchor=north] at (0.7525,-0.16) {0x51};
+			\node[condtag, anchor=south] at (0.383,1.16) {Address Phase};
+			\node[condtag, anchor=north] at (0.383,-0.16) {0x50, RnW = Write};
+			\node[condtag, anchor=south] at (0.7585,1.16) {Data Phase};
+			\node[condtag, anchor=north] at (0.7585,-0.16) {0x51};
 			\node[condtag, anchor=south] at (0.9735,1.16) {P};
 		\end{scope}
 	\end{tikzpicture}
 	\caption{Waveform giao dịch I\textsuperscript{2}C Write.}
 	\label{fig:res-i2c-write}
 \end{figure}
+\WaveformLogs{i2c_write}{i2c_write_transaction.jpg}{i2c_write_scoreboard.jpg}{\acrshort{iic} Write}{i2c-write}
 
-\begin{figure}[!htbp]
-	\centering
-	\begin{tikzpicture}[
-			window/.style={draw=red, dashed, line width=0.6pt},
-			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
-					font=\scriptsize, text=black, align=center,
-					text height=1.5ex, text depth=0.25ex}
-		]
-		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{i2c_read.png}};
-		\begin{scope}[shift={(wave.south west)},
-				x={($(wave.south east)-(wave.south west)$)},
-				y={($(wave.north west)-(wave.south west)$)}]
-			\draw[window] (0.154,-0.14) rectangle (0.191,1.14);
-			\draw[window] (0.196,-0.14) rectangle (0.548,1.14);
-			\draw[window] (0.553,-0.14) rectangle (0.922,1.14);
-			\draw[window] (0.927,-0.14) rectangle (1.000,1.14);
-			\node[condtag, anchor=south] at (0.1725,1.16) {S};
-			\node[condtag, anchor=south] at (0.372,1.16) {Address};
-			\node[condtag, anchor=north] at (0.372,-0.16) {0x50};
-			\node[condtag, anchor=south] at (0.7375,1.16) {DATA};
-			\node[condtag, anchor=north] at (0.7375,-0.16) {0x51};
-			\node[condtag, anchor=south] at (0.9635,1.16) {P};
-		\end{scope}
-	\end{tikzpicture}
-	\caption{Waveform giao dịch I\textsuperscript{2}C Read.}
-	\label{fig:res-i2c-read}
-\end{figure}
-
-Ở các giao dịch mà phía \ActiveController{} lái dữ liệu --- \PrivateWrite{},
-\ImmediateDataTransfer{} và pha dữ liệu của CCC --- tín hiệu \texttt{sel\_od\_pp} chuyển lên mức
+Ở các giao dịch mà phía \Controller{} lái dữ liệu --- \gls{i3c} \PrivateWrite{} và pha dữ liệu của \gls{ccc}
+--- tín hiệu \texttt{sel\_od\_pp} chuyển lên mức
 cao đúng khi bắt đầu pha dữ liệu, thể hiện điểm chuyển \OpenDrain{} sang \PushPull{} mà
-\cref{sec:rtl-controller-active} mô tả ở mức RTL; \cref{fig:res-enec-direct} còn cho thấy một
-\RepeatedSTART{} chèn giữa \BroadcastCCC{} và pha Direct. Ngược lại, trong \PrivateRead{}
-(\cref{fig:res-wave-read}) pha dữ liệu do \Target{} lái nên \texttt{sel\_od\_pp} giữ mức thấp và
-phía \ActiveController{} để đường SDA ở \OpenDrain{}. Thủ tục DAA (\cref{fig:res-daa}) diễn ra chủ
+\cref{sec:rtl-controller-active} mô tả ở mức \gls{rtl}. \Cref{fig:res-enec-direct} còn cho thấy một
+\RepeatedSTART{} giữa pha phát Direct \gls{ccc} opcode và Direct Address Phase. Ngược lại, trong \gls{i3c}
+\PrivateRead{} (\cref{fig:res-wave-read}), pha dữ liệu do \Target{} lái nên
+\texttt{sel\_od\_pp} giữ mức thấp và phía \Controller{} để đường \gls{sda} ở \OpenDrain{}. Waveform này
+minh họa trường hợp \texttt{HC\_ABORT}: sau khi \Host{} yêu cầu hủy, \Controller{} chờ hoàn tất byte
+hiện tại và \TBit{} đi kèm, thực hiện takeover, tạo STOP rồi trả phản hồi \texttt{HcAborted}.
+
+Quy trình \gls{daa} (\cref{fig:res-daa-1,fig:res-daa-2,fig:res-daa-3}) diễn ra chủ
 yếu ở \OpenDrain{} do quá trình phân xử địa chỉ, và trải trên trục thời gian dài hơn hẳn vì gán
-địa chỉ cho nhiều \Target{} nối tiếp. Hai giao dịch \LegacyIic{} (\cref{fig:res-i2c-write} và
-\cref{fig:res-i2c-read}) chạy hoàn toàn ở \OpenDrain{} tại Fast Mode 400~kHz, nên trục thời gian
-rộng hơn gần một bậc so với các giao dịch I3C ở 12,5~MHz.
+địa chỉ cho nhiều \Target{} nối tiếp. Giao dịch \LegacyIic{} Write
+(\cref{fig:res-i2c-write}) chạy hoàn toàn ở \OpenDrain{} tại Fast Mode 400~kHz.
 
-Bằng chứng waveform mang tính minh họa và phục vụ debug; nó không thay thế cơ chế kiểm tra tự động.
-Mọi thuộc tính quan sát được trên các hình này --- thứ tự pha, ACK/NACK, T-Bit, nội dung TX/RX data ---
-đều đã được Scoreboard hoặc SVA kiểm tra trong mọi lần chạy.
+Các waveform cho thấy trình tự pha, \gls{ack}, \TBit{} và giá trị \gls{tx}/\gls{rx} data của những giao dịch
+tiêu biểu. Kết quả đối chiếu chi tiết xác nhận giá trị quan sát phù hợp với giá trị dự kiến, còn
+kết quả tổng hợp ghi nhận các giao dịch đều PASS và không còn lệnh, dữ liệu hoặc phản hồi đang chờ
+xử lý khi \VirtualSequence{} hoàn tất. Waveform phục vụ debug và không thay thế cơ chế kiểm tra tự
+động của \Scoreboard{} và \gls{sva}.
 
-\section{Kết quả Functional Coverage và SVA}
+Mức \FunctionalCoverage{} trong từng kết quả tổng hợp phản ánh các tình huống được kích hoạt bởi
+\VirtualSequence{} tương ứng. Kết quả coverage của toàn bộ 81 test regression được trình bày riêng
+tại \cref{sec:res-coverage}.
+
+\section{Kết quả Functional Coverage và \texorpdfstring{\gls{sva}}{SVA}}
 \label{sec:res-coverage}
 
 \subsection{Functional Coverage}
 
-Trên coverage database thu được từ toàn bộ regression, mô hình ba lớp đạt \textbf{100\% closure}
+Trong kết quả regression 81 test, mô hình ba lớp đạt 100\% closure
 với 222/222 closure bin, đồng thời đạt 100\% ở toàn bộ 173/173 diagnostic bin, theo cách phân tách
 closure/diagnostic đã trình bày ở \cref{sec:ver-cov}. Mọi covergroup của cả ba lớp đều được kích
 hoạt đủ các bin đã định nghĩa. \Cref{tab:res-cov} trình bày closure bin theo ba coverage component
@@ -353,76 +404,99 @@ của \cref{sec:ver-cov}.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Kết quả Functional Coverage (closure bin) theo component trên toàn bộ regression.}
+	\caption{Kết quả Functional Coverage (closure bin) của regression 81 test.}
 	\label{tab:res-cov}
 	\begin{tabular}{L{5.6cm} C{3.0cm} C{2.4cm}}
 		\toprule
-		\textbf{Component}                 & \textbf{Closure bin} & \textbf{Tỷ lệ}   \\
+		\textbf{Component}    & \textbf{Closure bin} & \textbf{Tỷ lệ} \\
 		\midrule
-		\texttt{reg\_coverage}             & 25/25                & 100\%            \\
-		\texttt{i3c\_coverage}             & 42/42                & 100\%            \\
-		\texttt{i3c\_correlated\_coverage} & 155/155              & 100\%            \\
+		\RegisterCoverage{}   & 25/25                & 100\%          \\
+		\IThreeCCoverage{}    & 42/42                & 100\%          \\
+		\CorrelatedCoverage{} & 155/155              & 100\%          \\
 		\midrule
-		\textbf{Tổng}                      & \textbf{222/222}     & \textbf{100\%}   \\
+		\textbf{Tổng}         & \textbf{222/222}     & \textbf{100\%} \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-% PLACEHOLDER — ảnh chụp phần đầu coverage_report.txt hoặc giao diện IMC trên cov_work.
+\Cref{fig:res-cov-log} trình bày log coverage sau khi hợp nhất kết quả của 81
+\VirtualSequence{}. Các covergroup thuộc ba coverage component đều đạt 100\%, đồng thời mức
+\FunctionalCoverage{} tổng hợp cũng đạt 100\%.
+
 \begin{figure}[!htbp]
 	\centering
-	\fbox{\parbox[c][4.6cm][c]{0.92\textwidth}{\centering\itshape
-			[Hình chờ bổ sung]\\
-			Ảnh chụp tổng kết Functional Coverage sau khi chạy toàn bộ regression\\
-			(closure và diagnostic bin của ba coverage component).}}
-	\caption{Tổng kết Functional Coverage sau khi chạy toàn bộ regression.}
-	\label{fig:res-cov}
+	\includegraphics[width=\textwidth]{coverage_all/coverage_all.jpg}
+	\caption{Log Functional Coverage của regression 81 test.}
+	\label{fig:res-cov-log}
 \end{figure}
 
-Mức 100\% closure này được đo trên tập bin định nghĩa đúng theo phạm vi F1--F10, theo hai nguyên
-tắc phân bổ trách nhiệm ở \cref{sec:ver-cov}. Thứ nhất, khi một cross đóng vai trò closure owner cho
-một chức năng, các coverpoint thành phần của nó được tính là diagnostic bin và không cộng trùng vào
-mẫu số KPI. Thứ hai, các chiều mang bản chất so khớp bằng nhau --- địa chỉ, chiều truyền, các trường
-Response Descriptor và tính toàn vẹn payload --- cùng kết quả pass/fail của các luồng phục hồi thuộc
-trách nhiệm kiểm tra của Scoreboard và SVA, chứ không đặt thành positive coverage bin.
+Mức 100\% closure này được đo trên tập bin định nghĩa theo phạm vi F1--F10, với cách phân loại
+closure/diagnostic và quy tắc phân bổ trách nhiệm giữa coverage và Scoreboard/\gls{sva} như đã trình bày
+ở \cref{sec:ver-cov}.
 
-Nhờ ranh giới này, closure phản ánh việc các tình huống F1--F10 đã thực sự được kích hoạt, còn mọi
-sai khác về địa chỉ, chiều truyền, response hay tính toàn vẹn dữ liệu đều biểu hiện dưới dạng lỗi
-Scoreboard/SVA chứ không phải dưới dạng một bin chưa phủ. Các tổ hợp ba chiều hiếm gặp --- ví dụ
-chuỗi hai lệnh nối tiếp tại một loại điểm biên nhất định, hay tổ hợp nguồn gián đoạn $\times$ loại
-lệnh bị gián đoạn $\times$ loại lệnh phục hồi --- được bảo đảm bằng kiểm tra đúng/sai của Scoreboard
-và SVA trong mọi lần chạy; việc dàn dựng thêm kịch bản để đưa các tổ hợp này thành positive coverage
-bin được xếp vào hướng phát triển ở \cref{ch:conclusion}.
+Nhờ quy tắc phân loại này, con số closure phản ánh việc các tình huống F1--F10 đã thực sự được kích hoạt. Một số tổ hợp tương
+quan sâu, ít gặp chưa được mô hình hóa thành positive coverage bin. Các hành vi tương ứng vẫn được
+Scoreboard và \gls{sva} kiểm tra trong những test liên quan, và việc bổ sung chúng được xếp vào hướng phát triển
+ở \cref{ch:conclusion}.
 
-\subsection{Kết quả SVA}
+\subsection{Kết quả \texorpdfstring{\gls{sva}}{SVA}}
 
-Trên toàn bộ regression, 145 instance checker SVA (chín loại checker gắn bằng \texttt{bind} vào từng
-instance của module tương ứng, cùng checker pad model trong Testbench) ghi nhận 386 assertion và
-578 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
+Trong kết quả regression 81 test, \SvaCheckerCount{} module \gls{sva} (\BoundSvaCheckerCount{} module gắn bằng
+\texttt{bind} vào module tương ứng, cùng module còn lại kiểm tra ràng buộc điện chân \gls{io} trong
+\Testbench{}) ghi nhận 386 assertion và 578 cover property. Kết quả tổng hợp tại \cref{tab:res-sva}.
 
 \begin{table}[!htbp]
 	\centering
-	\caption{Kết quả SVA trên toàn bộ regression.}
+	\caption{Kết quả \gls{sva} của regression 81 test.}
 	\label{tab:res-sva}
 	\begin{tabular}{L{5.2cm} C{2.6cm} C{2.6cm} C{2.4cm}}
 		\toprule
-		\textbf{Hạng mục}             & \textbf{Đạt} & \textbf{Tổng} & \textbf{Tỷ lệ}  \\
+		\textbf{Hạng mục}             & \textbf{Đạt} & \textbf{Tổng} & \textbf{Tỷ lệ} \\
 		\midrule
-		Assertion pass (đã kích hoạt) & 386          & 386           & 100\%           \\
-		Assertion fail                & 0            & 386           & 0\%             \\
-		Cover property hit            & 578          & 578           & 100\%           \\
+		Assertion pass (đã kích hoạt) & 386          & 386           & 100\%          \\
+		Assertion fail                & 0            & 386           & 0\%            \\
+		Cover property hit            & 578          & 578           & 100\%          \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Không assertion nào fail, không assertion nào chỉ pass rỗng (vacuous), và mọi assertion đều được
-kích hoạt: closure của cả assertion lẫn cover property đạt 100\%. Nhờ quy ước mỗi assertion có cover
-property đối ứng (\cref{sec:ver-sva}), kết luận ``đã kích hoạt'' này được xác nhận tường minh thay vì
-bị đếm nhầm từ các pass rỗng. Một cover property duy nhất được \emph{waive} và loại khỏi mẫu số
-closure: \texttt{cp\_reset\_readback\_unmapped\_020} chỉ đọc lại một địa chỉ chưa ánh xạ cụ thể
-(\texttt{0x020}) sau reset --- đây là bin chẩn đoán, không phải mục tiêu closure của F1--F10, và sai
-khác nếu có vẫn bị Scoreboard bắt như một lỗi. Việc waive được ghi tường minh trong report để phần
-closure phản ánh đúng tập directive thuộc phạm vi kiểm chứng.
+Không assertion nào fail và không assertion nào chỉ pass rỗng (vacuous): nhờ cover property đi kèm theo quy ước ở \cref{sec:ver-sva}, mọi assertion đều được xác nhận đã kích hoạt, đạt 100\% closure ở cả assertion lẫn cover property.
+
+\section{Đối chiếu phạm vi với thiết kế tham chiếu}
+\label{sec:res-reference-comparison}
+
+Dự án \CHIPSAlliance{} \IThreeCCore{} công bố mục tiêu hỗ trợ \gls{mipi} \gls{i3c} Basic, \gls{hci} và \gls{tcri},
+hai vai trò Active Controller và Secondary Controller, cùng các môi trường kiểm chứng Cocotb,
+Verilator, Avery và
+\gls{uvm}~\cite{chipsalliance_i3c}. \Cref{tab:res-reference-comparison} đối chiếu phạm vi đó với thiết kế
+trong khóa luận theo chức năng, kiến trúc giao tiếp và phương pháp kiểm chứng. Bảng này không phân loại mức tái sử dụng của từng module. Riêng ở tầng \gls{uvm}, phạm vi tái sử dụng rõ ràng: \IThreeCAgent{} được phát triển từ thiết kế tham chiếu và viết lại phần lớn, còn \Scoreboard{}, mô hình tham chiếu, \RegisterAgent{}, \gls{sva} và thư viện \VirtualSequence{} do khóa luận tự xây dựng.
+
+\begin{table}[!htbp]
+	\centering
+	\caption{Đối chiếu phạm vi với thiết kế tham chiếu.}
+	\label{tab:res-reference-comparison}
+	\begin{tabular}{L{3.0cm} L{5.0cm} L{5.0cm}}
+		\toprule
+		\textbf{Trục đối chiếu} & \textbf{\CHIPSAlliance{} \IThreeCCore{}}                                                                             & \textbf{Thiết kế trong khóa luận} \\
+		\midrule
+		Vai trò controller
+		                        & Mục tiêu công bố gồm Active và Secondary Controller.
+		                        & Chỉ hiện thực Active Controller.                                                                                                                         \\
+		Phạm vi chuẩn
+		                        & Mục tiêu công bố bao quát \gls{i3c} Basic v1.1.1, \gls{hci} v1.2 và \gls{tcri} v1.0.
+		                        & Chọn tập chức năng \gls{sdr} cần cho F1--F10; không tuyên bố tuân thủ \gls{hci} đầy đủ.                                                                  \\
+		Giao diện và tích hợp
+		                        & Core tích hợp theo hệ sinh thái Caliptra và giao diện \gls{hci}.
+		                        & Top-level độc lập với giao diện thanh ghi 32-bit, bốn \gls{fifo} và \gls{dat} 32 mục.                                                                    \\
+		Chức năng trong phạm vi
+		                        & Phạm vi dự án hướng tới một \gls{i3c} core tổng quát hơn.
+		                        & \gls{i3c} Private Write/Read, \ImmediateDataTransfer{}, \gls{enec}/\gls{disec}, \gls{entdaa} và \gls{iic} Fast Mode.                                     \\
+		Phương pháp kiểm chứng
+		                        & Công bố Cocotb/Verilator, Avery compliance tests và \gls{uvm} tests.
+		                        & \Gls{uvm}~1.2 trên Xcelium, kết hợp Scoreboard, \gls{sva} và \FunctionalCoverage{}.                                                                      \\
+		\bottomrule
+	\end{tabular}
+\end{table}
 
 \section{Đánh giá theo yêu cầu}
 \label{sec:res-eval}
@@ -430,7 +504,7 @@ closure phản ánh đúng tập directive thuộc phạm vi kiểm chứng.
 Khép lại chương, \cref{tab:res-req} đối chiếu từng yêu cầu chức năng F1--F10 ở \cref{tab:req-func}
 với bằng chứng kiểm chứng tương ứng, theo khung ánh xạ đã lập ở \cref{tab:req-ver-map}. Mọi yêu cầu
 chức năng đều có nhóm test PASS và đạt 100\% closure ở các coverage bin thuộc phạm vi của nó, với
-ranh giới closure/diagnostic như đã nêu ở \cref{sec:res-coverage}.
+cách phân loại closure/diagnostic như đã nêu ở \cref{sec:res-coverage}.
 
 \begin{table}[!htbp]
 	\centering
@@ -438,32 +512,31 @@ ranh giới closure/diagnostic như đã nêu ở \cref{sec:res-coverage}.
 	\label{tab:res-req}
 	\begin{tabular}{C{1.4cm} L{5.4cm} L{6.5cm}}
 		\toprule
-		\textbf{Yêu cầu} & \textbf{Bằng chứng regression}        & \textbf{Bằng chứng coverage}                                   \\
+		\textbf{Yêu cầu} & \textbf{Bằng chứng regression}                                  & \textbf{Bằng chứng coverage}                                                                \\
 		\midrule
-		F1--F2           & 14 test I3C \PrivateWriteRead{} PASS  & \PrivateTransfer{} correlation, T-Bit và read-end: closure 100\% \\
-		F3               & 5 test \ImmediateDataTransfer{} PASS  & \ImmediateDataTransfer{}: closure 100\%                          \\
-		F4               & 4 test CCC PASS                       & CCC response, opcode/frame: closure 100\%                       \\
-		F5               & 9 test DAA PASS                       & DAA result/response và biên DAT: closure 100\%                  \\
-		F6               & 4 test I\textsuperscript{2}C PASS     & I\textsuperscript{2}C ACK và vị trí NACK: closure 100\%         \\
-		F7               & 14 test CSR + 5 test FIFO PASS        & Register access, DAT, Queue: closure 100\%                      \\
-		F8               & Kiểm tra Response trong mọi test      & Response status và Response Descriptor: closure 100\%           \\
-		F9               & 14 test response/error PASS           & Abort/recovery: closure 100\%; tổ hợp sâu do Scoreboard/SVA     \\
-		F10              & Test CSR định thời và bus timing PASS & CSR định thời: closure 100\%; cover property timing HIT         \\
+		F1--F2           & 14 test \gls{i3c} \PrivateWriteRead{} PASS                      & Cross giữa \gls{i3c} \PrivateWriteRead{}, \TBit{} và trạng thái kết thúc đọc: closure 100\% \\
+		F3               & 5 test \ImmediateDataTransfer{} PASS                            & \ImmediateDataTransfer{}: closure 100\%                                                     \\
+		F4               & 4 test \gls{ccc} PASS                                           & \Gls{ccc} response, opcode/frame: closure 100\%                                             \\
+		F5               & 9 test \gls{daa} PASS                                           & \Gls{daa} result/response và boundary bảng \gls{dat}: closure 100\%                         \\
+		F6               & 4 test \gls{iic} PASS                                           & \Gls{iic} \gls{ack} và vị trí NACK: closure 100\%                                           \\
+		F7               & 14 test \gls{csr} + 5 test \gls{fifo} PASS                      & Register access, \gls{dat}, \gls{fifo}: closure 100\%                                       \\
+		F8               & Kiểm tra \ResponseDescriptor{} trong mọi test                   & \ResponseDescriptor{} và mã lỗi: closure 100\%                                              \\
+		F9               & 14 test \ResponseDescriptor{} và lỗi PASS                       & Hủy giao dịch và xử lý lệnh tiếp theo: closure 100\%, tổ hợp sâu do Scoreboard/\gls{sva}    \\
+		F10              & Test \gls{csr} cấu hình tham số thời gian và định thời bus PASS & \Gls{csr} cấu hình tham số thời gian: closure 100\%, cover property định thời HIT           \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Về các chỉ tiêu P1--P5 ở \cref{tab:req-perf}: Testbench vận hành DUT với clock chu kỳ 3~ns tương
-ứng 333~MHz (P1); tần số SCL cấu hình qua các CSR định thời được kiểm tra bằng nhóm test bus timing đo
-trực tiếp độ rộng pha thấp/cao của SCL trên waveform (P2, P3); biên DAT 32 mục được kiểm tra bằng
-kịch bản DAA chạm biên bảng (P4); và mọi truy cập từ phía phần mềm ở tất cả các test đều đi qua giao diện
+Về các chỉ tiêu P1--P5 ở \cref{tab:req-perf}, Testbench vận hành \gls{dut} với clock chu kỳ 3~ns tương
+ứng 333~MHz (P1). Tần số \gls{scl} cấu hình qua các \gls{csr} chứa tham số thời gian được kiểm tra bằng nhóm test định thời bus xác định
+trực tiếp độ rộng pha thấp/cao của \gls{scl} trên waveform (P2, P3). \gls{dat} 32 mục được kiểm tra bằng
+kịch bản \gls{daa} đạt giới hạn dung lượng bảng (P4). Mọi truy cập từ phía phần mềm ở tất cả các test đều đi qua giao diện
 thanh ghi dữ liệu 32-bit (P5). Cần lưu ý giới hạn của các bằng chứng này: chúng là kết quả
-mô phỏng ở mức RTL, xác nhận tính đúng chức năng và quan hệ định thời (timing) theo chu kỳ clock; khóa luận
-không có dữ liệu tổng hợp hay đóng định thời (timing closure) ở mức vật lý, đúng như phạm vi tại \cref{tab:req-oos}.
+mô phỏng ở mức \gls{rtl}, xác nhận tính đúng chức năng và quan hệ định thời theo chu kỳ clock. Khóa luận
+không có dữ liệu tổng hợp hay triển khai ở mức vật lý, đúng như phạm vi tại \cref{tab:req-oos}.
 
 Tổng hợp lại, thiết kế đáp ứng đầy đủ mười yêu cầu chức năng và năm chỉ tiêu cấu hình trong phạm vi
-bằng chứng mô phỏng: 80/80 test PASS, không assertion nào fail và không assertion nào chưa kích hoạt
-trên 386 assertion, và mô hình coverage ba lớp đạt 100\% closure (222/222 bin) cùng 100\% ở 173/173
-diagnostic bin. Những giới hạn còn lại của bộ bằng chứng --- chiều sâu tương quan của các tổ hợp ba
-chiều do Scoreboard/SVA đảm nhiệm ở dạng kiểm tra đúng/sai, và việc thiếu dữ liệu sau tổng hợp ---
-được tổng kết thành hạn chế và hướng phát triển ở \cref{ch:conclusion}.
+bằng chứng mô phỏng: 81/81 test regression PASS, không assertion nào fail và không assertion nào chưa kích hoạt
+trên 386 assertion, và mô hình coverage ba lớp đạt 100\% closure ở 222/222 bin cùng 100\% ở 173/173
+diagnostic bin. Những giới hạn còn lại của bộ bằng chứng được tổng kết thành hạn chế và hướng phát triển
+ở \cref{ch:conclusion}.

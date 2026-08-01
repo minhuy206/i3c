@@ -75,7 +75,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit                   abort_valid;
     abort_cause_e         abort_cause;
     abort_point_e         abort_point;
-    i3c_resp_err_status_e resp_status;
+    i3c_resp_err_e        resp_status;
   } txn_cov_outcome_t;
 
   typedef struct {
@@ -103,7 +103,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit [3:0]             tid;
     int                   data_length;
     int                   requested_length;
-    i3c_resp_err_status_e resp_status;
+    i3c_resp_err_e        resp_status;
     i3c_resp_cmd_class_e  response_cmd_class;
     bit                   wroc;
     bit                   address_response_valid;
@@ -134,7 +134,7 @@ class i3c_scoreboard extends uvm_scoreboard;
     bit                   rnw;
     bit [3:0]             tid;
     int                   data_length;
-    i3c_resp_err_status_e resp_status;
+    i3c_resp_err_e        resp_status;
     bit                   is_ccc;
     i3c_ccc_e             ccc_opcode;
     bit                   ccc_direct;
@@ -354,7 +354,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   extern function void check_read_ack_or_t_bits(i3c_item item, exp_txn_t exp);
   extern function void check_i2c_read_ack_sequence(i3c_item item);
   extern function void handle_read_end(
-      i3c_item item, exp_txn_t exp, ref i3c_resp_err_status_e resp_status,
+      i3c_item item, exp_txn_t exp, ref i3c_resp_err_e resp_status,
       output bit expected_rstart, output bit expected_stop, output bit txn_aborted);
   extern function bit read_final_t_bit(i3c_item item);
   extern function bit is_read_terminated_by_final_bit(bit target_is_i3c, i3c_item item);
@@ -395,25 +395,25 @@ class i3c_scoreboard extends uvm_scoreboard;
       output txn_cov_outcome_t outcome);
   extern function void check_ccc_opcode(i3c_item item, exp_txn_t exp);
   extern function void check_ccc_direct_phase(
-      i3c_item item, exp_txn_t exp, ref i3c_resp_err_status_e resp_status, ref int resp_len,
+      i3c_item item, exp_txn_t exp, ref i3c_resp_err_e resp_status, ref int resp_len,
       output int direct_idx, output i3c_item direct_item);
   extern function void check_ccc_broadcast_payload(i3c_item item, exp_txn_t exp);
   extern function void check_ccc_entdaa(
-      i3c_item item, exp_txn_t exp, ref i3c_resp_err_status_e resp_status, ref int resp_len,
+      i3c_item item, exp_txn_t exp, ref i3c_resp_err_e resp_status, ref int resp_len,
       ref bit daa_response_valid, ref i3c_daa_result_e daa_result,
       output int unsigned joined_count);
   extern function void check_ccc_entdaa_round(
       i3c_item item, exp_txn_t exp, int i, ref daa_scan_state_t st,
-      ref i3c_resp_err_status_e resp_status, ref int resp_len);
+      ref i3c_resp_err_e resp_status, ref int resp_len);
   extern function i3c_daa_result_e resolve_daa_result(exp_txn_t exp, daa_scan_state_t st,
-                                                      i3c_resp_err_status_e resp_status);
+                                                      i3c_resp_err_e resp_status);
   extern function void log_ccc_direct_data(i3c_item item, exp_txn_t exp, int direct_idx,
-                                           i3c_item direct_item, i3c_resp_err_status_e resp_status,
+                                           i3c_item direct_item, i3c_resp_err_e resp_status,
                                            int resp_len);
   extern function void log_ccc_entdaa_data(i3c_item item, exp_txn_t exp,
-                                           i3c_resp_err_status_e resp_status, int resp_len);
+                                           i3c_resp_err_e resp_status, int resp_len);
   extern function void log_ccc_broadcast_data(i3c_item item, exp_txn_t exp,
-                                              i3c_resp_err_status_e resp_status, int resp_len);
+                                              i3c_resp_err_e resp_status, int resp_len);
 
   // RX/response and recovery modeling
   extern function bit enqueue_rx_word_expectation(bit [3:0] tid, int data_length, int word_idx,
@@ -424,7 +424,7 @@ class i3c_scoreboard extends uvm_scoreboard;
   extern function void record_exp_resp(exp_resp_seed_t seed);
   extern function void check_exp_resp(bit [31:0] rdata);
   extern function void set_resp_fifo_level_unknown(int unsigned count, string ctxt);
-  extern function bit response_expected(bit wroc, i3c_resp_err_status_e resp_status);
+  extern function bit response_expected(bit wroc, i3c_resp_err_e resp_status);
   extern function i3c_resp_cmd_class_e classify_response_cmd(i3c_cmd_attr_e cmd_attr, bit is_ccc);
   extern function bit response_length_applicable(i3c_resp_cmd_class_e cmd_class);
   extern function i3c_resp_len_relation_e classify_response_length(exp_resp_t exp_resp,
@@ -471,13 +471,13 @@ class i3c_scoreboard extends uvm_scoreboard;
                                                           bit response_present);
   extern function void publish_daa_response_coverage(exp_resp_t exp_resp, i3c_response_desc_t resp);
   extern function void publish_daa_dat_coverage(
-      int unsigned start_index, int unsigned requested_count, i3c_resp_err_status_e resp_status);
+      int unsigned start_index, int unsigned requested_count, i3c_resp_err_e resp_status);
   extern function void publish_response_coverage(exp_resp_t exp_resp, i3c_response_desc_t resp);
   extern function void publish_address_response_coverage(exp_resp_t exp_resp,
                                                          i3c_response_desc_t resp);
 
   // Diagnostic formatting
-  extern function string resp_status_to_string(i3c_resp_err_status_e status);
+  extern function string resp_status_to_string(i3c_resp_err_e status);
   extern function string ack_to_string(bit ack);
   extern function string optional_ack_to_string(bit present, bit ack);
   extern function string start_source_to_string(bit start_from_rstart);

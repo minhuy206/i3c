@@ -131,7 +131,7 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
     read_rx_words(24, rx_words);
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, Success,
+    `DV_CHECK_EQ(resp_desc.err, Success,
                  "DAA_007 middle ends-at-last response status")
     `DV_CHECK_EQ(resp_desc.data_length, 16'd24,
                  "DAA_007 middle ends-at-last response length")
@@ -181,7 +181,7 @@ class i3c_daa_dat_boundary_vseq extends i3c_base_vseq;
     poll_idle();
     read_response(resp);
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, NotSupported,
+    `DV_CHECK_EQ(resp_desc.err, NotSupported,
                  "DAA_007 middle crossing span must be rejected")
     check_all_queues_empty("after DAA_007 middle crossing DAT span rejection");
   endtask

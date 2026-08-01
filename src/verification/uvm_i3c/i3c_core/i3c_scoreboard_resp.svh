@@ -151,16 +151,16 @@ function void i3c_scoreboard::check_resp(bit [31:0] rdata);
     mark_response_model(orphan_id, 1'b1, "No response expected");
     mark_response_observed(orphan_id, 1'b0,
                            $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
-                                     resp_status_to_string(resp.err_status), resp.data_length));
+                                     resp_status_to_string(resp.err), resp.data_length));
     mark_result_failed(orphan_id, "Observed response had no expected command");
   end
   `uvm_error(`gfn, $sformatf(
              "Unexpected RESP: tid=0x%0h status=%s (0x%0h) data_length=%0d rdata=0x%08h",
              resp.tid,
              resp_status_to_string(
-                 resp.err_status
+                 resp.err
              ),
-             resp.err_status,
+             resp.err,
              resp.data_length,
              rdata
              ))
@@ -272,7 +272,7 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
       mark_response_model(orphan_id, 1'b1, "No response expected");
       mark_response_observed(orphan_id, 1'b0,
                              $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
-                                       resp_status_to_string(resp.err_status), resp.data_length));
+                                       resp_status_to_string(resp.err), resp.data_length));
       mark_result_failed(orphan_id, "Response TID did not match any pending command");
       `uvm_error(`gfn, $sformatf(
                  "Unexpected RESP ordering: expected next tid=0x%0h observed tid=0x%0h rdata=0x%08h",
@@ -292,17 +292,17 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
   end
 
   exp_resp = exp_resp_queue.pop_front();
-  response_matches = (resp.err_status == exp_resp.resp_status) &&
+  response_matches = (resp.err == exp_resp.resp_status) &&
                      (resp.tid == exp_resp.tid) &&
                      (resp.data_length == exp_resp.data_length);
 
-  if (resp.err_status != exp_resp.resp_status) begin
+  if (resp.err != exp_resp.resp_status) begin
     `uvm_error(
         `gfn,
         $sformatf(
             "RESP status mismatch: expected=%s (0x%0h) actual=%s (0x%0h) tid=0x%0h data_length=%0d rdata=0x%08h",
             resp_status_to_string(exp_resp.resp_status), exp_resp.resp_status,
-            resp_status_to_string(resp.err_status), resp.err_status, exp_resp.tid,
+            resp_status_to_string(resp.err), resp.err, exp_resp.tid,
             exp_resp.data_length, rdata))
   end
   if (resp.tid != exp_resp.tid) begin
@@ -319,7 +319,7 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
   mark_response_observed(
       exp_resp.result_id, response_matches,
       $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
-                resp_status_to_string(resp.err_status), resp.data_length));
+                resp_status_to_string(resp.err), resp.data_length));
   `uvm_info("I3C_SCB", $sformatf(
             "[TXN %04d][RESP %s]\n  EXPECTED: %s\n  OBSERVED: %s",
             exp_resp.result_id, response_matches ? "PASS" : "FAIL",
@@ -327,7 +327,7 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
               $sformatf("TID=0x%0h %s", exp_resp.tid,
                         results[exp_resp.result_id].expected_response) : "?",
             $sformatf("TID=0x%0h status=%s length=%0d", resp.tid,
-                      resp_status_to_string(resp.err_status), resp.data_length)), UVM_LOW)
+                      resp_status_to_string(resp.err), resp.data_length)), UVM_LOW)
   maybe_report_transaction_flow(exp_resp.result_id);
 
   publish_completion_policy_coverage(exp_resp, 1'b1);
@@ -340,16 +340,16 @@ function void i3c_scoreboard::check_exp_resp(bit [31:0] rdata);
   end
   if (exp_resp.daa_dat_valid && response_matches) begin
     publish_daa_dat_coverage(exp_resp.daa_start_index, exp_resp.daa_requested_count,
-                             resp.err_status);
+                             resp.err);
   end
   if (exp_resp.daa_response_valid && response_matches) begin
     publish_daa_response_coverage(exp_resp, resp);
   end
   if (exp_resp.recovery_valid) begin
-    publish_recovery_coverage(exp_resp, response_matches && (resp.err_status == Success));
+    publish_recovery_coverage(exp_resp, response_matches && (resp.err == Success));
   end
   if (exp_resp.stall_recovery_valid) begin
-    publish_stall_recovery_coverage(exp_resp, response_matches && (resp.err_status == Success));
+    publish_stall_recovery_coverage(exp_resp, response_matches && (resp.err == Success));
   end
 endfunction
 
@@ -359,7 +359,7 @@ function void i3c_scoreboard::set_resp_fifo_level_unknown(int unsigned count, st
             "%s: RESP FIFO scoreboard model set to %0d unknown word(s)", ctxt, count), UVM_MEDIUM)
 endfunction
 
-function bit i3c_scoreboard::response_expected(bit wroc, i3c_resp_err_status_e resp_status);
+function bit i3c_scoreboard::response_expected(bit wroc, i3c_resp_err_e resp_status);
   return wroc || (resp_status != Success);
 endfunction
 
@@ -382,8 +382,8 @@ function i3c_resp_len_relation_e i3c_scoreboard::classify_response_length(exp_re
   if (exp_resp.requested_length == exp_resp.data_length) return RESP_LEN_EXACT;
   if ((exp_resp.requested_length > 0) && (exp_resp.data_length == 0)) return RESP_LEN_ZERO;
   if ((exp_resp.data_length > 0) && (exp_resp.data_length < exp_resp.requested_length)) begin
-    if (resp.err_status == HcAborted) return RESP_LEN_PARTIAL_ABORT;
-    if (resp.err_status == Ovl) return RESP_LEN_PARTIAL_OVERFLOW;
+    if (resp.err == HcAborted) return RESP_LEN_PARTIAL_ABORT;
+    if (resp.err == Ovl) return RESP_LEN_PARTIAL_OVERFLOW;
     return RESP_LEN_SHORT;
   end
   return RESP_LEN_OTHER;

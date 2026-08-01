@@ -1,24 +1,23 @@
+% !TeX program = xelatex
 % =====================================================================
 %  KHÓA LUẬN TỐT NGHIỆP — "Thiết kế bộ điều khiển I3C"
 %  Tác giả : Võ Minh Huy (22207042)
 %  GVHD    : ThS. Nguyễn Duy Mạnh Thi
 %  Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM · Khoa Điện tử - Viễn thông
 %
-%  Định dạng theo template KLTN HCMUS (extreport, pdfLaTeX, UVN Times/tgtermes).
-%  Build (release):  pdflatex -> bibtex -> makeglossaries -> pdflatex -> pdflatex
+%  Định dạng theo template KLTN HCMUS (extreport, XeLaTeX, Times New Roman).
+%  Build (release): latexmk -xelatex report.tex
 % =====================================================================
 
-\documentclass[twoside,a4paper,14pt,openright]{extreport}
+\documentclass[twoside,a4paper,14pt,openany]{extreport}
+\usepackage{fix-cm}
 
 % ----- Cỡ chữ thân bài 13pt -----
 \usepackage[fontsize=13pt]{scrextend}
 
-% ----- Font tiếng Việt (T5) + Times New Roman qua tgtermes (an toàn dấu T5) -----
-\usepackage[T5]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{tgtermes}                 % TeX Gyre Termes ~ Times New Roman
-\renewcommand{\ttdefault}{cmtt}
-\DeclareTextSymbolDefault{\DH}{T1}
+% ----- Font Unicode tiếng Việt -----
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
 
 % ----- Tài liệu tham khảo -----
 \usepackage[
@@ -40,9 +39,18 @@
 \renewcommand{\bottomfraction}{0.8}
 \renewcommand{\textfraction}{0.05}
 \renewcommand{\floatpagefraction}{0.8}
+% Tắt căn đều đáy trang: tránh khoảng trắng dọc bị kéo giãn quanh các float cao.
+\raggedbottom
 
 % ----- Mã nguồn -----
 \usepackage{listings}
+% listings 1.11b (TeX Live 2026) tạo counter lstlisting trong
+% \AtBeginDocument, sau thời điểm LaTeX đọc checkpoint của các \include.
+% Không lưu counter này vào checkpoint để lần biên dịch kế tiếp không đọc
+% \setcounter{lstlisting} trước khi counter được tạo.
+\makeatletter
+\AtBeginDocument{\@removefromreset{lstlisting}{@ckpt}}
+\makeatother
 \usepackage{color}
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
@@ -91,6 +99,7 @@
 \newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
 \newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
 \newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\renewcommand{\arraystretch}{1.25}   % giãn dòng cho mọi bảng
 \usepackage{diagbox}
 \usepackage[table,xcdraw]{xcolor}
 \usepackage{pmboxdraw}
@@ -152,6 +161,7 @@
 % ----- Trang bìa -----
 \usepackage{tikz}
 \usetikzlibrary{calc,automata,positioning,arrows.meta,shapes.geometric,chains,fit,backgrounds,patterns}
+\usepackage{circuitikz}
 \usepackage{tikz-timing}   % biểu đồ định thời (waveform) cho handshake CSR--Queue
 \newcommand\HRule{\rule{\textwidth}{1pt}}
 
@@ -235,8 +245,8 @@
 % ----- Tài liệu tham khảo -----
 \clearpage\phantomsection
 \addcontentsline{toc}{chapter}{TÀI LIỆU THAM KHẢO}
-\DeclareNameAlias{sortname}{last-first}
-\DeclareNameAlias{default}{last-first}
+\DeclareNameAlias{sortname}{family-given}
+\DeclareNameAlias{default}{family-given}
 \printbibheading[title={TÀI LIỆU THAM KHẢO}]
 \printbibliography[heading=none]
 
@@ -246,7 +256,7 @@
 \crefalias{chapter}{appendix}
 \include{Appendix/appendixA}
 \include{Appendix/appendixB}
-\include{Appendix/appendixC}
-\include{Appendix/appendixE}
+% \include{Appendix/appendixCoverage}  % Phụ lục C (chú giải coverpoint) - tạm bỏ khỏi báo cáo, giữ file trong repo
+% \include{Appendix/appendixE}         % Phụ lục D (trích đoạn regression/coverage) - tạm bỏ khỏi báo cáo, giữ file trong repo
 
 \end{document}

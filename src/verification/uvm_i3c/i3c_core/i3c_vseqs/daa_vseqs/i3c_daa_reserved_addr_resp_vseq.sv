@@ -58,7 +58,7 @@ class i3c_daa_reserved_addr_resp_vseq extends i3c_base_vseq;
     read_response(resp);
 
     resp_desc = i3c_response_desc_t'(resp);
-    `DV_CHECK_EQ(resp_desc.err_status, NotSupported, $sformatf("%s: response status", ctxt))
+    `DV_CHECK_EQ(resp_desc.err, NotSupported, $sformatf("%s: response status", ctxt))
     `DV_CHECK_EQ(resp_desc.tid, daa_cmd.tid, $sformatf("%s: response TID", ctxt))
     `DV_CHECK_EQ(resp_desc.__rsvd23_16, 8'h00, $sformatf("%s: response reserved bits", ctxt))
     `DV_CHECK_EQ(resp_desc.data_length, 16'd12, $sformatf("%s: response length", ctxt))

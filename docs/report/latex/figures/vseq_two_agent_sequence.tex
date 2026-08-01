@@ -1,0 +1,70 @@
+% Sơ đồ tuần tự: VirtualSequence điều phối hai Agent (Host & Target) chạy song song.
+% Yêu cầu (khai báo trong report.tex): \usepackage{tikz} với các thư viện
+% arrows.meta, calc, positioning, fit, backgrounds. Đặt trong figure có \centering;
+% dùng \resizebox{\textwidth}{!}{\input{...}}. Nhãn trong hình dùng văn xuôi tiếng Anh
+% (không dùng định danh code); caption để tiếng Việt.
+\begingroup
+\sffamily
+\begin{tikzpicture}[
+		>={Stealth[length=2.2mm]},
+		font=\small,
+		head/.style={align=center, minimum height=1.0cm},
+		ll/.style={dashed, gray!55, line width=0.5pt},
+		msg/.style={->, line width=0.75pt},
+		ret/.style={->, line width=0.75pt, dashed},
+		lab/.style={font=\footnotesize, fill=white, inner sep=1.8pt, align=center},
+		act/.style={draw=black!70, fill=black!10, line width=0.4pt},
+	]
+	% --- toạ độ lifeline ---
+	\def\xvs{0} \def\xrs{4.4} \def\xdut{9.4} \def\xis{13.8}
+	\def\ybot{-12.0}
+
+	% --- khung "chạy song song" (nền) ---
+	\fill[black!3] (-2.0,-2.6) rectangle (14.7,-9.0);
+	\draw[gray!55, line width=0.7pt] (-2.0,-2.6) rectangle (14.7,-9.0);
+	\draw[gray!55, line width=0.7pt, fill=white]
+	(-2.0,-2.6) -- (-2.0,-3.15) -- (-0.55,-3.15) -- (-0.25,-2.87) -- (-0.25,-2.6) -- cycle;
+	\node[anchor=west, font=\scriptsize\bfseries] at (-1.93,-2.87) {parallel};
+	\node[anchor=west, font=\scriptsize] at (1.40,-2.87)
+	{Host and Target run concurrently};
+
+	% --- nhãn lifeline (chỉ chữ, không khung) ---
+	\node[head] (VS)  at (\xvs,0)  {\textbf{Virtual}\\\textbf{Sequence}};
+	\node[head] (RS)  at (\xrs,0)  {\textbf{Register}\\\textbf{Sequencer}};
+	\node[head] (DUT) at (\xdut,0) {\textbf{DUT}};
+	\node[head] (IS)  at (\xis,0)  {\textbf{I3C}\\\textbf{Sequencer}};
+
+	% --- lifelines ---
+	\foreach \x in {\xvs,\xrs,\xdut,\xis} \draw[ll] (\x,-0.6) -- (\x,\ybot);
+
+	% --- thanh activation ---
+	\fill[act] (\xvs-0.09,-1.50)  rectangle (\xvs+0.09,-11.30); % Virtual Sequence điều phối
+	\fill[act] (\xis-0.09,-3.80)  rectangle (\xis+0.09,-9.60);  % phản hồi Target chạy nền
+	\fill[act] (\xrs-0.09,-4.90)  rectangle (\xrs+0.09,-8.40);  % phía Host phát CSR/FIFO
+	\fill[act] (\xdut-0.09,-4.90) rectangle (\xdut+0.09,-8.40); % DUT thực thi giao dịch bus
+
+	% --- chuẩn bị (trước khi chạy song song) ---
+	\draw[msg] (\xvs,-1.80) -- node[lab, above]{enable DUT, write DAT} (\xrs,-1.80);
+
+	% --- khởi động phản hồi Target trên I3C Sequencer ---
+	\draw[msg] (\xvs,-3.80) -- node[lab, above]{start Target response} (\xis,-3.80);
+
+	% --- phía Host: nạp dữ liệu và lệnh ---
+	\draw[msg] (\xrs,-4.90) -- node[lab, above]{write TX FIFO} (\xdut,-4.90);
+	\draw[msg] (\xrs,-6.10) -- node[lab, above]{send Command\\Descriptor} (\xdut,-6.10);
+
+	% --- giao dịch trên bus (song song với phía Host) ---
+	\draw[<->, line width=0.9pt] (\xdut,-7.45) --
+	node[lab, above]{bus transaction\\on SCL/SDA\\{\scriptsize address \textperiodcentered\ data}\\{\scriptsize ACK/NACK \textperiodcentered\ T-Bit}} (\xis,-7.45);
+
+	% --- phía Host: chờ bộ điều khiển rảnh ---
+	\draw[msg] (\xrs,-8.40) -- node[lab, above]{poll controller status\\until idle} (\xdut,-8.40);
+
+	% --- hợp nhánh: phản hồi Target hoàn tất ---
+	\draw[ret] (\xis,-9.60) -- node[lab, above]{Target response complete} (\xvs,-9.60);
+
+	% --- đọc kết quả ---
+	\draw[msg] (\xvs,-10.60) -- node[lab, above]{read RX / Response FIFO} (\xrs,-10.60);
+	\draw[ret] (\xrs,-11.30) -- node[lab, above]{RX data \textperiodcentered\ Response} (\xvs,-11.30);
+\end{tikzpicture}
+\endgroup

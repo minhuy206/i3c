@@ -1,0 +1,163 @@
+\begin{figure}[!ht]
+\centering
+\resizebox{1\textwidth}{!}{%
+\begin{circuitikz}
+\tikzstyle{every node}=[font=\fontsize{11.9pt}{15.5pt}\selectfont]
+\draw [dashed, thick] (-7.5,46.5) rectangle  (17.5,26.5);
+\draw [thick] (-16.25,47.75) rectangle (26.25,25.25);
+\draw [thick] (8.75,35.25) rectangle (11.25,32.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (10,34) {\fontsize{11.9pt}{15.5pt}\selectfont Bus TX \\ Handler};
+\draw [thick] (13.75,30.25) rectangle (16.25,27.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (15,29) {\fontsize{11.9pt}{15.5pt}\selectfont Bus \\ Monitor};
+\draw [thick] (8.75,40.25) rectangle (11.25,37.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (10,39) {\fontsize{11.9pt}{15.5pt}\selectfont SCL \\ Generator};
+\draw [thick] (8.75,30.25) rectangle (11.25,27.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (10,29) {\fontsize{11.9pt}{15.5pt}\selectfont Bus RX \\ Handler};
+\draw [thick] (-2.5,37.75) rectangle (2.5,32.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (0,35.25) {\fontsize{11.9pt}{15.5pt}\selectfont I3C Transaction Processor};
+\draw [thick] (-2.5,31.5) rectangle (1.25,27.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (-0.625,29.625) {\fontsize{11.9pt}{15.5pt}\selectfont DAA Processor};
+\draw (13.75,38.375) -- (14.25,38.375);
+\draw (13.75,37.875) -- (14.25,37.875);
+\draw [thick] (14.25,38.875) -- (14.25,37.375) -- (14.875,37.875) -- (14.875, 38.375) -- (14.25,38.875);
+\draw (14.875,38.125) -- (15.375,38.125);
+\node [font=\fontsize{11.9pt}{15.5pt}\selectfont] at (14.625,38.125) {};
+\draw [short] (13.75,39.625) -- (11.25,39.625);
+\draw (13.75,34.75) -- (14.25,34.75);
+\draw (13.75,34.25) -- (14.25,34.25);
+\draw [thick] (14.25,35.25) -- (14.25,33.75) -- (14.875,34.25) -- (14.875, 34.75) -- (14.25,35.25);
+\draw (14.875,34.5) -- (15.375,34.5);
+\node [font=\fontsize{11.9pt}{15.5pt}\selectfont] at (14.625,34.5) {};
+\draw [short] (11.25,38.375) -- (13.75,38.375);
+\draw [short] (11.25,29) -- (13.75,29);
+\draw (5,34.25) -- (5.5,34.25);
+\draw (5,33.75) -- (5.5,33.75);
+\draw [thick] (5.5,34.75) -- (5.5,33.25) -- (6.125,33.75) -- (6.125, 34.25) -- (5.5,34.75);
+\draw (6.125,34) -- (6.625,34);
+\node [font=\fontsize{11.9pt}{15.5pt}\selectfont] at (5.875,34) {};
+\draw (5,38.5) to[short] (5.125,38.5);
+\draw (5,38) to[short] (5.125,38);
+\draw (5.125,38.5) node[ieeestd or port, anchor=in 1, scale=0.89](port){} (port.out) to[short] (7,38.25);
+\draw [short] (2.5,36.25) -- (4.375,36.25);
+\draw [short] (3.125,35.25) .. controls (4,35.25) and (4.25,35.25) .. (5,35.25);
+\draw [short] (7,38.25) -- (8.75,38.25);
+\draw [short] (3.125,35.25) -- (3.125,30.25);
+\draw [short] (1.25,30.25) -- (3.125,30.25);
+\draw [short] (3.75,32.5) -- (3.75,29.5);
+\draw [short] (1.25,29.5) -- (3.75,29.5);
+\draw (5,29.25) -- (5.5,29.25);
+\draw (5,28.75) -- (5.5,28.75);
+\draw [thick] (5.5,29.75) -- (5.5,28.25) -- (6.125,28.75) -- (6.125, 29.25) -- (5.5,29.75);
+\draw (6.125,29) -- (6.625,29);
+\node [font=\fontsize{11.9pt}{15.5pt}\selectfont] at (5.875,29) {};
+\draw [short] (6.5,29) -- (8.75,29);
+\draw [short] (1.25,28.75) -- (5.125,28.75);
+\draw [short] (1.25,31) -- (15,31);
+\draw [short] (15,31) -- (15,30.25);
+\draw [short] (2.5,37.125) -- (3.75,37.125);
+\draw [short] (16.25,29) -- (16.875,29);
+\draw [thick] (-2.5,41.5) rectangle (0,39);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (-1.25,40.25) {\fontsize{11.9pt}{15.5pt}\selectfont I\textsuperscript{2}C Timing};
+\draw [thick] (-2.5,45.25) rectangle (0,42.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (-1.25,44) {\fontsize{11.9pt}{15.5pt}\selectfont I3C Timing};
+\draw (5,42.5) -- (5.5,42.5);
+\draw (5,42) -- (5.5,42);
+\draw [thick] (5.5,43) -- (5.5,41.5) -- (6.125,42) -- (6.125, 42.5) -- (5.5,43);
+\draw (6.125,42.25) -- (6.625,42.25);
+\node [font=\fontsize{11.9pt}{15.5pt}\selectfont] at (5.875,42.25) {};
+\draw [short] (0,44) -- (3.75,44);
+\draw [short] (3.75,44) -- (3.75,42.5);
+\draw [short] (3.75,42) -- (3.75,40.25);
+\draw [short] (0,40.25) -- (3.75,40.25);
+\draw [short] (6.625,42.25) -- (10,42.25);
+\draw [short] (10,42.25) -- (10,40.25);
+\draw [short] (11.25,39) -- (13.125,39);
+\draw [dashed, thick] (-15,46.5) rectangle  (-8.75,26.5);
+\draw (-5,31.875) -- (-5.5,31.875);
+\draw (-5,32.375) -- (-5.5,32.375);
+\draw [thick] (-5.5,31.375) -- (-5.5,32.875) -- (-6.125,32.375) -- (-6.125, 31.875) -- (-5.5,31.375);
+\draw (-6.125,32.125) -- (-6.625,32.125);
+\node [font=\fontsize{11.9pt}{15.5pt}\selectfont] at (-5.75,32.125) {};
+\draw [short] (-5,35.25) -- (-5,32.375);
+\draw [short] (-5,35.25) -- (-2.5,35.25);
+\draw [short] (-5,29.625) -- (-2.5,29.625);
+\draw [short] (-5,31.875) -- (-5,29.625);
+\draw [thick] (-13.75,41.5) rectangle (-10,37.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (-11.875,39.625) {\fontsize{11.9pt}{15.5pt}\selectfont Control and Status \\ Registers \\ \scriptsize (Control / Status / DAT)};
+\draw [thick] (-13.75,35.25) rectangle (-10,31.5);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (-11.875,33.375) {\fontsize{11.9pt}{15.5pt}\selectfont HCI Queues \\ {\scriptsize (CMD / TX /} \\ {\scriptsize RX / RESP)}};
+\draw [short] (-10,39) -- (-6.625,39);
+\draw [short] (-6.625,39) -- (-6.625,32.125);
+\draw [short] (-2.5,44) -- (-5.5,44);
+\draw [short] (-6.25,44) -- (-5.5,44);
+\draw [short] (-10,40.25) -- (-2.5,40.25);
+\draw [short] (-11.875,44) -- (-6.25,44);
+\draw [dashed, thick] (18.75,46.5) rectangle  (25,26.5);
+\draw [short] (-11.875,44) -- (-11.875,41.5);
+\draw [short] (-11.875,37.75) -- (-11.875,35.25);
+\draw [short] (-10,39.625) -- (-5,39.625);
+\draw [short] (-5,36.5) -- (-2.5,36.5);
+\draw [short] (-5,39.625) -- (-5,36.5);
+\draw [short] (-10,34) -- (-2.5,34);
+\draw [short] (-3.75,29) -- (-2.5,29);
+\begin{scope}[transparency group, opacity=1]
+\node at (-3.75,36.5) [circ, color={rgb,255:red,0; green,0; blue,0}] {};
+\end{scope}
+\draw (-3.75,36.5) to[short] (-3.75,29);
+\draw [thick] (20,41.5) rectangle (23.75,37.75);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (21.875,39.625) {\fontsize{11.9pt}{15.5pt}\selectfont Bus Output \\ Driver \\ {\scriptsize (SCL/SDA output} \\ {\scriptsize OD/PP mode select)}};
+\draw [thick] (20,35.25) rectangle (23.75,31.5);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (21.875,33.375) {\fontsize{11.9pt}{15.5pt}\selectfont Bus Input \\ Synchronizer \\ {\scriptsize (2FF} \\ {\scriptsize SCL/SDA input)}};
+\draw [short] (13.75,40.75) -- (13.75,39.625);
+\draw [short] (13.75,40.75) -- (20,40.75);
+\draw [short] (16.875,33.375) -- (16.875,29);
+\draw [short] (16.875,33.375) -- (20,33.375);
+\draw [thick] (-23.75,47.75) rectangle (-17.5,25.25);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (-20.625,36.5) {\fontsize{11.9pt}{15.5pt}\selectfont \textbf{Host} \\ {\scriptsize (32-bit register bus} \\ {\scriptsize addr / wdata / rdata)}};
+\draw [thick] (27.5,47.75) rectangle (33.75,25.25);
+\node[anchor=center, align=center, inner xsep=0.080cm, inner ysep=0.085cm, rounded corners=0.020cm] at (30.625,36.5) {\fontsize{11.9pt}{15.5pt}\selectfont \textbf{Bus I3C / I\textsuperscript{2}C} \\ \scriptsize (SDA / SCL)};
+\draw [-{Stealth[scale=1.5]}, ] (23.75,39.625) -- (27.5,39.625);
+\draw [-{Stealth[scale=1.5]}, ] (27.5,33.375) -- (23.75,33.375);
+\draw [{Stealth[scale=1.5]}-{Stealth[scale=1.5]}, ] (-17.5,36.5) -- (-15,36.5);
+\draw (13.125,39) to[short] (13.125,34.25);
+\draw (13.125,34.25) to[short] (13.75,34.25);
+\draw (11.25,34.75) to[short] (13.75,34.75);
+\draw (12.5,37.875) to[short] (13.75,37.875);
+\draw (12.5,37.875) to[short] (12.5,33.375);
+\draw (11.25,33.375) to[short] (12.5,33.375);
+\draw (14.875,38.125) to[short] (16.25,38.125);
+\draw (16.25,39.625) to[short] (16.25,38.125);
+\draw (16.25,39.625) to[short] (20,39.625);
+\draw (14.875,34.5) to[short] (16.875,34.5);
+\draw (16.875,38.375) to[short] (16.875,34.5);
+\draw (16.875,38.375) to[short] (20,38.375);
+\draw (3.75,39.375) to[short] (8.75,39.375);
+\draw (3.75,39.375) to[short] (3.75,37.125);
+\draw (4.375,38.5) to[short] (4.375,36.25);
+\draw (4.375,38.5) to[short] (5,38.5);
+\draw (5,38) to[short] (5,35.25);
+\draw (6.625,34) to[short] (8.75,34);
+\draw (2.5,34.25) to[short] (5,34.25);
+\draw (4.375,33.75) to[short] (5.125,33.75);
+\draw (3.75,33.75) to[short] (3.75,32.5);
+\draw (3.75,33.75) to[short] (4.375,33.75);
+\draw (2.5,33.25) to[short] (5,33.25);
+\draw (5,33.25) to[short] (5,29.25);
+\draw (3.75,42.5) to[short] (5,42.5);
+\draw (3.75,42) to[short] (5,42);
+\node[anchor=north, align=center, font=\bfseries\fontsize{18pt}{22pt}\selectfont]
+  at (5,47.65) {I3C Controller Top};
+\node[anchor=north, align=center, fill=white, inner xsep=0.12cm,
+  font=\bfseries\fontsize{15pt}{18pt}\selectfont]
+  at (-11.875,46.35) {Register Interface};
+\node[anchor=north, align=center, fill=white, inner xsep=0.12cm,
+  font=\bfseries\fontsize{15pt}{18pt}\selectfont]
+  at (5,46.35) {I3C Protocol Controller};
+\node[anchor=north, align=center, fill=white, inner xsep=0.12cm,
+  font=\bfseries\fontsize{15pt}{18pt}\selectfont]
+  at (21.875,46.35) {Physical Layer};
+\end{circuitikz}
+}%
+\caption{Kiến trúc phân lớp và sơ đồ khối top-level của bộ điều khiển I3C.}
+\label{fig:arch-block}
+\end{figure}
