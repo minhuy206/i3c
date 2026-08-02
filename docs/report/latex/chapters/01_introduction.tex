@@ -13,7 +13,7 @@ tích hợp nhiều thiết bị cùng loại cần cấu hình địa chỉ th�
 chuẩn để phát hiện và cấp phát địa chỉ khi vận hành~\cite{nxp_i2c,mipi_i3c_basic}.
 
 \MIPIIThreeCBasic{} được xây dựng để duy trì cấu trúc \gls{sda}/\gls{scl} và khả năng tích hợp ngược với \Target{}
-\gls{iic}, đồng thời bổ sung chế độ \gls{sdr}, sử dụng \OpenDrain{} và \PushPull{} theo từng pha, cùng \gls{daa} và \gls{ccc}. Trong \gls{sdr}, tần số \gls{scl} có thể đạt 12,5~MHz~\cite[Secs.~2 and 5.1.2]{mipi_i3c_basic}. Do đó, việc hiện thực
+\gls{iic}, đồng thời bổ sung chế độ \gls{sdr}, sử dụng \OpenDrain{} và \PushPull{} theo từng pha, cùng \gls{daa} và \gls{ccc}. Trong \gls{sdr}, tần số \gls{scl} có thể đạt 12,5~MHz~\cite{mipi_i3c_basic}. Do đó, việc hiện thực
 một \gls{i3c} \Controller{} không chỉ tuần tự hóa dữ liệu. Thiết kế còn phải điều phối pha \OpenDrain{} và \PushPull{}, tạo đúng START, \RepeatedSTART{} và STOP, quản lý Descriptor và \gls{fifo}, xử lý lỗi,
 đồng thời cung cấp giao diện thanh ghi cho phần mềm truy cập.
 

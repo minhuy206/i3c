@@ -19,7 +19,13 @@ docs/spec_rtl_audit.md
 *.log
 *.lot
 *.out
+*.xdv
+*.dvi
+*.ps
+*.pdfsync
+*.synctex
 *.synctex.gz
+*.synctex(busy)
 *.toc
 *.bbl
 *.blg
@@ -34,10 +40,12 @@ docs/spec_rtl_audit.md
 *.glg
 *.glo
 *.gls
+*.glsdefs
 *.acn
 *.acr
 *.alg
 *.ist
+*.auxlock
 *-blx.bib
 docs/report/latex/*.pdf
 /docs/report/*.pdf
@@ -57,6 +65,10 @@ xrun.key
 .simvision/
 *.shm/
 *.diag
+/src/verification/waves/
+/src/verification/reg_cov_work/
+/src/verification/.cxl.*
+/src/verification/*.key
 docs/verification_specs/04b_i3c_driver_instruction.md
 docs/verification_specs/04c_i3c_monitor_instruction.md
 docs/rtl_design_review.md
@@ -75,5 +87,4 @@ docs/ccc_enec_disec_fix_plan.md
 /src/verification/tools/ucd2sva
 /src/verification/logs
 /src/verification/coverage_report.txt
-/src/verification/coverage_report.txt
-/src/verification/coverage_report.txt
+/src/verification/sva_coverage_report.txt

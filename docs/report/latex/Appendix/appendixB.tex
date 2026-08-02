@@ -1,7 +1,7 @@
 \chapter{Định dạng \CommandDescriptor{}, \ResponseDescriptor{} và mục DAT}
 \label{app:desc}
 
-Phụ lục này trình bày bố trí trường của các cấu trúc dữ liệu trao đổi giữa phần mềm và phần cứng. \CommandDescriptor{} rộng \CommandDescriptorWidth{}-bit (hai DWORD). \ResponseDescriptor{} rộng \ResponseDescriptorWidth{}-bit~\cite[Secs.~7.1.3 and 7.2.3]{mipi_i3c_tcri} và mục DAT rộng \DatEntryWidth{}-bit.
+Phụ lục này trình bày bố trí trường của các cấu trúc dữ liệu trao đổi giữa phần mềm và phần cứng. \CommandDescriptor{} rộng \CommandDescriptorWidth{}-bit (hai DWORD). \ResponseDescriptor{} rộng \ResponseDescriptorWidth{}-bit~\cite{mipi_i3c_tcri} và mục DAT rộng \DatEntryWidth{}-bit.
 
 \section*{\ResponseDescriptor{} (\ResponseDescriptorWidth{}-bit)}
 
@@ -20,7 +20,7 @@ Phụ lục này trình bày bố trí trường của các cấu trúc dữ li�
 \section*{\ImmediateDataTransfer{} Descriptor (\CommandDescriptorWidth{}-bit)}
 
 Dạng \ImmediateDataTransfer{} nhúng tối đa bốn byte dữ liệu ngay trong \CommandDescriptor{}, không dùng
-\TxFifo{}~\cite[Secs.~7.1.2.1 and 7.2.2.1]{mipi_i3c_tcri}.
+\TxFifo{}~\cite{mipi_i3c_tcri}.
 
 \begin{longtable}{C{4.5cm} L{8.1cm}}
 	\toprule
@@ -43,7 +43,7 @@ Dạng \ImmediateDataTransfer{} nhúng tối đa bốn byte dữ liệu ngay tro
 
 \section*{\RegularTransfer{} Descriptor (\CommandDescriptorWidth{}-bit)}
 
-Dạng \RegularTransfer{} dùng cho giao dịch có dữ liệu nằm trong \TxRxFifo{}~\cite[Secs.~7.1.2.2 and 7.2.2.2]{mipi_i3c_tcri}.
+Dạng \RegularTransfer{} dùng cho giao dịch có dữ liệu nằm trong \TxRxFifo{}~\cite{mipi_i3c_tcri}.
 
 \begin{longtable}{C{3.6cm} L{9.0cm}}
 	\toprule
@@ -65,7 +65,7 @@ Dạng \RegularTransfer{} dùng cho giao dịch có dữ liệu nằm trong \TxR
 \section*{\AddressAssignment{} Descriptor (\CommandDescriptorWidth{}-bit)}
 
 Dạng \AddressAssignment{} khởi tạo quy trình ENTDAA. Dữ liệu \gls{pid}/\gls{bcr}/\gls{dcr}
-được thu trực tiếp từ \Target{} trên bus nên \CommandDescriptor{} không mang byte dữ liệu~\cite[Secs.~7.1.2.5 and 7.2.2.5]{mipi_i3c_tcri}.
+được thu trực tiếp từ \Target{} trên bus nên \CommandDescriptor{} không mang byte dữ liệu~\cite{mipi_i3c_tcri}.
 
 \begin{longtable}{C{3.6cm} L{9.0cm}}
 	\toprule

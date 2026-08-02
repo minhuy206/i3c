@@ -1,8 +1,3 @@
-// i3c_csr_addr_pkg.sv
-// CSR address offsets and field positions for i3c_controller_top
-// Source of truth: src/csr/csr_register.sv (lines 74-91)
-// WARNING: Any CSR map change in RTL must be reflected here manually
-
 `ifndef I3C_CSR_ADDR_PKG_SV
 `define I3C_CSR_ADDR_PKG_SV
 
@@ -100,8 +95,7 @@ package i3c_csr_addr_pkg;
 
   // 4. Helper Functions
 
-  function automatic bit [31:0] hc_control_value(bit bus_enable = 1'b0,
-                                                 bit iba_include = 1'b0,
+  function automatic bit [31:0] hc_control_value(bit bus_enable = 1'b0, bit iba_include = 1'b0,
                                                  bit abort = 1'b0);
     bit [31:0] value;
     value = '0;
