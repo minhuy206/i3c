@@ -40,7 +40,7 @@ module i3c_phy_sva #(
     end
   end
 
-  ap_bus001_reset_sets_sync_idle:
+  ap_reset_sets_sync_idle :
   assert property (@(posedge clk_i)
                    !rst_ni |-> ((scl_ff1 === ResetValue) &&
                                 (scl_ff2 === ResetValue) &&
@@ -50,52 +50,48 @@ module i3c_phy_sva #(
                                 (ctrl_sda_o === ResetValue)))
   else $error("i3c_phy_sva: BUS_001 reset did not set synchronized bus inputs to idle");
 
-  cp_bus001_reset_sets_sync_idle:
+  cp_reset_sets_sync_idle :
   cover property (@(posedge clk_i)
                   !rst_ni && (scl_ff1 === ResetValue) && (scl_ff2 === ResetValue) &&
                   (ctrl_scl_o === ResetValue) && (sda_ff1 === ResetValue) &&
                   (sda_ff2 === ResetValue) && (ctrl_sda_o === ResetValue));
 
-  ap_bus001_scl_ff1_matches_shadow:
+  ap_scl_ff1_matches_shadow :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q[0])
                    scl_ff1 === exp_scl_ff1_q)
   else $error("i3c_phy_sva: BUS_001 SCL first synchronizer flop does not match shadow model");
 
-  ap_bus001_scl_two_cycle_settle:
+  ap_scl_two_cycle_settle :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q[0])
                    ctrl_scl_o === exp_scl_ff2_q)
   else $error("i3c_phy_sva: BUS_001 SCL synchronized output does not match 2FF shadow model");
 
-  ap_bus001_sda_ff1_matches_shadow:
+  ap_sda_ff1_matches_shadow :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q[0])
                    sda_ff1 === exp_sda_ff1_q)
   else $error("i3c_phy_sva: BUS_001 SDA first synchronizer flop does not match shadow model");
 
-  ap_bus001_sda_two_cycle_settle:
+  ap_sda_two_cycle_settle :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !past_valid_q[0])
                    ctrl_sda_o === exp_sda_ff2_q)
   else $error("i3c_phy_sva: BUS_001 SDA synchronized output does not match 2FF shadow model");
 
-  // No equality-only covers for the shadow-model invariants: stable idle inputs
-  // satisfy them immediately. The four input-pattern covers below demonstrate
-  // that the synchronizer exercised every SCL/SDA value combination.
-
-  cp_bus001_sync_pattern_00:
+  cp_sync_pattern_00 :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !(&past_valid_q))
                   ({exp_scl_ff2_q, exp_sda_ff2_q} === 2'b00) &&
                   ({ctrl_scl_o, ctrl_sda_o} === 2'b00));
 
-  cp_bus001_sync_pattern_10:
+  cp_sync_pattern_10 :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !(&past_valid_q))
                   ({exp_scl_ff2_q, exp_sda_ff2_q} === 2'b10) &&
                   ({ctrl_scl_o, ctrl_sda_o} === 2'b10));
 
-  cp_bus001_sync_pattern_01:
+  cp_sync_pattern_01 :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !(&past_valid_q))
                   ({exp_scl_ff2_q, exp_sda_ff2_q} === 2'b01) &&
                   ({ctrl_scl_o, ctrl_sda_o} === 2'b01));
 
-  cp_bus001_sync_pattern_11:
+  cp_sync_pattern_11 :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !(&past_valid_q))
                   ({exp_scl_ff2_q, exp_sda_ff2_q} === 2'b11) &&
                   ({ctrl_scl_o, ctrl_sda_o} === 2'b11));

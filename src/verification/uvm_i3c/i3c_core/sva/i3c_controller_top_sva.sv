@@ -67,17 +67,17 @@ module i3c_controller_top_sva #(
                   !sda_oe && !sel_od_pp_o);
 
   ap_hard_reset_release_has_no_queue_activity :
-  assert property (@(posedge clk_i)
-                   $rose(rst_ni) |->
-                   (i3c_fsm_idle_i && !cmd_hw_rready_i && !tx_hw_rready_i &&
-                    !rx_hw_wvalid_i && !resp_hw_wvalid_i))
+  assert property (@(posedge clk_i) $rose(
+      rst_ni
+  ) |-> (i3c_fsm_idle_i && !cmd_hw_rready_i && !tx_hw_rready_i && !rx_hw_wvalid_i &&
+         !resp_hw_wvalid_i))
   else $error("i3c_controller_top_sva: queue activity observed at hard-reset release");
 
   cp_hard_reset_release_has_no_queue_activity :
-  cover property (@(posedge clk_i)
-                  $rose(rst_ni) && i3c_fsm_idle_i &&
-                  !cmd_hw_rready_i && !tx_hw_rready_i &&
-                  !rx_hw_wvalid_i && !resp_hw_wvalid_i);
+  cover property (@(posedge clk_i) $rose(
+      rst_ni
+  ) && i3c_fsm_idle_i && !cmd_hw_rready_i && !tx_hw_rready_i && !rx_hw_wvalid_i &&
+      !resp_hw_wvalid_i);
 
   cp_reset_point_idle :
   cover property (@(negedge rst_ni) i3c_fsm_idle_i);
@@ -120,24 +120,14 @@ module i3c_controller_top_sva #(
                   disabled_window && queue_status_read && cmd_hw_rvalid_i && resp_empty_i
                   ##1 (!reg_rdata_o[QS_CMD_EMPTY_BIT] && reg_rdata_o[QS_RESP_EMPTY_BIT]));
 
-  // HC_CONTROL write/read behavior is checked inside csr_registers_sva. The
-  // top-level signals above are direct, unmodified views of that CSR output.
-
-  // BUS_014: once the active controller selects the I2C timing path, the
-  // top-level pad mode must remain open-drain and must never actively drive
-  // SDA high. The flow_active checker verifies the protocol phase; this one
-  // verifies propagation through controller_active and i3c_phy to top outputs.
-  ap_bus014_i2c_timing_forces_top_open_drain :
+  ap_i2c_timing_forces_top_open_drain :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    ctrl_enable_i && flow_use_i2c_timing_i |-> !sel_od_pp_o)
   else $error("i3c_controller_top_sva: BUS_014 top-level I2C path asserted push-pull");
 
-  cp_bus014_i2c_timing_forces_top_open_drain :
+  cp_i2c_timing_forces_top_open_drain :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   ctrl_enable_i && flow_use_i2c_timing_i && !sel_od_pp_o);
-
-  // With sda_oe = sel_od_pp_o || !sda_o, the open-drain assertion above also
-  // proves that the controller cannot actively drive SDA high.
 
   cp_cmd_start_after_enable :
   cover property (@(posedge clk_i) disable iff (!rst_ni)

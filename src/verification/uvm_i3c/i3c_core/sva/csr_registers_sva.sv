@@ -26,14 +26,14 @@ module csr_registers_sva
     input logic [DataWidth-1:0] hc_status_i,
     input logic [DataWidth-1:0] queue_status_i,
 
-    input logic                    cmd_wready_i,
-    input logic                    tx_wready_i,
-    input logic                    rx_rvalid_i,
-    input logic [   DataWidth-1:0] rx_rdata_i,
-    input logic                    rx_rready_o,
-    input logic                    resp_rvalid_i,
-    input logic [   DataWidth-1:0] resp_rdata_i,
-    input logic                    resp_rready_o,
+    input logic                 cmd_wready_i,
+    input logic                 tx_wready_i,
+    input logic                 rx_rvalid_i,
+    input logic [DataWidth-1:0] rx_rdata_i,
+    input logic                 rx_rready_o,
+    input logic                 resp_rvalid_i,
+    input logic [DataWidth-1:0] resp_rdata_i,
+    input logic                 resp_rready_o,
 
     input logic [CounterWidth-1:0] t_r_i,
     input logic [CounterWidth-1:0] t_f_i,
@@ -187,7 +187,8 @@ module csr_registers_sva
       ADDR_I2C_T_HD_STA,
       ADDR_I2C_T_SU_STO,
       ADDR_I2C_T_SU_DAT,
-      ADDR_I2C_T_BUF: return 1'b1;
+      ADDR_I2C_T_BUF:
+      return 1'b1;
       default: return 1'b0;
     endcase
   endfunction
@@ -225,10 +226,10 @@ module csr_registers_sva
       ADDR_CMD_QUEUE,
       ADDR_RESP,
       ADDR_PIO_DATA_PORT,
-      ADDR_QUEUE_STATUS: return 1'b1;
+      ADDR_QUEUE_STATUS:
+      return 1'b1;
       default: begin
-        return is_timing_addr(addr) ||
-            ((addr >= ADDR_DAT_BASE) && (addr <= (ADDR_DAT_END - 4)));
+        return is_timing_addr(addr) || ((addr >= ADDR_DAT_BASE) && (addr <= (ADDR_DAT_END - 4)));
       end
     endcase
   endfunction
@@ -280,8 +281,7 @@ module csr_registers_sva
       ADDR_I2C_T_SU_DAT: reset_default_rdata = RST_I2C_T_SU_DAT;
       ADDR_I2C_T_BUF: reset_default_rdata = RST_I2C_T_BUF;
       ADDR_QUEUE_STATUS: begin
-        // QUEUE_STATUS mirrors live FIFO state, so backdoor/FIFO-side activity can change it
-        // before any CSR write occurs. Reset value is checked by ap_queue_reset_defaults.
+
         reset_default_addr_valid = 1'b0;
       end
       default: begin
@@ -372,10 +372,6 @@ module csr_registers_sva
                                       tx_status_i.full, cmd_status_i.empty, cmd_status_i.full})
   else $error("csr_registers_sva: QUEUE_STATUS mirror mismatch");
 
-  // No matching covers for the two mirror invariants: both are true in the
-  // reset-default idle state. Queue-state read covers below provide meaningful
-  // empty/middle/full activation instead.
-
   cp_queue_status_cmd_empty_read :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   queue_status_read && !cmd_status_i.full && cmd_status_i.empty
@@ -447,8 +443,8 @@ module csr_registers_sva
   cp_hc_control_reset_defaults :
   cover property (@(posedge clk_i) disable iff (!rst_ni) $rose(
       rst_ni
-  ) && (hc_control_i == 32'h0000_0000) && !hc_control_cfg_i.ctrl_enable &&
-      !hc_control_cfg_i.i3c_fsm_en && !hc_control_cfg_i.sw_reset &&
+  ) && (hc_control_i == 32'h0000_0000) &&
+      !hc_control_cfg_i.ctrl_enable && !hc_control_cfg_i.i3c_fsm_en && !hc_control_cfg_i.sw_reset &&
       !hc_control_cfg_i.broadcast_header_enable && !hc_control_cfg_i.abort);
 
   ap_hc_control_write_updates_bits :
@@ -508,8 +504,6 @@ module csr_registers_sva
                   reset_control_write && wdata_i[RESET_CTRL_SOFT_RST_BIT] && !i3c_fsm_idle_i
                   ##1 !hc_control_cfg_i.sw_reset);
 
-  // ap_hc_control_write_updates_bits owns the correctness check for these
-  // specialized control writes. The covers retain the independent scenarios.
   cp_broadcast_header_enable_does_not_enable_hc :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   hc_control_write && wdata_i[HC_CTRL_IBA_INCLUDE_BIT] &&
@@ -554,8 +548,6 @@ module csr_registers_sva
   cp_reset_control_readback_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni) reset_control_read ##1 (rdata_o == '0));
 
-  // ADDR_UNMAPPED_020 is part of invalid_read, so
-  // ap_invalid_reg_read_zero already owns this correctness check.
   cp_unmapped_020_read_zero :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   unmapped_020_read ##1 (rdata_o == '0));
@@ -573,36 +565,55 @@ module csr_registers_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known ||
                                                  hc_control_cfg_i.sw_reset)
                    invalid_write
-                   |=> ((hc_control_cfg_i.ctrl_enable == $past(hc_control_cfg_i.ctrl_enable)) &&
-                        (hc_control_cfg_i.i3c_fsm_en == $past(hc_control_cfg_i.i3c_fsm_en)) &&
-                        (hc_control_cfg_i.broadcast_header_enable ==
-                         $past(hc_control_cfg_i.broadcast_header_enable)) &&
-                        (hc_control_cfg_i.abort == $past(hc_control_cfg_i.abort)) &&
-                        ({t_r_i, t_f_i, t_low_i, t_low_od_i, t_high_i, t_su_sta_i,
-                          t_hd_sta_i, t_su_sto_i, t_su_dat_i, t_hd_dat_i, t_bus_free_i,
-                          i2c_t_low_i, i2c_t_high_i, i2c_t_su_sta_i, i2c_t_hd_sta_i,
-                          i2c_t_su_sto_i, i2c_t_su_dat_i, i2c_t_buf_i} ==
-                         $past({t_r_i, t_f_i, t_low_i, t_low_od_i, t_high_i, t_su_sta_i,
+                   |=> ((hc_control_cfg_i.ctrl_enable == $past(
+      hc_control_cfg_i.ctrl_enable
+  )) && (hc_control_cfg_i.i3c_fsm_en == $past(
+      hc_control_cfg_i.i3c_fsm_en
+  )) && (hc_control_cfg_i.broadcast_header_enable == $past(
+      hc_control_cfg_i.broadcast_header_enable
+  )) && (hc_control_cfg_i.abort == $past(
+      hc_control_cfg_i.abort
+  )) && ({t_r_i, t_f_i, t_low_i, t_low_od_i, t_high_i, t_su_sta_i, t_hd_sta_i, t_su_sto_i,
+          t_su_dat_i, t_hd_dat_i, t_bus_free_i, i2c_t_low_i, i2c_t_high_i, i2c_t_su_sta_i,
+          i2c_t_hd_sta_i, i2c_t_su_sto_i, i2c_t_su_dat_i, i2c_t_buf_i} == $past(
+      {t_r_i, t_f_i, t_low_i, t_low_od_i, t_high_i, t_su_sta_i,
                                 t_hd_sta_i, t_su_sto_i, t_su_dat_i, t_hd_dat_i,
                                 t_bus_free_i, i2c_t_low_i, i2c_t_high_i, i2c_t_su_sta_i,
                                 i2c_t_hd_sta_i, i2c_t_su_sto_i, i2c_t_su_dat_i,
-                                i2c_t_buf_i}))))
+                                i2c_t_buf_i}
+  ))))
   else $error("csr_registers_sva: invalid CSR write changed control or timing state");
 
   cp_invalid_reg_write_no_control_timing_side_effects :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known ||
                                                 hc_control_cfg_i.sw_reset)
                   invalid_write
-                  ##1 ((hc_control_cfg_i.ctrl_enable == $past(hc_control_cfg_i.ctrl_enable)) &&
-                       ({t_r_i, t_f_i, t_low_i, t_low_od_i, t_high_i, t_su_sta_i,
-                         t_hd_sta_i, t_su_sto_i, t_su_dat_i, t_hd_dat_i, t_bus_free_i,
-                         i2c_t_low_i, i2c_t_high_i, i2c_t_su_sta_i, i2c_t_hd_sta_i,
-                         i2c_t_su_sto_i, i2c_t_su_dat_i, i2c_t_buf_i} ==
-                        $past({t_r_i, t_f_i, t_low_i, t_low_od_i, t_high_i, t_su_sta_i,
-                               t_hd_sta_i, t_su_sto_i, t_su_dat_i, t_hd_dat_i,
-                               t_bus_free_i, i2c_t_low_i, i2c_t_high_i, i2c_t_su_sta_i,
-                               i2c_t_hd_sta_i, i2c_t_su_sto_i, i2c_t_su_dat_i,
-                               i2c_t_buf_i}))));
+                  ##1 ((hc_control_cfg_i.ctrl_enable == $past(
+      hc_control_cfg_i.ctrl_enable
+  )) && ({t_r_i, t_f_i, t_low_i, t_low_od_i, t_high_i, t_su_sta_i, t_hd_sta_i, t_su_sto_i,
+          t_su_dat_i, t_hd_dat_i, t_bus_free_i, i2c_t_low_i, i2c_t_high_i, i2c_t_su_sta_i,
+          i2c_t_hd_sta_i, i2c_t_su_sto_i, i2c_t_su_dat_i, i2c_t_buf_i} == $past(
+      {
+        t_r_i,
+        t_f_i,
+        t_low_i,
+        t_low_od_i,
+        t_high_i,
+        t_su_sta_i,
+        t_hd_sta_i,
+        t_su_sto_i,
+        t_su_dat_i,
+        t_hd_dat_i,
+        t_bus_free_i,
+        i2c_t_low_i,
+        i2c_t_high_i,
+        i2c_t_su_sta_i,
+        i2c_t_hd_sta_i,
+        i2c_t_su_sto_i,
+        i2c_t_su_dat_i,
+        i2c_t_buf_i
+      }
+  ))));
 
   ap_invalid_reg_write_no_cmd_tx_side_effects :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known ||
@@ -610,12 +621,19 @@ module csr_registers_sva
                    invalid_write &&
                    !(cmd_wvalid_int_i && cmd_wready_i) &&
                    !(tx_wvalid_int_i && tx_wready_i)
-                   |=> ((cmd_staging_valid_i == $past(cmd_staging_valid_i)) &&
-                        (cmd_dword0_i == $past(cmd_dword0_i)) &&
-                        (cmd_wvalid_int_i == $past(cmd_wvalid_int_i)) &&
-                        (cmd_wdata_int_i == $past(cmd_wdata_int_i)) &&
-                        (tx_wvalid_int_i == $past(tx_wvalid_int_i)) &&
-                        (tx_wdata_int_i == $past(tx_wdata_int_i))))
+                   |=> ((cmd_staging_valid_i == $past(
+      cmd_staging_valid_i
+  )) && (cmd_dword0_i == $past(
+      cmd_dword0_i
+  )) && (cmd_wvalid_int_i == $past(
+      cmd_wvalid_int_i
+  )) && (cmd_wdata_int_i == $past(
+      cmd_wdata_int_i
+  )) && (tx_wvalid_int_i == $past(
+      tx_wvalid_int_i
+  )) && (tx_wdata_int_i == $past(
+      tx_wdata_int_i
+  ))))
   else $error("csr_registers_sva: invalid CSR write changed CMD/TX staging state");
 
   cp_invalid_reg_write_no_cmd_tx_side_effects :
@@ -624,25 +642,36 @@ module csr_registers_sva
                   invalid_write &&
                   !(cmd_wvalid_int_i && cmd_wready_i) &&
                   !(tx_wvalid_int_i && tx_wready_i)
-                  ##1 ((cmd_staging_valid_i == $past(cmd_staging_valid_i)) &&
-                       (cmd_dword0_i == $past(cmd_dword0_i)) &&
-                       (cmd_wvalid_int_i == $past(cmd_wvalid_int_i)) &&
-                       (tx_wvalid_int_i == $past(tx_wvalid_int_i))));
+                  ##1 ((cmd_staging_valid_i == $past(
+      cmd_staging_valid_i
+  )) && (cmd_dword0_i == $past(
+      cmd_dword0_i
+  )) && (cmd_wvalid_int_i == $past(
+      cmd_wvalid_int_i
+  )) && (tx_wvalid_int_i == $past(
+      tx_wvalid_int_i
+  ))));
 
   generate
-    for (genvar invalid_dat_i = 0; invalid_dat_i < DatDepth; invalid_dat_i++) begin : gen_invalid_write_preserves_dat
+    for (
+        genvar invalid_dat_i = 0; invalid_dat_i < DatDepth; invalid_dat_i++
+    ) begin : gen_invalid_write_preserves_dat
       ap_invalid_reg_write_preserves_dat_entry :
       assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known ||
                                                      hc_control_cfg_i.sw_reset)
                        invalid_write
-                       |=> (dat_mem_i[invalid_dat_i] == $past(dat_mem_i[invalid_dat_i])))
+                       |=> (dat_mem_i[invalid_dat_i] == $past(
+          dat_mem_i[invalid_dat_i]
+      )))
       else $error("csr_registers_sva: invalid CSR write changed DAT entry");
 
       cp_invalid_reg_write_preserves_dat_entry :
       cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known ||
                                                     hc_control_cfg_i.sw_reset)
                       invalid_write
-                      ##1 (dat_mem_i[invalid_dat_i] == $past(dat_mem_i[invalid_dat_i])));
+                      ##1 (dat_mem_i[invalid_dat_i] == $past(
+          dat_mem_i[invalid_dat_i]
+      )));
     end
   endgenerate
 
@@ -657,9 +686,6 @@ module csr_registers_sva
                   hc_control_cfg_i.sw_reset && !repeated_sw_reset_write
                   ##1 !hc_control_cfg_i.sw_reset);
 
-  // cmd/tx output-mirror assertions were removed: they repeated direct
-  // continuous assignments inside csr_registers. The staging, stability and
-  // ready/valid properties below check the observable handshake behavior.
   ap_cmd_first_write_stages_dword0 :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    !hc_control_cfg_i.sw_reset && cmd_queue_write && !cmd_wvalid_int_i &&
@@ -722,9 +748,9 @@ module csr_registers_sva
   ap_cmd_wdata_stable_until_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    !hc_control_cfg_i.sw_reset && cmd_wvalid_int_i && !cmd_wready_i
-                   |=> ($past(hc_control_cfg_i.sw_reset) ||
-                        hc_control_cfg_i.sw_reset ||
-                        (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
+                   |=> ($past(
+      hc_control_cfg_i.sw_reset
+  ) || hc_control_cfg_i.sw_reset || (cmd_wvalid_int_i && (cmd_wdata_int_i == $past(
       cmd_wdata_int_i
   )))))
   else $error("csr_registers_sva: CMD write data changed before ready");
@@ -772,9 +798,9 @@ module csr_registers_sva
   ap_tx_wdata_stable_until_ready :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    !hc_control_cfg_i.sw_reset && tx_wvalid_int_i && !tx_wready_i
-                   |=> ($past(hc_control_cfg_i.sw_reset) ||
-                        hc_control_cfg_i.sw_reset ||
-                        (tx_wvalid_int_i && (tx_wdata_int_i == $past(
+                   |=> ($past(
+      hc_control_cfg_i.sw_reset
+  ) || hc_control_cfg_i.sw_reset || (tx_wvalid_int_i && (tx_wdata_int_i == $past(
       tx_wdata_int_i
   )))))
   else $error("csr_registers_sva: TX write data changed before ready");
@@ -804,9 +830,6 @@ module csr_registers_sva
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    resp_rready_o == resp_read)
   else $error("csr_registers_sva: resp_rready_o must pulse only for RESP reads");
-
-  // No equality-only covers here: both expressions hit trivially while idle.
-  // cp_rx/resp_read_returns_fifo_data exercise the actual read handshakes.
 
   ap_rx_read_returns_fifo_data :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
@@ -866,7 +889,9 @@ module csr_registers_sva
   ap_timing_write_updates_selected_reg :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    timing_write
-                   |=> (timing_value_for_addr($past(addr_i)) == $past(
+                   |=> (timing_value_for_addr(
+      $past(addr_i)
+  ) == $past(
       wdata_i[CounterWidth-1:0]
   )))
   else $error("csr_registers_sva: timing CSR write did not update selected register");
@@ -874,7 +899,9 @@ module csr_registers_sva
   cp_timing_write_updates_selected_reg :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   timing_write
-                  ##1 (timing_value_for_addr($past(addr_i)) == $past(
+                  ##1 (timing_value_for_addr(
+      $past(addr_i)
+  ) == $past(
       wdata_i[CounterWidth-1:0]
   )));
 
@@ -920,9 +947,6 @@ module csr_registers_sva
       reset_default_rdata
   )))
   else $error("csr_registers_sva: reset-default CSR readback mismatch");
-
-  // No aggregate cover: the per-address reset-readback covers below partition
-  // every address accepted by reset_default_addr_valid.
 
   cp_reset_readback_hc_control :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -1054,9 +1078,9 @@ module csr_registers_sva
   ap_dat_write_updates_selected_entry :
   assert property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                    dat_write
-                   |=> (DataWidth'(dat_mem_i[dat_index_for_addr($past(
-      addr_i
-  ))]) == ($past(
+                   |=> (DataWidth'(dat_mem_i[dat_index_for_addr(
+      $past(addr_i)
+  )]) == ($past(
       wdata_i
   ) & DAT_WRITABLE_MASK)))
   else $error("csr_registers_sva: DAT write did not update selected entry");
@@ -1064,9 +1088,9 @@ module csr_registers_sva
   cp_dat_write_updates_selected_entry :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
                   dat_write
-                  ##1 (DataWidth'(dat_mem_i[dat_index_for_addr($past(
-      addr_i
-  ))]) == ($past(
+                  ##1 (DataWidth'(dat_mem_i[dat_index_for_addr(
+      $past(addr_i)
+  )]) == ($past(
       wdata_i
   ) & DAT_WRITABLE_MASK)));
 
@@ -1076,9 +1100,6 @@ module csr_registers_sva
       dat_read_data
   )))
   else $error("csr_registers_sva: DAT readback mismatch");
-
-  // No aggregate cover: gen_dat_reset_default_readback provides the same
-  // readback event per DAT index, which is the meaningful closure dimension.
 
   cp_dat_device_i3c_write :
   cover property (@(posedge clk_i) disable iff (!rst_ni || !csr_bus_known)
@@ -1094,8 +1115,7 @@ module csr_registers_sva
                      (dat_mem_i[i].reserved_15_7 == '0) &&
                      (dat_mem_i[i].reserved_30_23 == '0))
     else $error("csr_registers_sva: DAT[%0d] reserved fields are not zero", i);
-    // No matching cover: zero reserved fields are an invariant and hit
-    // immediately after reset. DAT write/index covers own scenario closure.
+
   end
 
   for (genvar i = 0; i < DatDepth; i++) begin : gen_dat_reset_defaults

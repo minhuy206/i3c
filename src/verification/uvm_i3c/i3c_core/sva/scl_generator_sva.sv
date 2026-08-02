@@ -36,19 +36,19 @@ module scl_generator_sva #(
     input logic tcount_expired
 );
 
-  localparam logic [3:0] StateIdle              = 4'd0;
-  localparam logic [3:0] StateGenerateStart     = 4'd1;
-  localparam logic [3:0] StateSdaFall           = 4'd2;
-  localparam logic [3:0] StateHoldStart         = 4'd3;
-  localparam logic [3:0] StateDriveLow          = 4'd4;
-  localparam logic [3:0] StateDriveHigh         = 4'd5;
-  localparam logic [3:0] StateWaitCmd           = 4'd6;
-  localparam logic [3:0] StateGenerateRstart    = 4'd7;
-  localparam logic [3:0] StateSclHighForRstart  = 4'd8;
-  localparam logic [3:0] StateGenerateStop      = 4'd9;
-  localparam logic [3:0] StateSclHighForStop    = 4'd10;
-  localparam logic [3:0] StateSdaRise           = 4'd11;
-  localparam logic [3:0] StateBusFree           = 4'd12;
+  localparam logic [3:0] StateIdle = 4'd0;
+  localparam logic [3:0] StateGenerateStart = 4'd1;
+  localparam logic [3:0] StateSdaFall = 4'd2;
+  localparam logic [3:0] StateHoldStart = 4'd3;
+  localparam logic [3:0] StateDriveLow = 4'd4;
+  localparam logic [3:0] StateDriveHigh = 4'd5;
+  localparam logic [3:0] StateWaitCmd = 4'd6;
+  localparam logic [3:0] StateGenerateRstart = 4'd7;
+  localparam logic [3:0] StateSclHighForRstart = 4'd8;
+  localparam logic [3:0] StateGenerateStop = 4'd9;
+  localparam logic [3:0] StateSclHighForStop = 4'd10;
+  localparam logic [3:0] StateSdaRise = 4'd11;
+  localparam logic [3:0] StateBusFree = 4'd12;
 
   logic [CounterWidth-1:0] low_fall_delay;
   logic [CounterWidth-1:0] high_rise_delay;
@@ -90,349 +90,348 @@ module scl_generator_sva #(
   assign bus009_waitcmd_rstart_req =
       (state_q == StateWaitCmd) && gen_rstart_i && !gen_stop_i && !gen_idle_i;
 
-  // BUS_006: START and STOP are generated on nearly every real transaction, so
-  // no dedicated force-based vseq is required. These assertions check the local
-  // scl_generator sequence and counter loads whenever existing traffic exercises
-  // START/STOP.
-  ap_bus006_start_req_enters_generate_start :
+  ap_start_req_enters_generate_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus006_start_req |-> (state_d == StateGenerateStart))
   else $error("scl_generator_sva: BUS_006 START request did not enter GenerateStart in %m");
 
-  cp_bus006_start_req_enters_generate_start :
+  cp_start_req_enters_generate_start :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus006_start_req ##1 (state_q == StateGenerateStart));
 
-  ap_bus006_start_req_loads_setup_start :
+  ap_start_req_loads_setup_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus006_start_req
                    |-> (load_tcount && (tcount_load_val == t_su_sta_i)))
   else $error("scl_generator_sva: BUS_006 START request did not load t_su_sta_i in %m");
 
-  cp_bus006_start_req_loads_setup_start :
+  cp_start_req_loads_setup_start :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus006_start_req && load_tcount && (tcount_load_val == t_su_sta_i));
 
-  ap_bus006_generate_start_releases_scl_sda :
+  ap_generate_start_releases_scl_sda :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateGenerateStart)
                    |-> (scl_o && sda_o && sda_ctrl_active_o && !done_o))
   else $error("scl_generator_sva: BUS_006 GenerateStart did not release SCL/SDA in %m");
 
-  cp_bus006_generate_start_releases_scl_sda :
+  cp_generate_start_releases_scl_sda :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateGenerateStart) && scl_o && sda_o &&
                   sda_ctrl_active_o && !done_o);
 
-  ap_bus006_generate_start_expires_to_sda_fall :
+  ap_generate_start_expires_to_sda_fall :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateGenerateStart) && tcount_expired && !gen_idle_i
                    |-> (state_d == StateSdaFall))
   else $error("scl_generator_sva: BUS_006 GenerateStart did not transition to SdaFall in %m");
 
-  cp_bus006_generate_start_expires_to_sda_fall :
+  cp_generate_start_expires_to_sda_fall :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateGenerateStart) && tcount_expired && !gen_idle_i
                   ##1 (state_q == StateSdaFall));
 
-  ap_bus006_sda_fall_drives_start :
+  ap_sda_fall_drives_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateSdaFall)
                    |-> (scl_o && !sda_o && sda_ctrl_active_o && !done_o))
   else $error("scl_generator_sva: BUS_006 SdaFall did not drive START condition in %m");
 
-  cp_bus006_sda_fall_drives_start :
+  cp_sda_fall_drives_start :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateSdaFall) && scl_o && !sda_o &&
                   sda_ctrl_active_o && !done_o);
 
-  ap_bus006_sda_fall_loads_hold_start :
+  ap_sda_fall_loads_hold_start :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateSdaFall) && !gen_idle_i
                    |-> (load_tcount && (tcount_load_val == t_hd_sta_i) &&
                         (state_d == StateHoldStart)))
   else $error("scl_generator_sva: BUS_006 SdaFall did not load t_hd_sta_i in %m");
 
-  cp_bus006_sda_fall_loads_hold_start :
+  cp_sda_fall_loads_hold_start :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateSdaFall) && !gen_idle_i && load_tcount &&
                   (tcount_load_val == t_hd_sta_i) ##1 (state_q == StateHoldStart));
 
-  ap_bus006_hold_start_drives_start_hold :
+  ap_hold_start_drives_start_hold :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateHoldStart)
                    |-> (scl_o && !sda_o && sda_ctrl_active_o))
   else $error("scl_generator_sva: BUS_006 HoldStart did not hold START condition in %m");
 
-  cp_bus006_hold_start_drives_start_hold :
+  cp_hold_start_drives_start_hold :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateHoldStart) && scl_o && !sda_o && sda_ctrl_active_o);
 
-  ap_bus006_hold_start_expires_to_drivelow :
+  ap_hold_start_expires_to_drivelow :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateHoldStart) && tcount_expired && !gen_idle_i
                    |-> (state_d == StateDriveLow && done_o && load_tcount &&
                         (tcount_load_val == low_fall_delay)))
-  else $error("scl_generator_sva: BUS_006 HoldStart did not finish START with low/fall delay in %m");
+  else
+    $error("scl_generator_sva: BUS_006 HoldStart did not finish START with low/fall delay in %m");
 
-  cp_bus006_hold_start_expires_to_drivelow :
+  cp_hold_start_expires_to_drivelow :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateHoldStart) && tcount_expired && !gen_idle_i &&
                   done_o && load_tcount && (tcount_load_val == low_fall_delay)
                   ##1 (state_q == StateDriveLow));
 
-  ap_bus006_stop_req_enters_generate_stop :
+  ap_stop_req_enters_generate_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus006_stop_req |-> (state_d == StateGenerateStop))
   else $error("scl_generator_sva: BUS_006 STOP request did not enter GenerateStop in %m");
 
-  cp_bus006_stop_req_enters_generate_stop :
+  cp_stop_req_enters_generate_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus006_stop_req ##1 (state_q == StateGenerateStop));
 
-  ap_bus006_stop_req_loads_low_delay :
+  ap_stop_req_loads_low_delay :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus006_stop_req
                    |-> (load_tcount && (tcount_load_val == low_fall_delay)))
   else $error("scl_generator_sva: BUS_006 STOP request did not load low/fall delay in %m");
 
-  cp_bus006_stop_req_loads_low_delay :
+  cp_stop_req_loads_low_delay :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus006_stop_req && load_tcount && (tcount_load_val == low_fall_delay));
 
-  ap_bus006_generate_stop_holds_sda_low :
+  ap_generate_stop_holds_sda_low :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateGenerateStop)
                    |-> (!sda_o && sda_ctrl_active_o && (tcount_expired || !scl_o)))
   else $error("scl_generator_sva: BUS_006 GenerateStop did not hold SDA low before STOP in %m");
 
-  cp_bus006_generate_stop_holds_sda_low :
+  cp_generate_stop_holds_sda_low :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateGenerateStop) && !sda_o && sda_ctrl_active_o &&
                   (tcount_expired || !scl_o));
 
-  ap_bus006_generate_stop_scl_high_loads_setup_stop :
+  ap_generate_stop_scl_high_loads_setup_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateGenerateStop) && tcount_expired && scl_i && !gen_idle_i
                    |-> (state_d == StateSclHighForStop && load_tcount &&
                         (tcount_load_val == t_su_sto_i)))
   else $error("scl_generator_sva: BUS_006 GenerateStop did not load t_su_sto_i in %m");
 
-  cp_bus006_generate_stop_scl_high_loads_setup_stop :
+  cp_generate_stop_scl_high_loads_setup_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateGenerateStop) && tcount_expired && scl_i && !gen_idle_i &&
                   load_tcount && (tcount_load_val == t_su_sto_i)
                   ##1 (state_q == StateSclHighForStop));
 
-  ap_bus006_scl_high_for_stop_holds_stop_setup :
+  ap_scl_high_for_stop_holds_stop_setup :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateSclHighForStop)
                    |-> (scl_o && !sda_o && sda_ctrl_active_o))
   else $error("scl_generator_sva: BUS_006 SclHighForStop did not hold STOP setup in %m");
 
-  cp_bus006_scl_high_for_stop_holds_stop_setup :
+  cp_scl_high_for_stop_holds_stop_setup :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateSclHighForStop) && scl_o && !sda_o &&
                   sda_ctrl_active_o);
 
-  ap_bus006_scl_high_for_stop_expires_to_sda_rise :
+  ap_scl_high_for_stop_expires_to_sda_rise :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateSclHighForStop) && tcount_expired && !gen_idle_i
                    |-> (state_d == StateSdaRise))
   else $error("scl_generator_sva: BUS_006 SclHighForStop did not transition to SdaRise in %m");
 
-  cp_bus006_scl_high_for_stop_expires_to_sda_rise :
+  cp_scl_high_for_stop_expires_to_sda_rise :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateSclHighForStop) && tcount_expired && !gen_idle_i
                   ##1 (state_q == StateSdaRise));
 
-  ap_bus006_sda_rise_drives_stop :
+  ap_sda_rise_drives_stop :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateSdaRise) && !gen_idle_i
                    |-> (scl_o && sda_o && sda_ctrl_active_o && load_tcount &&
                         (tcount_load_val == t_bus_free_i) && (state_d == StateBusFree)))
-  else $error("scl_generator_sva: BUS_006 SdaRise did not drive STOP and load bus-free delay in %m");
+  else
+    $error("scl_generator_sva: BUS_006 SdaRise did not drive STOP and load bus-free delay in %m");
 
-  cp_bus006_sda_rise_drives_stop :
+  cp_sda_rise_drives_stop :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateSdaRise) && !gen_idle_i && scl_o && sda_o && sda_ctrl_active_o &&
                   load_tcount && (tcount_load_val == t_bus_free_i)
                   ##1 (state_q == StateBusFree));
 
-  ap_bus006_bus_free_expires_to_idle :
+  ap_bus_free_expires_to_idle :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateBusFree) && tcount_expired && !gen_idle_i
                    |-> (state_d == StateIdle && done_o && scl_o && sda_o &&
                         !sda_ctrl_active_o))
   else $error("scl_generator_sva: BUS_006 BusFree did not finish STOP into Idle in %m");
 
-  cp_bus006_bus_free_expires_to_idle :
+  cp_bus_free_expires_to_idle :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateBusFree) && tcount_expired && !gen_idle_i &&
                   done_o && scl_o && sda_o && !sda_ctrl_active_o
                   ##1 (state_q == StateIdle));
 
-  // BUS_007: generated clock timing must use the programmed low/high timing
-  // values. The vseq sweeps CSR profiles; these assertions check the
-  // scl_generator counter loads that produce SCL low/high periods.
-  ap_bus007_pp_low_selects_t_low :
+  ap_pp_low_selects_t_low :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    !scl_use_od_low_i |-> (active_t_low_i == t_low_i))
   else $error("scl_generator_sva: BUS_007 PP low mode did not select t_low_i in %m");
 
-  cp_bus007_pp_low_selects_t_low :
+  cp_pp_low_selects_t_low :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   !scl_use_od_low_i && (active_t_low_i == t_low_i));
 
-  ap_bus007_od_low_selects_t_low_od :
+  ap_od_low_selects_t_low_od :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    scl_use_od_low_i |-> (active_t_low_i == t_low_od_i))
   else $error("scl_generator_sva: BUS_007 OD low mode did not select t_low_od_i in %m");
 
-  cp_bus007_od_low_selects_t_low_od :
+  cp_od_low_selects_t_low_od :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   scl_use_od_low_i && (active_t_low_i == t_low_od_i));
 
-  ap_bus007_drivelow_clock_enters_drivehigh :
+  ap_drivelow_clock_enters_drivehigh :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus007_drivelow_clock_req |-> (state_d == StateDriveHigh))
   else $error("scl_generator_sva: BUS_007 DriveLow clock request did not enter DriveHigh in %m");
 
-  cp_bus007_drivelow_clock_enters_drivehigh :
+  cp_drivelow_clock_enters_drivehigh :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus007_drivelow_clock_req ##1 (state_q == StateDriveHigh));
 
-  ap_bus007_drivelow_clock_loads_high_delay :
+  ap_drivelow_clock_loads_high_delay :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus007_drivelow_clock_req
                    |-> (load_tcount && (tcount_load_val == high_rise_delay)))
-  else $error("scl_generator_sva: BUS_007 DriveLow clock request did not load high/rise delay in %m");
+  else
+    $error("scl_generator_sva: BUS_007 DriveLow clock request did not load high/rise delay in %m");
 
-  cp_bus007_drivelow_clock_loads_high_delay :
+  cp_drivelow_clock_loads_high_delay :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus007_drivelow_clock_req && load_tcount &&
                   (tcount_load_val == high_rise_delay));
 
-  ap_bus007_drivehigh_clock_enters_drivelow :
+  ap_drivehigh_clock_enters_drivelow :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus007_drivehigh_clock_req |-> (state_d == StateDriveLow))
   else $error("scl_generator_sva: BUS_007 DriveHigh clock request did not enter DriveLow in %m");
 
-  cp_bus007_drivehigh_clock_enters_drivelow :
+  cp_drivehigh_clock_enters_drivelow :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus007_drivehigh_clock_req ##1 (state_q == StateDriveLow));
 
-  ap_bus007_drivehigh_clock_loads_low_delay :
+  ap_drivehigh_clock_loads_low_delay :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus007_drivehigh_clock_req
                    |-> (load_tcount && (tcount_load_val == low_fall_delay)))
-  else $error("scl_generator_sva: BUS_007 DriveHigh clock request did not load low/fall delay in %m");
+  else
+    $error("scl_generator_sva: BUS_007 DriveHigh clock request did not load low/fall delay in %m");
 
-  cp_bus007_drivehigh_clock_loads_pp_low_delay :
+  cp_drivehigh_clock_loads_pp_low_delay :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus007_drivehigh_clock_req && !scl_use_od_low_i && load_tcount &&
                   (tcount_load_val == low_fall_delay));
 
-  cp_bus007_drivehigh_clock_loads_od_low_delay :
+  cp_drivehigh_clock_loads_od_low_delay :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus007_drivehigh_clock_req && scl_use_od_low_i && load_tcount &&
                   (tcount_load_val == low_fall_delay));
 
-  // BUS_008: with no next bus command, WaitCmd intentionally parks SCL low.
-  // The generator must stay there until higher-level control requests clock,
-  // STOP, repeated START, or idle.
-  ap_bus008_waitcmd_no_cmd_stays_waitcmd :
+  ap_waitcmd_no_cmd_stays_waitcmd :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus008_waitcmd_no_cmd |-> (state_d == StateWaitCmd))
   else $error("scl_generator_sva: BUS_008 WaitCmd did not hold state with no command in %m");
 
-  cp_bus008_waitcmd_no_cmd_stays_waitcmd :
+  cp_waitcmd_no_cmd_stays_waitcmd :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus008_waitcmd_no_cmd ##1 (state_q == StateWaitCmd));
 
-  ap_bus008_waitcmd_no_cmd_holds_scl_low :
+  ap_waitcmd_no_cmd_holds_scl_low :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus008_waitcmd_no_cmd
                    |-> (!scl_o && sda_o && !sda_ctrl_active_o && !done_o))
   else $error("scl_generator_sva: BUS_008 WaitCmd did not park SCL low with SDA released in %m");
 
-  cp_bus008_waitcmd_no_cmd_holds_scl_low :
+  cp_waitcmd_no_cmd_holds_scl_low :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus008_waitcmd_no_cmd && !scl_o && sda_o && !sda_ctrl_active_o &&
                   !done_o);
 
-  ap_bus008_waitcmd_clock_resume_enters_drivelow :
+  ap_waitcmd_clock_resume_enters_drivelow :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus008_waitcmd_clock_resume |-> (state_d == StateDriveLow))
   else $error("scl_generator_sva: BUS_008 WaitCmd clock resume did not enter DriveLow in %m");
 
-  cp_bus008_waitcmd_clock_resume_enters_drivelow :
+  cp_waitcmd_clock_resume_enters_drivelow :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus008_waitcmd_clock_resume ##1 (state_q == StateDriveLow));
 
-  ap_bus008_waitcmd_clock_resume_loads_low_delay :
+  ap_waitcmd_clock_resume_loads_low_delay :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus008_waitcmd_clock_resume
                    |-> (load_tcount && (tcount_load_val == low_fall_delay)))
-  else $error("scl_generator_sva: BUS_008 WaitCmd clock resume did not load the low/fall delay in %m");
+  else
+    $error("scl_generator_sva: BUS_008 WaitCmd clock resume did not load the low/fall delay in %m");
 
-  cp_bus008_waitcmd_clock_resume_loads_low_delay :
+  cp_waitcmd_clock_resume_loads_low_delay :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus008_waitcmd_clock_resume && load_tcount &&
                   (tcount_load_val == low_fall_delay));
 
-  // BUS_009: a Repeated START request while SCL is parked low in WaitCmd must
-  // be serviced immediately by the restart path, not missed or treated as an
-  // ordinary clock resume.
-  ap_bus009_waitcmd_rstart_enters_generate_rstart :
+  ap_waitcmd_rstart_enters_generate_rstart :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus009_waitcmd_rstart_req |=> (state_q == StateGenerateRstart))
-  else $error("scl_generator_sva: BUS_009 WaitCmd rstart request did not enter GenerateRstart in %m");
+  else
+    $error("scl_generator_sva: BUS_009 WaitCmd rstart request did not enter GenerateRstart in %m");
 
-  cp_bus009_waitcmd_to_rstart :
+  cp_waitcmd_to_rstart :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus009_waitcmd_rstart_req ##1 (state_q == StateGenerateRstart));
 
-  ap_bus009_waitcmd_rstart_loads_low_delay :
+  ap_waitcmd_rstart_loads_low_delay :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    bus009_waitcmd_rstart_req
                    |-> (load_tcount && (tcount_load_val == low_fall_delay)))
   else $error("scl_generator_sva: BUS_009 WaitCmd rstart did not load the low/fall delay in %m");
 
-  cp_bus009_waitcmd_rstart_loads_low_delay :
+  cp_waitcmd_rstart_loads_low_delay :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   bus009_waitcmd_rstart_req && load_tcount &&
                   (tcount_load_val == low_fall_delay));
 
-  ap_bus009_generate_rstart_holds_scl_low :
+  ap_generate_rstart_holds_scl_low :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateGenerateRstart) && !tcount_expired
                    |-> (!scl_o && sda_o && sda_ctrl_active_o))
-  else $error("scl_generator_sva: BUS_009 GenerateRstart did not hold SCL low with SDA released in %m");
+  else
+    $error(
+        "scl_generator_sva: BUS_009 GenerateRstart did not hold SCL low with SDA released in %m"
+    );
 
-  cp_bus009_generate_rstart_holds_scl_low :
+  cp_generate_rstart_holds_scl_low :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateGenerateRstart) && !tcount_expired &&
                   !scl_o && sda_o && sda_ctrl_active_o);
 
-  ap_bus009_scl_high_for_rstart_releases_scl :
+  ap_scl_high_for_rstart_releases_scl :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateSclHighForRstart)
                    |-> (scl_o && sda_o && sda_ctrl_active_o))
-  else $error("scl_generator_sva: BUS_009 SclHighForRstart did not release SCL/SDA before Sr edge in %m");
+  else
+    $error(
+        "scl_generator_sva: BUS_009 SclHighForRstart did not release SCL/SDA before Sr edge in %m"
+    );
 
-  cp_bus009_scl_high_for_rstart_releases_scl :
+  cp_scl_high_for_rstart_releases_scl :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateSclHighForRstart) &&
                   scl_o && sda_o && sda_ctrl_active_o);
 
-  ap_bus009_scl_high_for_rstart_expires_to_sda_fall :
+  ap_scl_high_for_rstart_expires_to_sda_fall :
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateSclHighForRstart) && tcount_expired && !gen_idle_i
                    |-> (state_d == StateSdaFall))
   else $error("scl_generator_sva: BUS_009 SclHighForRstart did not transition to SdaFall in %m");
 
-  cp_bus009_scl_high_for_rstart_to_sda_fall :
+  cp_scl_high_for_rstart_to_sda_fall :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
                   (state_q == StateSclHighForRstart) && tcount_expired && !gen_idle_i
                   ##1 (state_q == StateSdaFall) && scl_o && !sda_o &&
@@ -442,7 +441,10 @@ module scl_generator_sva #(
   assert property (@(posedge clk_i) disable iff (!rst_ni)
                    (state_q == StateGenerateRstart && tcount_expired && scl_i)
                    |-> (state_d == StateSclHighForRstart))
-  else $error("scl_generator_sva: GenerateRstart did not transition to SclHighForRstart when ready in %m");
+  else
+    $error(
+        "scl_generator_sva: GenerateRstart did not transition to SclHighForRstart when ready in %m"
+    );
 
   cp_rstart_waits_for_scl_high :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
