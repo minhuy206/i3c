@@ -11,11 +11,11 @@ module tb_i3c_top;
   initial clk = 1'b0;
   always #1.5 clk = ~clk;  // 3 ns period -> 333.333 MHz
 
-  initial begin
-    rst_n = 1'b0;
-    repeat (100) @(posedge clk);
-    rst_n = 1'b1;
-  end
+  clk_rst_if u_clk_rst (
+      .clk_i(clk)
+  );
+
+  assign rst_n = u_clk_rst.rst_ni;
 
   wire scl_bus, sda_bus;
   logic scl_o, sda_o;
@@ -96,6 +96,7 @@ module tb_i3c_top;
     uvm_config_db#(virtual reg_if)::set(null, "*.env.m_reg_agent*", "vif", reg_bus);
     uvm_config_db#(virtual reg_if)::set(null, "*.env.m_reg_coverage", "vif", reg_bus);
     uvm_config_db#(virtual i3c_if)::set(null, "*.env.m_i3c_agent", "vif", i3c_bus);
+    uvm_config_db#(virtual clk_rst_if)::set(null, "*", "clk_rst_vif", u_clk_rst);
     $timeformat(-9, 0, " ns", 12);
     run_test();
   end

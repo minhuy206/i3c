@@ -10,6 +10,7 @@ RUN_NAME    ?= $(SEQ)
 WAVE_DIR    ?= $(WAVE_ROOT)/$(RUN_NAME)
 WAVE_FILE   ?= $(WAVE_DIR)/waves.shm
 COV         ?= 0
+COV_DETAIL  ?= 0
 COV_ROOT    ?= cov_work
 COV_TEST    ?= $(SEQ)_$(SEED)
 COV_OPTS    = -coverage all -covworkdir $(COV_ROOT) -covtest $(COV_TEST) -covoverwrite
@@ -130,6 +131,14 @@ ERR_REGRESSION_SEQS ?= \
 	i3c_reset_during_transfer_phases_vseq \
 	i3c_sw_reset_while_busy_policy_vseq
 
+ALL_SEQS = $(CSR_REGRESSION_SEQS) $(FIFO_REGRESSION_SEQS) $(BUS_REGRESSION_SEQS) \
+           $(SDRW_REGRESSION_SEQS) $(SDRR_REGRESSION_SEQS) $(IMM_REGRESSION_SEQS) \
+           $(I2C_REGRESSION_SEQS) $(CCC_REGRESSION_SEQS) $(DAA_REGRESSION_SEQS) \
+           $(ERR_REGRESSION_SEQS)
+comma := ,
+space := $(subst ,, )
+ALL_SEQS_CSV = $(subst $(space),$(comma),$(strip $(ALL_SEQS)))
+
 compile:
 	$(SIMULATOR) -compile -elaborate \
 	  -uvmhome $(UVM_HOME) \
@@ -151,6 +160,7 @@ sim: compile
 	  -svseed $(SEED) \
 	  -xceligen on \
 	  $(if $(filter 1,$(COV)),$(COV_OPTS),) \
+	  $(if $(filter 1,$(COV_DETAIL)),+COV_DETAIL,) \
 	  $(if $(filter 1,$(DUMP_WAVES)),+DUMP_WAVES +WAVE_FILE=$(WAVE_FILE),) \
 	  2>&1 | tee $(LOG_FILE)
 
@@ -236,6 +246,10 @@ waves:
 coverage:
 	$(MAKE) sim COV=1
 
+cov_all:
+	$(MAKE) sim COV=1 TEST=i3c_base_test SEQ="$(ALL_SEQS_CSV)" \
+	  COV_TEST=all_$(SEED) RUN_NAME=cov_all LOG_FILE=logs/coverage_all.log
+
 tools: $(UCD2JSON) $(if $(SVA_TOOLS_READY),$(UCD2SVA))
 
 check_ucis:
@@ -276,4 +290,4 @@ clean:
 .PHONY: compile sim smoke regression csr_regression fifo_regression bus_regression \
         sdrw_regression sdrr_regression imm_regression i2c_regression ccc_regression \
         err_regression sdr_regression \
-        waves coverage tools check_ucis cov_report sva_cov_report clean
+        waves coverage cov_all tools check_ucis cov_report sva_cov_report clean

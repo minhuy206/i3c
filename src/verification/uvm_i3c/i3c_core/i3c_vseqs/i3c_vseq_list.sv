@@ -68,6 +68,7 @@
 `include "i3c_vseqs/resp_vseqs/i3c_entdaa_rx_fifo_partial_overflow_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_resp_fifo_full_backpressure_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_write_abort_vseq.sv"
+`include "i3c_vseqs/resp_vseqs/i3c_read_abort_after_first_byte_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_read_abort_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i2c_regular_abort_vseq.sv"
 `include "i3c_vseqs/resp_vseqs/i3c_imm_abort_vseq.sv"

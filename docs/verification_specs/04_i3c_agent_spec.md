@@ -128,12 +128,12 @@ numbers.
 | `device_i2c_send_bit(tc, bit_i)` | Drive one I2C OD bit with `tSetupBit`/`tClockPulse`/`tHoldBit` timing |
 | `wait_for_i3c_target_sda_handoff(phase, output ok, pp_phase=0)` | Wait for the DUT to release SDA (`dut_sda_oe == 0`) before the device drives; `pp_phase` controls the device-side drive mode, not the release condition |
 | `device_i3c_raw_od_send_bit(tc, bit_i)` | Drive one I3C OD bit (no handoff wait) — used by ENTDAA/CCC OD phases |
-| `device_i3c_send_addr_ack_handoff(tc, ack)` | Address ACK/NACK with SDA handoff, held through `tSCO` (read-direction handoff to target) |
-| `device_i3c_send_addr_ack_no_handoff(tc, ack)` | Address ACK/NACK with SDA handoff but SDA held after (write-direction, target keeps driving) |
-| `device_i3c_raw_pp_send_bit(tc, bit_i)` | Drive one I3C PP bit (no handoff wait) |
+| `device_i3c_send_addr_ack_handoff(tc, ack)` | Drive a write-direction Address ACK/NACK in OD, then release SDA within `tSCO` for the Target-to-Controller handoff |
+| `device_i3c_send_addr_ack_no_handoff(tc, ack)` | Drive a read-direction Address ACK/NACK in OD and retain SDA ownership for the following Target read data |
+| `device_i3c_raw_pp_send_bit(tc, bit_i)` | Drive one I3C PP data bit after `tSCO` without releasing SDA afterward |
 | `device_i3c_raw_pp_send_t_bit(tc, bit_i)` | Drive PP T-bit, releasing SDA after `tSCO` |
-| `device_i3c_send_bit(tc, bit_i)` | Handoff-aware wrapper around `device_i3c_raw_pp_send_bit()` for read data bits |
-| `device_i3c_send_t_bit(tc, bit_i)` | Handoff-aware wrapper around `device_i3c_raw_pp_send_t_bit()` |
+| `device_i3c_send_bit(tc, bit_i)` | Drive one Target read data bit while retaining continuous PP ownership |
+| `device_i3c_send_t_bit(tc, bit_i)` | Drive the Target read T-bit and release SDA after its rising edge |
 | `device_i3c_send_daa_bit(tc, bit_i)` | Handoff-aware wrapper around `device_i3c_raw_od_send_bit()` for ENTDAA identity bits |
 
 ### 3.8. Connection to DUT

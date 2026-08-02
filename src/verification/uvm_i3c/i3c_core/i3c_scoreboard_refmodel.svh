@@ -52,14 +52,16 @@ endfunction
 
 function void i3c_scoreboard::handle_sw_reset();
   capture_reset_recovery_context();
+  mark_results_reset_cleared("SW_RESET");
   clear_transaction_model();
   `uvm_info(`gfn, "SW_RESET observed: scoreboard queues flushed", UVM_MEDIUM)
 endfunction
 
 function void i3c_scoreboard::handle_hard_reset();
   capture_reset_recovery_context();
+  mark_results_reset_cleared("Hard reset");
   clear_transaction_model();
-  foreach (dat_model[i]) dat_model[i] = dat_model_entry_t'('0);
+  foreach (dat_model[i]) dat_model[i] = '{default: '0};
   broadcast_header_enable = 1'b0;
   hc_abort_active = 1'b0;
   `uvm_info(`gfn, "Hard reset observed: scoreboard model returned to reset state", UVM_MEDIUM)
@@ -172,6 +174,9 @@ function void i3c_scoreboard::handle_cmd_dword(bit [31:0] wdata);
                                int'(reg_desc.data_length) :
                                (reg_desc.attr == ImmediateDataTransfer) ?
                                int'(imm_desc.dtt) : 0;
+    active_result_id = create_result(reg_desc.tid,
+                                     $sformatf("INVALID DESCRIPTOR attr=0x%0h", reg_desc.attr),
+                                     1'b0);
     record_exp_resp('{
         rnw:                     invalid_rnw,
         tid:                     reg_desc.tid,
@@ -198,6 +203,7 @@ function void i3c_scoreboard::handle_cmd_dword(bit [31:0] wdata);
             "CMD rejected before DAT/bus activity: attr=0x%0h mode=0x%0h cp=%0b rnw=%0b cmd=0x%02h tid=0x%0h",
             cmd_dw0[2:0], reg_desc.mode, reg_desc.cp, reg_desc.rnw, reg_desc.cmd, reg_desc.tid),
         UVM_MEDIUM)
+    active_result_id = 0;
     return;
   end
 
@@ -276,13 +282,14 @@ function void i3c_scoreboard::handle_cmd_dword(bit [31:0] wdata);
     end
   endcase
 
+  exp.result_id = create_result(exp.tid, format_command(exp), 1'b1);
   exp_txn_queue.push_back(exp);
   if (exp.is_ccc) begin
     `uvm_info(`gfn,
               $sformatf(
                   "CMD queued: attr=%s CCC=%s(0x%02h) addr=0x%02h event=0x%02h len=%0d toc=%0b",
                   reg_desc.attr.name(), ccc_to_string(exp.cmd_code), exp.cmd_code, exp.addr,
-                  exp.event_byte, exp.data_length, exp.toc), UVM_MEDIUM)
+                  exp.event_byte, exp.data_length, exp.toc), UVM_HIGH)
   end else begin
     `uvm_info(`gfn, $sformatf(
               "CMD queued: attr=%s dev_idx=%0d addr=0x%02h rnw=%0b len=%0d toc=%0b target_i3c=%0b",
@@ -293,7 +300,7 @@ function void i3c_scoreboard::handle_cmd_dword(bit [31:0] wdata);
               exp.data_length,
               exp.toc,
               exp.target_is_i3c
-              ), UVM_MEDIUM)
+              ), UVM_HIGH)
   end
 endfunction
 

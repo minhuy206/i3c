@@ -187,7 +187,7 @@ function bit i3c_scoreboard::check_ccc_bcast_header_nack(
             resp_status_to_string(
                 AddrHeader
             )
-            ), UVM_LOW)
+            ), UVM_HIGH)
   return 1'b1;
 endfunction
 
@@ -211,7 +211,7 @@ function void i3c_scoreboard::check_ccc_opcode(i3c_item item, exp_txn_t exp);
             format_optional_bit(
                 item.ccc_t_bit_valid, item.ccc_t_bit
             )
-            ), UVM_LOW)
+            ), UVM_HIGH)
 endfunction
 
 function void i3c_scoreboard::check_ccc_direct_phase(i3c_item item, exp_txn_t exp,
@@ -365,7 +365,7 @@ function void i3c_scoreboard::check_ccc_entdaa_round(i3c_item item, exp_txn_t ex
       `uvm_info(`gfn,
                 $sformatf(
                     "CCC ENTDAA ROUND[%0d]: tid=0x%0h HC abort after 8 ID bytes, observed_stop=1",
-                    i, exp.tid), UVM_LOW)
+                    i, exp.tid), UVM_HIGH)
       return;
     end
     `DV_CHECK_EQ(st.terminating_nack_seen, 1'b0,
@@ -487,7 +487,7 @@ function void i3c_scoreboard::check_ccc_entdaa_round(i3c_item item, exp_txn_t ex
             item.CCC_direct_q[i].addr, item.CCC_direct_q[i].bus_op.name(), pid, bcr, dcr,
             joined_addr, ~^joined_addr, item.CCC_direct_q[i].data_q[8][0], optional_ack_to_string(
             device_ack_present, !device_ack), item.CCC_direct_q[i].stop, item.CCC_direct_q[i].rstart),
-        UVM_LOW)
+        UVM_HIGH)
   end else begin
     `uvm_info(`gfn, $sformatf(
               "CCC ENTDAA ROUND[%0d]: tid=0x%0h expected_start=Sr observed_start=%s expected_addr=0x7e observed_addr=0x%02h expected_op=Read observed_op=%s addr_ack=NACK observed_stop=%0b observed_rstart=%0b",
@@ -500,7 +500,7 @@ function void i3c_scoreboard::check_ccc_entdaa_round(i3c_item item, exp_txn_t ex
               item.CCC_direct_q[i].bus_op.name(),
               item.CCC_direct_q[i].stop,
               item.CCC_direct_q[i].rstart
-              ), UVM_LOW)
+              ), UVM_HIGH)
     st.terminating_nack_seen = 1'b1;
     `DV_CHECK_EQ(st.address_rejected_once, 1'b0,
                  "Target that rejected an address should participate in the retry")
@@ -560,7 +560,7 @@ function void i3c_scoreboard::log_ccc_direct_data(i3c_item item, exp_txn_t exp, 
             ),
             direct_item.stop,
             direct_item.rstart
-            ), UVM_LOW)
+            ), UVM_HIGH)
   `uvm_info(`gfn, $sformatf(
             "CCC DATA: tid=0x%0h expected_ccc=%s(0x%02h) observed_ccc=%s expected_bcast_addr=0x%02h observed_bcast_addr=0x%02h expected_target=0x%02h observed_target=0x%02h expected_target_ack=%s observed_target_ack=%s expected_event=%s observed_event=%s expected_t_bit=%s observed_t_bit=%s expected_resp_status=%s expected_resp_len=%0d",
             exp.tid,
@@ -593,7 +593,7 @@ function void i3c_scoreboard::log_ccc_direct_data(i3c_item item, exp_txn_t exp, 
                 resp_status
             ),
             resp_len
-            ), UVM_LOW)
+            ), UVM_HIGH)
 endfunction
 
 function void i3c_scoreboard::log_ccc_entdaa_data(i3c_item item, exp_txn_t exp, i3c_resp_err_e resp_status,
@@ -628,7 +628,7 @@ function void i3c_scoreboard::log_ccc_entdaa_data(i3c_item item, exp_txn_t exp, 
                 resp_status
             ),
             resp_len
-            ), UVM_LOW)
+            ), UVM_HIGH)
 endfunction
 
 function void i3c_scoreboard::log_ccc_broadcast_data(i3c_item item, exp_txn_t exp,
@@ -677,5 +677,5 @@ function void i3c_scoreboard::log_ccc_broadcast_data(i3c_item item, exp_txn_t ex
                 resp_status
             ),
             resp_len
-            ), UVM_LOW)
+            ), UVM_HIGH)
 endfunction

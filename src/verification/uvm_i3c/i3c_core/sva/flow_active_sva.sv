@@ -67,6 +67,7 @@ module flow_active_sva
     input logic                                              gen_start_o,
     input logic                                              gen_rstart_o,
     input logic                                              gen_stop_o,
+    input logic                                              gen_clock_o,
     input logic                                              tx_queue_empty_i,
     input logic                                              tx_queue_rvalid_i,
     input logic                                              tx_queue_rready_o,
@@ -3951,8 +3952,13 @@ module flow_active_sva
                                             next_cmd_supported &&
                                             !resp_queue_wready_i
                                             |->
-                                            !cmd_queue_rready_o)
-  else $error("flow_active_sva: wroc=1 continuation must wait for RESP ready in %m");
+                                            !cmd_queue_rready_o &&
+                                            !resp_queue_wvalid &&
+                                            !gen_start_o &&
+                                            !gen_rstart_o &&
+                                            !gen_stop_o &&
+                                            !gen_clock_o)
+  else $error("flow_active_sva: blocked wroc=1 continuation must hold SCL low without consuming work in %m");
 
   cp_wroc1_continuation_waits_for_resp_ready :
   cover property (@(posedge clk_i) disable iff (!rst_ni)
@@ -3973,7 +3979,12 @@ module flow_active_sva
                                             next_cmd_available &&
                                             next_cmd_supported &&
                                             !resp_queue_wready_i &&
-                                            !cmd_queue_rready_o);
+                                            !cmd_queue_rready_o &&
+                                            !resp_queue_wvalid &&
+                                            !gen_start_o &&
+                                            !gen_rstart_o &&
+                                            !gen_stop_o &&
+                                            !gen_clock_o);
 
 endmodule
 
@@ -4020,6 +4031,7 @@ bind flow_active flow_active_sva #(
     .gen_start_o,
     .gen_rstart_o,
     .gen_stop_o,
+    .gen_clock_o,
     .tx_queue_empty_i,
     .tx_queue_rvalid_i,
     .tx_queue_rready_o,

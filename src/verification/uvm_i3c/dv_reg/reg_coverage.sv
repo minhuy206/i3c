@@ -393,21 +393,70 @@ class reg_coverage extends uvm_subscriber #(reg_seq_item);
     end
   endfunction
 
+  function void report_cov_detail(string message, int verbosity);
+    if (!$test$plusargs("COV_DETAIL")) return;
+    uvm_report_info("COV_DETAIL", message, verbosity);
+    uvm_report_info("REG_COV_DETAIL", message, verbosity);
+  endfunction
+
   virtual function void report_phase(uvm_phase phase);
     super.report_phase(phase);
 
     `uvm_info("REG_COVERAGE", $sformatf(
-              {
-                "cg_dat_entry=%0.2f%% ",
-                "cg_cmd_desc=%0.2f%% cg_cmd_dat_correlation=%0.2f%% ",
-                "cg_hc_control=%0.2f%% ",
-                "cg_queue_sw_port=%0.2f%%"
-              },
+              "cg_dat_entry=%0.2f%% cg_cmd_desc=%0.2f%%",
               cg_dat_entry.get_inst_coverage(),
-              cg_cmd_desc.get_inst_coverage(),
+              cg_cmd_desc.get_inst_coverage()), UVM_NONE)
+    `uvm_info("REG_COVERAGE", $sformatf(
+              "cg_cmd_dat_correlation=%0.2f%% cg_hc_control=%0.2f%%",
               cg_cmd_dat_correlation.get_inst_coverage(),
+              cg_hc_control.get_inst_coverage()), UVM_NONE)
+    `uvm_info("REG_COVERAGE", $sformatf(
+              "cg_queue_sw_port=%0.2f%%",
+              cg_queue_sw_port.get_inst_coverage()), UVM_NONE)
+
+    report_cov_detail($sformatf(
+              "cg_dat_entry=%0.2f%% cp_device=%0.2f%%",
+              cg_dat_entry.get_inst_coverage(),
+              cg_dat_entry.cp_device.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              {"cg_cmd_desc=%0.2f%% cp_cmd_attr=%0.2f%% cp_cmd_rnw=%0.2f%% ",
+               "cp_cmd_toc=%0.2f%% cp_cmd_wroc=%0.2f%% ",
+               "cp_cmd_data_len=%0.2f%% cp_cmd_dtt=%0.2f%% ",
+               "cp_cmd_dev_count=%0.2f%% cp_cmd_dat_idx=%0.2f%% ",
+               "cp_cmd_mode=%0.2f%% cp_cmd_present=%0.2f%% ",
+               "cp_cmd_code=%0.2f%% cp_cmd_sre=%0.2f%%"},
+              cg_cmd_desc.get_inst_coverage(),
+              cg_cmd_desc.cp_cmd_attr.get_coverage(),
+              cg_cmd_desc.cp_cmd_rnw.get_coverage(),
+              cg_cmd_desc.cp_cmd_toc.get_coverage(),
+              cg_cmd_desc.cp_cmd_wroc.get_coverage(),
+              cg_cmd_desc.cp_cmd_data_len.get_coverage(),
+              cg_cmd_desc.cp_cmd_dtt.get_coverage(),
+              cg_cmd_desc.cp_cmd_dev_count.get_coverage(),
+              cg_cmd_desc.cp_cmd_dat_idx.get_coverage(),
+              cg_cmd_desc.cp_cmd_mode.get_coverage(),
+              cg_cmd_desc.cp_cmd_present.get_coverage(),
+              cg_cmd_desc.cp_cmd_code.get_coverage(),
+              cg_cmd_desc.cp_cmd_sre.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              {"cg_cmd_dat_correlation=%0.2f%% ",
+               "cp_cmd_corr_attr=%0.2f%% cp_cmd_device_type=%0.2f%%"},
+              cg_cmd_dat_correlation.get_inst_coverage(),
+              cg_cmd_dat_correlation.cp_cmd_corr_attr.get_coverage(),
+              cg_cmd_dat_correlation.cp_cmd_device_type.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              {"cg_hc_control=%0.2f%% cp_bus_enable=%0.2f%% ",
+               "cp_bus_enable_transition=%0.2f%% cp_broadcast_enable=%0.2f%% ",
+               "cp_hc_abort=%0.2f%% cp_hc_abort_transition=%0.2f%%"},
               cg_hc_control.get_inst_coverage(),
-              cg_queue_sw_port.get_inst_coverage()
-              ), UVM_NONE)
+              cg_hc_control.cp_bus_enable.get_coverage(),
+              cg_hc_control.cp_bus_enable_transition.get_coverage(),
+              cg_hc_control.cp_broadcast_enable.get_coverage(),
+              cg_hc_control.cp_hc_abort.get_coverage(),
+              cg_hc_control.cp_hc_abort_transition.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              "cg_queue_sw_port=%0.2f%% cp_queue_op=%0.2f%%",
+              cg_queue_sw_port.get_inst_coverage(),
+              cg_queue_sw_port.cp_queue_op.get_coverage()), UVM_NONE);
   endfunction
 endclass

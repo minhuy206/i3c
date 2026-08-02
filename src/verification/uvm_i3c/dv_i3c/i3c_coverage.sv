@@ -306,24 +306,72 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     end
   endfunction
 
+  function void report_cov_detail(string message, int verbosity);
+    if (!$test$plusargs("COV_DETAIL")) return;
+    uvm_report_info("COV_DETAIL", message, verbosity);
+    uvm_report_info("I3C_COV_DETAIL", message, verbosity);
+  endfunction
+
   virtual function void report_phase(uvm_phase phase);
     super.report_phase(phase);
 
     `uvm_info("I3C_COVERAGE", $sformatf(
-              {
-                "cg_address_phase=%0.2f%% cg_bus_transfer=%0.2f%% ",
-                "cg_private_rstart_transition=%0.2f%% ",
-                "cg_ccc=%0.2f%% cg_ccc_target=%0.2f%% ",
-                "cg_daa_round=%0.2f%% ",
-                "cg_daa_assigned_address=%0.2f%%"
-              },
+              "cg_address_phase=%0.2f%% cg_bus_transfer=%0.2f%%",
               cg_address_phase.get_inst_coverage(),
-              cg_bus_transfer.get_inst_coverage(),
+              cg_bus_transfer.get_inst_coverage()), UVM_NONE)
+    `uvm_info("I3C_COVERAGE", $sformatf(
+              "cg_private_rstart_transition=%0.2f%% cg_ccc=%0.2f%%",
               cg_private_rstart_transition.get_inst_coverage(),
-              cg_ccc.get_inst_coverage(),
+              cg_ccc.get_inst_coverage()), UVM_NONE)
+    `uvm_info("I3C_COVERAGE", $sformatf(
+              "cg_ccc_target=%0.2f%% cg_daa_round=%0.2f%%",
               cg_ccc_target.get_inst_coverage(),
+              cg_daa_round.get_inst_coverage()), UVM_NONE)
+    `uvm_info("I3C_COVERAGE", $sformatf(
+              "cg_daa_assigned_address=%0.2f%%",
+              cg_daa_assigned_address.get_inst_coverage()), UVM_NONE)
+
+    report_cov_detail($sformatf(
+              {"cg_address_phase=%0.2f%% cp_addr_class=%0.2f%% ",
+               "cp_addr_nack=%0.2f%% cp_start_source=%0.2f%% ",
+               "cp_i2c_static_addr_range=%0.2f%%"},
+              cg_address_phase.get_inst_coverage(),
+              cg_address_phase.cp_addr_class.get_coverage(),
+              cg_address_phase.cp_addr_nack.get_coverage(),
+              cg_address_phase.cp_start_source.get_coverage(),
+              cg_address_phase.cp_i2c_static_addr_range.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              {"cg_bus_transfer=%0.2f%% cp_protocol=%0.2f%% ",
+               "cp_bus_op=%0.2f%% cp_actual_len=%0.2f%% ",
+               "cp_final_remainder=%0.2f%%"},
+              cg_bus_transfer.get_inst_coverage(),
+              cg_bus_transfer.cp_protocol.get_coverage(),
+              cg_bus_transfer.cp_bus_op.get_coverage(),
+              cg_bus_transfer.cp_actual_len.get_coverage(),
+              cg_bus_transfer.cp_final_remainder.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              {"cg_private_rstart_transition=%0.2f%% ",
+               "cp_previous_op=%0.2f%% cp_current_op=%0.2f%%"},
+              cg_private_rstart_transition.get_inst_coverage(),
+              cg_private_rstart_transition.cp_previous_op.get_coverage(),
+              cg_private_rstart_transition.cp_current_op.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              "cg_ccc=%0.2f%% cp_ccc_form=%0.2f%% cp_ccc_opcode=%0.2f%%",
+              cg_ccc.get_inst_coverage(),
+              cg_ccc.cp_ccc_form.get_coverage(),
+              cg_ccc.cp_ccc_opcode.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              "cg_ccc_target=%0.2f%% cp_ccc_opcode=%0.2f%% cp_target_nack=%0.2f%%",
+              cg_ccc_target.get_inst_coverage(),
+              cg_ccc_target.cp_ccc_opcode.get_coverage(),
+              cg_ccc_target.cp_target_nack.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              "cg_daa_round=%0.2f%% cp_round_outcome=%0.2f%%",
               cg_daa_round.get_inst_coverage(),
-              cg_daa_assigned_address.get_inst_coverage()
-              ), UVM_NONE)
+              cg_daa_round.cp_round_outcome.get_coverage()), UVM_NONE);
+    report_cov_detail($sformatf(
+              "cg_daa_assigned_address=%0.2f%% cp_address_class=%0.2f%%",
+              cg_daa_assigned_address.get_inst_coverage(),
+              cg_daa_assigned_address.cp_address_class.get_coverage()), UVM_NONE);
   endfunction
 endclass

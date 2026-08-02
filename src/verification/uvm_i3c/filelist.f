@@ -68,6 +68,8 @@ uvm_i3c/dv_i3c/i3c_if.sv
 uvm_i3c/dv_i3c/i3c_agent_pkg.sv
 
 // ─── Verification: environment package (includes vseqs) ──────────────────────
+uvm_i3c/i3c_core/clk_rst_if.sv
+
 uvm_i3c/i3c_core/i3c_env_pkg.sv
 
 // ─── Verification: test package ──────────────────────────────────────────────
