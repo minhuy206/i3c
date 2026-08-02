@@ -16,7 +16,7 @@ Bố cục các thanh ghi điều khiển/trạng thái, cổng hàng đợi và
 	\texttt{HC\_STATUS}      & 0x014            & Trạng thái của bộ điều khiển.                                                                                               \\
 	\texttt{CMD\_QUEUE}      & 0x080            & Cổng ghi \CommandDescriptor{} vào \CommandFifo{}.                                                                           \\
 	\texttt{RESP}            & 0x084            & Cổng đọc \ResponseDescriptor{} từ \ResponseFifo{}.                                                                          \\
-	\texttt{PIO\_DATA\_PORT} & 0x088            & Cổng ghi dữ liệu TX vào \TxFifo{} và đọc dữ liệu RX từ \RxFifo{}.                                                           \\
+	\texttt{PIO\_DATA\_PORT} & 0x088            & Cổng ghi \gls{tx} data vào \TxFifo{} và đọc \gls{rx} data từ \RxFifo{}.                                                    \\
 	\texttt{QUEUE\_STATUS}   & 0x0B4            & Cờ đầy/rỗng của các hàng đợi.                                                                                               \\
 	\texttt{T\_R}            & 0x32C            & Thời gian cạnh lên SCL (I3C).                                                                                               \\
 	\texttt{T\_F}            & 0x330            & Thời gian cạnh xuống SCL (I3C).                                                                                             \\

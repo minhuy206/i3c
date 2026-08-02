@@ -1,0 +1,15 @@
+\begin{tikzpicture}[
+			window/.style={draw=red, dashed, line width=0.6pt},
+			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
+					font=\scriptsize, text=black, align=center,
+					text height=1.5ex, text depth=0.25ex}
+		]
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{entdaa/daa5_png.png}};
+		\begin{scope}[shift={(wave.south west)},
+				x={($(wave.south east)-(wave.south west)$)},
+				y={($(wave.north west)-(wave.south west)$)}]
+			\draw[window] (0.152,-0.14) rectangle (1.000,1.14);
+			\node[condtag, anchor=south] at (0.576,1.16) {PID 48 bit};
+			\node[condtag, anchor=north] at (0.576,-0.16) {PID[47:0] = 0x7B AF D6 9E 1C 7B};
+		\end{scope}
+	\end{tikzpicture}

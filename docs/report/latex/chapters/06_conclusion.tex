@@ -26,9 +26,9 @@ Các kết quả chính của khóa luận gồm:
 	      (\cref{ch:verification}).
 
 	\item Hoàn thành 81 test regression với seed cố định (\cref{sec:res-baseline}). Toàn bộ test
-	      đều PASS và không có assertion \gls{sva} nào fail. Mô hình \FunctionalCoverage{} ba lớp đạt 100\% closure
-	      (222/222 bin) và 100\% ở 173/173 diagnostic bin. \Gls{sva} đạt 100\% closure trên 386 assertion và
-	      578 cover property. Các yêu cầu F1--F10 và chỉ tiêu P1--P5 đều có bằng chứng mô phỏng tương ứng
+	      đều PASS, \Scoreboard{} không ghi nhận lỗi và không ghi nhận assertion fail nào. Mô hình \FunctionalCoverage{} ba lớp
+	      đạt 100\% closure (222/222 bin) và 100\% ở 173/173 diagnostic bin. Các yêu cầu F1--F10 và
+	      chỉ tiêu P1--P5 đều có bằng chứng mô phỏng tương ứng
 	      tại \cref{sec:res-eval}.
 \end{itemize}
 
@@ -43,7 +43,8 @@ Bên cạnh các kết quả đạt được, thiết kế vẫn còn những h�
 
 	\item Không gian kiểm chứng còn giới hạn ở độ sâu \gls{fifo} \TestbenchQueueDepth{} và một seed cố định.
 	      Mức closure 100\% chỉ áp dụng cho tập mục tiêu F1--F10 hiện hành. Các tổ hợp tương quan sâu
-	      hơn chưa được mô hình hóa thành positive coverage bin.
+	      hơn chưa được mô hình hóa thành positive coverage bin. Do chưa có công cụ chuyên dụng để phân tích
+	      \gls{sva} coverage, khóa luận chưa đưa ra kết luận về độ bao phủ assertion.
 
 	\item Thiết kế chưa được tổng hợp, phân tích định thời hoặc triển khai trên \gls{fpga} nên chưa có
 	      số liệu về tài nguyên, tần số hoạt động và khả năng vận hành trên phần cứng thực.

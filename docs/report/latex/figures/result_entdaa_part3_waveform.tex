@@ -1,0 +1,23 @@
+\begin{tikzpicture}[
+			window/.style={draw=red, dashed, line width=0.6pt},
+			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
+					font=\scriptsize, text=black, align=center,
+					text height=1.5ex, text depth=0.25ex}
+		]
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{entdaa/daa4_png.png}};
+		\begin{scope}[shift={(wave.south west)},
+				x={($(wave.south east)-(wave.south west)$)},
+				y={($(wave.north west)-(wave.south west)$)}]
+			\draw[window] (0.154,-0.14) rectangle (0.413,1.14);
+			\draw[window] (0.418,-0.14) rectangle (0.671,1.14);
+			\draw[window] (0.676,-0.14) rectangle (0.967,1.14);
+			\draw[window] (0.972,-0.14) rectangle (1.000,1.14);
+			\node[condtag, anchor=south] at (0.2835,1.16) {BCR};
+			\node[condtag, anchor=north] at (0.2835,-0.16) {0x35};
+			\node[condtag, anchor=south] at (0.5445,1.16) {DCR};
+			\node[condtag, anchor=north] at (0.5445,-0.16) {0xEA};
+			\node[condtag, anchor=south] at (0.8215,1.16) {Dynamic Address};
+			\node[condtag, anchor=north] at (0.8215,-0.16) {0x24 + parity};
+			\node[condtag, anchor=south] at (0.986,1.16) {P};
+		\end{scope}
+	\end{tikzpicture}

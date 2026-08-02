@@ -1,0 +1,13 @@
+\begin{tikzpicture}
+	\node[anchor=south west, inner sep=0] (logimage) at (0,0) {\includegraphics[width=\textwidth]{dir_enec/enec_transaction.jpg}};
+	\begin{scope}[
+			x={(logimage.south east)},
+			y={(logimage.north west)},
+			highlight/.style={draw=red, dashed, line width=0.6pt}
+		]
+		% Response EXPECTED/OBSERVED comparison.
+		\draw[highlight] (0.016,0.3245) rectangle (0.310,0.6543);
+		% Transaction FLOW log and its decoded flow line.
+		\draw[highlight] (0.016,0.0053) rectangle (0.665,0.1649);
+	\end{scope}
+\end{tikzpicture}

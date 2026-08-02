@@ -1,0 +1,13 @@
+\begin{tikzpicture}
+	\node[anchor=south west, inner sep=0] (logimage) at (0,0) {\includegraphics[width=\textwidth]{i2c_write/i2c_write_scoreboard.jpg}};
+	\begin{scope}[
+			x={(logimage.south east)},
+			y={(logimage.north west)},
+			highlight/.style={draw=red, dashed, line width=0.6pt}
+		]
+		% Scoreboard summary body, excluding the preceding UVM_INFO line.
+		\draw[highlight] (0.016,0.0936) rectangle (0.648,0.9118);
+		% Functional coverage summary, excluding the UVM_INFO prefix and timestamp.
+		\draw[highlight] (0.435,0.0027) rectangle (0.832,0.0882);
+	\end{scope}
+\end{tikzpicture}

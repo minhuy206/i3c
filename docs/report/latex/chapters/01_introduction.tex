@@ -20,7 +20,7 @@ một \gls{i3c} \Controller{} không chỉ tuần tự hóa dữ liệu. Thiết
 Khóa luận giải quyết bài toán trên ở mức \gls{ip} số có thể tổng hợp. Điểm xuất phát là dự án mã nguồn mở \CHIPSAlliance{} \IThreeCCore{}, được phát triển cho hệ sinh thái \Caliptra{}~\cite{chipsalliance_i3c}.
 Thiết kế tham chiếu cung cấp cấu trúc giao thức và \gls{hci}, nhưng phạm vi tích hợp của dự án lớn
 hơn nhu cầu của một \Controller{} độc lập. Vì vậy, khóa luận lựa chọn lại phạm vi chức năng, xây dựng
-đường điều khiển \gls{rtl} gọn hơn và hoàn thiện luồng phát lệnh cho tập tính năng mục tiêu. Trong môi trường \gls{uvm}, thiết kế tham chiếu cung cấp \gls{i3c} bus agent nhưng chưa kèm scoreboard và thư viện kịch bản hoàn chỉnh cho \gls{dut}. Khóa luận dựa trên agent này, viết lại phần lớn và phát triển thành một môi trường \gls{uvm} tự kiểm tra đầy đủ. Việc kiểm chứng được
+đường điều khiển \gls{rtl} gọn hơn và hoàn thiện luồng phát lệnh cho tập tính năng mục tiêu. Trong môi trường \gls{uvm}, thiết kế tham chiếu cung cấp \gls{i3c} bus agent nhưng chưa kèm \Scoreboard{} và thư viện kịch bản hoàn chỉnh cho \gls{dut}. Khóa luận dựa trên agent này, viết lại phần lớn và phát triển thành một môi trường \gls{uvm} tự kiểm tra đầy đủ. Việc kiểm chứng được
 thực hiện bằng \SystemVerilog{}~\cite{ieee1800}, \UVMVersion{}~\cite{uvm12_ug} và
 \CadenceXcelium{}~\cite{cadence_xcelium}. \SimVision{} được dùng cho waveform debug.
 

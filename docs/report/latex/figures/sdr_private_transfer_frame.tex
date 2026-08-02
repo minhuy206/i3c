@@ -1,0 +1,68 @@
+\begin{adjustbox}{max width=\textwidth}
+		\begin{tikzpicture}[
+				every node/.style={font=\footnotesize},
+				field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
+						inner xsep=4pt, align=center},
+				od/.style={field, fill=blue!10},
+				pp/.style={field, fill=orange!18},
+				cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+				rowlbl/.style={font=\footnotesize\bfseries, anchor=east},
+				drv/.style={font=\scriptsize\itshape, text=black!70, align=center},
+			]
+
+			% ---------------- SDR private write (0x7E header enabled) ----------------
+			\begin{scope}[start chain=w going right, node distance=-\pgflinewidth]
+				\node[cond, on chain=w] (w0) at (0,0) {S};
+				\node[od,   on chain=w]        {\texttt{0x7E}$+$W};
+				\node[od,   on chain=w]        {ACK};
+				\node[cond, on chain=w] (wSr)  {Sr};
+				\node[pp,   on chain=w]        {Address\,$+$\,W};
+				\node[od,   on chain=w]        {ACK};
+				\node[pp,   on chain=w]        {Data\,0};
+				\node[pp,   on chain=w]        {T};
+				\node[pp,   on chain=w]        {$\cdots$};
+				\node[pp,   on chain=w]        {Data\,$N\!-\!1$};
+				\node[pp,   on chain=w] (wT)   {T};
+				\node[cond, on chain=w] (wN)   {P};
+			\end{scope}
+			\node[rowlbl, left=5pt of w0] {Write};
+			\path (w0.north west) -- (wN.north east)
+			node[drv, midway, above=2.5pt] {\Controller{} drives data bytes \,$\bullet$\, T $=$ odd parity of byte};
+			\draw[-{Stealth[length=5pt]}, thick, gray]
+			(wT.south) .. controls +(0,-0.75) and +(0,-0.75) .. (wSr.south);
+			\node[drv] at ($(wSr.south)!0.5!(wT.south) + (0,-0.95)$)
+			{Continuation of Frame Using Repeated START};
+
+			% ---------------- SDR private read (0x7E header enabled) ----------------
+			\begin{scope}[start chain=r going right, node distance=-\pgflinewidth]
+				\node[cond, on chain=r] (r0) at (0,-3.0) {S};
+				\node[od,   on chain=r]        {\texttt{0x7E}$+$W};
+				\node[od,   on chain=r]        {ACK};
+				\node[cond, on chain=r] (rSr)  {Sr};
+				\node[pp,   on chain=r]        {Address\,$+$\,R};
+				\node[od,   on chain=r]        {ACK};
+				\node[pp,   on chain=r]        {Data\,0};
+				\node[pp,   on chain=r]        {T$=$1};
+				\node[pp,   on chain=r]        {$\cdots$};
+				\node[pp,   on chain=r]        {Data\,$N\!-\!1$};
+				\node[pp,   on chain=r] (rT)   {T$=$0};
+				\node[cond, on chain=r] (rN)   {P};
+			\end{scope}
+			\node[rowlbl, left=5pt of r0] {Read};
+			\path (r0.north west) -- (rN.north east)
+			node[drv, midway, above=2.5pt] {\Target{} drives data bytes \,$\bullet$\, T $=$ end-of-data (1 $=$ more bytes, 0 $=$ last byte)};
+			\draw[-{Stealth[length=5pt]}, thick, gray]
+			(rT.south) .. controls +(0,-0.75) and +(0,-0.75) .. (rSr.south);
+			\node[drv] at ($(rSr.south)!0.5!(rT.south) + (0,-0.95)$)
+			{Continuation of Frame Using Repeated START};
+
+			% ---------------- legend ----------------
+			\begin{scope}[every node/.style={font=\scriptsize}, node distance=3pt,
+					sq/.style={draw, minimum size=5mm, inner sep=0pt}]
+				\node[sq, fill=blue!10] (lg1) at (4.0,-5.0) {};
+				\node[right=of lg1] (lg1t) {\OpenDrain{}};
+				\node[sq, fill=orange!18, right=12pt of lg1t] (lg2) {};
+				\node[right=of lg2] {\PushPull{}};
+			\end{scope}
+		\end{tikzpicture}
+	\end{adjustbox}

@@ -1,0 +1,16 @@
+\begin{tikzpicture}
+	\node[anchor=south west, inner sep=0] (logimage) at (0,0) {\includegraphics[width=\textwidth]{i3c_write/i3c_write_transaction.jpg}};
+	\begin{scope}[
+			x={(logimage.south east)},
+			y={(logimage.north west)},
+			highlight/.style={draw=red, dashed, line width=0.6pt}
+		]
+		% Address, TX data, T-bit, and response EXPECTED/OBSERVED comparisons.
+		\draw[highlight] (0.016,0.8000) rectangle (0.310,0.9300);
+		\draw[highlight] (0.016,0.6000) rectangle (0.310,0.7300);
+		\draw[highlight] (0.016,0.4025) rectangle (0.310,0.5325);
+		\draw[highlight] (0.016,0.1425) rectangle (0.310,0.2725);
+		% Transaction FLOW log and its decoded flow line.
+		\draw[highlight] (0.016,0.0050) rectangle (0.765,0.0700);
+	\end{scope}
+\end{tikzpicture}

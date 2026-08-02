@@ -1,0 +1,30 @@
+\begin{tikzpicture}[
+			window/.style={draw=red, dashed, line width=0.6pt},
+			condtag/.style={draw=none, fill=none, inner sep=1.7pt,
+					font=\scriptsize, text=black, align=center,
+					text height=1.5ex, text depth=0.25ex}
+		]
+		\node[inner sep=0] (wave) {\includegraphics[width=\textwidth]{dir_enec/enec_direct.png}};
+		\begin{scope}[shift={(wave.south west)},
+				x={($(wave.south east)-(wave.south west)$)},
+				y={($(wave.north west)-(wave.south west)$)}]
+			\draw[window] (0.188,-0.14) rectangle (0.218,1.14);
+			\draw[window] (0.223,-0.14) rectangle (0.5055,1.14);
+			\draw[window] (0.5105,-0.14) rectangle (0.640,1.14);
+			\draw[window] (0.645,-0.14) rectangle (0.690,1.14);
+			\draw[window] (0.695,-0.14) rectangle (0.821,1.14);
+			\draw[window] (0.826,-0.14) rectangle (0.957,1.14);
+			\draw[window] (0.962,-0.14) rectangle (1.000,1.14);
+			\node[condtag, anchor=south] at (0.203,1.16) {S};
+			\node[condtag, anchor=south] at (0.36425,1.16) {Broadcast Address};
+			\node[condtag, anchor=north] at (0.36425,-0.16) {0x7E, RnW = Write};
+			\node[condtag, anchor=south] at (0.57525,1.16) {CCC};
+			\node[condtag, anchor=north] at (0.57525,-0.16) {0x80};
+			\node[condtag, anchor=south] at (0.6675,1.16) {Sr};
+			\node[condtag, anchor=south] at (0.758,1.16) {Direct Address};
+			\node[condtag, anchor=north] at (0.758,-0.16) {0x08, RnW = Write};
+			\node[condtag, anchor=south] at (0.8915,1.16) {Event Byte};
+			\node[condtag, anchor=north] at (0.8915,-0.16) {0x01};
+			\node[condtag, anchor=south] at (0.981,1.16) {P};
+		\end{scope}
+	\end{tikzpicture}

@@ -29,61 +29,7 @@ Sau STOP, đặc tả còn phân biệt \BusFreeCondition{}, \BusAvailableCondit
 
 \begin{figure}[!htbp]
 	\centering
-	\begin{adjustbox}{max width=\textwidth}
-		\begin{tikzpicture}[
-				font=\small,
-				scl/.style={draw=black, line width=1pt, line join=round},
-				sda/.style={draw=black, line width=1pt, line join=round},
-				window/.style={draw=black, dashed, line width=0.6pt},
-				condtag/.style={draw=black, fill=white, rounded corners=1pt,
-						inner sep=2.2pt, font=\scriptsize\bfseries, text=black},
-				siglabel/.style={font=\small\bfseries, anchor=east},
-				note/.style={align=center, font=\scriptsize, text=black},
-				condlabel/.style={align=center, font=\scriptsize\bfseries, text=black},
-			]
-
-			% ---- Khung nét đứt: cửa sổ SCL giữ mức cao, nơi nhận diện điều kiện ----
-			\draw[window] (0.5,0.9) rectangle (1.8,4.3);
-			\draw[window] (4.6,0.9) rectangle (6.0,4.3);
-			\draw[window] (8.7,0.9) rectangle (10.5,4.3);
-
-			% ---- Dạng sóng SCL (thấp y=3.1, cao y=3.9) ----
-			\draw[scl]
-			(0,3.9) -- (1.8,3.9) -- (1.8,3.1) -- (2.3,3.1) -- (2.3,3.9)
-			-- (2.9,3.9) -- (2.9,3.1) -- (3.4,3.1) -- (3.4,3.9)
-			-- (4.0,3.9) -- (4.0,3.1) -- (4.6,3.1) -- (4.6,3.9)
-			-- (6.0,3.9) -- (6.0,3.1) -- (6.5,3.1) -- (6.5,3.9)
-			-- (7.1,3.9) -- (7.1,3.1) -- (7.6,3.1) -- (7.6,3.9)
-			-- (8.2,3.9) -- (8.2,3.1) -- (8.7,3.1) -- (8.7,3.9)
-			-- (10.8,3.9);
-
-			% ---- Dạng sóng SDA (thấp y=1.3, cao y=2.1) ----
-			\draw[sda]
-			(0,2.1) -- (1.0,2.1) -- (1.0,1.3)
-			-- (2.05,1.3) -- (2.05,2.1)
-			-- (3.15,2.1) -- (3.15,1.3)
-			-- (4.3,1.3) -- (4.3,2.1)
-			-- (5.3,2.1) -- (5.3,1.3)
-			-- (6.25,1.3) -- (6.25,2.1)
-			-- (7.35,2.1) -- (7.35,1.3)
-			-- (9.5,1.3) -- (9.5,2.1)
-			-- (10.8,2.1);
-
-			% ---- Tên tín hiệu ----
-			\node[siglabel] at (-0.15,3.5) {SCL};
-			\node[siglabel] at (-0.15,1.7) {SDA};
-
-			% ---- Nhãn điều kiện (trên khung nét đứt) ----
-			\node[condlabel] at (1.15,4.55) {START (S)};
-			\node[condlabel] at (5.3,4.55) {\RepeatedSTART{} (Sr)};
-			\node[condlabel] at (9.6,4.55) {STOP (P)};
-
-			% ---- Chú thích dưới mỗi điều kiện ----
-			\node[note, anchor=north] at (1.0,0.45) {SDA high$\to$low};
-			\node[note, anchor=north] at (5.3,0.45) {SDA high$\to$low};
-			\node[note, anchor=north] at (9.5,0.45) {SDA low$\to$high};
-		\end{tikzpicture}
-	\end{adjustbox}
+	\input{figures/start_repeated_start_stop.tex}
 	\caption[Waveform của START, Repeated START và STOP]{Waveform của START, \RepeatedSTART{} và STOP. Vẽ theo định nghĩa bus condition của MIPI I3C Basic và NXP I\textsuperscript{2}C~\cites[Sec.~5.1.2]{mipi_i3c_basic}[Sec.~3.1.4]{nxp_i2c}.}
 	\label{fig:start-sr-stop}
 \end{figure}
@@ -140,74 +86,7 @@ Một \PrivateTransfer{} trong \gls{sdr} Mode có cấu trúc tuần tự gồm:
 
 \begin{figure}[!htbp]
 	\centering
-	\begin{adjustbox}{max width=\textwidth}
-		\begin{tikzpicture}[
-				every node/.style={font=\footnotesize},
-				field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
-						inner xsep=4pt, align=center},
-				od/.style={field, fill=blue!10},
-				pp/.style={field, fill=orange!18},
-				cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
-				rowlbl/.style={font=\footnotesize\bfseries, anchor=east},
-				drv/.style={font=\scriptsize\itshape, text=black!70, align=center},
-			]
-
-			% ---------------- SDR private write (0x7E header enabled) ----------------
-			\begin{scope}[start chain=w going right, node distance=-\pgflinewidth]
-				\node[cond, on chain=w] (w0) at (0,0) {S};
-				\node[od,   on chain=w]        {\texttt{0x7E}$+$W};
-				\node[od,   on chain=w]        {ACK};
-				\node[cond, on chain=w] (wSr)  {Sr};
-				\node[pp,   on chain=w]        {Address\,$+$\,W};
-				\node[od,   on chain=w]        {ACK};
-				\node[pp,   on chain=w]        {Data\,0};
-				\node[pp,   on chain=w]        {T};
-				\node[pp,   on chain=w]        {$\cdots$};
-				\node[pp,   on chain=w]        {Data\,$N\!-\!1$};
-				\node[pp,   on chain=w] (wT)   {T};
-				\node[cond, on chain=w] (wN)   {P};
-			\end{scope}
-			\node[rowlbl, left=5pt of w0] {Write};
-			\path (w0.north west) -- (wN.north east)
-			node[drv, midway, above=2.5pt] {\Controller{} drives data bytes \,$\bullet$\, T $=$ odd parity of byte};
-			\draw[-{Stealth[length=5pt]}, thick, gray]
-			(wT.south) .. controls +(0,-0.75) and +(0,-0.75) .. (wSr.south);
-			\node[drv] at ($(wSr.south)!0.5!(wT.south) + (0,-0.95)$)
-			{Continuation of Frame Using Repeated START};
-
-			% ---------------- SDR private read (0x7E header enabled) ----------------
-			\begin{scope}[start chain=r going right, node distance=-\pgflinewidth]
-				\node[cond, on chain=r] (r0) at (0,-3.0) {S};
-				\node[od,   on chain=r]        {\texttt{0x7E}$+$W};
-				\node[od,   on chain=r]        {ACK};
-				\node[cond, on chain=r] (rSr)  {Sr};
-				\node[pp,   on chain=r]        {Address\,$+$\,R};
-				\node[od,   on chain=r]        {ACK};
-				\node[pp,   on chain=r]        {Data\,0};
-				\node[pp,   on chain=r]        {T$=$1};
-				\node[pp,   on chain=r]        {$\cdots$};
-				\node[pp,   on chain=r]        {Data\,$N\!-\!1$};
-				\node[pp,   on chain=r] (rT)   {T$=$0};
-				\node[cond, on chain=r] (rN)   {P};
-			\end{scope}
-			\node[rowlbl, left=5pt of r0] {Read};
-			\path (r0.north west) -- (rN.north east)
-			node[drv, midway, above=2.5pt] {\Target{} drives data bytes \,$\bullet$\, T $=$ end-of-data (1 $=$ more bytes, 0 $=$ last byte)};
-			\draw[-{Stealth[length=5pt]}, thick, gray]
-			(rT.south) .. controls +(0,-0.75) and +(0,-0.75) .. (rSr.south);
-			\node[drv] at ($(rSr.south)!0.5!(rT.south) + (0,-0.95)$)
-			{Continuation of Frame Using Repeated START};
-
-			% ---------------- legend ----------------
-			\begin{scope}[every node/.style={font=\scriptsize}, node distance=3pt,
-					sq/.style={draw, minimum size=5mm, inner sep=0pt}]
-				\node[sq, fill=blue!10] (lg1) at (4.0,-5.0) {};
-				\node[right=of lg1] (lg1t) {\OpenDrain{}};
-				\node[sq, fill=orange!18, right=12pt of lg1t] (lg2) {};
-				\node[right=of lg2] {\PushPull{}};
-			\end{scope}
-		\end{tikzpicture}
-	\end{adjustbox}
+	\input{figures/sdr_private_transfer_frame.tex}
 	\caption[Định dạng frame I3C Private Write/Read]{Định dạng frame của I3C \PrivateWriteRead{} trong SDR Mode. Vẽ theo MIPI I3C Basic, Annex~A.2~\cite{mipi_i3c_basic}.}
 	\label{fig:sdr-frame}
 \end{figure}
@@ -217,56 +96,9 @@ Một \PrivateTransfer{} trong \gls{sdr} Mode có cấu trúc tuần tự gồm:
 
 \acrfull{daa} là quy trình cho phép \Controller{} cấp \DynamicAddress{} cho các \gls{i3c} \Target{}, thay cho cơ chế địa chỉ tĩnh của \gls{iic}. Với \gls{entdaa}, \Controller{} phát START, \IThreeCBroadcastAddress{} với \gls{rnw} = Write, sau đó phát \gls{entdaa} \gls{ccc} (\texttt{0x07}) sau ACK để đưa các \Target{} chưa có địa chỉ tham gia quá trình cấp phát. Mỗi vòng cấp phát bắt đầu bằng \RepeatedSTART{} và \IThreeCBroadcastAddress{} và \gls{rnw} = Read. Các \Target{} đủ điều kiện cùng phản hồi ACK, sau đó đồng thời phát chuỗi định danh 64-bit gồm \gls{pid} 48-bit, \gls{bcr} 8-bit và \gls{dcr} 8-bit trên \OpenDrain{}. Nhờ đặc tính wired-AND, thiết bị có chuỗi định danh nhỏ nhất sẽ thắng phân xử. \Controller{} thu chuỗi định danh 64-bit của thiết bị thắng, phát \DynamicAddress{} 7-bit kèm bit parity, và \Target{} xác nhận bằng ACK. Quá trình này lặp lại cho \Target{} tiếp theo cho đến khi không còn thiết bị phản hồi \IThreeCBroadcastAddress{} hoặc đã cấp đủ số lượng yêu cầu. Sau đó, \Controller{} kết thúc bằng STOP~\cite[Secs.~5.1.4.2 and 5.1.9.3.4]{mipi_i3c_basic}.
 
-\begin{figure}[!htb]\centering
-	\begin{adjustbox}{max width=\textwidth}
-		\begin{tikzpicture}[
-				font=\footnotesize,
-				field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
-						inner xsep=4pt, align=center},
-				od/.style={field, fill=blue!10},
-				pp/.style={field, fill=orange!18},
-				ccc/.style={field, fill=green!14},
-				cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
-			]
-			% ---- field chain ----
-			\begin{scope}[start chain=c going right, node distance=-\pgflinewidth]
-				\node[cond, on chain] (S)   {S};
-				\node[od,   on chain]        {\\\texttt{0x7E}$+$W};
-				\node[od,   on chain]        {ACK};
-				\node[pp,   on chain] (entdaa) {\\\texttt{0x07}};
-				\node[pp,   on chain]        {T};
-				\node[cond, on chain] (Sr)  {Sr};
-				\node[od,   on chain]        {\\\texttt{0x7E}$+$R};
-				\node[od,   on chain] (id) {64-bit ID};
-				\node[od,   on chain]        {dyn-addr$+$par};
-				\node[od,   on chain] (ack2) {ACK};
-				\node[cond, on chain] (P)    {P};
-			\end{scope}
-
-			% ---- identity / arbitration annotation above the 64-bit field ----
-			\node[above=3pt of id, font=\scriptsize\itshape, text=black!70, align=center]
-			{64-bit ID $=$ PID/BCR/DCR, MSB first --- Open-Drain wired-AND arbitration};
-
-			% ---- per-target loop-back arrow ----
-			\draw[-{Stealth[length=5pt]}, thick, gray]
-			(ack2.south) .. controls +(0,-1.1) and +(0,-1.1) .. (Sr.south);
-			\node[font=\scriptsize\itshape, text=black!70, align=center]
-			at ($(Sr.south)!0.5!(ack2.south) + (0,-1.35)$)
-			{per \Target{}, loop until a round goes unanswered, then STOP};
-
-			% ---- legend (centered under the box row) ----
-			\coordinate (legc) at ($(S.center)!0.5!(P.center)$);
-			\node at (legc |- 0,-2.7) {%
-				\begin{tikzpicture}[font=\scriptsize, node distance=3pt,
-						lg/.style={draw, minimum size=5mm, inner sep=0pt}]
-					\node[lg, fill=blue!10] (g1) {};
-					\node[right=of g1] (g1t) {\OpenDrain{}};
-					\node[lg, fill=orange!18, right=12pt of g1t] (g2) {};
-					\node[right=of g2] {\PushPull{}};
-				\end{tikzpicture}%
-			};
-		\end{tikzpicture}
-	\end{adjustbox}
+\begin{figure}[!htb]
+	\centering
+	\input{figures/entdaa_frame.tex}
 	\caption[Định dạng ENTDAA]{Định dạng ENTDAA. Vẽ theo MIPI I3C Basic, Fig.~37 và Sec.~5.1.9.3.4~\cite{mipi_i3c_basic}.}
 	\label{fig:entdaa}
 \end{figure}
@@ -283,61 +115,9 @@ sau \IThreeCBroadcastAddress{} với \gls{rnw} = Write. \BroadcastCCC{} áp dụ
 một pha \RepeatedSTART{} và \AddressHeader{} của \Target{} cụ thể trước phần dữ liệu~\cite[Secs.~5.1.9.1--5.1.9.2]{mipi_i3c_basic}. Tập \gls{ccc} được triển khai
 trong khóa luận gồm \gls{enec}, \gls{disec} ở cả hai dạng và \gls{entdaa}, như \cref{tab:ccc}~\cite[Table~16 and Secs.~5.1.9.3.1, 5.1.9.3.4]{mipi_i3c_basic}.
 
-\begin{figure}[!htb]\centering
-	\begin{adjustbox}{max width=\textwidth}
-		\begin{tikzpicture}[
-				font=\footnotesize,
-				field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
-						inner xsep=4pt, align=center},
-				od/.style={field, fill=blue!10},
-				pp/.style={field, fill=orange!18},
-				ccc/.style={field, fill=orange!18},
-				data/.style={field, fill=black!4},
-				cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
-				rowlbl/.style={anchor=east, font=\footnotesize\bfseries},
-			]
-			% ---------------- Broadcast ENEC / DISEC ----------------
-			\begin{scope}[start chain=b going right, node distance=-\pgflinewidth]
-				\node[cond, on chain] (b0) {S};
-				\node[od,   on chain]      {\texttt{0x7E}$+$W};
-				\node[od,   on chain]      {ACK};
-				\node[ccc,  on chain]      {\texttt{0x00/0x01}};
-				\node[pp,   on chain]      {T};
-				\node[pp,   on chain]      {\EventsByte{}};
-				\node[pp,   on chain]      {T};
-				\node[cond, on chain] (bN) {P};
-			\end{scope}
-			\node[rowlbl] at (b0.west) {Broadcast~};
-
-			% ---------------- Direct ENEC / DISEC ----------------
-			\begin{scope}[start chain=d going right, node distance=-\pgflinewidth]
-				\node[cond, on chain] (d0) at (0,-2.4) {S};
-				\node[od,   on chain]      {\texttt{0x7E}$+$W};
-				\node[od,   on chain]      {ACK};
-				\node[ccc,  on chain]      {\texttt{0x80/0x81}};
-				\node[pp,   on chain]      {T};
-				\node[cond, on chain]      {Sr};
-				\node[pp,   on chain]      {addr$+$W};
-				\node[od,   on chain]      {ACK};
-				\node[pp,   on chain]      {\EventsByte{}};
-				\node[pp,   on chain]      {T};
-				\node[cond, on chain] (dN) {P};
-			\end{scope}
-			\node[rowlbl] at (d0.west) {Direct~};
-
-			% ---------------- legend ----------------
-			\coordinate (legc) at ($(d0.center)!0.5!(dN.center)$);
-			\node at (legc |- 0,-3.5) {%
-				\begin{tikzpicture}[font=\scriptsize, node distance=3pt,
-						lg/.style={draw, minimum size=5mm, inner sep=0pt}]
-					\node[lg, fill=blue!10] (l1) {};
-					\node[right=of l1] (l1t) {\OpenDrain{}};
-					\node[lg, fill=orange!18, right=12pt of l1t] (l2) {};
-					\node[right=of l2] {\PushPull{}};
-				\end{tikzpicture}%
-			};
-		\end{tikzpicture}
-	\end{adjustbox}
+\begin{figure}[!htb]
+	\centering
+	\input{figures/ccc_frames.tex}
 	\caption[Định dạng frame ENEC và DISEC]{Định dạng frame của ENEC và DISEC ở hai dạng Broadcast và Direct. Vẽ theo MIPI I3C Basic, Figs.~32--33~\cite{mipi_i3c_basic}.}
 	\label{fig:ccc-frames}
 \end{figure}
@@ -493,7 +273,7 @@ Giao diện thanh ghi mà phần mềm có thể truy cập sử dụng địa c
 \begin{itemize}
 	\item Môi trường kiểm chứng phải tạo được stimulus cho toàn bộ yêu cầu F1--F10.
 	\item Các monitor phải ghi nhận các thao tác đọc/ghi \gls{csr}, \gls{dat} và \gls{fifo}. Trên bus, monitor phải theo dõi \gls{sda}/\gls{scl} để nhận diện START, \RepeatedSTART{} và STOP, kiểm tra các khoảng thời gian liên quan, đồng thời tái tạo \AddressHeader{}, hướng truyền, \gls{tx}/\acrshort{rx} data, \gls{ack} và \gls{tbit} của từng giao dịch.
-	\item Scoreboard phải đối chiếu giao dịch quan sát được trên bus với cấu hình, \CommandDescriptor{}, dữ liệu và \ResponseDescriptor{} ghi nhận từ giao diện thanh ghi.
+	\item \Scoreboard{} phải đối chiếu giao dịch quan sát được trên bus với cấu hình, \CommandDescriptor{}, dữ liệu và \ResponseDescriptor{} ghi nhận từ giao diện thanh ghi.
 	\item \gls{sva} phải kiểm tra handshake, \gls{fsm}, bộ đếm, hai loại reset, trạng thái \gls{fifo}, yêu cầu hủy giao dịch, quyền điều khiển và chế độ lái \gls{sda}.
 	\item \FunctionalCoverage{} phải ghi nhận truy cập \gls{csr}/\gls{dat}/\gls{fifo}, loại giao dịch, hướng truyền, \gls{ack}, \gls{ccc}, \gls{entdaa}, \gls{tbit}, \ResponseDescriptor{}, mã lỗi và các boundary case về độ dài dữ liệu và quá trình xử lý giao dịch thuộc phạm vi F1--F10.
 \end{itemize}

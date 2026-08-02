@@ -1,0 +1,17 @@
+\input{figures/uvm_i3c_verification_architecture_horizontal_tikz.tex}
+	\par\vspace{0.45em}
+	\begin{tikzpicture}[
+			legend text/.style={font=\footnotesize, anchor=west},
+			control flow/.style={line width=0.8pt, -{Stealth[length=2.2mm,width=1.5mm]}},
+			analysis flow/.style={line width=0.7pt, dashed, dash pattern=on 4pt off 2.5pt,
+						-{Stealth[open,length=2.2mm,width=1.5mm]}}
+		]
+		\draw[control flow] (0,0) -- (1.10,0);
+		\node[legend text, right=2mm] (control-label) at (1.10,0)
+		{Control / direct interface flow};
+		\coordinate (analysis-start) at ([xshift=9mm]control-label.east);
+		\draw[analysis flow] (analysis-start) -- ++(1.10,0)
+		coordinate (analysis-end);
+		\node[legend text, right=2mm] at (analysis-end)
+		{UVM TLM analysis transaction flow};
+	\end{tikzpicture}

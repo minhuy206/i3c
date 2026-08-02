@@ -8,10 +8,10 @@ Phụ lục này trích các phần tổng kết từ kết quả gốc làm b�
 
 \section*{Tổng kết regression}
 
-Bảng tổng kết và các dòng đầu của bảng kết quả theo từng test (\texttt{SEED=1}):
+Bảng tổng kết và các dòng đầu của bảng kết quả theo từng test (\texttt{Seed = 1}):
 
 \begin{lstlisting}
-Regression summary  (SEED=1)
+Regression summary  (Seed = 1)
 total=81  pass=81  fail=0  error=0
 
 seq                                 status  uvm_err  uvm_fatal
@@ -62,30 +62,7 @@ Coverage   : 12/12  (100.0%)
 
 \section*{Tổng kết SVA}
 
-Phần đầu của báo cáo SVA tổng hợp trên cùng cơ sở dữ liệu coverage:
-
-\begin{lstlisting}
-I3C SVA Coverage Report
-Tests analysed   : 81
-Assertions       : 386
-  PASS           : 386
-  VACUOUS        : 0
-  FAIL           : 0
-  MISS           : 0
-  WAIVED         : 0
-  Closure        : 100.0%
-Cover properties : 578
-  HIT            : 578
-  MISS           : 0
-  WAIVED         : 1
-  Closure        : 100.0%
-\end{lstlisting}
-
-Cover property được waive nằm ngoài mẫu số closure vì chỉ kiểm tra giá trị đọc lại của một địa chỉ
-chưa ánh xạ cụ thể, không phải mục tiêu chức năng F1--F10:
-
-\begin{lstlisting}
-[WAIVED ] COVER cp_reset_readback_unmapped_020
-reason=Raw readback of one specific unmapped address (0x020)
-       is diagnostic, not a feature F1-F10 closure goal.
-\end{lstlisting}
+Trong quá trình chạy regression, không ghi nhận assertion fail nào. Do chưa có
+công cụ chuyên dụng để phân tích \gls{sva} coverage,
+khóa luận không đưa ra kết luận về mức độ bao phủ hoặc tỷ lệ kích hoạt của các
+assertion.

@@ -1,0 +1,51 @@
+\begin{adjustbox}{max width=\textwidth}
+		\begin{tikzpicture}[
+				font=\footnotesize,
+				field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
+						inner xsep=4pt, align=center},
+				od/.style={field, fill=blue!10},
+				pp/.style={field, fill=orange!18},
+				ccc/.style={field, fill=green!14},
+				cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+			]
+			% ---- field chain ----
+			\begin{scope}[start chain=c going right, node distance=-\pgflinewidth]
+				\node[cond, on chain] (S)   {S};
+				\node[od,   on chain]        {\\\texttt{0x7E}$+$W};
+				\node[od,   on chain]        {ACK};
+				\node[pp,   on chain] (entdaa) {\\\texttt{0x07}};
+				\node[pp,   on chain]        {T};
+				\node[cond, on chain] (Sr)  {Sr};
+				\node[od,   on chain]        {\\\texttt{0x7E}$+$R};
+				\node[od,   on chain] (id) {64-bit ID};
+				\node[od,   on chain]        {dyn-addr$+$par};
+				\node[od,   on chain] (ack2) {ACK};
+				\node[cond, on chain] (P)    {P};
+			\end{scope}
+
+			% ---- identity / arbitration annotation above the 64-bit field ----
+			\node[above=3pt of id, font=\scriptsize\itshape, text=black!70,
+				text width=7.2cm, align=center]
+			{64-bit ID $=$ PID/BCR/DCR, MSB first\\Open-Drain arbitration};
+
+			% ---- per-target loop-back arrow ----
+			\draw[-{Stealth[length=5pt]}, thick, gray]
+			(ack2.south) .. controls +(0,-1.1) and +(0,-1.1) .. (Sr.south);
+			\node[font=\scriptsize\itshape, text=black!70,
+				text width=6.8cm, align=center]
+			at ($(Sr.south)!0.5!(ack2.south) + (0,-1.35)$)
+			{per \Target{}, loop until a round goes unanswered,\\then STOP};
+
+			% ---- legend (centered under the box row) ----
+			\coordinate (legc) at ($(S.center)!0.5!(P.center)$);
+			\node at (legc |- 0,-2.7) {%
+				\begin{tikzpicture}[font=\scriptsize, node distance=3pt,
+						lg/.style={draw, minimum size=5mm, inner sep=0pt}]
+					\node[lg, fill=blue!10] (g1) {};
+					\node[right=of g1] (g1t) {\OpenDrain{}};
+					\node[lg, fill=orange!18, right=12pt of g1t] (g2) {};
+					\node[right=of g2] {\PushPull{}};
+				\end{tikzpicture}%
+			};
+		\end{tikzpicture}
+	\end{adjustbox}

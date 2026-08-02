@@ -1,0 +1,54 @@
+\begin{adjustbox}{max width=\textwidth}
+		\begin{tikzpicture}[
+				font=\footnotesize,
+				field/.style={draw, minimum height=9mm, text height=1.6ex, text depth=.5ex,
+						inner xsep=4pt, align=center},
+				od/.style={field, fill=blue!10},
+				pp/.style={field, fill=orange!18},
+				ccc/.style={field, fill=orange!18},
+				data/.style={field, fill=black!4},
+				cond/.style={field, fill=black!12, font=\footnotesize\bfseries},
+				rowlbl/.style={anchor=east, font=\footnotesize\bfseries},
+			]
+			% ---------------- Broadcast ENEC / DISEC ----------------
+			\begin{scope}[start chain=b going right, node distance=-\pgflinewidth]
+				\node[cond, on chain] (b0) {S};
+				\node[od,   on chain]      {\texttt{0x7E}$+$W};
+				\node[od,   on chain]      {ACK};
+				\node[ccc,  on chain]      {\texttt{0x00/0x01}};
+				\node[pp,   on chain]      {T};
+				\node[pp,   on chain]      {\EventsByte{}};
+				\node[pp,   on chain]      {T};
+				\node[cond, on chain] (bN) {P};
+			\end{scope}
+			\node[rowlbl] at (b0.west) {Broadcast~};
+
+			% ---------------- Direct ENEC / DISEC ----------------
+			\begin{scope}[start chain=d going right, node distance=-\pgflinewidth]
+				\node[cond, on chain] (d0) at (0,-2.4) {S};
+				\node[od,   on chain]      {\texttt{0x7E}$+$W};
+				\node[od,   on chain]      {ACK};
+				\node[ccc,  on chain]      {\texttt{0x80/0x81}};
+				\node[pp,   on chain]      {T};
+				\node[cond, on chain]      {Sr};
+				\node[pp,   on chain]      {addr$+$W};
+				\node[od,   on chain]      {ACK};
+				\node[pp,   on chain]      {\EventsByte{}};
+				\node[pp,   on chain]      {T};
+				\node[cond, on chain] (dN) {P};
+			\end{scope}
+			\node[rowlbl] at (d0.west) {Direct~};
+
+			% ---------------- legend ----------------
+			\coordinate (legc) at ($(d0.center)!0.5!(dN.center)$);
+			\node at (legc |- 0,-3.5) {%
+				\begin{tikzpicture}[font=\scriptsize, node distance=3pt,
+						lg/.style={draw, minimum size=5mm, inner sep=0pt}]
+					\node[lg, fill=blue!10] (l1) {};
+					\node[right=of l1] (l1t) {\OpenDrain{}};
+					\node[lg, fill=orange!18, right=12pt of l1t] (l2) {};
+					\node[right=of l2] {\PushPull{}};
+				\end{tikzpicture}%
+			};
+		\end{tikzpicture}
+	\end{adjustbox}

@@ -3,7 +3,7 @@
 
 Chương này trình bày phương pháp xây dựng môi trường kiểm chứng cho thiết kế \gls{rtl} ở
 \cref{ch:architecture} theo các yêu cầu tại \cref{sec:req}: từ mục tiêu và chiến lược, kiến
-trúc môi trường \gls{uvm}, các cơ chế kiểm tra (Scoreboard, \gls{sva}, \FunctionalCoverage{}), đến
+trúc môi trường \gls{uvm}, các cơ chế kiểm tra (\Scoreboard{}, \gls{sva}, \FunctionalCoverage{}), đến
 cách xây dựng kịch bản kiểm chứng.
 
 \section{Mục tiêu và phạm vi kiểm chứng}
@@ -45,7 +45,7 @@ cụ thể.
 
 Ba cơ chế kiểm tra được sử dụng song song:
 \begin{itemize}
-	\item Scoreboard~\cite[Secs.~1.1.4 and 4.9]{uvm12_ug}: đối chiếu \CommandDescriptor{} và dữ liệu ghi vào \gls{csr}/\gls{fifo}
+	\item \Scoreboard{}~\cite[Secs.~1.1.4 and 4.9]{uvm12_ug}: đối chiếu \CommandDescriptor{} và dữ liệu ghi vào \gls{csr}/\gls{fifo}
 	      với giao dịch quan sát trên \gls{scl}/\gls{sda}, dữ liệu đọc từ \RxFifo{} và \ResponseDescriptor{} do \gls{rtl} trả về.
 	\item \gls{sva}~\cite[Clause~16]{ieee1800}: mô tả và kiểm tra các điều kiện mà \gls{rtl} phải thỏa mãn trong một hoặc
 	      nhiều chu kỳ clock, như handshake ready/valid, hành vi của tín hiệu reset ngoài, trạng
@@ -84,28 +84,12 @@ trên interface và phát kết quả quan sát qua \TLMAnalysisPort{}~\cite[Cha
 	\item \IThreeCMonitor{} đảm nhiệm phía bus \gls{scl}/\gls{sda}.
 	\item \Scoreboard{} và các coverage component đăng ký nhận các kết quả quan sát này.
 \end{itemize}
-Cơ chế mô hình tham chiếu tạo giá trị dự kiến và đối chiếu được trình bày tại
+Cơ chế mô hình tham chiếu tạo giá trị kỳ vọng và đối chiếu được trình bày tại
 \cref{sec:ver-tlm}, còn thu thập \FunctionalCoverage{} tại \cref{sec:ver-cov}.
 
 \begin{figure}[!htbp]
 	\centering
-	\input{figures/uvm_i3c_verification_architecture_horizontal_tikz.tex}
-	\par\vspace{0.45em}
-	\begin{tikzpicture}[
-			legend text/.style={font=\footnotesize, anchor=west},
-			control flow/.style={line width=0.8pt, -{Stealth[length=2.2mm,width=1.5mm]}},
-			analysis flow/.style={line width=0.7pt, dashed, dash pattern=on 4pt off 2.5pt,
-						-{Stealth[open,length=2.2mm,width=1.5mm]}}
-		]
-		\draw[control flow] (0,0) -- (1.10,0);
-		\node[legend text, right=2mm] (control-label) at (1.10,0)
-		{Control / direct interface flow};
-		\coordinate (analysis-start) at ([xshift=9mm]control-label.east);
-		\draw[analysis flow] (analysis-start) -- ++(1.10,0)
-		coordinate (analysis-end);
-		\node[legend text, right=2mm] at (analysis-end)
-		{UVM TLM analysis transaction flow};
-	\end{tikzpicture}
+	\input{figures/uvm_i3c_verification_architecture_with_legend.tex}
 	\caption{Kiến trúc tổng thể của môi trường kiểm chứng I3C.}
 	\label{fig:tb-arch}
 \end{figure}
@@ -117,8 +101,8 @@ sequencer và các sequence cơ bản, nhưng chưa có cơ chế tự động �
 \Controller{} ở cấp hệ thống. Trên cơ sở đó, khóa luận phát triển một môi trường \gls{uvm} tự kiểm tra,
 bổ sung \RegisterAgent{}, \Scoreboard{}, \ReferenceModel{}, \CorrelatedCoverage{} và các nhóm \gls{sva}.
 
-\ReferenceModel{} tái tạo trạng thái dự kiến từ cấu hình, \CommandDescriptor{} và dữ liệu do
-\Host{} cung cấp. \Scoreboard{} đối chiếu kết quả dự kiến với giao dịch quan sát trên bus, dữ liệu
+\ReferenceModel{} tái tạo trạng thái kỳ vọng từ cấu hình, \CommandDescriptor{} và dữ liệu do
+\Host{} cung cấp. \Scoreboard{} đối chiếu kết quả kỳ vọng với giao dịch quan sát trên bus, dữ liệu
 trong \RxFifo{} và \ResponseDescriptor{} do \gls{dut} tạo ra. Đồng thời, \CorrelatedCoverage{} liên kết
 lệnh đầu vào, hành vi của \Target{} và kết quả giao dịch. Nhờ đó, môi trường hình thành một luồng
 tự kiểm tra khép kín cho phạm vi chức năng đã hiện thực, thay vì chỉ cung cấp stimulus và ghi nhận
@@ -130,7 +114,7 @@ hoạt động trên bus.
 \Scoreboard{} nhận kết quả quan sát từ \RegisterMonitor{} và \IThreeCMonitor{} qua
 \TLMAnalysisPort{}. Các thao tác trên \gls{csr}/\gls{fifo} được dùng làm đầu vào cho
 \ReferenceModel{}. Các giao dịch tái tạo trên bus, cùng \gls{rx} data đọc từ \RxFifo{} và
-\ResponseDescriptor{} đọc từ \ResponseFifo{}, được dùng để đối chiếu với giá trị dự kiến
+\ResponseDescriptor{} đọc từ \ResponseFifo{}, được dùng để đối chiếu với giá trị kỳ vọng
 (\cref{fig:sb-flow}).
 
 \begin{figure}[!htbp]
@@ -141,11 +125,11 @@ hoạt động trên bus.
 \end{figure}
 
 \ReferenceModel{} trong \Scoreboard{} theo dõi các thao tác phía \gls{csr}/\gls{fifo} để xây dựng
-giá trị dự kiến cho từng giao dịch. Hai lần ghi vào \CommandFifo{} được ghép thành
+giá trị kỳ vọng cho từng giao dịch. Hai lần ghi vào \CommandFifo{} được ghép thành
 \CommandDescriptor{} \CommandDescriptorWidth{}-bit và giải mã theo cấu trúc tại
 \cref{app:desc}. Các thao tác ghi \gls{dat} cập nhật bản sao \gls{dat}, còn dữ liệu ghi vào
-\TxFifo{} được dùng làm \gls{tx} data dự kiến. Từ đó, mô hình xây dựng \gls{rx} data và
-\ResponseDescriptor{} dự kiến để \Scoreboard{} đối chiếu.
+\TxFifo{} được dùng làm \gls{tx} data kỳ vọng. Từ đó, mô hình xây dựng \gls{rx} data và
+\ResponseDescriptor{} kỳ vọng để \Scoreboard{} đối chiếu.
 
 Nội dung đối chiếu được phân theo từng loại giao dịch:
 \begin{itemize}
@@ -159,7 +143,7 @@ Nội dung đối chiếu được phân theo từng loại giao dịch:
 	      cấp, trường hợp \Target{} từ chối địa chỉ và dữ liệu sau cấp phát được ghi về \RxFifo{}.
 \end{itemize}
 Sau khi giao dịch kết thúc, \Scoreboard{} đối chiếu \ResponseDescriptor{} do \Host{} đọc từ
-\ResponseFifo{} với giá trị dự kiến do \ReferenceModel{} xây dựng.
+\ResponseFifo{} với giá trị kỳ vọng do \ReferenceModel{} xây dựng.
 
 \section{Kiểm tra bằng \texorpdfstring{\gls{sva}}{SVA}}
 \label{sec:ver-sva}
@@ -170,12 +154,13 @@ quy tắc lái \gls{sda} (\OpenDrain{}/\PushPull{}, handoff và takeover), đố
 chiếu đồng thời tín hiệu \gls{dut} với net của mô hình chân \gls{io}.
 
 Trừ các bất biến luôn đúng, mỗi assertion được kiểm tra cùng một cover property tương ứng
-để xác nhận điều kiện kích hoạt đã xảy ra và phân biệt pass thực sự với vacuous pass. Bằng chứng
-kiểm chứng dựa trên kết quả kích hoạt và pass/miss, không dựa trên số lượng property
-(\cref{ch:results}).
+để xác nhận điều kiện kích hoạt đã xảy ra và phân biệt pass thực sự với vacuous pass. Do chưa
+có công cụ chuyên dụng để phân tích \gls{sva} coverage, khóa luận không đưa ra kết luận về
+mức độ bao phủ assertion.
 
-\Cref{lst:ver-sva-contention} minh họa bất biến yêu cầu \Controller{} và \Target{} không đồng thời
-lái \gls{sda} ở hai mức logic khác nhau. Trường hợp cả hai cùng kéo \gls{sda} xuống thấp vẫn hợp lệ.
+\Cref{lst:ver-sva-contention} minh họa một assertion kiểm tra bất biến: \Controller{} và
+\Target{} không được đồng thời lái \gls{sda} ở hai mức logic khác nhau. Trường hợp cả hai
+cùng kéo \gls{sda} xuống thấp vẫn hợp lệ.
 
 \begin{lstlisting}[language=Verilog,caption={\acrshort{sva} kiểm tra bất biến không xung đột khi \Controller{} và \Target{} lái \acrshort{sda}.},label={lst:ver-sva-contention}]
 ap_no_sda_contention:
@@ -225,16 +210,16 @@ xuyên suốt chỉ xác định được sau khi \Scoreboard{} ghép dữ liệ
 	\label{tab:cov-aspect}
 	\begin{tabular}{L{3.8cm} L{10.7cm}}
 		\toprule
-		\textbf{Nhóm tình huống}          & \textbf{Nội dung bao phủ}                                                                                           \\
+		\textbf{Nhóm tình huống}                & \textbf{Nội dung bao phủ}                                                                                                             \\
 		\midrule
-		Lệnh từ \Host{}                   & \gls{dat}, nội dung \CommandDescriptor{}, cấu hình \Host{} và truy cập \gls{fifo}                                   \\
-		Pha địa chỉ                       & START/\RepeatedSTART{}, \IThreeCBroadcastAddress{}, \StaticAddress{}/\DynamicAddress{} và \gls{ack}                 \\
-		Giao dịch dữ liệu                 & \gls{i3c}/\gls{iic}, Read/Write, độ dài, \gls{tx}/\gls{rx} data và vị trí NACK                                      \\
-		\gls{ccc}                          & Broadcast/Direct, \gls{ccc} opcode, \gls{ack} và pha dữ liệu                                                        \\
-		\gls{entdaa}                      & Số \Target{} yêu cầu/tham gia, \DynamicAddress{}, phạm vi \gls{dat} và kết quả cấp phát                             \\
-		Response                          & Mã lỗi $\times$ loại lệnh, quan hệ giữa độ dài yêu cầu và thực tế, sự xuất hiện của \ResponseDescriptor{}           \\
-		Kết thúc \gls{sdr} Read           & T-Bit cuối, độ dài thực tế, \texttt{I3cShortReadErr} và nguyên nhân kết thúc                                        \\
-		Gián đoạn và chuyển tiếp lệnh     & Nguyên nhân, pha và số byte tại thời điểm gián đoạn; lệnh bị gián đoạn và lệnh kế tiếp                              \\
+		Lệnh từ \Host{}                         & \gls{dat}, nội dung \CommandDescriptor{}, cấu hình \Host{} và truy cập \gls{fifo}                                                     \\
+		Pha địa chỉ                             & START/\RepeatedSTART{}, \IThreeCBroadcastAddress{}, \StaticAddress{}/\DynamicAddress{} và \gls{ack}                                   \\
+		Giao dịch dữ liệu                       & \gls{i3c}/\gls{iic}, Read/Write, độ dài, \gls{tx}/\gls{rx} data và vị trí NACK                                                        \\
+		\gls{ccc}                               & Broadcast/Direct, \gls{ccc} opcode, \gls{ack} và pha dữ liệu                                                                          \\
+		\gls{entdaa}                            & Số \Target{} yêu cầu/tham gia, \DynamicAddress{}, phạm vi \gls{dat} và kết quả cấp phát                                               \\
+		Response                                & Mã lỗi $\times$ loại lệnh, quan hệ giữa độ dài yêu cầu và thực tế, sự xuất hiện của \ResponseDescriptor{}                             \\
+		Kết thúc \gls{sdr} Read                 & T-Bit cuối, độ dài thực tế, \texttt{I3cShortReadErr} và nguyên nhân kết thúc                                                          \\
+		Gián đoạn và chuyển tiếp lệnh           & Nguyên nhân, pha và số byte tại thời điểm gián đoạn; lệnh bị gián đoạn và lệnh kế tiếp                                                \\
 		Trạng thái \gls{fifo} và ranh giới lệnh & \gls{tx} underflow, \gls{rx} overflow, Response \gls{fifo} backpressure, thiếu \CommandDescriptor{} kế tiếp, STOP và \RepeatedSTART{} \\
 		\bottomrule
 	\end{tabular}
@@ -260,7 +245,7 @@ Về hiện thực, mỗi component là một \UVMSubscriber{}~\cite[Sec.~17.10]
 một mẫu chỉ được ghi khi một truy cập thanh ghi hoặc giao dịch bus hoàn tất, hoặc khi kết quả
 tương quan đã có đầy đủ thông tin cần thiết.
 
-Tổng hợp lại, \cref{tab:req-ver-map} cho thấy ba cơ chế kiểm tra trên phối hợp phủ các yêu cầu
+Tổng hợp lại, \cref{tab:req-ver-map} cho thấy ba cơ chế kiểm tra trên phối hợp bao phủ các yêu cầu
 chức năng F1--F10 như thế nào. Đây cũng là khung đối chiếu khi đánh giá kết quả ở \cref{ch:results}.
 
 \begin{table}[!htbp]
@@ -269,15 +254,15 @@ chức năng F1--F10 như thế nào. Đây cũng là khung đối chiếu khi �
 	\label{tab:req-ver-map}
 	\begin{tabular}{C{2.0cm} L{10.5cm}}
 		\toprule
-		\textbf{Yêu cầu} & \textbf{Cơ chế và nội dung kiểm tra}                                                                                                                                                        \\
+		\textbf{Yêu cầu} & \textbf{Cơ chế và nội dung kiểm tra}                                                                                                                                                                                                                                                    \\
 		\midrule
-		F1--F3           & \IThreeCMonitor{} tái tạo giao dịch. \Scoreboard{} đối chiếu loại giao dịch, hướng truyền, độ dài và \gls{tx}/\gls{rx} data. \Gls{sva} kiểm tra \TBit{}. Coverage ghi nhận các giao dịch \gls{i3c} \gls{sdr} Mode. \\
-		F4               & \IThreeCDriver{} lưu ngữ cảnh \gls{ccc}. \Scoreboard{} đối chiếu \gls{ccc} opcode và dạng Broadcast/Direct. Coverage ghi nhận các lệnh \gls{ccc}.                                           \\
-		F5               & \IThreeCAgent{} tham gia \gls{entdaa}. \Scoreboard{} đối chiếu \gls{pid}/\gls{bcr}/\gls{dcr}, \DynamicAddress{} và \gls{dat}/\gls{rx}. \Gls{sva} kiểm tra \gls{fsm}. Coverage ghi nhận các kịch bản \gls{daa}. \\
-		F6               & \IThreeCAgent{} tạo \gls{ack} và dữ liệu \gls{iic}. \Scoreboard{} đối chiếu \gls{tx}/\gls{rx}. \Gls{sva} kiểm tra bộ đếm và quy tắc lái bus.                                      \\
-		F7               & \RegisterMonitor{} và \Scoreboard{} kiểm tra \gls{csr}/\gls{fifo}. \Gls{sva} kiểm tra cơ chế bắt tay và trạng thái \gls{fifo}. Coverage ghi nhận truy cập và cấu hình thanh ghi.         \\
-		F8               & Mô hình tham chiếu tạo \ResponseDescriptor{} dự kiến. \Scoreboard{} đối chiếu mã lỗi, mã giao dịch và số byte đã xử lý. \CorrelatedCoverage{} ghi nhận các tổ hợp giữa mã lỗi và loại lệnh. \\
-		F9               & \Scoreboard{} theo dõi yêu cầu hủy giao dịch từ \Host{}. \Gls{sva} kiểm tra việc hủy giao dịch, kết thúc ở pha hợp lệ và quy tắc lái bus \gls{sda}.                                          \\
+		F1--F3           & \IThreeCMonitor{} tái tạo giao dịch. \Scoreboard{} đối chiếu loại giao dịch, hướng truyền, độ dài và \gls{tx}/\gls{rx} data. \Gls{sva} kiểm tra \TBit{}. Coverage ghi nhận các giao dịch \gls{i3c} \gls{sdr} Mode.                                                                      \\
+		F4               & \IThreeCDriver{} lưu ngữ cảnh \gls{ccc}. \Scoreboard{} đối chiếu \gls{ccc} opcode và dạng Broadcast/Direct. Coverage ghi nhận các lệnh \gls{ccc}.                                                                                                                                       \\
+		F5               & \IThreeCAgent{} tham gia \gls{entdaa}. \Scoreboard{} đối chiếu \gls{pid}/\gls{bcr}/\gls{dcr}, \DynamicAddress{} và \gls{dat}/\gls{rx}. \Gls{sva} kiểm tra \gls{fsm}. Coverage ghi nhận các kịch bản \gls{daa}.                                                                          \\
+		F6               & \IThreeCAgent{} tạo \gls{ack} và dữ liệu \gls{iic}. \Scoreboard{} đối chiếu \gls{tx}/\gls{rx}. \Gls{sva} kiểm tra bộ đếm và quy tắc lái bus.                                                                                                                                            \\
+		F7               & \RegisterMonitor{} và \Scoreboard{} kiểm tra \gls{csr}/\gls{fifo}. \Gls{sva} kiểm tra cơ chế bắt tay và trạng thái \gls{fifo}. Coverage ghi nhận truy cập và cấu hình thanh ghi.                                                                                                        \\
+		F8               & Mô hình tham chiếu tạo \ResponseDescriptor{} kỳ vọng. \Scoreboard{} đối chiếu mã lỗi, mã giao dịch và số byte đã xử lý. \CorrelatedCoverage{} ghi nhận các tổ hợp giữa mã lỗi và loại lệnh.                                                                                             \\
+		F9               & \Scoreboard{} theo dõi yêu cầu hủy giao dịch từ \Host{}. \Gls{sva} kiểm tra việc hủy giao dịch, kết thúc ở pha hợp lệ và quy tắc lái bus \gls{sda}.                                                                                                                                     \\
 		F10              & \RegisterMonitor{} đối chiếu các \gls{csr} cấu hình tham số thời gian. \IThreeCMonitor{} kiểm tra các khoảng thời gian của START, \RepeatedSTART{}, STOP và \BusFreeCondition{}. \Gls{sva} kiểm tra chu kỳ \gls{scl} và hoạt động của \gls{scl} Generator theo các tham số đã cấu hình. \\
 		\bottomrule
 	\end{tabular}
@@ -317,7 +302,7 @@ Trước mỗi giao dịch, mô hình \Target{} được cấu hình Static/\Dyn
 \TBit{} và \gls{pid}/\gls{bcr}/\gls{dcr}. Dựa trên cấu hình này, \IThreeCDriver{} tạo hành vi tương
 ứng trên bus để tham gia \gls{entdaa}, xử lý \gls{ccc} hoặc thực hiện \gls{i3c} \PrivateTransfer{}. Driver đồng thời
 duy trì ngữ cảnh giao thức từ Broadcast Header và opcode \gls{ccc} đã quan sát để lựa chọn bước phản hồi
-tiếp theo, chẳng hạn tham gia \gls{daa}, nhận \EventsByte{} hoặc chuyển sang data phase của
+tiếp theo, chẳng hạn tham gia \gls{daa}, nhận \EventsByte{} hoặc chuyển sang pha dữ liệu của
 \PrivateTransfer{}.
 
 \begin{table}[!htbp]
@@ -326,21 +311,21 @@ tiếp theo, chẳng hạn tham gia \gls{daa}, nhận \EventsByte{} hoặc chuy�
 	\label{tab:drv-phase}
 	\begin{tabular}{L{4.0cm} L{9.2cm}}
 		\toprule
-		\textbf{Trạng thái}       & \textbf{Chức năng}                                                                                  \\
+		\textbf{Trạng thái}       & \textbf{Chức năng}                                                                                        \\
 		\midrule
-		\texttt{DrvIdle}          & Chờ \Host{} phát START.                                                                             \\
-		\texttt{DrvAddr}          & Lấy mẫu \AddressHeader{} trong pha \OpenDrain{}.                                                    \\
+		\texttt{DrvIdle}          & Chờ \Host{} phát START.                                                                                   \\
+		\texttt{DrvAddr}          & Lấy mẫu \AddressHeader{} trong pha \OpenDrain{}.                                                          \\
 		\texttt{DrvAddrPushPull}  & Lấy mẫu địa chỉ trong pha \PushPull{} (sau \RepeatedSTART{}) và chọn \gls{entdaa}, \DirectCCC{} hoặc ACK. \\
-		\texttt{DrvAck}           & Phát \gls{ack} cho địa chỉ theo cấu hình \Target{}.                                                  \\
-		\texttt{DrvSelectNext}    & Chọn nhánh đọc, ghi, \gls{ccc} hoặc kết thúc giao dịch.                                              \\
-		\texttt{DrvWr}            & Nhận dữ liệu \gls{iic} và phản hồi \gls{ack} từng byte.                                              \\
-		\texttt{DrvWrPushPull}    & Nhận dữ liệu \gls{i3c} cùng \TBit{} ở chế độ push-pull.                                              \\
-		\texttt{DrvRd}            & Phát dữ liệu \gls{iic} và lấy mẫu \gls{ack} từ \Host{}.                                              \\
-		\texttt{DrvRdPushPull}    & Phát dữ liệu \gls{i3c} cùng \TBit{} ở chế độ push-pull.                                              \\
-		\texttt{DrvEntdaa}        & Phát \gls{pid}/\gls{bcr}/\gls{dcr}, nhận và \gls{ack} \DynamicAddress{}.                              \\
-		\texttt{DrvStop}          & Nhả bus và chờ kết thúc phiên xử lý.                                                                \\
-		\texttt{DrvBcastDispatch} & Nhận opcode và chọn Broadcast \gls{ccc}, \DirectCCC{} hoặc \gls{entdaa}.                              \\
-		\texttt{DrvCccData}       & Xử lý địa chỉ \Target{} và dữ liệu của \gls{ccc}.                                                    \\
+		\texttt{DrvAck}           & Phát \gls{ack} cho địa chỉ theo cấu hình \Target{}.                                                       \\
+		\texttt{DrvSelectNext}    & Chọn nhánh đọc, ghi, \gls{ccc} hoặc kết thúc giao dịch.                                                   \\
+		\texttt{DrvWr}            & Nhận dữ liệu \gls{iic} và phản hồi \gls{ack} từng byte.                                                   \\
+		\texttt{DrvWrPushPull}    & Nhận dữ liệu \gls{i3c} cùng \TBit{} ở chế độ push-pull.                                                   \\
+		\texttt{DrvRd}            & Phát dữ liệu \gls{iic} và lấy mẫu \gls{ack} từ \Host{}.                                                   \\
+		\texttt{DrvRdPushPull}    & Phát dữ liệu \gls{i3c} cùng \TBit{} ở chế độ push-pull.                                                   \\
+		\texttt{DrvEntdaa}        & Phát \gls{pid}/\gls{bcr}/\gls{dcr}, nhận và \gls{ack} \DynamicAddress{}.                                  \\
+		\texttt{DrvStop}          & Nhả bus và chờ kết thúc phiên xử lý.                                                                      \\
+		\texttt{DrvBcastDispatch} & Nhận opcode và chọn Broadcast \gls{ccc}, \DirectCCC{} hoặc \gls{entdaa}.                                  \\
+		\texttt{DrvCccData}       & Xử lý địa chỉ \Target{} và dữ liệu của \gls{ccc}.                                                         \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -366,20 +351,20 @@ chuẩn bị \gls{dat} và phát \CommandDescriptor{} cho tới chờ giao dịc
 	\label{tab:vseq-cat}
 	\begin{tabular}{L{3.0cm} C{1.6cm} L{8.5cm}}
 		\toprule
-		\textbf{Nhóm}                      & \textbf{Số lượng}             & \textbf{Mục tiêu chính}                                                                                                                              \\
+		\textbf{Nhóm}                      & \textbf{Số lượng}             & \textbf{Mục tiêu chính}                                                                                                                                      \\
 		\midrule
-		Bus                                & \BusVseqCount{}               & Kiểm chứng lớp vật lý, START/\RepeatedSTART{}/STOP, định thời, tuần tự hóa dữ liệu và mô hình chân \gls{io}.                                        \\
-		\gls{csr}                          & \CsrVseqCount{}               & Kiểm chứng giá trị mặc định sau reset ngoài, \gls{dat}, ghép \CommandDescriptor{}, trạng thái và địa chỉ chưa ánh xạ.                               \\
-		\gls{fifo}                         & \FifoVseqCount{}              & Kiểm chứng thứ tự, trạng thái đầy/rỗng, đọc--ghi đồng thời, xóa và quay vòng con trỏ.                                                                \\
-		\gls{sdr} write                    & \SdrWriteVseqCount{}          & Kiểm chứng \gls{i3c} \PrivateWrite{} với nhiều độ dài, giao dịch liên tiếp, \gls{dat}, kết thúc/nối tiếp giao dịch và \texttt{Ovl}.                  \\
+		Bus                                & \BusVseqCount{}               & Kiểm chứng lớp vật lý, START/\RepeatedSTART{}/STOP, định thời, tuần tự hóa dữ liệu và mô hình chân \gls{io}.                                                 \\
+		\gls{csr}                          & \CsrVseqCount{}               & Kiểm chứng giá trị mặc định sau reset ngoài, \gls{dat}, ghép \CommandDescriptor{}, trạng thái và địa chỉ chưa ánh xạ.                                        \\
+		\gls{fifo}                         & \FifoVseqCount{}              & Kiểm chứng thứ tự, trạng thái đầy/rỗng, đọc--ghi đồng thời, xóa và quay vòng con trỏ.                                                                        \\
+		\gls{sdr} write                    & \SdrWriteVseqCount{}          & Kiểm chứng \gls{i3c} \PrivateWrite{} với nhiều độ dài, giao dịch liên tiếp, \gls{dat}, kết thúc/nối tiếp giao dịch và \texttt{Ovl}.                          \\
 		\gls{sdr} read                     & \SdrReadVseqCount{}           & Kiểm chứng \gls{i3c} \PrivateRead{} với nhiều độ dài, giao dịch liên tiếp, \gls{dat}, kết thúc/nối tiếp giao dịch, \texttt{Ovl} và \texttt{I3cShortReadErr}. \\
-		\ImmediateDataTransfer{}           & \ImmediateVseqCount{}         & Kiểm chứng dữ liệu nhúng trong \CommandDescriptor{} với \gls{i3c}/\gls{iic}, số byte dữ liệu hợp lệ và NACK.                                        \\
-		\gls{ccc}                          & \CccVseqCount{}               & Kiểm chứng \gls{enec} và \gls{disec} ở dạng \BroadcastCCC{} và \DirectCCC{}.                                                                         \\
-		\gls{daa}                          & \DaaVseqCount{}               & Kiểm chứng \gls{entdaa} với không, một hoặc nhiều \Target{}, boundary bảng \gls{dat}, \texttt{NACK} và \texttt{NotSupported}.                        \\
-		\gls{iic}                          & \IicVseqCount{}               & Kiểm chứng đọc/ghi \gls{iic}, độ dài dữ liệu, nhận một phần và \texttt{I2cDataNackOr\allowbreak I3cBusAborted}.                                      \\
-		\ResponseDescriptor{} và xử lý lỗi & \ResponseVseqCount{}          & Kiểm chứng mã giao dịch, số byte đã xử lý và các mã lỗi \texttt{Success}, \texttt{HcAborted}, \texttt{NotSupported}; hai loại reset và backpressure. \\
+		\ImmediateDataTransfer{}           & \ImmediateVseqCount{}         & Kiểm chứng dữ liệu nhúng trong \CommandDescriptor{} với \gls{i3c}/\gls{iic}, số byte dữ liệu hợp lệ và NACK.                                                 \\
+		\gls{ccc}                          & \CccVseqCount{}               & Kiểm chứng \gls{enec} và \gls{disec} ở dạng \BroadcastCCC{} và \DirectCCC{}.                                                                                 \\
+		\gls{daa}                          & \DaaVseqCount{}               & Kiểm chứng \gls{entdaa} với không, một hoặc nhiều \Target{}, boundary bảng \gls{dat}, \texttt{NACK} và \texttt{NotSupported}.                                \\
+		\gls{iic}                          & \IicVseqCount{}               & Kiểm chứng đọc/ghi \gls{iic}, độ dài dữ liệu, nhận một phần và \texttt{I2cDataNackOr\allowbreak I3cBusAborted}.                                              \\
+		\ResponseDescriptor{} và xử lý lỗi & \ResponseVseqCount{}          & Kiểm chứng mã giao dịch, số byte đã xử lý và các mã lỗi \texttt{Success}, \texttt{HcAborted}, \texttt{NotSupported}; hai loại reset và backpressure.         \\
 		\midrule
-		\textbf{Tổng}                      & \textbf{\RunnableVseqCount{}}                                                                                                                                                        \\
+		\textbf{Tổng}                      & \textbf{\RunnableVseqCount{}}                                                                                                                                                                \\
 		\bottomrule
 	\end{tabular}
 \end{table}

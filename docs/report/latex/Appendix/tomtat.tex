@@ -2,7 +2,7 @@
 \addcontentsline{toc}{chapter}{TÓM TẮT}
 
 Chuẩn giao tiếp I3C do \MIPIAlliance{} đề xuất nhằm khắc phục các hạn chế của bus \iic{}
-truyền thống — tín hiệu \OpenDrain{} tốc độ thấp, địa chỉ cố định và thiếu cơ chế ngắt gốc — trong khi
+truyền thống — tín hiệu \OpenDrain{} tốc độ thấp và địa chỉ cố định — trong khi
 vẫn giữ được ưu điểm hai dây và khả năng tương thích ngược. Việc tự thiết kế một bộ điều khiển I3C từ
 đặc tả là một bài toán tiêu biểu cho toàn bộ luồng thiết kế IP số front-end, từ đọc hiểu giao thức,
 thiết kế RTL đến kiểm chứng chức năng.
@@ -17,7 +17,7 @@ kết hợp \FunctionalCoverage{} và \SystemVerilog{} Assertions (SVA).
 
 Kết quả cho thấy bộ điều khiển thực hiện đúng I3C \PrivateWrite{} và \PrivateRead{} trong SDR Mode,
 \ImmediateDataTransfer{}, CCC, ENTDAA và truy cập thanh ghi. Kết quả định lượng về độ bao phủ và
-đối chiếu với bản tham chiếu được trình bày trong chương Kết quả.
+đối chiếu với bản tham chiếu được trình bày trong chương Kết quả và đánh giá.
 
 
 \clearpage
@@ -29,7 +29,7 @@ Kết quả cho thấy bộ điều khiển thực hiện đúng I3C \PrivateWri
 
 \vspace{0.3cm}
 The MIPI I3C standard was introduced to overcome the limitations of the legacy \iic{} bus —
-low-speed \OpenDrain{} signalling, manufacturer-assigned addresses, and the lack of a native interrupt — while
+low-speed \OpenDrain{} signalling and manufacturer-assigned addresses — while
 preserving its two-wire simplicity and backward compatibility. Designing an I3C \Controller{} from the
 specification is a representative exercise spanning the full front-end digital-IC flow, from reading the
 protocol, through RTL design, to functional verification.
@@ -44,4 +44,4 @@ Verification uses UVM 1.2 on the \CadenceXcelium{} simulator. It combines
 
 The \Controller{} correctly performs the I3C Private Write and Read Transfers in SDR Mode, \ImmediateDataTransfer{}s, CCC, ENTDAA, and
 register-access flows, passing the category-based regression suite. Quantitative coverage results and a
-scope comparison with the reference are reported in the Results chapter.
+scope comparison with the reference are reported in the Results and Evaluation chapter.

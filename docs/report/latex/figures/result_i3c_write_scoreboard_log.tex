@@ -1,0 +1,13 @@
+\begin{tikzpicture}
+	\node[anchor=south west, inner sep=0] (logimage) at (0,0) {\includegraphics[width=\textwidth]{i3c_write/i3c_write_scoreboard.jpg}};
+	\begin{scope}[
+			x={(logimage.south east)},
+			y={(logimage.north west)},
+			highlight/.style={draw=red, dashed, line width=0.6pt}
+		]
+		% Scoreboard summary body, excluding the preceding UVM_INFO line.
+		\draw[highlight] (0.016,0.1206) rectangle (0.647,0.8794);
+		% Functional coverage summary, excluding the UVM_INFO prefix and timestamp.
+		\draw[highlight] (0.428,0.0035) rectangle (0.826,0.1170);
+	\end{scope}
+\end{tikzpicture}

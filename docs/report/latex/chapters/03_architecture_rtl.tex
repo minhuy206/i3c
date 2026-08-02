@@ -14,7 +14,12 @@ Thiết kế được tổ chức thành ba lớp. Lớp giao diện thanh ghi t
 
 Sự phân lớp này tách giao thức thanh ghi khỏi ngữ nghĩa giao dịch và tách quyết định giao thức khỏi lớp vật lý. Thông qua các \gls{fifo}, lớp giao diện thanh ghi đưa \CommandDescriptor{} và \gls{tx} data đến lớp xử lý giao thức, đồng thời tiếp nhận \acrshort{rx} data và \ResponseDescriptor{} theo chiều ngược lại. Các \gls{csr} cung cấp tham số thời gian, trạng thái enable và yêu cầu điều khiển cho thiết kế. \gls{dat} có một cổng ghi từ \Host{} và một cổng đọc phần cứng được sử dụng chung bởi \gls{i3c} Transaction Processor và \acrshort{daa} Processor.
 
-\input{figures/i3c_controller_top_architecture_tikz.tex}
+\begin{figure}[!ht]
+	\centering
+	\input{figures/i3c_controller_top_architecture_tikz.tex}
+	\caption{Kiến trúc phân lớp và sơ đồ khối top-level của bộ điều khiển I3C.}
+	\label{fig:arch-block}
+\end{figure}
 
 \subsection{Ánh xạ yêu cầu sang cơ chế hiện thực}
 \label{sec:arch-flow}
@@ -70,7 +75,7 @@ HCI Queues tách quá trình chuẩn bị lệnh khỏi quá trình thực thi t
 		\CommandDescriptor{}               & \CommandDescriptorWidth{} bit  & \Host{} nạp vào \CommandFifo{} để khởi tạo một giao dịch.                                                                         \\
 		\ResponseDescriptor{}              & \ResponseDescriptorWidth{} bit & Kết quả do \gls{i3c} Transaction Processor tạo và trả về \Host{} sau khi giao dịch kết thúc.                                      \\
 		Mục \gls{dat}                      & \DatEntryWidth{} bit           & Mục tra cứu địa chỉ và loại giao thức (\gls{i3c} hoặc \gls{iic}) của \Target{}, tham chiếu qua chỉ số trong \CommandDescriptor{}. \\
-		\gls{tx}/\acrshort{rx} \gls{dword} & \DataBufferWordWidth{} bit     & Đơn vị lưu \gls{tx}/\gls{rx} data trong \TxRxFifo{}. Các byte trong mỗi \gls{dword} được sắp xếp theo thứ tự little-endian.       \\
+		\gls{tx}/\acrshort{rx} \gls{dword} & \DataBufferWordWidth{} bit     & Đơn vị lưu \gls{tx}/\acrshort{rx} data trong \TxRxFifo{}. Các byte trong mỗi \gls{dword} được sắp xếp theo thứ tự little-endian.  \\
 		\bottomrule
 	\end{tabular}
 \end{table}
@@ -133,7 +138,7 @@ Reset ngoài đưa \Controller{} về trạng thái nghỉ và xóa bốn \gls{f
 	\end{tabular}
 \end{table}
 
-\subsection{Tạo \texorpdfstring{\gls{scl}}{SCL} và điều kiện bus}
+\subsection{\texorpdfstring{\gls{scl}}{SCL} Generator và bus condition}
 \label{sec:rtl-scl}
 
 \gls{scl} Generator nạp các giá trị trong \cref{tab:scl-timing-cycles} theo loại \Target{} (\gls{i3c} hoặc \gls{iic}) được đọc từ \gls{dat}. Đối với \gls{i3c}, \gls{scl} Generator chọn thời gian \gls{scl} ở mức thấp theo pha \OpenDrain{} hoặc \PushPull{} hiện tại. Giao dịch \gls{iic} chọn nhóm tham số Fast Mode.
@@ -148,7 +153,7 @@ Bus TX Handler nhận dữ liệu ở mức byte hoặc mức bit từ lớp gia
 
 \gls{sda} được điều khiển theo thứ tự ưu tiên giữa tạo bus condition, cơ chế giữ mức thấp khi handoff (\cref{sec:bg-odpp}) và dữ liệu từ Bus TX Handler. Khi không có yêu cầu phát, \gls{sda} được nhả về \OpenDrain{}.
 
-\section{Vòng đời của một lệnh}
+\section{Quy trình xử lý lệnh}
 \label{sec:rtl-flow-active}
 
 \subsection{Tiếp nhận, kiểm tra và phân luồng}
@@ -215,7 +220,7 @@ Giao dịch \gls{iic} Fast Mode sử dụng \StaticAddress{} và chọn bộ tha
 
 Trong giao dịch đọc, Bus RX Handler nhận từng byte từ \Target{}, sau đó \gls{i3c} Transaction Processor ghi dữ liệu vào \RxFifo{}. Bus TX Handler phát ACK khi cần nhận thêm dữ liệu và phát NACK khi cần kết thúc trước khi \gls{scl} Generator tạo STOP. Toàn bộ Address Header, \gls{ack} và pha dữ liệu đều được thực hiện ở \OpenDrain{}.
 
-\section{Hiện thực \texorpdfstring{\acrshort{daa}}{DAA} Processor}
+\section{\texorpdfstring{\acrshort{daa}}{DAA} với \texorpdfstring{\gls{entdaa}}{ENTDAA}}
 \label{sec:rtl-entdaa}
 
 Thiết kế chỉ triển khai \gls{entdaa} cho \acrshort{daa}. Các \gls{ccc} SETDASA, SETAASA, RSTDAA và SETNEWDA
@@ -234,7 +239,7 @@ vòng lặp cấp phát. \gls{fsm} thực thi xử lý từng lượt, gồm ph�
 	\label{fig:entdaa-flow}
 \end{figure}
 
-Sau khi phát \gls{entdaa} \gls{ccc}, \acrshort{daa} Processor đọc \DynamicAddress{} dự kiến
+Sau khi phát \gls{entdaa} \gls{ccc}, \acrshort{daa} Processor đọc \DynamicAddress{} cần cấp
 từ \gls{dat} và yêu cầu \gls{scl} Generator tạo \RepeatedSTART{}. Bus TX Handler phát
 \IThreeCBroadcastAddress{} (\texttt{0x7e}) với \gls{rnw} = Read, còn Bus RX Handler nhận phản hồi từ
 \Target{}. Nếu không có \Target{} phản hồi, quy trình kết thúc. Nếu có phản hồi, Bus RX Handler

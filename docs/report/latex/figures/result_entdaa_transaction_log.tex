@@ -1,0 +1,16 @@
+\begin{tikzpicture}
+	\node[anchor=south west, inner sep=0] (logimage) at (0,0) {\includegraphics[width=\textwidth]{entdaa/daa_transaction.jpg}};
+	\begin{scope}[
+			x={(logimage.south east)},
+			y={(logimage.north west)},
+			highlight/.style={draw=red, dashed, line width=0.6pt}
+		]
+		% Three RX data and one response EXPECTED/OBSERVED comparisons.
+		\draw[highlight] (0.016,0.7510) rectangle (0.310,0.8715);
+		\draw[highlight] (0.016,0.5643) rectangle (0.310,0.6827);
+		\draw[highlight] (0.016,0.3775) rectangle (0.310,0.4960);
+		\draw[highlight] (0.016,0.1245) rectangle (0.310,0.2490);
+		% Transaction FLOW log and its decoded flow line.
+		\draw[highlight] (0.016,0.0020) rectangle (0.998,0.0643);
+	\end{scope}
+\end{tikzpicture}

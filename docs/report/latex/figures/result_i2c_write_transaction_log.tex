@@ -1,0 +1,16 @@
+\begin{tikzpicture}
+	\node[anchor=south west, inner sep=0] (logimage) at (0,0) {\includegraphics[width=\textwidth]{i2c_write/i2c_write_transaction.jpg}};
+	\begin{scope}[
+			x={(logimage.south east)},
+			y={(logimage.north west)},
+			highlight/.style={draw=red, dashed, line width=0.6pt}
+		]
+		% Address, TX data, TX ACK, and response EXPECTED/OBSERVED comparisons.
+		\draw[highlight] (0.016,0.7983) rectangle (0.310,0.9292);
+		\draw[highlight] (0.016,0.5987) rectangle (0.310,0.7318);
+		\draw[highlight] (0.016,0.3991) rectangle (0.310,0.5322);
+		\draw[highlight] (0.016,0.1309) rectangle (0.310,0.2639);
+		% Transaction FLOW log and its decoded flow line.
+		\draw[highlight] (0.016,0.0021) rectangle (0.359,0.0665);
+	\end{scope}
+\end{tikzpicture}
