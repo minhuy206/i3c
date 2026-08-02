@@ -4,9 +4,9 @@
 % NGUỒN SỐ LIỆU (không đưa vào bản in):
 %   - Regression/coverage database: 81 test, 81 PASS (Seed = 1).
 %   - Functional coverage: src/verification/coverage_report.txt
-%       (closure 222/222 = 100%, diagnostic 173/173 = 100%; per-component closure reg 25/25, i3c 42/42, corr 155/155).
+%       (closure 222/222 = 100%, diagnostic 173/173 = 100%. Per-component closure reg 25/25, i3c 42/42, corr 155/155).
 %       Header "Tests analysed: 81" dùng cùng tập regression 81 test.
-%   - SVA: regression không ghi nhận assertion fail; không kết luận SVA coverage do thiếu công cụ chuyên dụng.
+%   - SVA: regression không ghi nhận assertion fail. Không kết luận SVA coverage do thiếu công cụ chuyên dụng.
 % #1: highlighted transaction-log source, #2: highlighted scoreboard-log source,
 % #3: transaction name, #4: label suffix.
 \newcommand{\WaveformLogs}[4]{%
@@ -101,7 +101,7 @@ compile thành công cũng đồng thời xác nhận ràng buộc tham số nà
 Theo cách phân vai tại \cref{sec:ver-vseq}, mỗi kịch bản chỉ sinh stimulus, còn \Scoreboard{} và
 \Gls{sva} thực hiện đối chiếu đúng/sai. Vì vậy, kết quả PASS phản ánh kết luận chung của các cơ chế kiểm
 tra. Với một seed cố định, PASS chỉ xác nhận các hành vi đã
-được kích hoạt là đúng; mức độ đầy đủ được đánh giá riêng bằng \FunctionalCoverage{} tại
+được kích hoạt là đúng. Mức độ đầy đủ được đánh giá riêng bằng \FunctionalCoverage{} tại
 \cref{sec:res-coverage}.
 
 \section{Kết quả simulation}
@@ -324,7 +324,7 @@ trong khóa luận theo chức năng, kiến trúc giao tiếp và phương phá
 		                        & Chỉ hiện thực Active Controller.                                                                                                                         \\
 		Phạm vi chuẩn
 		                        & Mục tiêu công bố bao quát \gls{i3c} Basic v1.1.1, \gls{hci} v1.2 và \gls{tcri} v1.0.
-		                        & Chọn tập chức năng \gls{sdr} cần cho F1--F10; không tuyên bố tuân thủ \gls{hci} đầy đủ.                                                                  \\
+		                        & Chọn tập chức năng \gls{sdr} cần cho F1--F10, không tuyên bố tuân thủ \gls{hci} đầy đủ.                                                                  \\
 		Giao diện và tích hợp
 		                        & Core tích hợp theo hệ sinh thái Caliptra và giao diện \gls{hci}.
 		                        & Top-level độc lập với giao diện thanh ghi 32-bit, bốn \gls{fifo} và \gls{dat} 32 mục.                                                                    \\
@@ -362,7 +362,7 @@ cách phân loại closure/diagnostic như đã nêu ở \cref{sec:res-coverage}
 		F1--F2           & 14 test \gls{i3c} \PrivateWriteRead{} PASS                      & Cross giữa \gls{i3c} \PrivateWriteRead{}, \TBit{} và trạng thái kết thúc đọc: closure 100\% \\
 		F3               & 5 test \ImmediateDataTransfer{} PASS                            & \ImmediateDataTransfer{}: closure 100\%                                                     \\
 		F4               & 4 test \gls{ccc} PASS                                           & \Gls{ccc} response, opcode/frame: closure 100\%                                             \\
-		F5               & 9 test \gls{daa} PASS                                           & \Gls{daa} result/response và boundary bảng \gls{dat}: closure 100\%                         \\
+		F5               & 10 test \gls{daa} PASS                                          & \Gls{daa} result/response và boundary bảng \gls{dat}: closure 100\%                         \\
 		F6               & 4 test \gls{iic} PASS                                           & \Gls{iic} \gls{ack} và vị trí NACK: closure 100\%                                           \\
 		F7               & 14 test \gls{csr} + 5 test \gls{fifo} PASS                      & Register access, \gls{dat}, \gls{fifo}: closure 100\%                                       \\
 		F8               & Kiểm tra \ResponseDescriptor{} trong mọi test                   & \ResponseDescriptor{} và mã lỗi: closure 100\%                                              \\

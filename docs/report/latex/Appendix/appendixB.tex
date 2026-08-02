@@ -64,7 +64,7 @@ Dạng \RegularTransfer{} dùng cho giao dịch có dữ liệu nằm trong \TxR
 
 \section*{\AddressAssignment{} Descriptor (\CommandDescriptorWidth{}-bit)}
 
-Dạng \AddressAssignment{} khởi tạo quy trình ENTDAA; dữ liệu \gls{pid}/\gls{bcr}/\gls{dcr}
+Dạng \AddressAssignment{} khởi tạo quy trình ENTDAA. Dữ liệu \gls{pid}/\gls{bcr}/\gls{dcr}
 được thu trực tiếp từ \Target{} trên bus nên \CommandDescriptor{} không mang byte dữ liệu~\cite[Secs.~7.1.2.5 and 7.2.2.5]{mipi_i3c_tcri}.
 
 \begin{longtable}{C{3.6cm} L{9.0cm}}
@@ -76,7 +76,7 @@ Dạng \AddressAssignment{} khởi tạo quy trình ENTDAA; dữ liệu \gls{pid
 	\texttt{tid}        & Mã giao dịch.                                                                                                                   \\
 	\texttt{cmd}        & Mã CCC cấp phát địa chỉ (ENTDAA).                                                                                               \\
 	\texttt{dev\_idx}   & Chỉ số mục DAT đầu tiên được cấp địa chỉ.                                                                                       \\
-	\texttt{dev\_count} & Số \Target{} cần cấp địa chỉ trong một lần chạy; \texttt{dev\_idx}+\texttt{dev\_count} phải nằm trong \DatEntryCount{} mục DAT. \\
+	\texttt{dev\_count} & Số \Target{} cần cấp địa chỉ trong một lần chạy. Tổng \texttt{dev\_idx}+\texttt{dev\_count} phải nằm trong \DatEntryCount{} mục DAT. \\
 	\texttt{wroc}       & Yêu cầu ghi \ResponseDescriptor{} khi hoàn tất.                                                                                 \\
 	\texttt{toc}        & Yêu cầu kết thúc giao dịch khi hoàn tất.                                                                                        \\
 	\bottomrule

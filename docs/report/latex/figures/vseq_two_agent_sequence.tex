@@ -12,7 +12,7 @@
 		ll/.style={dashed, gray!55, line width=0.5pt},
 		msg/.style={->, line width=0.75pt},
 		ret/.style={->, line width=0.75pt, dashed},
-		lab/.style={font=\footnotesize, fill=white, inner sep=1.8pt, align=center},
+		lab/.style={font=\footnotesize, fill=none, inner sep=1.8pt, align=center},
 		act/.style={draw=black!70, fill=black!10, line width=0.4pt},
 	]
 	% --- toạ độ lifeline ---
@@ -25,8 +25,8 @@
 	\draw[gray!55, line width=0.7pt, fill=white]
 	(-2.0,-2.6) -- (-2.0,-3.15) -- (-0.55,-3.15) -- (-0.25,-2.87) -- (-0.25,-2.6) -- cycle;
 	\node[anchor=west, font=\scriptsize\bfseries] at (-1.93,-2.87) {parallel};
-	\node[anchor=west, font=\scriptsize] at (1.40,-2.87)
-	{Host and Target run concurrently};
+	\node[anchor=west, font=\scriptsize] at (0.10,-2.87)
+	{Register Agent and I3C Agent run concurrently};
 
 	% --- nhãn lifeline (chỉ chữ, không khung) ---
 	\node[head] (VS)  at (\xvs,0)  {\textbf{Virtual}\\\textbf{Sequence}};
@@ -51,11 +51,13 @@
 
 	% --- phía Host: nạp dữ liệu và lệnh ---
 	\draw[msg] (\xrs,-4.90) -- node[lab, above]{write TX FIFO} (\xdut,-4.90);
-	\draw[msg] (\xrs,-6.10) -- node[lab, above]{send Command\\Descriptor} (\xdut,-6.10);
+\draw[msg] (\xrs,-6.10) -- node[lab, above]{send Command Descriptor} (\xdut,-6.10);
 
 	% --- giao dịch trên bus (song song với phía Host) ---
 	\draw[<->, line width=0.9pt] (\xdut,-7.45) --
-	node[lab, above]{bus transaction\\on SCL/SDA\\{\scriptsize address \textperiodcentered\ data}\\{\scriptsize ACK/NACK \textperiodcentered\ T-Bit}} (\xis,-7.45);
+	node[lab, above]{bus transaction\\on SCL/SDA}
+	node[lab, below]{address \textperiodcentered\ data\\ACK/NACK \textperiodcentered\ T-Bit}
+	(\xis,-7.45);
 
 	% --- phía Host: chờ bộ điều khiển rảnh ---
 	\draw[msg] (\xrs,-8.40) -- node[lab, above]{poll controller status\\until idle} (\xdut,-8.40);

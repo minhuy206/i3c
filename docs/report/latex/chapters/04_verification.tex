@@ -170,8 +170,7 @@ ap_no_sda_contention:
       !both_drive_low));
 \end{lstlisting}
 
-\Cref{lst:ver-sva-tbit} minh họa property \TBit{} của \gls{i3c} \PrivateWrite{}
-. Ở pha dữ liệu \PushPull{}, mỗi byte kết thúc bằng \TBit{}
+\Cref{lst:ver-sva-tbit} minh họa property \TBit{} của \gls{i3c} \PrivateWrite{}. Ở pha dữ liệu \PushPull{}, mỗi byte kết thúc bằng \TBit{}
 mang odd parity. Khi \gls{fsm} đến thời điểm phát \TBit{}, assertion yêu cầu \gls{dut} phát đúng một bit
 với giá trị parity tương ứng.
 
@@ -219,7 +218,7 @@ xuyên suốt chỉ xác định được sau khi \Scoreboard{} ghép dữ liệ
 		\gls{entdaa}                            & Số \Target{} yêu cầu/tham gia, \DynamicAddress{}, phạm vi \gls{dat} và kết quả cấp phát                                               \\
 		Response                                & Mã lỗi $\times$ loại lệnh, quan hệ giữa độ dài yêu cầu và thực tế, sự xuất hiện của \ResponseDescriptor{}                             \\
 		Kết thúc \gls{sdr} Read                 & T-Bit cuối, độ dài thực tế, \texttt{I3cShortReadErr} và nguyên nhân kết thúc                                                          \\
-		Gián đoạn và chuyển tiếp lệnh           & Nguyên nhân, pha và số byte tại thời điểm gián đoạn; lệnh bị gián đoạn và lệnh kế tiếp                                                \\
+		Gián đoạn và chuyển tiếp lệnh           & Nguyên nhân, pha và số byte tại thời điểm gián đoạn, lệnh bị gián đoạn và lệnh kế tiếp                                                \\
 		Trạng thái \gls{fifo} và ranh giới lệnh & \gls{tx} underflow, \gls{rx} overflow, Response \gls{fifo} backpressure, thiếu \CommandDescriptor{} kế tiếp, STOP và \RepeatedSTART{} \\
 		\bottomrule
 	\end{tabular}
@@ -362,7 +361,7 @@ chuẩn bị \gls{dat} và phát \CommandDescriptor{} cho tới chờ giao dịc
 		\gls{ccc}                          & \CccVseqCount{}               & Kiểm chứng \gls{enec} và \gls{disec} ở dạng \BroadcastCCC{} và \DirectCCC{}.                                                                                 \\
 		\gls{daa}                          & \DaaVseqCount{}               & Kiểm chứng \gls{entdaa} với không, một hoặc nhiều \Target{}, boundary bảng \gls{dat}, \texttt{NACK} và \texttt{NotSupported}.                                \\
 		\gls{iic}                          & \IicVseqCount{}               & Kiểm chứng đọc/ghi \gls{iic}, độ dài dữ liệu, nhận một phần và \texttt{I2cDataNackOr\allowbreak I3cBusAborted}.                                              \\
-		\ResponseDescriptor{} và xử lý lỗi & \ResponseVseqCount{}          & Kiểm chứng mã giao dịch, số byte đã xử lý và các mã lỗi \texttt{Success}, \texttt{HcAborted}, \texttt{NotSupported}; hai loại reset và backpressure.         \\
+		\ResponseDescriptor{} và xử lý lỗi & \ResponseVseqCount{}          & Kiểm chứng mã giao dịch, số byte đã xử lý, các mã lỗi \texttt{Success}, \texttt{HcAborted}, \texttt{NotSupported}, hai loại reset và backpressure.         \\
 		\midrule
 		\textbf{Tổng}                      & \textbf{\RunnableVseqCount{}}                                                                                                                                                                \\
 		\bottomrule
