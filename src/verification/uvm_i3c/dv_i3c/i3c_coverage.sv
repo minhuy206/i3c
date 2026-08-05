@@ -343,12 +343,12 @@ class i3c_coverage extends uvm_subscriber #(i3c_item);
     report_cov_detail($sformatf(
               {"cg_bus_transfer=%0.2f%% cp_protocol=%0.2f%% ",
                "cp_bus_op=%0.2f%% cp_actual_len=%0.2f%% ",
-               "cp_final_remainder=%0.2f%%"},
+               "cp_trailing_bytes=%0.2f%%"},
               cg_bus_transfer.get_inst_coverage(),
               cg_bus_transfer.cp_protocol.get_coverage(),
               cg_bus_transfer.cp_bus_op.get_coverage(),
               cg_bus_transfer.cp_actual_len.get_coverage(),
-              cg_bus_transfer.cp_final_remainder.get_coverage()), UVM_NONE);
+              cg_bus_transfer.cp_trailing_bytes.get_coverage()), UVM_NONE);
     report_cov_detail($sformatf(
               {"cg_private_rstart_transition=%0.2f%% ",
                "cp_previous_op=%0.2f%% cp_current_op=%0.2f%%"},
